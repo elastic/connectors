@@ -10,6 +10,7 @@ from collections.abc import Iterable, Sized
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from functools import partial, wraps
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import aiofiles
 import aiohttp
@@ -45,7 +46,6 @@ from connectors.utils import (
     retryable,
     url_encode,
 )
-from typing import Tuple, Any, Dict, List, Optional, Union
 
 SPO_API_MAX_BATCH_SIZE = 20
 
@@ -259,7 +259,9 @@ class MicrosoftSecurityToken:
 
 
 class SecretAPIToken(MicrosoftSecurityToken):
-    def __init__(self, http_session, tenant_id, tenant_name, client_id, client_secret) -> None:
+    def __init__(
+        self, http_session, tenant_id, tenant_name, client_id, client_secret
+    ) -> None:
         super().__init__(http_session, tenant_id, tenant_name, client_id)
         self._client_secret = client_secret
 
@@ -452,7 +454,7 @@ class MicrosoftAPISession:
 
     @asynccontextmanager
     @retryable_aiohttp_call(retries=DEFAULT_RETRY_COUNT)
-    async def _post(self, absolute_url, payload=None, retry_count: int=0):
+    async def _post(self, absolute_url, payload=None, retry_count: int = 0):
         try:
             token = await self._api_token.get()
             headers = {"authorization": f"Bearer {token}"}
@@ -495,7 +497,7 @@ class MicrosoftAPISession:
 
     @asynccontextmanager
     @retryable_aiohttp_call(retries=DEFAULT_RETRY_COUNT)
-    async def _get(self, absolute_url, retry_count: int=0):
+    async def _get(self, absolute_url, retry_count: int = 0):
         try:
             token = await self._api_token.get()
             headers = {"authorization": f"Bearer {token}"}
@@ -779,8 +781,8 @@ class SharepointOnlineClient:
         self,
         sharepoint_host,
         allowed_root_sites,
-        enumerate_all_sites: bool=True,
-        fetch_subsites: bool=False,
+        enumerate_all_sites: bool = True,
+        fetch_subsites: bool = False,
     ):
         if allowed_root_sites == [WILDCARD] or enumerate_all_sites:
             self._logger.debug(f"Looking up all sites to fetch: {allowed_root_sites}")
@@ -877,7 +879,7 @@ class SharepointOnlineClient:
             if "value" in response and len(response["value"]) > 0:
                 yield DriveItemsPage(response["value"], delta_link)
 
-    async def drive_items(self, drive_id, url: Optional[str]=None):
+    async def drive_items(self, drive_id, url: Optional[str] = None):
         url = (
             (
                 f"{GRAPH_API_URL}/drives/{drive_id}/root/delta?$select={DRIVE_ITEMS_FIELDS}"
@@ -1269,7 +1271,17 @@ class SharepointOnlineDataSource(BaseDataSource):
         return self._client
 
     @classmethod
-    def get_default_configuration(cls) -> Dict[str, Union[Dict[str, Union[List[Dict[str, str]], int, str]], Dict[str, Union[List[Dict[str, Union[bool, str]]], int, str]], Dict[str, Union[List[str], int, str]], Dict[str, Union[int, str]]]]:
+    def get_default_configuration(
+        cls,
+    ) -> Dict[
+        str,
+        Union[
+            Dict[str, Union[List[Dict[str, str]], int, str]],
+            Dict[str, Union[List[Dict[str, Union[bool, str]]], int, str]],
+            Dict[str, Union[List[str], int, str]],
+            Dict[str, Union[int, str]],
+        ],
+    ]:
         return {
             "tenant_id": {
                 "label": "Tenant ID",
@@ -1960,7 +1972,7 @@ class SharepointOnlineDataSource(BaseDataSource):
 
             yield site_collection
 
-    async def sites(self, hostname, collections, check_timestamp: bool=False):
+    async def sites(self, hostname, collections, check_timestamp: bool = False):
         async for site in self.client.sites(
             hostname,
             collections,
@@ -1976,7 +1988,7 @@ class SharepointOnlineDataSource(BaseDataSource):
 
                 yield site
 
-    async def site_drives(self, site, check_timestamp: bool=False):
+    async def site_drives(self, site, check_timestamp: bool = False):
         async for site_drive in self.client.site_drives(site["id"]):
             if not check_timestamp or (
                 check_timestamp
@@ -2109,7 +2121,7 @@ class SharepointOnlineDataSource(BaseDataSource):
         site_list_id,
         site_list_name,
         site_access_control,
-        check_timestamp: bool=False,
+        check_timestamp: bool = False,
     ):
         site_id = site.get("id")
         site_web_url = site.get("webUrl")
@@ -2217,7 +2229,9 @@ class SharepointOnlineDataSource(BaseDataSource):
 
                 yield list_item, None
 
-    async def site_lists(self, site, site_access_control, check_timestamp: bool=False):
+    async def site_lists(
+        self, site, site_access_control, check_timestamp: bool = False
+    ):
         async for site_list in self.client.site_lists(site["id"]):
             if not check_timestamp or (
                 check_timestamp
@@ -2336,7 +2350,9 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         return access_control
 
-    async def site_pages(self, site, site_access_control, check_timestamp: bool=False):
+    async def site_pages(
+        self, site, site_access_control, check_timestamp: bool = False
+    ):
         site_id = site["id"]
         url = site["webUrl"]
         async for site_page in self.client.site_pages(url):
@@ -2487,7 +2503,9 @@ class SharepointOnlineDataSource(BaseDataSource):
             drive_item["_original_filename"] = drive_item.get("name", "")
             return partial(self.get_drive_item_content, drive_item)
 
-    async def get_attachment_content(self, attachment, timestamp=None, doit: bool=False) -> Optional[Dict[str, Any]]:
+    async def get_attachment_content(
+        self, attachment, timestamp=None, doit: bool = False
+    ) -> Optional[Dict[str, Any]]:
         if not doit:
             return
 
@@ -2529,7 +2547,9 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         return doc
 
-    async def get_drive_item_content(self, drive_item, timestamp=None, doit: bool=False) -> Optional[Dict[str, Any]]:
+    async def get_drive_item_content(
+        self, drive_item, timestamp=None, doit: bool = False
+    ) -> Optional[Dict[str, Any]]:
         document_size = int(drive_item["size"])
 
         if not (doit and document_size):

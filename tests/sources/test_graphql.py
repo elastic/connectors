@@ -42,8 +42,8 @@ def get_json_mock(mock_response, status) -> AsyncMock:
 async def create_graphql_source(
     headers=None,
     graphql_variables=None,
-    graphql_query: str="{users {name {firstName } } }",
-    graphql_object_to_id_map: str='{"users": "id"}',
+    graphql_query: str = "{users {name {firstName } } }",
+    graphql_object_to_id_map: str = '{"users": "id"}',
 ):
     async with create_source(
         GraphQLDataSource,

@@ -18,6 +18,7 @@ from collections import UserDict
 from copy import deepcopy
 from datetime import datetime, timezone
 from enum import Enum
+from typing import Optional, Sized, Tuple
 
 from elasticsearch import (
     ApiError,
@@ -25,6 +26,7 @@ from elasticsearch import (
 from elasticsearch import (
     NotFoundError as ElasticNotFoundError,
 )
+from pyre_extensions import PyreReadOnly
 
 from connectors.es import ESDocument, ESIndex
 from connectors.es.client import with_concurrency_control
@@ -48,8 +50,6 @@ from connectors.utils import (
     parse_datetime_string,
     with_utc_tz,
 )
-from pyre_extensions import PyreReadOnly
-from typing import Optional, Sized, Tuple
 
 __all__ = [
     "CONNECTORS_INDEX",
@@ -175,7 +175,7 @@ class ConnectorIndex(ESIndex):
         service_type,
         connector_name=None,
         index_name=None,
-        is_native: bool=False,
+        is_native: bool = False,
     ) -> None:
         await self.api.connector_put(
             connector_id=connector_id,
@@ -185,7 +185,9 @@ class ConnectorIndex(ESIndex):
             is_native=is_native,
         )
 
-    async def connector_exists(self, connector_id, include_deleted: bool=False) -> bool:
+    async def connector_exists(
+        self, connector_id, include_deleted: bool = False
+    ) -> bool:
         try:
             doc = await self.api.connector_get(
                 connector_id=connector_id, include_deleted=include_deleted
@@ -224,7 +226,11 @@ class ConnectorIndex(ESIndex):
             connector_id=connector_id, configuration=schema, values=values
         )
 
-    async def supported_connectors(self, native_service_types: Optional[PyreReadOnly[Sized]]=None, connector_ids: Optional[PyreReadOnly[Sized]]=None):
+    async def supported_connectors(
+        self,
+        native_service_types: Optional[PyreReadOnly[Sized]] = None,
+        connector_ids: Optional[PyreReadOnly[Sized]] = None,
+    ):
         if native_service_types is None:
             native_service_types = []
         if connector_ids is None:
@@ -404,7 +410,11 @@ class SyncJob(ESDocument):
         except Exception as e:
             self._wrap_errors("claim job", e)
 
-    async def update_metadata(self, ingestion_stats=None, connector_metadata: Optional[PyreReadOnly[Sized]]=None) -> None:
+    async def update_metadata(
+        self,
+        ingestion_stats=None,
+        connector_metadata: Optional[PyreReadOnly[Sized]] = None,
+    ) -> None:
         try:
             ingestion_stats = filter_ingestion_stats(ingestion_stats)
             if self.index.feature_use_connectors_api:
@@ -427,7 +437,11 @@ class SyncJob(ESDocument):
         except Exception as e:
             self._wrap_errors("update metadata and stats", e)
 
-    async def done(self, ingestion_stats=None, connector_metadata: Optional[PyreReadOnly[Sized]]=None) -> None:
+    async def done(
+        self,
+        ingestion_stats=None,
+        connector_metadata: Optional[PyreReadOnly[Sized]] = None,
+    ) -> None:
         try:
             await self._terminate(
                 JobStatus.COMPLETED, None, ingestion_stats, connector_metadata
@@ -435,7 +449,12 @@ class SyncJob(ESDocument):
         except Exception as e:
             self._wrap_errors("terminate as completed", e)
 
-    async def fail(self, error, ingestion_stats=None, connector_metadata: Optional[PyreReadOnly[Sized]]=None) -> None:
+    async def fail(
+        self,
+        error,
+        ingestion_stats=None,
+        connector_metadata: Optional[PyreReadOnly[Sized]] = None,
+    ) -> None:
         try:
             if isinstance(error, str):
                 message = error
@@ -451,7 +470,11 @@ class SyncJob(ESDocument):
         except Exception as e:
             self._wrap_errors("terminate as failed", e)
 
-    async def cancel(self, ingestion_stats=None, connector_metadata: Optional[PyreReadOnly[Sized]]=None) -> None:
+    async def cancel(
+        self,
+        ingestion_stats=None,
+        connector_metadata: Optional[PyreReadOnly[Sized]] = None,
+    ) -> None:
         try:
             await self._terminate(
                 JobStatus.CANCELED, None, ingestion_stats, connector_metadata
@@ -459,7 +482,11 @@ class SyncJob(ESDocument):
         except Exception as e:
             self._wrap_errors("terminate as canceled", e)
 
-    async def suspend(self, ingestion_stats=None, connector_metadata: Optional[PyreReadOnly[Sized]]=None) -> None:
+    async def suspend(
+        self,
+        ingestion_stats=None,
+        connector_metadata: Optional[PyreReadOnly[Sized]] = None,
+    ) -> None:
         try:
             await self._terminate(
                 JobStatus.SUSPENDED, None, ingestion_stats, connector_metadata
@@ -468,7 +495,11 @@ class SyncJob(ESDocument):
             self._wrap_errors("terminate as suspended", e)
 
     async def _terminate(
-        self, status, error=None, ingestion_stats=None, connector_metadata: Optional[PyreReadOnly[Sized]]=None
+        self,
+        status,
+        error=None,
+        ingestion_stats=None,
+        connector_metadata: Optional[PyreReadOnly[Sized]] = None,
     ) -> None:
         ingestion_stats = filter_ingestion_stats(ingestion_stats)
         if connector_metadata is None:
@@ -509,13 +540,15 @@ class Filtering:
 
         self.filtering = filtering
 
-    def get_active_filter(self, domain: str=DEFAULT_DOMAIN) -> "Filter":
+    def get_active_filter(self, domain: str = DEFAULT_DOMAIN) -> "Filter":
         return self.get_filter(filter_state="active", domain=domain)
 
-    def get_draft_filter(self, domain: str=DEFAULT_DOMAIN) -> "Filter":
+    def get_draft_filter(self, domain: str = DEFAULT_DOMAIN) -> "Filter":
         return self.get_filter(filter_state="draft", domain=domain)
 
-    def get_filter(self, filter_state: str="active", domain: str=DEFAULT_DOMAIN) -> "Filter":
+    def get_filter(
+        self, filter_state: str = "active", domain: str = DEFAULT_DOMAIN
+    ) -> "Filter":
         return next(
             (
                 Filter(filter_[filter_state])
@@ -744,7 +777,7 @@ class Connector(ESDocument):
     def api_key_secret_id(self):
         return self.get("api_key_secret_id")
 
-    async def heartbeat(self, interval, force: bool=False) -> None:
+    async def heartbeat(self, interval, force: bool = False) -> None:
         if (
             force
             or self.last_seen is None

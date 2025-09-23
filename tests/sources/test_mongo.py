@@ -27,12 +27,12 @@ DEFAULT_COLLECTION = "col"
 
 @asynccontextmanager
 async def create_mongo_source(
-    host: str="mongodb://127.0.0.1:27021",
-    database: str=DEFAULT_DATABASE,
-    collection: str=DEFAULT_COLLECTION,
-    ssl_enabled: bool=False,
-    ssl_ca: str="",
-    tls_insecure: bool=False,
+    host: str = "mongodb://127.0.0.1:27021",
+    database: str = DEFAULT_DATABASE,
+    collection: str = DEFAULT_COLLECTION,
+    ssl_enabled: bool = False,
+    ssl_ca: str = "",
+    tls_insecure: bool = False,
 ):
     async with create_source(
         MongoDataSource,
@@ -245,7 +245,9 @@ async def test_mongo_data_source_get_docs_when_advanced_rules_find_present() -> 
 
 
 @pytest.mark.asyncio
-async def test_mongo_data_source_get_docs_when_advanced_rules_aggregate_present() -> None:
+async def test_mongo_data_source_get_docs_when_advanced_rules_aggregate_present() -> (
+    None
+):
     async with create_mongo_source() as source:
         filtering = Filter(
             {

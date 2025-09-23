@@ -4,6 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import sys
+from logging import Logger
 
 from elastic_agent_client.client import V2Options, VersionInfo
 from elastic_agent_client.reader import new_v2_from_reader
@@ -15,7 +16,6 @@ from connectors.agent.logger import get_logger
 from connectors.agent.protocol import ConnectorActionHandler, ConnectorCheckinHandler
 from connectors.agent.service_manager import ConnectorServiceManager
 from connectors.services.base import MultiService
-from logging import Logger
 
 logger: Logger = get_logger("component")
 

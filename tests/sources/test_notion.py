@@ -3,6 +3,7 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+from typing import Dict, List, Optional, Union
 from unittest.mock import ANY, AsyncMock, MagicMock, Mock, patch
 
 import aiohttp
@@ -21,10 +22,20 @@ from connectors.sources.notion import (
 )
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
-from typing import Dict, List, Optional, Union
 
 ADVANCED_SNIPPET = "advanced_snippet"
-DATABASE: Dict[str, Union[List[Dict[str, Union[None, Dict[str, Optional[str]], Dict[str, Union[bool, str]], str]]], str]] = {
+DATABASE: Dict[
+    str,
+    Union[
+        List[
+            Dict[
+                str,
+                Union[None, Dict[str, Optional[str]], Dict[str, Union[bool, str]], str],
+            ]
+        ],
+        str,
+    ],
+] = {
     "object": "database",
     "id": "database_id",
     "created_time": "2021-07-13T16:48:00.000Z",
@@ -49,7 +60,32 @@ DATABASE: Dict[str, Union[List[Dict[str, Union[None, Dict[str, Optional[str]], D
         }
     ],
 }
-BLOCK: Dict[str, Union[Dict[str, Dict[str, Union[List[Dict[str, Union[None, Dict[str, Optional[str]], Dict[str, Union[bool, str]], str]]], str]]], str]] = {
+BLOCK: Dict[
+    str,
+    Union[
+        Dict[
+            str,
+            Dict[
+                str,
+                Union[
+                    List[
+                        Dict[
+                            str,
+                            Union[
+                                None,
+                                Dict[str, Optional[str]],
+                                Dict[str, Union[bool, str]],
+                                str,
+                            ],
+                        ]
+                    ],
+                    str,
+                ],
+            ],
+        ],
+        str,
+    ],
+] = {
     "object": "page",
     "id": "b3a9a3e8-5a8a-4ac0-9b52-9fb62772a9bd",
     "created_time": "2021-06-13T16:48:00.000Z",
@@ -80,7 +116,19 @@ BLOCK: Dict[str, Union[Dict[str, Dict[str, Union[List[Dict[str, Union[None, Dict
         }
     },
 }
-COMMENT: Dict[str, Union[Dict[str, str], List[Dict[str, Union[None, Dict[str, Optional[str]], Dict[str, Union[bool, str]], str]]], str]] = {
+COMMENT: Dict[
+    str,
+    Union[
+        Dict[str, str],
+        List[
+            Dict[
+                str,
+                Union[None, Dict[str, Optional[str]], Dict[str, Union[bool, str]], str],
+            ]
+        ],
+        str,
+    ],
+] = {
     "object": "comment",
     "id": "c8f5a3e8-5a8a-4ac0-9b52-9fb62772a9bd",
     "created_time": "2021-06-13T16:48:00.000Z",
@@ -107,7 +155,24 @@ COMMENT: Dict[str, Union[Dict[str, str], List[Dict[str, Union[None, Dict[str, Op
     ],
 }
 
-CHILD_BLOCK: Dict[str, Union[Dict[str, List[Dict[str, Union[None, Dict[str, Optional[str]], Dict[str, Union[bool, str]], str]]]], bool, str]] = {
+CHILD_BLOCK: Dict[
+    str,
+    Union[
+        Dict[
+            str,
+            List[
+                Dict[
+                    str,
+                    Union[
+                        None, Dict[str, Optional[str]], Dict[str, Union[bool, str]], str
+                    ],
+                ]
+            ],
+        ],
+        bool,
+        str,
+    ],
+] = {
     "object": "block",
     "id": "b8f5a3e8-5a8a-4ac0-9b52-9fb62772a9bd",
     "created_time": "2021-05-13T16:48:00.000Z",
@@ -136,7 +201,24 @@ CHILD_BLOCK: Dict[str, Union[Dict[str, List[Dict[str, Union[None, Dict[str, Opti
         ]
     },
 }
-CHILD_BLOCK_WITH_CHILDREN: Dict[str, Union[Dict[str, List[Dict[str, Union[None, Dict[str, Optional[str]], Dict[str, Union[bool, str]], str]]]], bool, str]] = {
+CHILD_BLOCK_WITH_CHILDREN: Dict[
+    str,
+    Union[
+        Dict[
+            str,
+            List[
+                Dict[
+                    str,
+                    Union[
+                        None, Dict[str, Optional[str]], Dict[str, Union[bool, str]], str
+                    ],
+                ]
+            ],
+        ],
+        bool,
+        str,
+    ],
+] = {
     "object": "block",
     "id": "b8f5a3e8-5a8a-4ac0-9b52-9fb62772a9bd",
     "created_time": "2021-05-13T16:48:00.000Z",
@@ -764,7 +846,9 @@ async def test_get_docs_with_advanced_rules(filtering) -> None:
     ],
 )
 @pytest.mark.asyncio
-async def test_advanced_rules_validation(advanced_rules, expected_validation_result) -> None:
+async def test_advanced_rules_validation(
+    advanced_rules, expected_validation_result
+) -> None:
     async with create_source(
         NotionDataSource, notion_secret_key="secret_key"
     ) as source:

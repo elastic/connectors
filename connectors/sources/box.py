@@ -10,6 +10,7 @@ import logging
 import os
 from datetime import datetime, timedelta
 from functools import cached_property, partial
+from typing import Dict, List, Optional, Union
 
 import aiofiles
 import aiohttp
@@ -29,7 +30,6 @@ from connectors.utils import (
     convert_to_b64,
     retryable,
 )
-from typing import Dict, List, Optional, Union
 
 FINISHED = "FINISHED"
 
@@ -255,7 +255,16 @@ class BoxDataSource(BaseDataSource):
         options["concurrent_downloads"] = self.concurrent_downloads
 
     @classmethod
-    def get_default_configuration(cls) -> Dict[str, Union[Dict[str, Union[List[Dict[str, str]], int, str]], Dict[str, Union[List[Dict[str, Union[int, str]]], List[str], int, str]], Dict[str, Union[int, str]]]]:
+    def get_default_configuration(
+        cls,
+    ) -> Dict[
+        str,
+        Union[
+            Dict[str, Union[List[Dict[str, str]], int, str]],
+            Dict[str, Union[List[Dict[str, Union[int, str]]], List[str], int, str]],
+            Dict[str, Union[int, str]],
+        ],
+    ]:
         """Get the default configuration for Box.
 
         Returns:
@@ -422,7 +431,9 @@ class BoxDataSource(BaseDataSource):
             return False
         return True
 
-    async def get_content(self, attachment, user_id=None, timestamp=None, doit: bool=False):
+    async def get_content(
+        self, attachment, user_id=None, timestamp=None, doit: bool = False
+    ):
         """Extracts the content for Apache TIKA supported file types.
 
         Args:

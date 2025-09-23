@@ -8,6 +8,7 @@
 import ssl
 from contextlib import asynccontextmanager
 from copy import copy
+from typing import Dict, Optional
 from unittest import mock
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
@@ -34,7 +35,6 @@ from connectors.sources.jira import (
 from connectors.utils import ssl_context
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
-from typing import Optional, Dict
 
 ADVANCED_SNIPPET = "advanced_snippet"
 
@@ -332,9 +332,9 @@ ACCESS_CONTROL = "_allow_access_control"
 
 @asynccontextmanager
 async def create_jira_source(
-    use_text_extraction_service: bool=False,
-    data_source: str="jira_cloud",
-    jira_url: str="http://127.0.0.1:8080",
+    use_text_extraction_service: bool = False,
+    data_source: str = "jira_cloud",
+    jira_url: str = "http://127.0.0.1:8080",
 ):
     async with create_source(
         JiraDataSource,

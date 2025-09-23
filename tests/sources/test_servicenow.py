@@ -30,7 +30,7 @@ ADVANCED_SNIPPET = "advanced_snippet"
 
 
 @asynccontextmanager
-async def create_service_now_source(use_text_extraction_service: bool=False):
+async def create_service_now_source(use_text_extraction_service: bool = False):
     async with create_source(
         ServiceNowDataSource,
         url="http://127.0.0.1:1234",
@@ -275,7 +275,9 @@ async def test_filter_services_when_sysparm_fields_missing() -> None:
 
 
 @pytest.mark.asyncio
-async def test_filter_services_when_sysparm_fields_missing_for_unrelated_table() -> None:
+async def test_filter_services_when_sysparm_fields_missing_for_unrelated_table() -> (
+    None
+):
     async with create_service_now_source() as source:
         source.servicenow_client.services = ["Incident", "Feature"]
 
@@ -360,7 +362,9 @@ async def test_get_docs_with_skipping_table_data() -> None:
         ),
     ],
 )
-async def test_get_docs_with_skipping_attachment_data(dls_enabled, expected_response) -> None:
+async def test_get_docs_with_skipping_attachment_data(
+    dls_enabled, expected_response
+) -> None:
     async with create_service_now_source() as source:
         source._dls_enabled = Mock(return_value=dls_enabled)
         source._fetch_access_controls = mock.AsyncMock(
@@ -745,7 +749,9 @@ async def test_fetch_attachment_content_with_unsupported_file_size_then_skip() -
     ],
 )
 @pytest.mark.asyncio
-async def test_advanced_rules_validation(advanced_rules, expected_validation_result) -> None:
+async def test_advanced_rules_validation(
+    advanced_rules, expected_validation_result
+) -> None:
     async with create_service_now_source() as source:
         source.servicenow_client.get_table_length = mock.AsyncMock(return_value=2)
 

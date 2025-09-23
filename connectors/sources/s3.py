@@ -7,6 +7,7 @@ import asyncio
 import os
 from contextlib import AsyncExitStack
 from functools import partial
+from typing import Dict, List, Union
 
 import aioboto3
 import fastjsonschema
@@ -21,7 +22,6 @@ from connectors.filtering.validation import (
 from connectors.logger import logger
 from connectors.source import BaseDataSource
 from connectors.utils import hash_id
-from typing import Dict, List, Union
 
 DEFAULT_PAGE_SIZE = 100
 DEFAULT_MAX_RETRY_ATTEMPTS = 5
@@ -341,7 +341,11 @@ class S3DataSource(BaseDataSource):
         await self.s3_client.close_client()
 
     @classmethod
-    def get_default_configuration(cls) -> Dict[str, Union[Dict[str, Union[List[str], int, str]], Dict[str, Union[int, str]]]]:
+    def get_default_configuration(
+        cls,
+    ) -> Dict[
+        str, Union[Dict[str, Union[List[str], int, str]], Dict[str, Union[int, str]]]
+    ]:
         """Get the default configuration for Amazon S3.
 
         Returns:

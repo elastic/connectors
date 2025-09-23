@@ -7,6 +7,7 @@
 
 import json
 from contextlib import asynccontextmanager
+from typing import Dict, List, Optional, Union
 from unittest import mock
 from unittest.mock import ANY, AsyncMock, MagicMock, Mock, patch
 
@@ -34,7 +35,6 @@ from connectors.sources.dropbox import (
 )
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
-from typing import Dict, List, Optional, Union
 
 PATH = "/"
 DUMMY_VALUES = "abc#123"
@@ -196,7 +196,9 @@ MOCK_LIST_FILE_FOLDER_PERMISSION_CONTINUE = {
     "has_more": True,
 }
 
-MOCK_FILES_FOLDERS_CONTINUE: Dict[str, Union[None, List[Dict[str, Union[int, str]]], bool]] = {
+MOCK_FILES_FOLDERS_CONTINUE: Dict[
+    str, Union[None, List[Dict[str, Union[int, str]]], bool]
+] = {
     "entries": [
         {
             ".tag": "file",
@@ -214,7 +216,12 @@ MOCK_FILES_FOLDERS_CONTINUE: Dict[str, Union[None, List[Dict[str, Union[int, str
     "has_more": False,
 }
 
-MOCK_MEMBERS_CONTINUE: Dict[str, Union[None, List[Dict[str, Dict[str, Union[Dict[str, str], List[str], str]]]], bool]] = {
+MOCK_MEMBERS_CONTINUE: Dict[
+    str,
+    Union[
+        None, List[Dict[str, Dict[str, Union[Dict[str, str], List[str], str]]]], bool
+    ],
+] = {
     "members": [
         {
             "profile": {
@@ -298,7 +305,9 @@ MOCK_SHARED_FILES = {
     "cursor": "abcd#1234",
 }
 
-MOCK_SHARED_FILES_CONTINUE: Dict[str, Optional[List[Dict[str, Union[Dict[str, str], str]]]]] = {
+MOCK_SHARED_FILES_CONTINUE: Dict[
+    str, Optional[List[Dict[str, Union[Dict[str, str], str]]]]
+] = {
     "entries": [
         {
             "access_type": {".tag": "viewer"},
@@ -595,8 +604,8 @@ def setup_dropbox(source) -> None:
 
 @asynccontextmanager
 async def create_dropbox_source(
-    use_text_extraction_service: bool=False,
-    mock_access_token: bool=True,
+    use_text_extraction_service: bool = False,
+    mock_access_token: bool = True,
 ):
     async with create_source(
         DropboxDataSource,
@@ -615,7 +624,9 @@ async def create_dropbox_source(
     "field",
     ["app_key", "app_secret", "refresh_token"],
 )
-async def test_validate_configuration_with_empty_fields_then_raise_exception(field) -> None:
+async def test_validate_configuration_with_empty_fields_then_raise_exception(
+    field,
+) -> None:
     async with create_source(DropboxDataSource) as source:
         setup_dropbox(source)
         source.dropbox_client.configuration.get_field(field).value = ""
@@ -697,7 +708,9 @@ async def test_set_access_token_with_incorrect_app_key_then_raise_exception() ->
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
-async def test_set_access_token_with_incorrect_refresh_token_then_raise_exception() -> None:
+async def test_set_access_token_with_incorrect_refresh_token_then_raise_exception() -> (
+    None
+):
     async with create_source(DropboxDataSource) as source:
         setup_dropbox(source)
 
@@ -1047,7 +1060,9 @@ async def test_get_content_when_is_downloadable_is_true(
 
 
 @pytest.mark.asyncio
-async def test_get_content_when_is_downloadable_is_true_with_extraction_service() -> None:
+async def test_get_content_when_is_downloadable_is_true_with_extraction_service() -> (
+    None
+):
     with (
         patch(
             "connectors.content_extraction.ContentExtraction.extract_text",

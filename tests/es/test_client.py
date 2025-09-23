@@ -105,7 +105,9 @@ class TestESClient:
         ],
     )
     @pytest.mark.asyncio
-    async def test_has_licenses_disabled(self, enabled_license, licenses_disabled) -> None:
+    async def test_has_licenses_disabled(
+        self, enabled_license, licenses_disabled
+    ) -> None:
         es_client = ESClient(BASIC_CONFIG)
         es_client.client = AsyncMock()
         es_client.client.license.get = AsyncMock(

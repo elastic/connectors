@@ -7,6 +7,7 @@ import functools
 import logging
 import time
 from enum import Enum
+from typing import Tuple
 
 from elastic_transport import ConnectionTimeout
 from elastic_transport.client_utils import url_to_node_config
@@ -27,7 +28,6 @@ from connectors.utils import (
     func_human_readable_name,
     time_to_sleep_between_retries,
 )
-from typing import Tuple
 
 
 class License(Enum):
@@ -209,7 +209,7 @@ class TransientElasticsearchRetrier:
         logger_,
         max_retries,
         retry_interval,
-        retry_strategy: RetryStrategy=RetryStrategy.LINEAR_BACKOFF,
+        retry_strategy: RetryStrategy = RetryStrategy.LINEAR_BACKOFF,
     ) -> None:
         self._logger = logger_
         self._sleeps = CancellableSleeps()
@@ -261,7 +261,7 @@ class TransientElasticsearchRetrier:
         raise RetryInterruptedError(msg)
 
 
-def with_concurrency_control(retries: int=3):
+def with_concurrency_control(retries: int = 3):
     def wrapper(func):
         @functools.wraps(func)
         async def wrapped(*args, **kwargs):

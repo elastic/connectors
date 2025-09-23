@@ -25,7 +25,7 @@ API_VERSION = "v1"
 
 
 @asynccontextmanager
-async def create_gcs_source(use_text_extraction_service: bool=False):
+async def create_gcs_source(use_text_extraction_service: bool = False):
     async with create_source(
         GoogleCloudStorageDataSource,
         service_account_credentials=SERVICE_ACCOUNT_CREDENTIALS,
@@ -135,7 +135,9 @@ async def test_ping_for_failed_connection(catch_stdout) -> None:
         )
     ],
 )
-async def test_get_blob_document(previous_documents_list, updated_documents_list) -> None:
+async def test_get_blob_document(
+    previous_documents_list, updated_documents_list
+) -> None:
     """Tests the function which modifies the fetched blobs and maps the values to keys.
 
     Args:

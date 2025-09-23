@@ -10,13 +10,13 @@ import io
 import os
 import random
 import re
+from _io import BytesIO
+from typing import Any, Dict, List, Union
 
+from faker.proxy import Faker
 from flask import Flask, request
 
 from tests.commons import WeightedFakeProvider
-from _io import BytesIO
-from typing import Any, Dict, List, Union
-from faker.proxy import Faker
 
 fake_provider = WeightedFakeProvider(weights=[0.6, 0.2, 0.15, 0.05])
 fake: Faker = fake_provider.fake

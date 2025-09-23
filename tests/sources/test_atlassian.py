@@ -91,7 +91,9 @@ from tests.sources.support import create_source
     ],
 )
 @pytest.mark.asyncio
-async def test_advanced_rules_validation(advanced_rules, expected_validation_result) -> None:
+async def test_advanced_rules_validation(
+    advanced_rules, expected_validation_result
+) -> None:
     validation_result = await AtlassianAdvancedRulesValidator(
         AdvancedRulesValidator
     ).validate(advanced_rules)

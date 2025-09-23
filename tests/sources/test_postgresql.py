@@ -7,6 +7,7 @@
 
 import ssl
 from contextlib import asynccontextmanager
+from typing import List
 from unittest.mock import ANY, Mock, patch
 
 import pytest
@@ -24,7 +25,6 @@ from connectors.sources.postgresql import (
 )
 from connectors.utils import iso_utc
 from tests.sources.support import create_source
-from typing import List
 
 ADVANCED_SNIPPET = "advanced_snippet"
 POSTGRESQL_CONNECTION_STRING = (
@@ -69,7 +69,9 @@ class ConnectionAsync:
         """Make a dummy database connection and return it"""
         return self
 
-    async def __aexit__(self, exception_type, exception_value, exception_traceback) -> None:
+    async def __aexit__(
+        self, exception_type, exception_value, exception_traceback
+    ) -> None:
         """Make sure the dummy database connection gets closed"""
         pass
 
@@ -151,7 +153,9 @@ class CursorAsync:
                 ]
         return []
 
-    async def __aexit__(self, exception_type, exception_value, exception_traceback) -> None:
+    async def __aexit__(
+        self, exception_type, exception_value, exception_traceback
+    ) -> None:
         """Make sure the dummy database connection gets closed"""
         pass
 
@@ -286,7 +290,9 @@ async def test_ping_negative() -> None:
     ],
 )
 @pytest.mark.asyncio
-async def test_advanced_rules_validation(advanced_rules, expected_validation_result) -> None:
+async def test_advanced_rules_validation(
+    advanced_rules, expected_validation_result
+) -> None:
     async with create_source(
         PostgreSQLDataSource, database="xe", tables="*", schema="public", port=5432
     ) as source:

@@ -7,13 +7,13 @@
 import datetime
 import re
 from enum import Enum
+from typing import Sized, Union
 
 from dateutil.parser import ParserError, parser
+from pyre_extensions import PyreReadOnly
 
 from connectors.logger import logger
 from connectors.utils import Format, shorten_str
-from pyre_extensions import PyreReadOnly
-from typing import Sized, Union
 
 IS_BOOL_FALSE: re.Pattern[str] = re.compile("^(false|f|no|n|off)$", re.I)
 IS_BOOL_TRUE: re.Pattern[str] = re.compile("^(true|t|yes|y|on)$", re.I)

@@ -3,6 +3,7 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+from typing import Dict, List, Union
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -11,7 +12,6 @@ from connectors.agent.connector_record_manager import (
     ConnectorRecordManager,
 )
 from connectors.protocol import ConnectorIndex
-from typing import Dict, List, Union
 
 
 @pytest.fixture

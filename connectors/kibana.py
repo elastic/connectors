@@ -8,7 +8,8 @@ import json
 import logging
 import os
 import sys
-from argparse import Namespace, ArgumentDefaultsHelpFormatter, ArgumentParser
+from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser
+from typing import Optional, Sequence
 
 from connectors.config import load_config
 from connectors.es import DEFAULT_LANGUAGE
@@ -17,7 +18,6 @@ from connectors.logger import set_extra_logger
 from connectors.protocol import ConnectorIndex
 from connectors.source import get_source_klass
 from connectors.utils import validate_index_name
-from typing import Optional
 
 CONNECTORS_INDEX = ".elastic-connectors-v1"
 JOBS_INDEX = ".elastic-connectors-sync-jobs-v1"
@@ -157,9 +157,9 @@ def _parser() -> ArgumentParser:
     return parser
 
 
-def main(args: Optional[Namespace]=None) -> int:
+def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = _parser()
-    args = parser.parse_args(args=args)
+    args = parser.parse_args(args=argv)
 
     connector_definition_file = args.connector_definition
     config_file = args.config_file

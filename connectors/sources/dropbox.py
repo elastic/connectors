@@ -10,10 +10,12 @@ import os
 from datetime import datetime
 from enum import Enum
 from functools import cached_property, partial
+from typing import Any, Dict, List, Optional, Union
 from urllib import parse
 
 import aiohttp
 import fastjsonschema
+from aiohttp.client import ClientSession
 from aiohttp.client_exceptions import ClientResponseError, ServerDisconnectedError
 
 from connectors.access_control import (
@@ -35,8 +37,6 @@ from connectors.utils import (
     iso_utc,
     retryable,
 )
-from aiohttp.client import ClientSession
-from typing import Optional, Any, Dict, List, Union
 
 RETRY_COUNT = 3
 DEFAULT_RETRY_AFTER = 300  # seconds
@@ -685,7 +685,16 @@ class DropboxDataSource(BaseDataSource):
         self.dropbox_client.set_logger(self._logger)
 
     @classmethod
-    def get_default_configuration(cls) -> Dict[str, Union[Dict[str, Union[List[Dict[str, Union[bool, str]]], int, str]], Dict[str, Union[List[str], int, str]], Dict[str, Union[int, str]]]]:
+    def get_default_configuration(
+        cls,
+    ) -> Dict[
+        str,
+        Union[
+            Dict[str, Union[List[Dict[str, Union[bool, str]]], int, str]],
+            Dict[str, Union[List[str], int, str]],
+            Dict[str, Union[int, str]],
+        ],
+    ]:
         """Get the default configuration for Dropbox
 
         Returns:
@@ -892,7 +901,12 @@ class DropboxDataSource(BaseDataSource):
         ) or root_info.get("root_namespace_id")
 
     async def get_content(
-        self, attachment, is_shared: bool=False, folder_id=None, timestamp=None, doit: bool=False
+        self,
+        attachment,
+        is_shared: bool = False,
+        folder_id=None,
+        timestamp=None,
+        doit: bool = False,
     ):
         """Extracts the content for allowed file types.
 
@@ -1146,7 +1160,7 @@ class DropboxDataSource(BaseDataSource):
         else:
             return document, None
 
-    async def add_document_to_list(self, func, account_id, is_shared: bool=False):
+    async def add_document_to_list(self, func, account_id, is_shared: bool = False):
         batched_document = {}
         calling_func = func() if is_shared else func(path=self.dropbox_client.path)
 

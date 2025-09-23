@@ -4,11 +4,12 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 
+from logging import Logger
+from typing import Optional, Tuple
+
 from connectors.agent.logger import get_logger
 from connectors.protocol import ConnectorIndex
 from connectors.utils import generate_random_id
-from typing import Optional, Tuple
-from logging import Logger
 
 logger: Logger = get_logger("agent_connector_record_manager")
 
@@ -22,7 +23,9 @@ class ConnectorRecordManager:
     def __init__(self) -> None:
         self.connector_index = None
 
-    async def ensure_connector_records_exist(self, agent_config, connector_name: Optional[str]=None) -> None:
+    async def ensure_connector_records_exist(
+        self, agent_config, connector_name: Optional[str] = None
+    ) -> None:
         """
         Ensure that connector records exist for all connectors specified in the agent configuration.
 

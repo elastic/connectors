@@ -11,18 +11,20 @@ import io
 import os
 import random
 import string
+from _io import BytesIO
+from typing import Dict, List, Tuple
 from urllib.parse import parse_qs, urlparse
 
 from flask import Flask, make_response, request
-from _io import BytesIO
 from flask.wrappers import Response
-from typing import Dict, List, Tuple
 from typing_extensions import Buffer
 
 DATA_SIZE: str = os.environ.get("DATA_SIZE", "small").lower()
 _SIZES = {"small": 500000, "medium": 1000000, "large": 3000000}
 FILE_SIZE: int = _SIZES[DATA_SIZE]
-LARGE_DATA: str = "".join([random.choice(string.ascii_letters) for _ in range(FILE_SIZE)])
+LARGE_DATA: str = "".join(
+    [random.choice(string.ascii_letters) for _ in range(FILE_SIZE)]
+)
 TABLE_FETCH_SIZE = 50
 
 

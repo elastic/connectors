@@ -9,11 +9,14 @@ import json
 import re
 from copy import deepcopy
 from functools import cached_property
+from typing import Dict, List, Union
 
 import aiohttp
+from aiohttp.client import ClientSession
 from aiohttp.client_exceptions import ClientResponseError
 from graphql import parse, visit
 from graphql.language.ast import VariableNode
+from graphql.language.source import Source
 from graphql.language.visitor import Visitor
 
 from connectors.logger import logger
@@ -24,9 +27,6 @@ from connectors.utils import (
     iso_utc,
     retryable,
 )
-from aiohttp.client import ClientSession
-from graphql.language.source import Source
-from typing import Dict, List, Union
 
 RETRIES = 3
 RETRY_INTERVAL = 2
@@ -310,7 +310,16 @@ class GraphQLDataSource(BaseDataSource):
         self.graphql_client.set_logger(self._logger)
 
     @classmethod
-    def get_default_configuration(cls) -> Dict[str, Union[Dict[str, Union[List[Dict[str, str]], int, str]], Dict[str, Union[List[str], int, str]], Dict[str, Union[int, str]]]]:
+    def get_default_configuration(
+        cls,
+    ) -> Dict[
+        str,
+        Union[
+            Dict[str, Union[List[Dict[str, str]], int, str]],
+            Dict[str, Union[List[str], int, str]],
+            Dict[str, Union[int, str]],
+        ],
+    ]:
         """Get the default configuration for GraphQL.
 
         Returns:
@@ -439,7 +448,7 @@ class GraphQLDataSource(BaseDataSource):
         return False
 
     def check_field_existence(
-        self, ast, field_path, graphql_field_id=None, check_id: bool=False
+        self, ast, field_path, graphql_field_id=None, check_id: bool = False
     ):
         def traverse(selections, path):
             for selection in selections:

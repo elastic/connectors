@@ -8,6 +8,7 @@
 import os
 import re
 from functools import partial
+from typing import Any, Dict, List, Optional, Union
 from urllib.parse import quote
 
 import httpx
@@ -27,7 +28,6 @@ from connectors.utils import (
     iso_utc,
     ssl_context,
 )
-from typing import Optional, Any, Dict, List, Union
 
 BASIC_AUTH = "Basic"
 NTLM_AUTH = "NTLM"
@@ -195,7 +195,7 @@ class SharepointServerClient:
         relative_url,
         list_item_id=None,
         content_type_id=None,
-        is_list_item_has_attachment: bool=False,
+        is_list_item_has_attachment: bool = False,
     ):
         if is_list_item_has_attachment:
             return (
@@ -220,7 +220,7 @@ class SharepointServerClient:
         await self.session.aclose()  # pyright: ignore
         self.session = None
 
-    async def _api_call(self, url_name, url: str="", **url_kwargs):
+    async def _api_call(self, url_name, url: str = "", **url_kwargs):
         """Make an API call to the SharePoint Server
 
         Args:
@@ -270,7 +270,7 @@ class SharepointServerClient:
                 await self._sleeps.sleep(RETRY_INTERVAL**retry)
 
     async def _fetch_data_with_next_url(
-        self, site_url, list_id, param_name, selected_field: str=""
+        self, site_url, list_id, param_name, selected_field: str = ""
     ):
         """Invokes a GET call to the SharePoint Server for calling list and drive item API.
 
@@ -646,7 +646,17 @@ class SharepointServerDataSource(BaseDataSource):
         return None
 
     @classmethod
-    def get_default_configuration(cls) -> Dict[str, Union[Dict[str, Union[List[Dict[str, str]], int, str]], Dict[str, Union[List[Dict[str, Union[bool, str]]], int, str]], Dict[str, Union[List[str], int, str]], Dict[str, Union[int, str]]]]:
+    def get_default_configuration(
+        cls,
+    ) -> Dict[
+        str,
+        Union[
+            Dict[str, Union[List[Dict[str, str]], int, str]],
+            Dict[str, Union[List[Dict[str, Union[bool, str]]], int, str]],
+            Dict[str, Union[List[str], int, str]],
+            Dict[str, Union[int, str]],
+        ],
+    ]:
         """Get the default configuration for SharePoint
 
         Returns:
@@ -1369,7 +1379,7 @@ class SharepointServerDataSource(BaseDataSource):
                             )
 
     async def get_content(
-        self, document, file_relative_url, site_url, timestamp=None, doit: bool=False
+        self, document, file_relative_url, site_url, timestamp=None, doit: bool = False
     ):
         """Get content of list items and drive items
 
@@ -1415,7 +1425,7 @@ class SharepointServerDataSource(BaseDataSource):
         )
 
     async def get_site_pages_content(
-        self, document, list_response, timestamp=None, doit: bool=False
+        self, document, list_response, timestamp=None, doit: bool = False
     ):
         """Get content of site pages for SharePoint
 

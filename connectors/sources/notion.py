@@ -11,11 +11,12 @@ import os
 import re
 from copy import copy
 from functools import cached_property, partial
-from typing import Dict, List, Union, Any, Awaitable, Callable
+from typing import Any, Awaitable, Callable, Dict, List, Union
 from urllib.parse import unquote
 
 import aiohttp
 import fastjsonschema
+from aiohttp.client import ClientSession
 from aiohttp.client_exceptions import ClientResponseError
 from notion_client import APIResponseError, AsyncClient
 
@@ -26,8 +27,6 @@ from connectors.filtering.validation import (
 from connectors.logger import logger
 from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.utils import CancellableSleeps, RetryStrategy, retryable
-from aiohttp.client import ClientSession
-from notion_client.client import AsyncClient
 
 RETRIES = 3
 RETRY_INTERVAL = 2
@@ -446,7 +445,11 @@ class NotionDataSource(BaseDataSource):
         )
 
     @classmethod
-    def get_default_configuration(cls) -> Dict[str, Union[Dict[str, Union[List[str], int, str]], Dict[str, Union[int, str]]]]:
+    def get_default_configuration(
+        cls,
+    ) -> Dict[
+        str, Union[Dict[str, Union[List[str], int, str]], Dict[str, Union[int, str]]]
+    ]:
         """Get the default configuration for Notion.
         Returns:
             dict: Default configuration.
@@ -512,7 +515,9 @@ class NotionDataSource(BaseDataSource):
         attachment_metadata["name"] = unquote(response.url.path.split("/")[-1])
         return attachment_metadata
 
-    async def get_content(self, attachment, file_url, timestamp=None, doit: bool=False):
+    async def get_content(
+        self, attachment, file_url, timestamp=None, doit: bool = False
+    ):
         """Extracts the content for Apache TIKA supported file types.
 
         Args:

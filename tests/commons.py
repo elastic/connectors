@@ -6,11 +6,10 @@
 import math
 from functools import cached_property
 from random import choices
+from typing import List, Optional, Sized, Union
 
-from faker import Faker
 from faker.proxy import Faker
 from pyre_extensions import PyreReadOnly
-from typing import List, Optional, Sized, Union
 
 
 class AsyncIterator:
@@ -18,7 +17,7 @@ class AsyncIterator:
     Async documents generator fake class, which records the args and kwargs it was called with.
     """
 
-    def __init__(self, items, reusable: bool=False) -> None:
+    def __init__(self, items, reusable: bool = False) -> None:
         """
         AsyncIterator is a test-only abstraction to mock async iterables.
         By default it's usable only once: once iterated over, he iterator will not
@@ -80,7 +79,9 @@ class AsyncIterator:
 
 
 class WeightedFakeProvider:
-    def __init__(self, seed=None, weights: Optional[PyreReadOnly[Sized]]=None) -> None:
+    def __init__(
+        self, seed=None, weights: Optional[PyreReadOnly[Sized]] = None
+    ) -> None:
         self.seed = seed
         if weights and len(weights) != 4:
             msg = f"Exactly 4 weights should be provided. Got {len(weights)}: {weights}"
@@ -122,7 +123,9 @@ class WeightedFakeProvider:
 
 
 class FakeProvider:
-    def __init__(self, seed: Union[None, bytearray, bytes, float, int, str]=None) -> None:
+    def __init__(
+        self, seed: Union[None, bytearray, bytes, float, int, str] = None
+    ) -> None:
         self.seed = seed
         self.fake = Faker()
         if seed:

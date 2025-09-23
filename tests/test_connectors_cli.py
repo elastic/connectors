@@ -5,6 +5,7 @@
 #
 import json
 import os
+from typing import Sequence, Union
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -19,7 +20,6 @@ from connectors.protocol.connectors import Connector as ConnectorObject
 from connectors.protocol.connectors import JobStatus
 from connectors.protocol.connectors import SyncJob as SyncJobObject
 from tests.commons import AsyncIterator
-from typing import Sequence, Union
 
 
 @pytest.fixture(autouse=True)
@@ -85,7 +85,9 @@ def test_login_successful(tmp_path: Union[None, os.PathLike[str], str]) -> None:
 
 
 @patch("connectors.cli.auth.Auth._Auth__ping_es_client", AsyncMock(return_value=True))
-def test_login_successful_with_apikey_method(tmp_path: Union[None, os.PathLike[str], str]) -> None:
+def test_login_successful_with_apikey_method(
+    tmp_path: Union[None, os.PathLike[str], str],
+) -> None:
     runner = CliRunner()
     api_key = "testapikey"
     with runner.isolated_filesystem(temp_dir=tmp_path) as temp_dir:
@@ -103,7 +105,9 @@ def test_login_successful_with_apikey_method(tmp_path: Union[None, os.PathLike[s
 
 
 @patch("click.confirm")
-def test_login_when_credentials_file_exists(mocked_confirm, tmp_path: Union[None, os.PathLike[str], str]) -> None:
+def test_login_when_credentials_file_exists(
+    mocked_confirm, tmp_path: Union[None, os.PathLike[str], str]
+) -> None:
     runner = CliRunner()
     with runner.isolated_filesystem(temp_dir=tmp_path) as temp_dir:
         mocked_confirm.return_value = True

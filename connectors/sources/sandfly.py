@@ -12,6 +12,7 @@ import socket
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from functools import cached_property
+from typing import Any, Dict, Tuple
 
 # import aiofiles
 import aiohttp
@@ -30,7 +31,6 @@ from connectors.utils import (
     iso_utc,
     retryable,
 )
-from typing import Tuple, Any, Dict
 
 RETRIES = 3
 RETRY_INTERVAL = 2
@@ -86,7 +86,7 @@ class SandflyAccessToken:
     def set_logger(self, logger_) -> None:
         self._logger = logger_
 
-    async def get(self, is_cache: bool=True):
+    async def get(self, is_cache: bool = True):
         cached_value = self._token_cache.get_value() if is_cache else None
 
         if cached_value:
@@ -532,7 +532,9 @@ class SandflyDataSource(BaseDataSource):
 
         return self._sync_cursor
 
-    def _format_doc(self, doc_id, doc_time, doc_text, doc_field, doc_data) -> Dict[str, Any]:
+    def _format_doc(
+        self, doc_id, doc_time, doc_text, doc_field, doc_data
+    ) -> Dict[str, Any]:
         document = {
             "_id": doc_id,
             "_timestamp": doc_time,

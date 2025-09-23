@@ -4,18 +4,20 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 from copy import deepcopy
+from typing import Dict, List, Union
 from unittest.mock import patch
 
 import pytest
 
 from connectors.preflight_check import PreflightCheck
 from connectors.protocol import CONCRETE_CONNECTORS_INDEX, CONCRETE_JOBS_INDEX
-from typing import Dict, List, Union
 
 connectors_version = "1.2.3.4"
 headers = {"X-Elastic-Product": "Elasticsearch"}
 host = "http://localhost:9200"
-config: Dict[str, Union[Dict[str, float], Dict[str, Union[float, str]], List[Dict[str, str]]]] = {
+config: Dict[
+    str, Union[Dict[str, float], Dict[str, Union[float, str]], List[Dict[str, str]]]
+] = {
     "elasticsearch": {
         "host": host,
         "username": "elastic",
@@ -35,10 +37,10 @@ config: Dict[str, Union[Dict[str, float], Dict[str, Union[float, str]], List[Dic
 
 def mock_es_info(
     mock_responses,
-    healthy: bool=True,
-    repeat: bool=False,
-    es_version: str=connectors_version,
-    serverless: bool=False,
+    healthy: bool = True,
+    repeat: bool = False,
+    es_version: str = connectors_version,
+    serverless: bool = False,
 ) -> None:
     status = 200 if healthy else 503
     payload = {
@@ -52,22 +54,24 @@ def mock_es_info(
     )
 
 
-def mock_index_exists(mock_responses, index, exist: bool=True, repeat: bool=False) -> None:
+def mock_index_exists(
+    mock_responses, index, exist: bool = True, repeat: bool = False
+) -> None:
     status = 200 if exist else 404
     mock_responses.head(f"{host}/{index}", status=status, repeat=repeat)
 
 
-def mock_index(mock_responses, index, doc_id, repeat: bool=False) -> None:
+def mock_index(mock_responses, index, doc_id, repeat: bool = False) -> None:
     status = 200
     mock_responses.put(f"{host}/{index}/_doc/{doc_id}", status=status, repeat=repeat)
 
 
-def mock_create_index(mock_responses, index, repeat: bool=False) -> None:
+def mock_create_index(mock_responses, index, repeat: bool = False) -> None:
     status = 200
     mock_responses.put(f"{host}/{index}", status=status, repeat=repeat)
 
 
-def mock_delete(mock_responses, index, doc_id, repeat: bool=False) -> None:
+def mock_delete(mock_responses, index, doc_id, repeat: bool = False) -> None:
     status = 200
     mock_responses.delete(f"{host}/{index}/_doc/{doc_id}", status=status, repeat=repeat)
 
@@ -144,7 +148,9 @@ async def test_pass_serverless(patched_logger, mock_responses) -> None:
 
 @pytest.mark.asyncio
 @patch("connectors.preflight_check.logger")
-async def test_pass_serverless_mismatched_versions(patched_logger, mock_responses) -> None:
+async def test_pass_serverless_mismatched_versions(
+    patched_logger, mock_responses
+) -> None:
     mock_es_info(mock_responses, es_version="2.0.0-SNAPSHOT", serverless=True)
     mock_index_exists(mock_responses, CONCRETE_CONNECTORS_INDEX)
     mock_index_exists(mock_responses, CONCRETE_JOBS_INDEX)

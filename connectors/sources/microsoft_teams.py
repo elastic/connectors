@@ -11,6 +11,7 @@ from calendar import month_name
 from datetime import datetime, timedelta
 from enum import Enum
 from functools import cached_property, partial
+from typing import Any, Dict, Optional, Union
 
 import aiofiles
 import aiohttp
@@ -33,7 +34,6 @@ from connectors.utils import (
     retryable,
     url_encode,
 )
-from typing import Any, Dict, Optional, Union
 
 QUEUE_MEM_SIZE: int = 5 * 1024 * 1024  # Size in Megabytes
 MAX_CONCURRENCY = 80
@@ -327,7 +327,7 @@ class GraphAPIToken:
         interval=RETRY_INTERVAL,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
-    async def _fetch_token(self, is_acquire_for_client: bool=False):
+    async def _fetch_token(self, is_acquire_for_client: bool = False):
         """Generate API token for usage with Graph API
         Args:
         is_acquire_for_client (boolean): True if token needs be generated using client. Default to false
@@ -427,7 +427,7 @@ class MicrosoftTeamsClient:
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
         skipped_exceptions=[NotFound, PermissionsMissing],
     )
-    async def _get(self, absolute_url, use_token: bool=True):
+    async def _get(self, absolute_url, use_token: bool = True):
         try:
             if use_token:
                 if any(
@@ -756,7 +756,9 @@ class MicrosoftTeamsFormatter:
         )
         return document
 
-    def format_channel_message(self, item, channel_name, message_content) -> Dict[str, Any]:
+    def format_channel_message(
+        self, item, channel_name, message_content
+    ) -> Dict[str, Any]:
         document = {"type": TeamEndpointName.MESSAGE.value}
         document.update(
             {  # pyright: ignore
@@ -898,7 +900,9 @@ class MicrosoftTeamsDataSource(BaseDataSource):
             return
         return True
 
-    async def _download_content_for_attachment(self, download_func, original_filename) -> str:
+    async def _download_content_for_attachment(
+        self, download_func, original_filename
+    ) -> str:
         attachment = None
         source_file_name = ""
 
@@ -966,7 +970,7 @@ class MicrosoftTeamsDataSource(BaseDataSource):
                 )
 
     async def get_content(
-        self, user_attachment, download_url, timestamp=None, doit: bool=False
+        self, user_attachment, download_url, timestamp=None, doit: bool = False
     ) -> Optional[Dict[str, Any]]:
         """Extracts the content for allowed file types.
 

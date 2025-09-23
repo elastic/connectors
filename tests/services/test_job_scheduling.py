@@ -5,6 +5,7 @@
 #
 import asyncio
 from datetime import datetime, timedelta, timezone
+from typing import List
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
@@ -24,8 +25,6 @@ from connectors.services.job_scheduling import JobSchedulingService
 from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
 from tests.commons import AsyncIterator
 from tests.services.test_base import create_and_run_service
-from connectors.protocol.connectors import JobType, Status
-from typing import List
 
 JOB_TYPES: List[JobType] = [JobType.FULL, JobType.ACCESS_CONTROL]
 
@@ -64,13 +63,13 @@ default_next_sync: datetime = datetime.now(timezone.utc) + timedelta(hours=1)
 
 
 def mock_connector(
-    status: Status=Status.CONNECTED,
-    service_type: str="fake",
-    next_sync: datetime=default_next_sync,
+    status: Status = Status.CONNECTED,
+    service_type: str = "fake",
+    next_sync: datetime = default_next_sync,
     prepare_exception=None,
     last_sync_scheduled_at_by_job_type=None,
-    document_level_security_enabled: bool=True,
-    incremental_sync_enabled: bool=False,
+    document_level_security_enabled: bool = True,
+    incremental_sync_enabled: bool = False,
 ) -> Mock:
     connector = Mock()
     connector.native = True

@@ -4,6 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 
+from typing import Dict, Union
 from unittest.mock import AsyncMock, Mock
 
 import pytest
@@ -23,7 +24,6 @@ from connectors.filtering.validation import (
     SyncRuleValidationResult,
 )
 from connectors.protocol import Filter
-from typing import Dict, Union
 
 RULE_ONE_ID = 1
 RULE_ONE_VALIDATION_MESSAGE = "rule 1 is valid"
@@ -101,7 +101,9 @@ FILTERING_TWO_BASIC_RULES_WITHOUT_ADVANCED_RULE = Filter(
         ),
     ],
 )
-def test_sync_rule_validation_result_eq(result_one, result_two, should_be_equal) -> None:
+def test_sync_rule_validation_result_eq(
+    result_one, result_two, should_be_equal
+) -> None:
     assert result_one == result_two if should_be_equal else result_one != result_two
 
 
@@ -220,7 +222,9 @@ def test_sync_rule_validation_result_eq_wrong_type() -> None:
         ),
     ],
 )
-def test_filtering_validation_result_eq(result_one, result_two, should_be_equal) -> None:
+def test_filtering_validation_result_eq(
+    result_one, result_two, should_be_equal
+) -> None:
     assert result_one == result_two if should_be_equal else result_one != result_two
 
 
@@ -703,7 +707,9 @@ async def test_filtering_validator(
 
 
 @pytest.mark.asyncio
-async def test_filtering_validator_validate_when_advanced_rules_empty_then_skip_validation() -> None:
+async def test_filtering_validator_validate_when_advanced_rules_empty_then_skip_validation() -> (
+    None
+):
     invalid_validation_result = SyncRuleValidationResult(
         rule_id=RULE_TWO_ID,
         is_valid=False,
@@ -724,7 +730,7 @@ async def test_filtering_validator_validate_when_advanced_rules_empty_then_skip_
     assert validation_result.state == FilteringValidationState.VALID
 
 
-def validator_fakes(results, is_basic_rule_validator: bool=True):
+def validator_fakes(results, is_basic_rule_validator: bool = True):
     validators = []
 
     # validator 1 returns result 1, validator 2 returns result 2 ...

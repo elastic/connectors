@@ -27,7 +27,7 @@ CONFIG = {
 }
 
 
-def mock_connector(connector_id: str="1") -> Mock:
+def mock_connector(connector_id: str = "1") -> Mock:
     connector = Mock()
     connector.id = connector_id
     connector.sync_done = AsyncMock()
@@ -35,8 +35,8 @@ def mock_connector(connector_id: str="1") -> Mock:
 
 
 def mock_sync_job(
-    sync_job_id: str="1",
-    connector_id: str="1",
+    sync_job_id: str = "1",
+    connector_id: str = "1",
 ) -> Mock:
     job = Mock()
     job.job_id = sync_job_id

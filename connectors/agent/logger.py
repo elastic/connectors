@@ -4,9 +4,9 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import logging
+from typing import TextIO, Union
 
 import ecs_logging
-from typing import Union, TextIO
 
 root_logger: logging.Logger = logging.getLogger("agent_component")
 handler: logging.StreamHandler[TextIO] = logging.StreamHandler()

@@ -17,6 +17,8 @@ import json
 import logging
 import os
 import signal
+from asyncio.events import AbstractEventLoop
+from typing import Optional
 
 import click
 from click import ClickException, UsageError
@@ -29,8 +31,6 @@ from connectors.logger import logger, set_logger
 from connectors.preflight_check import PreflightCheck
 from connectors.services import get_services
 from connectors.source import get_source_klass, get_source_klasses
-from asyncio.events import AbstractEventLoop
-from typing import Optional
 
 __all__ = ["main"]
 
@@ -82,7 +82,7 @@ def _get_uvloop():
     return uvloop
 
 
-def get_event_loop(uvloop: bool=False) -> AbstractEventLoop:
+def get_event_loop(uvloop: bool = False) -> AbstractEventLoop:
     if uvloop:
         # activate uvloop if lib is present
         try:
@@ -104,7 +104,9 @@ def get_event_loop(uvloop: bool=False) -> AbstractEventLoop:
     return loop
 
 
-def run(action, config_file, log_level, filebeat: bool, service_type, uvloop: bool) -> Optional[int]:
+def run(
+    action, config_file, log_level, filebeat: bool, service_type, uvloop: bool
+) -> Optional[int]:
     """Loads the config file, sets the logger and executes an action.
 
     Actions:

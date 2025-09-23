@@ -6,17 +6,19 @@
 # ruff: noqa: T201
 import asyncio
 import os
-from argparse import Namespace, ArgumentDefaultsHelpFormatter, ArgumentParser
+from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser, Namespace
+from typing import Optional, Sequence, Union
 
 from elasticsearch import AsyncElasticsearch
 
 from connectors.config import load_config
-from typing import Optional, Sequence, Union
 
 DEFAULT_CONFIG: str = os.path.join(os.path.dirname(__file__), "..", "config.yml")
 
 
-async def verify(service_type, index_name: Union[None, Sequence[str], str], size, config) -> None:
+async def verify(
+    service_type, index_name: Union[None, Sequence[str], str], size, config
+) -> None:
     config = config["elasticsearch"]
     host = config["host"]
     auth = config["username"], config["password"]
@@ -74,7 +76,7 @@ def _parser() -> ArgumentParser:
     return parser
 
 
-def main(args: Optional[Namespace]=None) -> None:
+def main(args: Optional[Namespace] = None) -> None:
     parser = _parser()
     args = parser.parse_args(args=args)
     config_file = args.config_file

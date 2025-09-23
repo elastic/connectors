@@ -4,6 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 from functools import cached_property
+from typing import Any, Dict, List, Union
 
 import fastjsonschema
 from aiogoogle import AuthError
@@ -29,7 +30,6 @@ from connectors.utils import (
     iso_utc,
     validate_email_address,
 )
-from typing import Any, Dict, List, Union
 
 CUSTOMER_ID_LABEL = "Google customer id"
 
@@ -116,7 +116,14 @@ class GMailDataSource(BaseDataSource):
         super().__init__(configuration=configuration)
 
     @classmethod
-    def get_default_configuration(cls) -> Dict[str, Union[Dict[str, Union[List[Dict[str, str]], int, str]], Dict[str, Union[int, str]]]]:
+    def get_default_configuration(
+        cls,
+    ) -> Dict[
+        str,
+        Union[
+            Dict[str, Union[List[Dict[str, str]], int, str]], Dict[str, Union[int, str]]
+        ],
+    ]:
         """Get the default configuration for the GMail connector.
         Returns:
             dict: Default configuration.

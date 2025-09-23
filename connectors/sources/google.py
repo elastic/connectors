@@ -6,6 +6,7 @@
 import json
 import os
 from enum import Enum
+from typing import Optional
 
 from aiogoogle import Aiogoogle, AuthError, HTTPError
 from aiogoogle.auth.creds import ServiceAccountCreds
@@ -14,7 +15,6 @@ from aiogoogle.sessions.aiohttp_session import AiohttpSession
 from connectors.logger import logger
 from connectors.source import ConfigurableFieldValueError
 from connectors.utils import RetryStrategy, retryable
-from typing import Optional
 
 # Google Service Account JSON includes "universe_domain" key. That argument is not
 # supported in aiogoogle library in version 5.3.0. The "universe_domain" key is allowed in
@@ -254,7 +254,9 @@ def remove_universe_domain(json_credentials) -> None:
 
 
 class GoogleDirectoryClient:
-    def __init__(self, json_credentials, customer_id, subject, timeout: int=DEFAULT_TIMEOUT) -> None:
+    def __init__(
+        self, json_credentials, customer_id, subject, timeout: int = DEFAULT_TIMEOUT
+    ) -> None:
         remove_universe_domain(json_credentials)
 
         json_credentials["subject"] = subject
@@ -296,7 +298,9 @@ class GoogleDirectoryClient:
 
 
 class GMailClient:
-    def __init__(self, json_credentials, customer_id, subject, timeout: int=DEFAULT_TIMEOUT) -> None:
+    def __init__(
+        self, json_credentials, customer_id, subject, timeout: int = DEFAULT_TIMEOUT
+    ) -> None:
         remove_universe_domain(json_credentials)
 
         # This override is needed to be able to fetch the messages for the corresponding user, otherwise we get a 403 Forbidden (see: https://issuetracker.google.com/issues/290567932)
@@ -323,7 +327,10 @@ class GMailClient:
             raise
 
     async def messages(
-        self, query=None, includeSpamTrash: bool=False, pageSize: int=DEFAULT_PAGE_SIZE
+        self,
+        query=None,
+        includeSpamTrash: bool = False,
+        pageSize: int = DEFAULT_PAGE_SIZE,
     ):
         fields = "id"
 

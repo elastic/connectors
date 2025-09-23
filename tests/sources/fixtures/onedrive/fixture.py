@@ -9,16 +9,16 @@
 import io
 import os
 import time
+from _io import BytesIO
+from typing import Any, Dict, List, Union
 
+from faker.proxy import Faker
 from flask import Flask, make_response, request
+from flask.wrappers import Response
 from flask_limiter import HEADERS, Limiter
 from flask_limiter.util import get_remote_address
 
 from tests.commons import WeightedFakeProvider
-from _io import BytesIO
-from flask.wrappers import Response
-from typing import Any, Dict, List, Union
-from faker.proxy import Faker
 
 fake_provider = WeightedFakeProvider()
 
@@ -113,7 +113,7 @@ class DataGenerator:
 
                 self.files_per_user[user["id"]].append(item)
 
-    def get_users(self, skip: int=0, take: int=100):
+    def get_users(self, skip: int = 0, take: int = 100):
         results = []
 
         for user in self.users[skip:][:take]:
@@ -121,7 +121,9 @@ class DataGenerator:
 
         return results
 
-    def get_drive_items(self, user_id, skip: int=0, take: int=100) -> List[Dict[str, Any]]:
+    def get_drive_items(
+        self, user_id, skip: int = 0, take: int = 100
+    ) -> List[Dict[str, Any]]:
         results = []
 
         for file in self.files_per_user[user_id][skip:][:take]:

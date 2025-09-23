@@ -202,7 +202,9 @@ async def test_update_by_script() -> None:
 
 
 @pytest.mark.asyncio
-async def test_get_all_docs_with_error(mock_responses, patch_logger, patch_sleep) -> None:
+async def test_get_all_docs_with_error(
+    mock_responses, patch_logger, patch_sleep
+) -> None:
     index = FakeIndex(index_name, config)
     mock_responses.post(
         f"http://nowhere.com:9200/{index_name}/_refresh", headers=headers, status=200

@@ -9,13 +9,13 @@
 import io
 import json
 import os
+from _io import BytesIO
+from typing import Dict, Union
 
 from flask import Flask, jsonify, make_response, request
+from flask.wrappers import Response
 
 from tests.commons import WeightedFakeProvider
-from _io import BytesIO
-from flask.wrappers import Response
-from typing import Dict, Union
 
 fake_provider = WeightedFakeProvider()
 

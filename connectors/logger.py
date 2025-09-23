@@ -13,13 +13,13 @@ import logging
 import time
 from datetime import datetime, timezone
 from functools import wraps
-from typing import Mapping, Optional, Tuple, Type, Union, AsyncGenerator
+from types import TracebackType
+from typing import AsyncGenerator, Mapping, Optional, Tuple, Type, Union
 
 import ecs_logging
 from dateutil.tz import tzlocal
 
 from connectors import __version__
-from types import TracebackType
 
 logger: logging.Logger = logging.getLogger("connectors")
 logger_initialized = False
@@ -52,7 +52,9 @@ class ColorFormatter(logging.Formatter):
         return dt.astimezone(timezone.utc)
 
     # override logging.Formatter to use an aware datetime object
-    def formatTime(self, record: logging.LogRecord, datefmt: Optional[str]=None) -> str:
+    def formatTime(
+        self, record: logging.LogRecord, datefmt: Optional[str] = None
+    ) -> str:
         dt = self.converter(record.created)
         if datefmt:
             s = dt.strftime(datefmt)
@@ -112,7 +114,7 @@ class DocumentLogger:
             **kwargs,
         )
 
-    def exception(self, msg, *args, exc_info: bool=True, **kwargs) -> None:
+    def exception(self, msg, *args, exc_info: bool = True, **kwargs) -> None:
         logger.exception(
             msg,
             *args,
@@ -142,7 +144,21 @@ class DocumentLogger:
 
 
 class ExtraLogger(logging.Logger):
-    def _log(self, level: int, msg: str, args: Union[Mapping[str, object], Tuple[object, ...]], exc_info: Union[None, BaseException, bool, Tuple[Type[BaseException], BaseException, Optional[TracebackType]], Tuple[None, ...]]=None, prefix=None, extra: Optional[Mapping[str, object]]=None) -> None:
+    def _log(
+        self,
+        level: int,
+        msg: str,
+        args: Union[Mapping[str, object], Tuple[object, ...]],
+        exc_info: Union[
+            None,
+            BaseException,
+            bool,
+            Tuple[Type[BaseException], BaseException, Optional[TracebackType]],
+            Tuple[None, ...],
+        ] = None,
+        prefix=None,
+        extra: Optional[Mapping[str, object]] = None,
+    ) -> None:
         if (
             not (hasattr(self, "filebeat") and self.filebeat)  # pyright: ignore
             and prefix
@@ -160,7 +176,7 @@ class ExtraLogger(logging.Logger):
         super(ExtraLogger, self)._log(level, msg, args, exc_info, extra)
 
 
-def set_logger(log_level: int=logging.INFO, filebeat: bool=False):
+def set_logger(log_level: int = logging.INFO, filebeat: bool = False):
     global logger
     global logger_initialized
     if filebeat:
@@ -184,7 +200,12 @@ def set_logger(log_level: int=logging.INFO, filebeat: bool=False):
     return logger
 
 
-def set_extra_logger(logger: Optional[str], log_level: Union[int, str]=logging.INFO, prefix: str="BYOC", filebeat: bool=False) -> None:
+def set_extra_logger(
+    logger: Union[str, logging.Logger],
+    log_level: Union[int, str] = logging.INFO,
+    prefix: str = "BYOC",
+    filebeat: bool = False,
+) -> None:
     if isinstance(logger, str):
         logger = logging.getLogger(logger)
     handler = logging.StreamHandler()

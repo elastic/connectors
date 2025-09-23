@@ -8,6 +8,7 @@
 from contextlib import asynccontextmanager
 from copy import deepcopy
 from http import HTTPStatus
+from typing import Dict, List, Tuple, Union
 from unittest.mock import ANY, AsyncMock, Mock, patch
 
 import gidgethub
@@ -30,7 +31,6 @@ from connectors.sources.github import (
 )
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
-from typing import Dict, List, Tuple, Union
 
 ADVANCED_SNIPPET = "advanced_snippet"
 
@@ -56,7 +56,73 @@ def public_repo() -> Dict[str, Union[Dict[str, int], Dict[str, str], int, str]]:
     }
 
 
-def pull_request() -> Dict[str, Dict[str, Dict[str, Dict[str, List[Dict[str, Union[Dict[str, str], Dict[str, Union[Dict[str, Union[bool, str]], List[Dict[str, Dict[str, str]]]]], Dict[str, Union[Dict[str, Union[bool, str]], List[Dict[str, str]]]], Dict[str, Union[Dict[str, Union[bool, str]], List[Dict[str, Union[Dict[str, str], Dict[str, Union[Dict[str, Union[bool, str]], List[Dict[str, str]]]], str]]]]], Dict[str, Union[Dict[str, Union[bool, str]], List[Dict[str, Union[Dict[str, str], str]]]]], int, str]]]]]]]:
+def pull_request() -> (
+    Dict[
+        str,
+        Dict[
+            str,
+            Dict[
+                str,
+                Dict[
+                    str,
+                    List[
+                        Dict[
+                            str,
+                            Union[
+                                Dict[str, str],
+                                Dict[
+                                    str,
+                                    Union[
+                                        Dict[str, Union[bool, str]],
+                                        List[Dict[str, Dict[str, str]]],
+                                    ],
+                                ],
+                                Dict[
+                                    str,
+                                    Union[
+                                        Dict[str, Union[bool, str]],
+                                        List[Dict[str, str]],
+                                    ],
+                                ],
+                                Dict[
+                                    str,
+                                    Union[
+                                        Dict[str, Union[bool, str]],
+                                        List[
+                                            Dict[
+                                                str,
+                                                Union[
+                                                    Dict[str, str],
+                                                    Dict[
+                                                        str,
+                                                        Union[
+                                                            Dict[str, Union[bool, str]],
+                                                            List[Dict[str, str]],
+                                                        ],
+                                                    ],
+                                                    str,
+                                                ],
+                                            ]
+                                        ],
+                                    ],
+                                ],
+                                Dict[
+                                    str,
+                                    Union[
+                                        Dict[str, Union[bool, str]],
+                                        List[Dict[str, Union[Dict[str, str], str]]],
+                                    ],
+                                ],
+                                int,
+                                str,
+                            ],
+                        ]
+                    ],
+                ],
+            ],
+        ],
+    ]
+):
     return {
         "data": {
             "repository": {
@@ -135,7 +201,44 @@ def pull_request() -> Dict[str, Dict[str, Dict[str, Dict[str, List[Dict[str, Uni
     }
 
 
-def issue() -> Dict[str, Dict[str, Dict[str, Dict[str, List[Dict[str, Union[None, Dict[str, Union[Dict[str, Union[bool, str]], List[Dict[str, str]]]], Dict[str, Union[Dict[str, Union[bool, str]], List[Dict[str, Union[Dict[str, str], str]]]]], int, str]]]]]]]:
+def issue() -> (
+    Dict[
+        str,
+        Dict[
+            str,
+            Dict[
+                str,
+                Dict[
+                    str,
+                    List[
+                        Dict[
+                            str,
+                            Union[
+                                None,
+                                Dict[
+                                    str,
+                                    Union[
+                                        Dict[str, Union[bool, str]],
+                                        List[Dict[str, str]],
+                                    ],
+                                ],
+                                Dict[
+                                    str,
+                                    Union[
+                                        Dict[str, Union[bool, str]],
+                                        List[Dict[str, Union[Dict[str, str], str]]],
+                                    ],
+                                ],
+                                int,
+                                str,
+                            ],
+                        ]
+                    ],
+                ],
+            ],
+        ],
+    ]
+):
     return {
         "data": {
             "repository": {
@@ -281,7 +384,37 @@ MOCK_RESPONSE_REPO = [
     },
 ]
 
-MOCK_RESPONSE_ISSUE: Dict[str, Dict[str, Dict[str, List[Dict[str, Union[None, Dict[str, str], Dict[str, Union[Dict[str, Union[bool, str]], List[Dict[str, str]]]], Dict[str, Union[Dict[str, Union[bool, str]], List[Dict[str, Union[Dict[str, str], str]]]]], int, str]]]]]] = {
+MOCK_RESPONSE_ISSUE: Dict[
+    str,
+    Dict[
+        str,
+        Dict[
+            str,
+            List[
+                Dict[
+                    str,
+                    Union[
+                        None,
+                        Dict[str, str],
+                        Dict[
+                            str,
+                            Union[Dict[str, Union[bool, str]], List[Dict[str, str]]],
+                        ],
+                        Dict[
+                            str,
+                            Union[
+                                Dict[str, Union[bool, str]],
+                                List[Dict[str, Union[Dict[str, str], str]]],
+                            ],
+                        ],
+                        int,
+                        str,
+                    ],
+                ]
+            ],
+        ],
+    ],
+] = {
     "repository": {
         "issues": {
             "nodes": [
@@ -326,7 +459,17 @@ MOCK_RESPONSE_ISSUE: Dict[str, Dict[str, Dict[str, List[Dict[str, Union[None, Di
         }
     }
 }
-EXPECTED_ISSUE: Dict[str, Union[None, Dict[str, str], List[Dict[str, str]], List[Dict[str, Union[Dict[str, str], str]]], int, str]] = {
+EXPECTED_ISSUE: Dict[
+    str,
+    Union[
+        None,
+        Dict[str, str],
+        List[Dict[str, str]],
+        List[Dict[str, Union[Dict[str, str], str]]],
+        int,
+        str,
+    ],
+] = {
     "number": 1,
     "url": "https://github.com/demo_user/demo_repo/issues/1",
     "createdAt": "2023-04-18T10:12:21Z",
@@ -637,7 +780,14 @@ MOCK_RESPONSE_MEMBERS = {
         }
     }
 }
-EXPECTED_ACCESS_CONTROL: List[Dict[str, Union[Dict[str, Dict[str, Union[Dict[str, List[str]], str]]], Dict[str, str], str]]] = [
+EXPECTED_ACCESS_CONTROL: List[
+    Dict[
+        str,
+        Union[
+            Dict[str, Dict[str, Union[Dict[str, List[str]], str]]], Dict[str, str], str
+        ],
+    ]
+] = [
     {
         "_id": "#123",
         "identity": {
@@ -660,7 +810,14 @@ EXPECTED_ACCESS_CONTROL: List[Dict[str, Union[Dict[str, Dict[str, Union[Dict[str
         },
     }
 ]
-EXPECTED_ACCESS_CONTROL_GITHUB_APP: List[Dict[str, Union[Dict[str, Dict[str, Union[Dict[str, List[str]], str]]], Dict[str, str], str]]] = [
+EXPECTED_ACCESS_CONTROL_GITHUB_APP: List[
+    Dict[
+        str,
+        Union[
+            Dict[str, Dict[str, Union[Dict[str, List[str]], str]]], Dict[str, str], str
+        ],
+    ]
+] = [
     {
         "_id": "#1",
         "identity": {
@@ -812,12 +969,12 @@ MOCK_REPO_4_DOC = {
 
 @asynccontextmanager
 async def create_github_source(
-    auth_method: str=PERSONAL_ACCESS_TOKEN,
-    repo_type: str="other",
-    org_name: str="",
-    repos: str="*",
-    use_document_level_security: bool=False,
-    use_text_extraction_service: bool=False,
+    auth_method: str = PERSONAL_ACCESS_TOKEN,
+    repo_type: str = "other",
+    org_name: str = "",
+    repos: str = "*",
+    use_document_level_security: bool = False,
+    use_text_extraction_service: bool = False,
 ):
     async with create_source(
         GitHubDataSource,
@@ -1625,7 +1782,9 @@ async def test_get_docs() -> None:
 
 
 @pytest.mark.asyncio
-async def test_get_docs_with_access_control_should_not_add_acl_for_public_repo() -> None:
+async def test_get_docs_with_access_control_should_not_add_acl_for_public_repo() -> (
+    None
+):
     public_repo_ = public_repo()
     pull_request_ = pull_request()
     issue_ = issue()
@@ -1652,7 +1811,9 @@ async def test_get_docs_with_access_control_should_not_add_acl_for_public_repo()
 
 
 @pytest.mark.asyncio
-async def test_get_docs_with_access_control_should_add_acl_for_non_public_repo() -> None:
+async def test_get_docs_with_access_control_should_add_acl_for_non_public_repo() -> (
+    None
+):
     expected_response = [
         PRIVATE_REPO,
         MOCK_RESPONSE_PULL,
@@ -1826,7 +1987,9 @@ async def test_get_docs_with_access_control_should_add_acl_for_non_public_repo()
     ],
 )
 @pytest.mark.asyncio
-async def test_advanced_rules_validation(advanced_rules, expected_validation_result) -> None:
+async def test_advanced_rules_validation(
+    advanced_rules, expected_validation_result
+) -> None:
     async with create_github_source() as source:
         source.get_invalid_repos = AsyncMock(return_value=[])
 
@@ -2105,7 +2268,9 @@ async def test_get_personal_access_token_scopes(scopes, expected_scopes) -> None
         ),
     ],
 )
-async def test_get_personal_access_token_scopes_when_error_occurs(exception, raises) -> None:
+async def test_get_personal_access_token_scopes_when_error_occurs(
+    exception, raises
+) -> None:
     async with create_github_source() as source:
         source.github_client._get_client._request = AsyncMock(side_effect=exception)
         with pytest.raises(raises):

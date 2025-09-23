@@ -6,6 +6,7 @@
 """Tests the OneDrive source class methods"""
 
 from contextlib import asynccontextmanager
+from typing import Dict, List, Union
 from unittest.mock import ANY, AsyncMock, MagicMock, Mock, patch
 
 import pytest
@@ -26,7 +27,6 @@ from connectors.sources.onedrive import (
 )
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
-from typing import Dict, List, Union
 
 ADVANCED_SNIPPET = "advanced_snippet"
 EXPECTED_USERS = [
@@ -179,7 +179,9 @@ RESPONSE_USER1_FILES = [
     },
 ]
 
-EXPECTED_USER1_FILES: List[Union[Dict[str, Union[None, int, str]], Dict[str, Union[int, str]]]] = [
+EXPECTED_USER1_FILES: List[
+    Union[Dict[str, Union[None, int, str]], Dict[str, Union[int, str]]]
+] = [
     {
         "created_at": "2023-05-01T09:09:19Z",
         "_id": "01DABHRNU2RE777OZMAZG24FV3XP24GXCO",
@@ -229,7 +231,9 @@ RESPONSE_USER2_FILES = [
     },
 ]
 
-EXPECTED_USER2_FILES: List[Union[Dict[str, Union[None, int, str]], Dict[str, Union[int, str]]]] = [
+EXPECTED_USER2_FILES: List[
+    Union[Dict[str, Union[None, int, str]], Dict[str, Union[int, str]]]
+] = [
     {
         "created_at": "2023-05-01T09:09:19Z",
         "_id": "01DABHRNU2RE777OZMAZG24FV3XP24GXCO",
@@ -352,7 +356,12 @@ RESPONSE_PERMISSION_INVALID = {
     "grantedToIdentitiesV2": [{"group": {"bar": "foo"}}],
 }
 
-EXPECTED_USER1_FILES_PERMISSION: List[Union[Dict[str, Union[None, List[str], int, str]], Dict[str, Union[List[str], int, str]]]] = [
+EXPECTED_USER1_FILES_PERMISSION: List[
+    Union[
+        Dict[str, Union[None, List[str], int, str]],
+        Dict[str, Union[List[str], int, str]],
+    ]
+] = [
     {
         "type": "folder",
         "title": "folder3",
@@ -384,7 +393,12 @@ EXPECTED_USER1_FILES_PERMISSION: List[Union[Dict[str, Union[None, List[str], int
         ],
     },
 ]
-EXPECTED_USER2_FILES_PERMISSION: List[Union[Dict[str, Union[None, List[str], int, str]], Dict[str, Union[List[str], int, str]]]] = [
+EXPECTED_USER2_FILES_PERMISSION: List[
+    Union[
+        Dict[str, Union[None, List[str], int, str]],
+        Dict[str, Union[List[str], int, str]],
+    ]
+] = [
     {
         "type": "folder",
         "title": "folder4",
@@ -525,7 +539,7 @@ def test_get_configuration() -> None:
 
 
 @asynccontextmanager
-async def create_onedrive_source(use_text_extraction_service: bool=False):
+async def create_onedrive_source(use_text_extraction_service: bool = False):
     async with create_source(
         OneDriveDataSource,
         client_id="foo",
@@ -1157,7 +1171,9 @@ async def test_get_docs(users_patch, files_patch) -> None:
     ],
 )
 @pytest.mark.asyncio
-async def test_advanced_rules_validation(advanced_rules, expected_validation_result) -> None:
+async def test_advanced_rules_validation(
+    advanced_rules, expected_validation_result
+) -> None:
     async with create_onedrive_source() as source:
         validation_result = await OneDriveAdvancedRulesValidator(source).validate(
             advanced_rules
@@ -1330,7 +1346,9 @@ async def test_get_docs_without_dls_enabled(users_patch, files_patch) -> None:
     ],
 )
 @pytest.mark.asyncio
-async def test_get_docs_with_dls_enabled(users_patch, files_patch, permissions_patch) -> None:
+async def test_get_docs_with_dls_enabled(
+    users_patch, files_patch, permissions_patch
+) -> None:
     async with create_onedrive_source() as source:
         source._dls_enabled = MagicMock(return_value=True)
 

@@ -11,12 +11,12 @@ import functools
 import os
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any, Dict, Optional
 
 import aiofiles
 
 from connectors.source import BaseDataSource
 from connectors.utils import TIKA_SUPPORTED_FILETYPES, get_base64_value, hash_id
-from typing import Any, Dict, Optional
 
 DEFAULT_DIR: str = os.environ.get("SYSTEM_DIR", os.path.dirname(__file__))
 
@@ -60,7 +60,9 @@ class DirectoryDataSource(BaseDataSource):
     def get_id(self, path) -> str:
         return hash_id(str(path))
 
-    async def _download(self, path, timestamp=None, doit=None) -> Optional[Dict[str, Any]]:
+    async def _download(
+        self, path, timestamp=None, doit=None
+    ) -> Optional[Dict[str, Any]]:
         if not (doit and os.path.splitext(path)[-1] in TIKA_SUPPORTED_FILETYPES):
             return
 

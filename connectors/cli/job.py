@@ -18,7 +18,6 @@ from connectors.protocol import (
     Sort,
     SyncJobIndex,
 )
-from typing import Any, Dict, List, Optional
 
 
 class Job:

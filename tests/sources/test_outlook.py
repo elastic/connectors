@@ -6,6 +6,7 @@
 """Tests the Outlook source class methods"""
 
 from contextlib import asynccontextmanager
+from typing import List, Optional, Union
 from unittest import mock
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -24,7 +25,6 @@ from connectors.sources.outlook import (
 )
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
-from typing import Optional, List, Union
 
 RESPONSE_CONTENT = bytes("# This is the dummy file", "utf-8")
 EXPECTED_CONTENT = {
@@ -258,7 +258,15 @@ class AllObjects:
     def __init__(self, object_type) -> None:
         self.object_type = object_type
 
-    def only(self, *args) -> Union[None, List[CalendarDocument], List[ContactDocument], List[MailDocument], List[TaskDocument]]:
+    def only(
+        self, *args
+    ) -> Union[
+        None,
+        List[CalendarDocument],
+        List[ContactDocument],
+        List[MailDocument],
+        List[TaskDocument],
+    ]:
         match self.object_type:
             case "mail":
                 return [MailDocument()]
@@ -371,18 +379,18 @@ class StreamReaderAsyncMock(AsyncMock):
 
 @asynccontextmanager
 async def create_outlook_source(
-    data_source: str=OUTLOOK_CLOUD,
-    tenant_id: str="foo",
-    client_id: str="bar",
-    client_secret: str="faa",
-    exchange_server: str="127.0.0.1",
-    active_directory_server: str="127.0.0.1",
-    username: str="fee",
-    password: str="fuu",
-    domain: str="outlook.com",
-    ssl_enabled: bool=False,
-    ssl_ca: str="",
-    use_text_extraction_service: bool=False,
+    data_source: str = OUTLOOK_CLOUD,
+    tenant_id: str = "foo",
+    client_id: str = "bar",
+    client_secret: str = "faa",
+    exchange_server: str = "127.0.0.1",
+    active_directory_server: str = "127.0.0.1",
+    username: str = "fee",
+    password: str = "fuu",
+    domain: str = "outlook.com",
+    ssl_enabled: bool = False,
+    ssl_ca: str = "",
+    use_text_extraction_service: bool = False,
 ):
     async with create_source(
         OutlookDataSource,

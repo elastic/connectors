@@ -5,6 +5,7 @@
 #
 import asyncio
 from functools import cached_property, partial
+from typing import Any, Dict, List, Optional, Union
 
 from aiogoogle import HTTPError
 
@@ -31,7 +32,6 @@ from connectors.utils import (
     iso_zulu,
     validate_email_address,
 )
-from typing import Any, Dict, List, Optional, Union
 
 GOOGLE_DRIVE_SERVICE_NAME = "Google Drive"
 GOOGLE_ADMIN_DIRECTORY_SERVICE_NAME = "Google Admin Directory"
@@ -156,7 +156,7 @@ class GoogleDriveClient(GoogleServiceAccountClient):
 
         return folders
 
-    async def list_files(self, fetch_permissions: bool=False, last_sync_time=None):
+    async def list_files(self, fetch_permissions: bool = False, last_sync_time=None):
         """Get files from Google Drive. Files can have any type.
 
         Args:
@@ -190,7 +190,7 @@ class GoogleDriveClient(GoogleServiceAccountClient):
             yield file
 
     async def list_files_from_my_drive(
-        self, fetch_permissions: bool=False, last_sync_time=None
+        self, fetch_permissions: bool = False, last_sync_time=None
     ):
         """Retrieves files from Google Drive, with an option to fetch permissions (DLS).
 
@@ -370,7 +370,22 @@ class GoogleDriveDataSource(BaseDataSource):
             self.google_admin_directory_client.set_logger(self._logger)
 
     @classmethod
-    def get_default_configuration(cls) -> Dict[str, Union[Dict[str, Union[List[Dict[str, str]], List[Dict[str, Union[bool, str]]], int, str]], Dict[str, Union[List[Dict[str, Union[int, str]]], List[str], int, str]], Dict[str, Union[List[str], int, str]], Dict[str, Union[int, str]]]]:
+    def get_default_configuration(
+        cls,
+    ) -> Dict[
+        str,
+        Union[
+            Dict[
+                str,
+                Union[
+                    List[Dict[str, str]], List[Dict[str, Union[bool, str]]], int, str
+                ],
+            ],
+            Dict[str, Union[List[Dict[str, Union[int, str]]], List[str], int, str]],
+            Dict[str, Union[List[str], int, str]],
+            Dict[str, Union[int, str]],
+        ],
+    ]:
         """Get the default configuration for Google Drive.
 
         Returns:
@@ -758,7 +773,9 @@ class GoogleDriveDataSource(BaseDataSource):
             ):
                 yield access_control_doc
 
-    async def resolve_paths(self, google_drive_client: Optional[GoogleDriveClient]=None):
+    async def resolve_paths(
+        self, google_drive_client: Optional[GoogleDriveClient] = None
+    ):
         """Builds a lookup between a folder id and its absolute path in Google Drive structure
 
         Returns:
@@ -827,7 +844,9 @@ class GoogleDriveDataSource(BaseDataSource):
 
         return attachment, body, file_size
 
-    async def get_google_workspace_content(self, client, file, timestamp=None) -> Optional[Dict[str, Any]]:
+    async def get_google_workspace_content(
+        self, client, file, timestamp=None
+    ) -> Optional[Dict[str, Any]]:
         """Exports Google Workspace documents to an allowed file type and extracts its text content.
 
         Shared Google Workspace documents are different than regular files. When shared from
@@ -880,7 +899,9 @@ class GoogleDriveDataSource(BaseDataSource):
 
         return document
 
-    async def get_generic_file_content(self, client, file, timestamp=None) -> Optional[Dict[str, Any]]:
+    async def get_generic_file_content(
+        self, client, file, timestamp=None
+    ) -> Optional[Dict[str, Any]]:
         """Extracts the content from allowed file types supported by Apache Tika.
 
         Args:
@@ -929,7 +950,9 @@ class GoogleDriveDataSource(BaseDataSource):
 
         return document
 
-    async def get_content(self, client, file, timestamp=None, doit=None) -> Optional[Dict[str, Any]]:
+    async def get_content(
+        self, client, file, timestamp=None, doit=None
+    ) -> Optional[Dict[str, Any]]:
         """Extracts the content from a file file.
 
         Args:

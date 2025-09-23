@@ -6,11 +6,11 @@
 """Azure Blob Storage source module responsible to fetch documents from Azure Blob Storage"""
 
 from functools import partial
+from typing import Any, Dict, List, Union
 
 from azure.storage.blob.aio import BlobServiceClient, ContainerClient
 
 from connectors.source import BaseDataSource
-from typing import Any, Dict, List, Union
 
 BLOB_SCHEMA = {
     "title": "name",
@@ -57,7 +57,16 @@ class AzureBlobStorageDataSource(BaseDataSource):
         options["concurrent_downloads"] = self.concurrent_downloads
 
     @classmethod
-    def get_default_configuration(cls) -> Dict[str, Union[Dict[str, Union[List[Dict[str, Union[int, str]]], List[str], int, str]], Dict[str, Union[List[str], int, str]], Dict[str, Union[int, str]]]]:
+    def get_default_configuration(
+        cls,
+    ) -> Dict[
+        str,
+        Union[
+            Dict[str, Union[List[Dict[str, Union[int, str]]], List[str], int, str]],
+            Dict[str, Union[List[str], int, str]],
+            Dict[str, Union[int, str]],
+        ],
+    ]:
         """Get the default configuration for Azure Blob Storage
 
         Returns:

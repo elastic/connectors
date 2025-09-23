@@ -9,6 +9,7 @@ import asyncio
 from copy import copy
 from datetime import datetime
 from functools import partial
+from typing import Dict, List, Union
 from urllib import parse
 
 import aiohttp
@@ -34,7 +35,6 @@ from connectors.utils import (
     retryable,
     ssl_context,
 )
-from typing import Dict, List, Union
 
 FINISHED = "FINISHED"
 WILDCARD = "*"
@@ -468,7 +468,18 @@ class JiraDataSource(BaseDataSource):
         self.jira_client.set_logger(self._logger)
 
     @classmethod
-    def get_default_configuration(cls) -> Dict[str, Union[Dict[str, Union[List[Dict[str, str]], int, str]], Dict[str, Union[List[Dict[str, Union[bool, str]]], int, str]], Dict[str, Union[List[Dict[str, Union[int, str]]], List[str], int, str]], Dict[str, Union[List[str], int, str]], Dict[str, Union[int, str]]]]:
+    def get_default_configuration(
+        cls,
+    ) -> Dict[
+        str,
+        Union[
+            Dict[str, Union[List[Dict[str, str]], int, str]],
+            Dict[str, Union[List[Dict[str, Union[bool, str]]], int, str]],
+            Dict[str, Union[List[Dict[str, Union[int, str]]], List[str], int, str]],
+            Dict[str, Union[List[str], int, str]],
+            Dict[str, Union[int, str]],
+        ],
+    ]:
         """Get the default configuration for Jira
 
         Returns:
@@ -788,7 +799,9 @@ class JiraDataSource(BaseDataSource):
         """Closes unclosed client session"""
         await self.jira_client.close_session()
 
-    async def get_content(self, issue_key, attachment, timestamp=None, doit: bool=False):
+    async def get_content(
+        self, issue_key, attachment, timestamp=None, doit: bool = False
+    ):
         """Extracts the content for allowed file types.
 
         Args:
@@ -952,7 +965,7 @@ class JiraDataSource(BaseDataSource):
                 )
         await self.queue.put("FINISHED")  # pyright: ignore
 
-    async def _get_issues(self, custom_query: str="") -> None:
+    async def _get_issues(self, custom_query: str = "") -> None:
         """Get issues with the help of REST APIs
 
         Yields:

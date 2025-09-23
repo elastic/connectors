@@ -9,14 +9,14 @@ import os
 import random
 import string
 import time
+from typing import Any, Dict, List, Optional, Union
 
+from faker.proxy import Faker
 from flask import Flask, escape, request
 from flask_limiter import HEADERS, Limiter
 from flask_limiter.util import get_remote_address
 
 from tests.commons import WeightedFakeProvider
-from typing import Any, Dict, List, Optional, Union
-from faker.proxy import Faker
 
 seed = 1597463007
 
@@ -269,7 +269,7 @@ class RandomDataStorage:
             "siteCollection": {"hostname": "example.sharepoint.com"},
         }
 
-    def get_sites(self, skip: int=0, take: int=10) -> List[Dict[str, Any]]:
+    def get_sites(self, skip: int = 0, take: int = 10) -> List[Dict[str, Any]]:
         results = []
 
         for site in self.sites[skip:][:take]:
@@ -329,7 +329,9 @@ class RandomDataStorage:
 
         return results
 
-    def get_site_pages(self, site_name, skip: int=0, take: int=10) -> List[Dict[str, Any]]:
+    def get_site_pages(
+        self, site_name, skip: int = 0, take: int = 10
+    ) -> List[Dict[str, Any]]:
         results = []
 
         site = self.sites_by_site_name[site_name]
@@ -384,7 +386,9 @@ class RandomDataStorage:
     def generate_sharepoint_id(self) -> str:
         return "".join(random.choices(string.ascii_uppercase + string.digits, k=32))
 
-    def get_drive_items(self, drive_id, skip: int=0, take: int=100) -> List[Union[Dict[str, int], Dict[str, str]]]:
+    def get_drive_items(
+        self, drive_id, skip: int = 0, take: int = 100
+    ) -> List[Union[Dict[str, int], Dict[str, str]]]:
         results = []
 
         site = self.sites_by_drive_id[drive_id]
@@ -422,7 +426,9 @@ class RandomDataStorage:
     def get_drive_item_content(self, drive_item_id):
         return self.drive_item_content[drive_item_id]
 
-    def get_site_lists(self, site_id, skip: int=0, take: int=100) -> List[Dict[str, Any]]:
+    def get_site_lists(
+        self, site_id, skip: int = 0, take: int = 100
+    ) -> List[Dict[str, Any]]:
         results = []
 
         site = self.sites_by_site_id[site_id]
@@ -457,7 +463,9 @@ class RandomDataStorage:
 
         return results
 
-    def get_site_list_items(self, site_id, list_id, skip: int=0, take: int=100) -> List[Dict[str, Any]]:
+    def get_site_list_items(
+        self, site_id, list_id, skip: int = 0, take: int = 100
+    ) -> List[Dict[str, Any]]:
         results = []
 
         list_ = self.site_lists_by_list_id[list_id]
@@ -521,7 +529,9 @@ class RandomDataStorage:
 
         return results
 
-    def get_site_list_item_attachments(self, site_name, list_name, list_item_id) -> Dict[str, Any]:
+    def get_site_list_item_attachments(
+        self, site_name, list_name, list_item_id
+    ) -> Dict[str, Any]:
         list_ = self.site_lists_by_list_name[list_name]
         site = self.sites_by_site_name[site_name]
         list_items = self.site_list_items[list_["id"]]

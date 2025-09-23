@@ -13,7 +13,9 @@ from datetime import date, datetime, time
 from decimal import Decimal
 from enum import Enum
 from functools import cache
+from os import PathLike
 from pydoc import locate
+from typing import Dict, List, Type, Union
 
 import aiofiles
 from aiofiles.os import remove
@@ -23,9 +25,10 @@ from bson import Decimal128
 from connectors.config import DataSourceFrameworkConfig
 from connectors.content_extraction import ContentExtraction
 from connectors.filtering.validation import (
-    FilteringValidationResult, BasicRuleAgainstSchemaValidator,
+    BasicRuleAgainstSchemaValidator,
     BasicRuleNoMatchAllRegexValidator,
     BasicRulesSetSemanticValidator,
+    FilteringValidationResult,
     FilteringValidator,
 )
 from connectors.logger import logger
@@ -36,8 +39,6 @@ from connectors.utils import (
     get_file_extension,
     hash_id,
 )
-from os import PathLike
-from typing import Dict, List, Type, Union
 
 CHUNK_SIZE: int = 1024 * 64  # 64KB default SSD page size
 CURSOR_SYNC_TIMESTAMP = "cursor_timestamp"
@@ -83,8 +84,8 @@ class Field:
         default_value=None,
         depends_on=None,
         label=None,
-        required: bool=True,
-        field_type: str="str",
+        required: bool = True,
+        field_type: str = "str",
         validations=None,
         value=None,
     ) -> None:
@@ -310,8 +311,8 @@ class DataSourceConfiguration:
         default_value=None,
         depends_on=None,
         label=None,
-        required: bool=True,
-        field_type: str="str",
+        required: bool = True,
+        field_type: str = "str",
         validations=None,
         value=None,
     ) -> None:
@@ -461,7 +462,17 @@ class BaseDataSource:
         raise NotImplementedError
 
     @classmethod
-    def basic_rules_validators(cls) -> List[Type[Union[BasicRuleAgainstSchemaValidator, BasicRuleNoMatchAllRegexValidator, BasicRulesSetSemanticValidator]]]:
+    def basic_rules_validators(
+        cls,
+    ) -> List[
+        Type[
+            Union[
+                BasicRuleAgainstSchemaValidator,
+                BasicRuleNoMatchAllRegexValidator,
+                BasicRulesSetSemanticValidator,
+            ]
+        ]
+    ]:
         """Return default basic rule validators.
 
         Basic rule validators are executed in the order they appear in the list.
@@ -750,7 +761,7 @@ class BaseDataSource:
         source_filename,
         file_extension,
         download_func,
-        return_doc_if_failed: bool=False,
+        return_doc_if_failed: bool = False,
     ):
         """
         Performs all the steps required for handling binary content:
@@ -852,7 +863,9 @@ class BaseDataSource:
 
         return doc
 
-    async def remove_temp_file(self, temp_filename: Union[PathLike[bytes], PathLike[str], bytes, str]) -> None:
+    async def remove_temp_file(
+        self, temp_filename: Union[PathLike[bytes], PathLike[str], bytes, str]
+    ) -> None:
         try:
             await remove(temp_filename)
         except Exception as e:

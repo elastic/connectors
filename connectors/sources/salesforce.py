@@ -10,9 +10,11 @@ import re
 from datetime import datetime
 from functools import cached_property, partial
 from itertools import groupby
+from typing import Any, Dict, List, Optional, Union
 
 import aiohttp
 import fastjsonschema
+from aiohttp.client import ClientSession
 from aiohttp.client_exceptions import ClientResponseError
 
 from connectors.access_control import (
@@ -33,8 +35,6 @@ from connectors.utils import (
     iso_utc,
     retryable,
 )
-from aiohttp.client import ClientSession
-from typing import Any, Dict, List, Optional, Union
 
 SALESFORCE_EMULATOR_HOST: Optional[str] = os.environ.get("SALESFORCE_EMULATOR_HOST")
 RUNNING_FTEST: bool = (
@@ -571,7 +571,9 @@ class SalesforceClient:
             return queryable_fields
         return [f for f in fields if f.lower() in queryable_fields]
 
-    async def _yield_non_bulk_query_pages(self, soql_query, endpoint: str=QUERY_ENDPOINT):
+    async def _yield_non_bulk_query_pages(
+        self, soql_query, endpoint: str = QUERY_ENDPOINT
+    ):
         """loops through query response pages and yields lists of records"""
         url = f"{self.base_url}{endpoint}"
         params = {"q": soql_query}
@@ -1342,7 +1344,16 @@ class SalesforceDataSource(BaseDataSource):
         self.salesforce_client.set_logger(self._logger)
 
     @classmethod
-    def get_default_configuration(cls) -> Dict[str, Union[Dict[str, Union[List[Dict[str, Union[bool, str]]], int, str]], Dict[str, Union[List[str], int, str]], Dict[str, Union[int, str]]]]:
+    def get_default_configuration(
+        cls,
+    ) -> Dict[
+        str,
+        Union[
+            Dict[str, Union[List[Dict[str, Union[bool, str]]], int, str]],
+            Dict[str, Union[List[str], int, str]],
+            Dict[str, Union[int, str]],
+        ],
+    ]:
         return {
             "domain": {
                 "label": "Domain",

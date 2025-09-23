@@ -76,7 +76,7 @@ class ESDocument:
             **kwargs,
         )
 
-    def log_exception(self, msg, *args, exc_info: bool=True, **kwargs) -> None:
+    def log_exception(self, msg, *args, exc_info: bool = True, **kwargs) -> None:
         self.logger.exception(
             msg,
             *args,

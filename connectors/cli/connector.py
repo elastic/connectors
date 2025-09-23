@@ -5,6 +5,7 @@
 #
 import asyncio
 from collections import OrderedDict
+from typing import Dict, Union
 
 from connectors.es import DEFAULT_LANGUAGE
 from connectors.es.cli_client import CLIClient
@@ -16,7 +17,6 @@ from connectors.protocol import (
 )
 from connectors.source import get_source_klass
 from connectors.utils import iso_utc
-from typing import Any, Dict, Union
 
 EVERYDAY_AT_MIDNIGHT = "0 0 0 * * ?"
 
@@ -63,8 +63,8 @@ class Connector:
         configuration,
         is_native,
         name,
-        language: str=DEFAULT_LANGUAGE,
-        from_index: bool=False,
+        language: str = DEFAULT_LANGUAGE,
+        from_index: bool = False,
     ):
         return asyncio.run(
             self.__create(

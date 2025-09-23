@@ -22,6 +22,7 @@ from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from time import strftime
+from typing import Optional, Union
 
 import dateutil.parser as parser
 import pytz
@@ -29,10 +30,9 @@ import tzcron
 from base64io import Base64IO
 from bs4 import BeautifulSoup
 from pympler import asizeof
+from typing_extensions import Buffer
 
 from connectors.logger import logger
-from typing import Optional, Union
-from typing_extensions import Buffer
 
 ACCESS_CONTROL_INDEX_PREFIX = ".search-acl-filter-"
 DEFAULT_CHUNK_SIZE = 500
@@ -92,7 +92,7 @@ def parse_datetime_string(datetime) -> datetime:
     return parser.parse(datetime)
 
 
-def iso_utc(when: Optional[datetime]=None) -> str:
+def iso_utc(when: Optional[datetime] = None) -> str:
     if when is None:
         when = datetime.now(timezone.utc)
     return when.isoformat()
@@ -235,7 +235,19 @@ def decode_base64_value(content: Union[str, Buffer]) -> bytes:
 _BASE64: Optional[str] = shutil.which("base64")
 
 
-def convert_to_b64(source: Union[os.PathLike[bytes], os.PathLike[str], bytes, str], target: Union[None, os.PathLike[bytes], os.PathLike[str], bytes, int, str]=None, overwrite: bool=False) -> Union[os.PathLike[bytes], os.PathLike[str], os.PathLike[Union[bytes, str]], bytes, int, str]:
+def convert_to_b64(
+    source: Union[os.PathLike[bytes], os.PathLike[str], bytes, str],
+    target: Union[None, os.PathLike[bytes], os.PathLike[str], bytes, int, str] = None,
+    overwrite: bool = False,
+) -> Union[
+    os.PathLike[bytes],
+    os.PathLike[str],
+    os.PathLike[Union[bytes, str]],
+    bytes,
+    int,
+    str,
+    None,
+]:
     """Converts a `source` file to base64 using the system's `base64`
 
     When `target` is not provided, done in-place.
@@ -291,7 +303,11 @@ def convert_to_b64(source: Union[os.PathLike[bytes], os.PathLike[str], bytes, st
 
 class MemQueue(asyncio.Queue):
     def __init__(
-        self, maxsize: int=0, maxmemsize: int=0, refresh_interval: float=1.0, refresh_timeout: int=60
+        self,
+        maxsize: int = 0,
+        maxmemsize: int = 0,
+        refresh_interval: float = 1.0,
+        refresh_timeout: float = 60,
     ) -> None:
         super().__init__(maxsize)
         self.maxmemsize = maxmemsize
@@ -311,7 +327,7 @@ class MemQueue(asyncio.Queue):
         self._current_memsize += item[0]  # pyright: ignore
         self._queue.append(item)  # pyright: ignore
 
-    def full(self, next_item_size: int=0) -> bool:
+    def full(self, next_item_size: int = 0) -> bool:
         full_by_numbers = super().full()
 
         if full_by_numbers:
@@ -445,7 +461,7 @@ class ConcurrentTasks:
         await task_pool.join()
     """
 
-    def __init__(self, max_concurrency: int=5) -> None:
+    def __init__(self, max_concurrency: int = 5) -> None:
         self.tasks = []
         self._sem = NonBlockingBoundedSemaphore(max_concurrency)
 
@@ -464,7 +480,7 @@ class ConcurrentTasks:
                 f"Exception found for task {task.get_name()}", exc_info=task.exception()
             )
 
-    def _add_task(self, coroutine, name: Optional[str]=None):
+    def _add_task(self, coroutine, name: Optional[str] = None):
         task = asyncio.create_task(coroutine(), name=name)
         self.tasks.append(task)
         # _callback will be executed when the task is done,
@@ -473,7 +489,7 @@ class ConcurrentTasks:
         task.add_done_callback(functools.partial(self._callback))
         return task
 
-    async def put(self, coroutine, name: Optional[str]=None):
+    async def put(self, coroutine, name: Optional[str] = None):
         """Adds a coroutine for immediate execution.
 
         If the number of running tasks reach `max_concurrency`, this
@@ -482,7 +498,7 @@ class ConcurrentTasks:
         await self._sem.acquire()
         return self._add_task(coroutine, name=name)
 
-    def try_put(self, coroutine, name: Optional[str]=None):
+    def try_put(self, coroutine, name: Optional[str] = None):
         """Tries to add a coroutine for immediate execution.
 
         If the number of running tasks reach `max_concurrency`, this
@@ -493,7 +509,7 @@ class ConcurrentTasks:
             return self._add_task(coroutine, name=name)
         return None
 
-    async def join(self, raise_on_error: bool=False) -> None:
+    async def join(self, raise_on_error: bool = False) -> None:
         """Wait for all tasks to finish."""
         try:
             await asyncio.gather(*self.tasks, return_exceptions=(not raise_on_error))
@@ -531,9 +547,9 @@ sleeps_for_retryable = CancellableSleeps()
 
 
 def retryable(
-    retries: int=3,
-    interval: float=1.0,
-    strategy: RetryStrategy=RetryStrategy.LINEAR_BACKOFF,
+    retries: int = 3,
+    interval: float = 1.0,
+    strategy: RetryStrategy = RetryStrategy.LINEAR_BACKOFF,
     skipped_exceptions=None,
 ):
     def wrapper(func):
@@ -669,7 +685,7 @@ def url_encode(original_string) -> str:
     return urllib.parse.quote(original_string, safe="'")
 
 
-def evaluate_timedelta(seconds, time_skew: int=0) -> str:
+def evaluate_timedelta(seconds, time_skew: int = 0) -> str:
     """Adds seconds to the current utc time.
 
     Args:
@@ -694,7 +710,7 @@ def is_expired(expires_at) -> bool:
     return datetime.utcnow() >= expires_at
 
 
-def get_pem_format(key: str, postfix: str="-----END CERTIFICATE-----") -> str:
+def get_pem_format(key: str, postfix: str = "-----END CERTIFICATE-----") -> str:
     """Convert key into PEM format.
 
     Args:
@@ -855,7 +871,7 @@ def html_to_text(html):
         return BeautifulSoup(html, features="html.parser").get_text(separator="\n")
 
 
-async def aenumerate(asequence, start: int=0):
+async def aenumerate(asequence, start: int = 0):
     i = start
     async for elem in asequence:
         try:
@@ -997,7 +1013,7 @@ class Counters:
     def __init__(self) -> None:
         self._storage = {}
 
-    def increment(self, key: str, value: int=1, namespace=None) -> None:
+    def increment(self, key: str, value: int = 1, namespace=None) -> None:
         if namespace:
             key = f"{namespace}.{key}"
         self._storage[key] = self._storage.get(key, 0) + value
@@ -1016,12 +1032,12 @@ class TooManyErrors(Exception):
 class ErrorMonitor:
     def __init__(
         self,
-        enabled: bool=True,
-        max_total_errors: int=1000,
-        max_consecutive_errors: int=10,
-        max_error_rate: float=0.15,
-        error_window_size: int=100,
-        error_queue_size: int=10,
+        enabled: bool = True,
+        max_total_errors: int = 1000,
+        max_consecutive_errors: int = 10,
+        max_error_rate: float = 0.15,
+        error_window_size: int = 100,
+        error_queue_size: int = 10,
     ) -> None:
         # When disabled, only track errors
         self.enabled = enabled
@@ -1112,7 +1128,7 @@ class ErrorMonitor:
                 raise TooManyErrors(msg) from self.last_error
 
 
-def generate_random_id(length: int=4) -> str:
+def generate_random_id(length: int = 4) -> str:
     return "".join(
         secrets.choice(string.ascii_letters + string.digits) for _ in range(length)
     )

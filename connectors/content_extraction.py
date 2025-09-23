@@ -12,6 +12,8 @@ from aiohttp.client_exceptions import ClientConnectionError, ServerTimeoutError
 
 from connectors.logger import logger
 
+__EXTRACTION_CONFIG = {}  # setup by cli.py on startup
+
 
 class ContentExtraction:
     """Content extraction manager
@@ -20,8 +22,6 @@ class ContentExtraction:
     using an instance of the data extraction service.
     Requires the data extraction service to be running
     """
-
-    __EXTRACTION_CONFIG = {}  # setup by cli.py on startup
 
     @classmethod
     def get_extraction_config(cls):

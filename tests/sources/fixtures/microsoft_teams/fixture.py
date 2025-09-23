@@ -6,14 +6,14 @@
 # ruff: noqa: T201
 import io
 import os
+from _io import BytesIO
+from typing import Any, Dict, List, Union
 
 from flask import Flask, request
 from flask_limiter import HEADERS, Limiter
 from flask_limiter.util import get_remote_address
 
 from tests.commons import WeightedFakeProvider
-from _io import BytesIO
-from typing import Any, Dict, List, Union
 
 fake_provider = WeightedFakeProvider()
 
@@ -183,7 +183,9 @@ class MicrosoftTeamsAPI:
             ]
         }
 
-    def get_user_chat_messages(self, chat_id) -> Union[Dict[str, str], Dict[str, Union[List[Dict[str, Any]], str]]]:
+    def get_user_chat_messages(
+        self, chat_id
+    ) -> Union[Dict[str, str], Dict[str, Union[List[Dict[str, Any]], str]]]:
         global MESSAGES
         message_data = []
         top = int(request.args.get("$top"))
@@ -235,7 +237,9 @@ class MicrosoftTeamsAPI:
             ]
         }
 
-    def get_events(self, user_id) -> Union[Dict[str, str], Dict[str, Union[List[Dict[str, Any]], str]]]:
+    def get_events(
+        self, user_id
+    ) -> Union[Dict[str, str], Dict[str, Union[List[Dict[str, Any]], str]]]:
         global EVENTS
         event_data = []
         top = int(request.args.get("$top"))
@@ -340,7 +344,9 @@ class MicrosoftTeamsAPI:
             "value": channel_list,
         }
 
-    def get_channel_messages(self, team_id, channel_id) -> Dict[str, Union[List[Dict[str, Any]], str]]:
+    def get_channel_messages(
+        self, team_id, channel_id
+    ) -> Dict[str, Union[List[Dict[str, Any]], str]]:
         message_list = []
         for message in range(CHANNEL_MESSAGE):
             message_list.append(
@@ -374,7 +380,9 @@ class MicrosoftTeamsAPI:
             "value": message_list,
         }
 
-    def get_channel_tabs(self, team_id, channel_id) -> Dict[str, Union[List[Dict[str, Any]], str]]:
+    def get_channel_tabs(
+        self, team_id, channel_id
+    ) -> Dict[str, Union[List[Dict[str, Any]], str]]:
         return {
             "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#tabs)",
             "value": [
@@ -387,7 +395,9 @@ class MicrosoftTeamsAPI:
             ],
         }
 
-    def get_teams_filefolder(self, team_id, channel_id) -> Dict[str, Union[Dict[str, str], int, str]]:
+    def get_teams_filefolder(
+        self, team_id, channel_id
+    ) -> Dict[str, Union[Dict[str, str], int, str]]:
         return {
             "id": "filfolder-1",
             "createdDateTime": "0001-01-01T00:00:00Z",

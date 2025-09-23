@@ -6,8 +6,10 @@
 """Tests the Generic Database source class methods"""
 
 from functools import partial
+from typing import List, Optional, Sized
 
 import pytest
+from pyre_extensions import PyreReadOnly
 
 from connectors.sources.generic_database import (
     configured_tables,
@@ -16,8 +18,6 @@ from connectors.sources.generic_database import (
     map_column_names,
 )
 from connectors.sources.mssql import MSSQLQueries
-from typing import Optional, Sized, List
-from pyre_extensions import PyreReadOnly
 
 SCHEMA = "dbo"
 TABLE = "emp_table"
@@ -158,7 +158,9 @@ COLUMN_NAMES = ["Column_1", "Column_2"]
         ("Schema", ["Table1", "Table2"], "schema_table1_table2_"),
     ],
 )
-def test_map_column_names(schema, tables: Optional[PyreReadOnly[Sized]], prefix) -> None:
+def test_map_column_names(
+    schema, tables: Optional[PyreReadOnly[Sized]], prefix
+) -> None:
     mapped_column_names = map_column_names(COLUMN_NAMES, schema, tables)
 
     for column_name, mapped_column_name in zip(

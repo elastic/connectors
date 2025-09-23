@@ -9,6 +9,7 @@ import os
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from functools import cached_property, partial
+from typing import Dict, List, Union
 
 import aiohttp
 from aiohttp.client_exceptions import ClientResponseError
@@ -23,7 +24,6 @@ from connectors.utils import (
     iso_utc,
     retryable,
 )
-from typing import Dict, List, Union
 
 RETRIES = 3
 RETRY_INTERVAL = 2
@@ -80,7 +80,7 @@ class ZoomAPIToken:
     def set_logger(self, logger_) -> None:
         self._logger = logger_
 
-    async def get(self, is_cache: bool=True):
+    async def get(self, is_cache: bool = True):
         cached_value = self._token_cache.get_value() if is_cache else None
 
         if cached_value:
@@ -320,7 +320,16 @@ class ZoomDataSource(BaseDataSource):
         return ZoomClient(configuration=self.configuration)
 
     @classmethod
-    def get_default_configuration(cls) -> Dict[str, Union[Dict[str, Union[List[Dict[str, Union[int, str]]], int, str]], Dict[str, Union[List[str], int, str]], Dict[str, Union[int, str]]]]:
+    def get_default_configuration(
+        cls,
+    ) -> Dict[
+        str,
+        Union[
+            Dict[str, Union[List[Dict[str, Union[int, str]]], int, str]],
+            Dict[str, Union[List[str], int, str]],
+            Dict[str, Union[int, str]],
+        ],
+    ]:
         return {
             "account_id": {
                 "label": "Account ID",
@@ -390,7 +399,7 @@ class ZoomDataSource(BaseDataSource):
         )
         return doc
 
-    async def get_content(self, chat_file, timestamp=None, doit: bool=False):
+    async def get_content(self, chat_file, timestamp=None, doit: bool = False):
         file_size = chat_file["file_size"]
         if not (doit and file_size > 0):
             return

@@ -8,6 +8,7 @@ Collection of fake source classes for tests
 """
 
 from functools import partial
+from typing import Dict, Optional
 from unittest.mock import Mock
 
 from connectors.filtering.validation import (
@@ -15,7 +16,6 @@ from connectors.filtering.validation import (
     FilteringValidationState,
 )
 from connectors.source import BaseDataSource
-from typing import Dict, Optional
 
 
 class FakeSource(BaseDataSource):

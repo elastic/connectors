@@ -5,6 +5,7 @@
 #
 import base64
 from io import BytesIO
+from typing import Dict, List, Optional, Union
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
@@ -23,7 +24,6 @@ from connectors.sources.microsoft_teams import (
 )
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
-from typing import Dict, List, Optional, Union
 
 USER_CHATS = [
     {
@@ -222,7 +222,43 @@ USERS = [
     },
 ]
 
-EVENTS: List[Union[Dict[str, Union[None, Dict[str, Dict[str, str]], Dict[str, str], Dict[str, Union[Dict[str, Union[List[str], int, str]], Dict[str, Union[int, str]]]], List[Dict[str, Dict[str, str]]], List[Dict[str, str]], List[str], int, str]], Dict[str, Union[None, Dict[str, Dict[str, str]], Dict[str, str], List[Dict[str, Dict[str, str]]], List[Dict[str, str]], List[str], int, str]]]] = [
+EVENTS: List[
+    Union[
+        Dict[
+            str,
+            Union[
+                None,
+                Dict[str, Dict[str, str]],
+                Dict[str, str],
+                Dict[
+                    str,
+                    Union[
+                        Dict[str, Union[List[str], int, str]],
+                        Dict[str, Union[int, str]],
+                    ],
+                ],
+                List[Dict[str, Dict[str, str]]],
+                List[Dict[str, str]],
+                List[str],
+                int,
+                str,
+            ],
+        ],
+        Dict[
+            str,
+            Union[
+                None,
+                Dict[str, Dict[str, str]],
+                Dict[str, str],
+                List[Dict[str, Dict[str, str]]],
+                List[Dict[str, str]],
+                List[str],
+                int,
+                str,
+            ],
+        ],
+    ]
+] = [
     {
         "id": "AAMkADkyYTNmOTcw",
         "createdDateTime": "2023-08-10T05:47:41.5466652Z",

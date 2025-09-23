@@ -32,13 +32,17 @@ class TestESManagementClient:
         yield es_management_client
 
     @pytest.mark.asyncio
-    async def test_ensure_exists_when_no_indices_passed(self, es_management_client) -> None:
+    async def test_ensure_exists_when_no_indices_passed(
+        self, es_management_client
+    ) -> None:
         await es_management_client.ensure_exists()
 
         es_management_client.client.indices.exists.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_ensure_exists_when_indices_passed(self, es_management_client) -> None:
+    async def test_ensure_exists_when_indices_passed(
+        self, es_management_client
+    ) -> None:
         index_name = "search-mongo"
         es_management_client.client.indices.exists.return_value = False
 
@@ -193,7 +197,9 @@ class TestESManagementClient:
             assert ids == ["1", "2"]
 
     @pytest.mark.asyncio
-    async def test_get_connector_secret(self, es_management_client, mock_responses) -> None:
+    async def test_get_connector_secret(
+        self, es_management_client, mock_responses
+    ) -> None:
         secret_id = "secret-id"
 
         es_management_client.client.perform_request = AsyncMock(
@@ -227,7 +233,9 @@ class TestESManagementClient:
             assert secret is None
 
     @pytest.mark.asyncio
-    async def test_create_connector_secret(self, es_management_client, mock_responses) -> None:
+    async def test_create_connector_secret(
+        self, es_management_client, mock_responses
+    ) -> None:
         secret_id = "secret-id"
         secret_value = "my-secret"
 
@@ -245,7 +253,9 @@ class TestESManagementClient:
         )
 
     @pytest.mark.asyncio
-    async def test_extract_index_or_alias_with_index(self, es_management_client) -> None:
+    async def test_extract_index_or_alias_with_index(
+        self, es_management_client
+    ) -> None:
         response = {
             "shapo-online": {
                 "aliases": {"search-shapo-online": {}},
@@ -261,7 +271,9 @@ class TestESManagementClient:
         assert index == response["shapo-online"]
 
     @pytest.mark.asyncio
-    async def test_extract_index_or_alias_with_alias(self, es_management_client) -> None:
+    async def test_extract_index_or_alias_with_alias(
+        self, es_management_client
+    ) -> None:
         response = {
             "shapo-online": {
                 "aliases": {"search-shapo-online": {}},
@@ -277,7 +289,9 @@ class TestESManagementClient:
         assert index == response["shapo-online"]
 
     @pytest.mark.asyncio
-    async def test_extract_index_or_alias_when_none_present(self, es_management_client) -> None:
+    async def test_extract_index_or_alias_when_none_present(
+        self, es_management_client
+    ) -> None:
         response = {
             "shapo-online": {
                 "aliases": {"search-shapo-online": {}},
@@ -293,7 +307,9 @@ class TestESManagementClient:
         assert index is None
 
     @pytest.mark.asyncio
-    async def test_get_index_or_alias(self, es_management_client, mock_responses) -> None:
+    async def test_get_index_or_alias(
+        self, es_management_client, mock_responses
+    ) -> None:
         secret_id = "secret-id"
         secret_value = "my-secret"
 

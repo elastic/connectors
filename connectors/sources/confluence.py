@@ -9,6 +9,7 @@ import asyncio
 import os
 from copy import copy
 from functools import partial
+from typing import Any, Dict, List, Union
 from urllib.parse import urljoin
 
 import aiohttp
@@ -38,7 +39,6 @@ from connectors.utils import (
     retryable,
     ssl_context,
 )
-from typing import Any, Dict, List, Union
 
 RETRIES = 3
 RETRY_INTERVAL = 2
@@ -477,7 +477,18 @@ class ConfluenceDataSource(BaseDataSource):
         self.confluence_client.set_logger(self._logger)
 
     @classmethod
-    def get_default_configuration(cls) -> Dict[str, Union[Dict[str, Union[List[Dict[str, str]], int, str]], Dict[str, Union[List[Dict[str, Union[bool, str]]], int, str]], Dict[str, Union[List[Dict[str, Union[int, str]]], List[str], int, str]], Dict[str, Union[List[str], int, str]], Dict[str, Union[int, str]]]]:
+    def get_default_configuration(
+        cls,
+    ) -> Dict[
+        str,
+        Union[
+            Dict[str, Union[List[Dict[str, str]], int, str]],
+            Dict[str, Union[List[Dict[str, Union[bool, str]]], int, str]],
+            Dict[str, Union[List[Dict[str, Union[int, str]]], List[str], int, str]],
+            Dict[str, Union[List[str], int, str]],
+            Dict[str, Union[int, str]],
+        ],
+    ]:
         """Get the default configuration for Confluence
 
         Returns:
@@ -1073,7 +1084,9 @@ class ConfluenceDataSource(BaseDataSource):
 
             yield document, download_url
 
-    async def download_attachment(self, url, attachment, timestamp=None, doit: bool=False):
+    async def download_attachment(
+        self, url, attachment, timestamp=None, doit: bool = False
+    ):
         """Downloads the content of the given attachment in chunks using REST API call
 
         Args:

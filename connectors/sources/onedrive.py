@@ -10,10 +10,12 @@ import json
 import os
 from datetime import datetime, timedelta
 from functools import cached_property, partial
+from typing import Any, Dict, List, Optional, Union
 from urllib import parse
 
 import aiohttp
 import fastjsonschema
+from aiohttp.client import ClientSession
 from aiohttp.client_exceptions import (
     ClientPayloadError,
     ClientResponseError,
@@ -39,8 +41,6 @@ from connectors.utils import (
     iso_utc,
     retryable,
 )
-from aiohttp.client import ClientSession
-from typing import Any, Dict, List, Optional, Union
 
 RETRIES = 3
 RETRY_INTERVAL = 2
@@ -343,7 +343,11 @@ class OneDriveClient:
             raise
 
     async def paginated_api_call(
-        self, url, params: Optional[str]=None, fetch_size: int=FETCH_SIZE, header=None
+        self,
+        url,
+        params: Optional[str] = None,
+        fetch_size: int = FETCH_SIZE,
+        header=None,
     ):
         if params is None:
             params = {}
@@ -371,7 +375,7 @@ class OneDriveClient:
                 )
                 break
 
-    async def list_users(self, include_groups: bool=False):
+    async def list_users(self, include_groups: bool = False):
         header = None
         params = {
             "$filter": "accountEnabled eq true",
@@ -405,7 +409,9 @@ class OneDriveClient:
             for permission_detail in response:
                 yield permission_detail
 
-    async def get_owned_files(self, user_id, skipped_extensions=None, pattern: str=""):
+    async def get_owned_files(
+        self, user_id, skipped_extensions=None, pattern: str = ""
+    ):
         params = {"$select": ITEM_FIELDS}
         delta_endpoint = ENDPOINTS[DELTA].format(user_id=user_id)
 
@@ -451,7 +457,11 @@ class OneDriveDataSource(BaseDataSource):
         self.client.set_logger(self._logger)
 
     @classmethod
-    def get_default_configuration(cls) -> Dict[str, Union[Dict[str, Union[List[str], int, str]], Dict[str, Union[int, str]]]]:
+    def get_default_configuration(
+        cls,
+    ) -> Dict[
+        str, Union[Dict[str, Union[List[str], int, str]], Dict[str, Union[int, str]]]
+    ]:
         """Get the default configuration for OneDrive
 
         Returns:
@@ -537,7 +547,7 @@ class OneDriveDataSource(BaseDataSource):
             self._logger.exception("Error while connecting to OneDrive")
             raise
 
-    async def get_content(self, file, download_url, timestamp=None, doit: bool=False):
+    async def get_content(self, file, download_url, timestamp=None, doit: bool = False):
         """Extracts the content for allowed file types.
 
         Args:

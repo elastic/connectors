@@ -23,20 +23,23 @@ import copy
 import functools
 import logging
 import time
+from typing import Any, Dict, Optional, Tuple
 
 from connectors.config import (
     DEFAULT_ELASTICSEARCH_MAX_RETRIES,
     DEFAULT_ELASTICSEARCH_RETRY_INTERVAL,
 )
 from connectors.es import TIMESTAMP_FIELD
+from connectors.es.client import License
 from connectors.es.management_client import ESManagementClient
 from connectors.filtering.basic_rule import BasicRuleEngine, parse
 from connectors.logger import logger, tracer
-from connectors.protocol import Filter, JobType
+from connectors.protocol import JobType
 from connectors.protocol.connectors import (
-    Filter, DELETED_DOCUMENT_COUNT,
+    DELETED_DOCUMENT_COUNT,
     INDEXED_DOCUMENT_COUNT,
     INDEXED_DOCUMENT_VOLUME,
+    Filter,
 )
 from connectors.utils import (
     DEFAULT_CHUNK_MEM_SIZE,
@@ -56,8 +59,6 @@ from connectors.utils import (
     retryable,
     sanitize,
 )
-from typing import Tuple, Any, Dict, Optional
-from connectors.es.client import License
 
 __all__ = ["SyncOrchestrator"]
 EXTRACTOR_ERROR = "EXTRACTOR_ERROR"
@@ -147,7 +148,7 @@ class Sink:
         retry_interval,
         error_monitor,
         logger_=None,
-        enable_bulk_operations_logging: bool=False,
+        enable_bulk_operations_logging: bool = False,
     ) -> None:
         self.client = client
         self.queue = queue
@@ -164,7 +165,7 @@ class Sink:
         self._enable_bulk_operations_logging = enable_bulk_operations_logging
         self.counters = Counters()
 
-    def _bulk_op(self, doc, operation: str=OP_INDEX):
+    def _bulk_op(self, doc, operation: str = OP_INDEX):
         doc_id = doc["_id"]
         index = doc["_index"]
 
@@ -233,7 +234,9 @@ class Sink:
                         result[doc["_id"]] = op
         return result
 
-    async def _process_bulk_response(self, res, ids_to_ops, do_log: bool=False) -> None:
+    async def _process_bulk_response(
+        self, res, ids_to_ops, do_log: bool = False
+    ) -> None:
         for item in res.get("items", []):
             if OP_INDEX in item:
                 action_item = OP_INDEX
@@ -443,13 +446,13 @@ class Extractor:
         client,
         queue,
         index,
-        filter_: Optional[Filter]=None,
-        sync_rules_enabled: bool=False,
-        content_extraction_enabled: bool=True,
-        display_every: int=DEFAULT_DISPLAY_EVERY,
-        concurrent_downloads: int=DEFAULT_CONCURRENT_DOWNLOADS,
+        filter_: Optional[Filter] = None,
+        sync_rules_enabled: bool = False,
+        content_extraction_enabled: bool = True,
+        display_every: int = DEFAULT_DISPLAY_EVERY,
+        concurrent_downloads: int = DEFAULT_CONCURRENT_DOWNLOADS,
         logger_=None,
-        skip_unchanged_documents: bool=False,
+        skip_unchanged_documents: bool = False,
     ) -> None:
         if filter_ is None:
             filter_ = Filter()
@@ -552,7 +555,7 @@ class Extractor:
         async for doc in generator:
             yield doc
 
-    async def get_docs(self, generator, skip_unchanged_documents: bool=False) -> None:
+    async def get_docs(self, generator, skip_unchanged_documents: bool = False) -> None:
         """Iterate on a generator of documents to fill a queue of bulk operations for the `Sink` to consume.
         Extraction happens in a separate task, when a document contains files.
 
@@ -981,12 +984,12 @@ class SyncOrchestrator:
         generator,
         pipeline,
         job_type,
-        filter_: Optional[Filter]=None,
-        sync_rules_enabled: bool=False,
-        content_extraction_enabled: bool=True,
+        filter_: Optional[Filter] = None,
+        sync_rules_enabled: bool = False,
+        content_extraction_enabled: bool = True,
         options=None,
-        skip_unchanged_documents: bool=False,
-        enable_bulk_operations_logging: bool=False,
+        skip_unchanged_documents: bool = False,
+        enable_bulk_operations_logging: bool = False,
     ) -> None:
         """Performs a batch of `_bulk` calls, given a generator of documents
 

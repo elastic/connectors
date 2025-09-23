@@ -14,6 +14,7 @@ executes the `main` function of this module, which starts the service.
 import asyncio
 import json
 import os
+from typing import BinaryIO, List, TextIO, Union
 
 import click
 import yaml
@@ -28,7 +29,6 @@ from connectors.cli.index import Index
 from connectors.cli.job import Job
 from connectors.config import _default_config
 from connectors.es import DEFAULT_LANGUAGE
-from typing import List, Union, BinaryIO, TextIO
 
 __all__ = ["main"]
 

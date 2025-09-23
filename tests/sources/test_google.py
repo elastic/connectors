@@ -3,6 +3,7 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+from typing import Dict, Optional
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
@@ -18,21 +19,24 @@ from connectors.sources.google import (
     validate_service_account_json,
 )
 from tests.commons import AsyncIterator
-from typing import Dict, Optional
 
 JSON_CREDENTIALS = {"key": "value"}
 CUSTOMER_ID = "customer_id"
 SUBJECT = "subject@domain.com"
 
 
-def setup_gmail_client(json_credentials: Optional[Dict[str, str]]=None) -> GMailClient:
+def setup_gmail_client(
+    json_credentials: Optional[Dict[str, str]] = None,
+) -> GMailClient:
     if json_credentials is None:
         json_credentials = JSON_CREDENTIALS
 
     return GMailClient(json_credentials, CUSTOMER_ID, SUBJECT)
 
 
-def setup_google_directory_client(json_credentials: Optional[Dict[str, str]]=None) -> GoogleDirectoryClient:
+def setup_google_directory_client(
+    json_credentials: Optional[Dict[str, str]] = None,
+) -> GoogleDirectoryClient:
     if json_credentials is None:
         json_credentials = JSON_CREDENTIALS
 
@@ -119,7 +123,9 @@ class TestGoogleServiceAccountClient:
             yield aiogoogle_client
 
     @pytest.mark.asyncio
-    async def test_api_call_paged(self, patch_service_account_creds, patch_aiogoogle) -> None:
+    async def test_api_call_paged(
+        self, patch_service_account_creds, patch_aiogoogle
+    ) -> None:
         items = ["a", "b", "c"]
         first_page_mock = AsyncIterator(items)
         first_page_mock.content = items

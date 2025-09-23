@@ -4,11 +4,11 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import base64
+from logging import Logger
 
 from connectors.agent.logger import get_logger
 from connectors.config import add_defaults
 from connectors.utils import nested_get_from_dict
-from logging import Logger
 
 logger: Logger = get_logger("config")
 

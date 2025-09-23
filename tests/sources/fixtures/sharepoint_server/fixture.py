@@ -8,13 +8,13 @@
 
 import os
 import time
+from typing import Dict, Union
 
 from flask import Flask, request
 from flask_limiter import HEADERS, Limiter
 from flask_limiter.util import get_remote_address
 
 from tests.commons import WeightedFakeProvider
-from typing import Dict, Union
 
 fake_provider = WeightedFakeProvider()
 
@@ -283,7 +283,9 @@ def get_list_and_items(parent_site_url, list_id):
     "/<path:parent_site_url>/_api/web/getfilebyserverrelativeurl('<string:file_relative_url>')",
     methods=["GET"],
 )
-def get_attachment_data(parent_site_url, file_relative_url) -> Dict[str, Union[int, str]]:
+def get_attachment_data(
+    parent_site_url, file_relative_url
+) -> Dict[str, Union[int, str]]:
     """Function to fetch attachment data on the sharepoint
     Args:
         parent_site_url (str): Path of parent site

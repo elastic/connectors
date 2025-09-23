@@ -7,11 +7,11 @@
 
 import base64
 import os
+from typing import Any, Dict
 
 from flask import Flask, request
 
 from tests.commons import WeightedFakeProvider
-from typing import Any, Dict
 
 fake_provider = WeightedFakeProvider()
 

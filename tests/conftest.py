@@ -17,11 +17,11 @@ from aioresponses import aioresponses
 
 
 class Logger:
-    def __init__(self, silent: bool=True) -> None:
+    def __init__(self, silent: bool = True) -> None:
         self.logs = []
         self.silent = silent
 
-    def debug(self, msg, exc_info: bool=False) -> None:
+    def debug(self, msg, exc_info: bool = False) -> None:
         if not self.silent:
             print(msg)  # noqa: T201
         self.logs.append(msg)
@@ -80,7 +80,7 @@ def catch_stdout():
 
 
 @pytest.fixture
-def patch_logger(silent: bool=True):
+def patch_logger(silent: bool = True):
     class PatchedLogger(Logger):
         def info(self, msg, *args, prefix=None, extra=None, exc_info=None):
             super(PatchedLogger, self).info(msg, *args)

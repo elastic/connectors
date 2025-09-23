@@ -15,7 +15,7 @@ HERE: str = os.path.dirname(__file__)
 FIXTURES_DIR: str = os.path.abspath(os.path.join(HERE, "fixtures"))
 
 
-def mock_index_creation(index, mock_responses, hidden: bool=True) -> None:
+def mock_index_creation(index, mock_responses, hidden: bool = True) -> None:
     url = f"http://nowhere.com:9200/{index}"
     headers = {"X-Elastic-Product": "Elasticsearch"}
     mock_responses.head(

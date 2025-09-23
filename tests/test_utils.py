@@ -362,7 +362,7 @@ async def test_mem_queue_put_nowait() -> None:
         queue.put_nowait(i)
 
     with pytest.raises(asyncio.QueueFull) as e:
-        await queue.put_nowait("x")
+        queue.put_nowait("x")
 
     assert e is not None
 
@@ -739,7 +739,9 @@ def patch_file_ops():
         ("Ubuntu", None, "/usr/bin/base64 -w 0 {source} > {target}"),
     ],
 )
-def test_convert_to_b64_newer_macos(system, mac_ver, cmd_template, patch_file_ops) -> None:
+def test_convert_to_b64_newer_macos(
+    system, mac_ver, cmd_template, patch_file_ops
+) -> None:
     with (
         patch("platform.system", return_value=system),
         patch("platform.mac_ver", return_value=[mac_ver]),
@@ -1255,7 +1257,9 @@ def test_shorten_str(original, shorten_by: int, shortened) -> None:
         (RetryStrategy.EXPONENTIAL_BACKOFF, 10, 2, 100),  # 10 ^ 2 = 100
     ],
 )
-async def test_time_to_sleep_between_retries(strategy, interval, retry, expected_sleep) -> None:
+async def test_time_to_sleep_between_retries(
+    strategy, interval, retry, expected_sleep
+) -> None:
     assert time_to_sleep_between_retries(strategy, interval, retry) == expected_sleep
 
 

@@ -8,6 +8,7 @@
 import ssl
 from contextlib import asynccontextmanager
 from copy import copy
+from typing import Dict, List, Optional, Union
 from unittest import mock
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
@@ -36,7 +37,6 @@ from connectors.sources.confluence import (
 from connectors.utils import ssl_context
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
-from typing import Dict, List, Optional, Union
 
 ADVANCED_SNIPPET = "advanced_snippet"
 HOST_URL = "http://127.0.0.1:9696"
@@ -338,7 +338,9 @@ RESPONSE_SEARCH_RESULT = {
 }
 
 
-EXPECTED_SEARCH_RESULT_FOR_FILTERING_CLOUD: List[Union[Dict[str, str], Dict[str, Optional[str]], Dict[str, Union[int, str]]]] = [
+EXPECTED_SEARCH_RESULT_FOR_FILTERING_CLOUD: List[
+    Union[Dict[str, str], Dict[str, Optional[str]], Dict[str, Union[int, str]]]
+] = [
     {
         "_id": "983046",
         "title": "Product Details",
@@ -375,7 +377,9 @@ EXPECTED_SEARCH_RESULT_FOR_FILTERING_CLOUD: List[Union[Dict[str, str], Dict[str,
 ]
 
 
-EXPECTED_SEARCH_RESULT_FOR_FILTERING_DATA_CENTER: List[Union[Dict[str, str], Dict[str, Optional[str]], Dict[str, Union[int, str]]]] = [
+EXPECTED_SEARCH_RESULT_FOR_FILTERING_DATA_CENTER: List[
+    Union[Dict[str, str], Dict[str, Optional[str]], Dict[str, Union[int, str]]]
+] = [
     {
         "_id": "983046",
         "title": "Product Details",
@@ -500,7 +504,7 @@ EXPECTED_QUERY_RESPONSE = {
 
 @asynccontextmanager
 async def create_confluence_source(
-    use_text_extraction_service: bool=False, data_source: str=CONFLUENCE_SERVER
+    use_text_extraction_service: bool = False, data_source: str = CONFLUENCE_SERVER
 ):
     async with create_source(
         ConfluenceDataSource,
@@ -648,7 +652,9 @@ async def test_validate_config_with_valid_dependency_fields_does_not_raise_error
 
 
 @pytest.mark.asyncio
-async def test_validate_config_when_ssl_enabled_and_ssl_ca_not_empty_does_not_raise_error() -> None:
+async def test_validate_config_when_ssl_enabled_and_ssl_ca_not_empty_does_not_raise_error() -> (
+    None
+):
     with patch.object(ssl, "create_default_context", return_value=MockSSL()):
         async with create_confluence_source() as source:
             source.confluence_client._get_session().get = AsyncMock()
@@ -715,7 +721,9 @@ async def test_remote_validation_when_space_keys_are_valid() -> None:
 
 
 @pytest.mark.asyncio
-async def test_remote_validation_when_space_keys_are_unavailable_then_raise_exception() -> None:
+async def test_remote_validation_when_space_keys_are_unavailable_then_raise_exception() -> (
+    None
+):
     async with create_confluence_source() as source:
         source.spaces = ["ES", "CS"]
         async_response = AsyncMock()
@@ -1098,7 +1106,9 @@ async def test_download_attachment_when_filesize_is_large_then_download_skips() 
 
 
 @pytest.mark.asyncio
-async def test_download_attachment_when_unsupported_filetype_used_then_fail_download_skips() -> None:
+async def test_download_attachment_when_unsupported_filetype_used_then_fail_download_skips() -> (
+    None
+):
     """Tests the download attachments method for file type is not supported"""
     # Setup
     async with create_confluence_source() as source:
@@ -1185,7 +1195,9 @@ async def test_download_attachment_with_text_extraction_enabled_adds_body() -> N
     return_value=AsyncIterator([[copy(EXPECTED_CONTENT)]]),
 )
 @freeze_time("2024-04-02T09:53:15.818621+00:00")
-async def test_get_docs(spaces_patch, pages_patch, attachment_patch, content_patch) -> None:
+async def test_get_docs(
+    spaces_patch, pages_patch, attachment_patch, content_patch
+) -> None:
     """Tests the get_docs method"""
 
     # Setup

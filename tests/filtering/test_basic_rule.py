@@ -6,6 +6,7 @@
 
 import datetime
 import uuid
+from typing import Any, Dict, Union
 
 import pytest
 
@@ -18,7 +19,6 @@ from connectors.filtering.basic_rule import (
     parse,
 )
 from connectors.utils import Format
-from typing import Any, Dict, Union
 
 BASIC_RULE_ONE_ID = "1"
 BASIC_RULE_ONE_ORDER = 1
@@ -295,7 +295,9 @@ def test_rule_match_stats_eq(rule_match_stats, should_equal) -> None:
         ),
     ],
 )
-def test_engine_should_ingest(documents_should_ingest_tuples, rules, expected_stats) -> None:
+def test_engine_should_ingest(
+    documents_should_ingest_tuples, rules, expected_stats
+) -> None:
     engine = BasicRuleEngine(rules)
 
     for document_should_ingest_tuple in documents_should_ingest_tuples:
@@ -391,7 +393,9 @@ def is_default_rule(basic_rule):
         ("eXcLuDe", Policy.EXCLUDE),
     ],
 )
-def test_from_string_policy_factory_method(policy_string, expected_parsed_policy) -> None:
+def test_from_string_policy_factory_method(
+    policy_string, expected_parsed_policy
+) -> None:
     assert Policy.from_string(policy_string) == expected_parsed_policy
 
 
@@ -1312,7 +1316,9 @@ def test_coerce_rule_to_default_if_type_is_not_registered() -> None:
     assert coerced_rule_value == "something"
 
 
-def test_coerce_rule_to_default_if_doc_value_type_not_matching_rule_value_type() -> None:
+def test_coerce_rule_to_default_if_doc_value_type_not_matching_rule_value_type() -> (
+    None
+):
     basic_rule = BasicRule(
         id_=1,
         order=1,

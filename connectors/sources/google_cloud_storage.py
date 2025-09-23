@@ -8,6 +8,7 @@
 import os
 import urllib.parse
 from functools import cached_property, partial
+from typing import Dict, List, Optional, Union
 
 from aiogoogle import Aiogoogle, HTTPError
 from aiogoogle.auth.creds import ServiceAccountCreds
@@ -19,7 +20,6 @@ from connectors.sources.google import (
     validate_service_account_json,
 )
 from connectors.utils import RetryStrategy, get_pem_format, retryable
-from typing import Dict, List, Optional, Union
 
 CLOUD_STORAGE_READ_ONLY_SCOPE = "https://www.googleapis.com/auth/devstorage.read_only"
 CLOUD_STORAGE_BASE_URL = "https://console.cloud.google.com/storage/browser/_details/"
@@ -89,7 +89,7 @@ class GoogleCloudStorageClient:
         resource,
         method,
         sub_method=None,
-        full_response: bool=False,
+        full_response: bool = False,
         **kwargs,
     ):
         """Make a GET call for Google Cloud Storage with retry for the failed API calls.
@@ -169,7 +169,11 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         self._google_storage_client.set_logger(self._logger)
 
     @classmethod
-    def get_default_configuration(cls) -> Dict[str, Union[Dict[str, Union[List[str], int, str]], Dict[str, Union[int, str]]]]:
+    def get_default_configuration(
+        cls,
+    ) -> Dict[
+        str, Union[Dict[str, Union[List[str], int, str]], Dict[str, Union[int, str]]]
+    ]:
         """Get the default configuration for Google Cloud Storage.
 
         Returns:

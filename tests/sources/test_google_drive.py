@@ -937,7 +937,9 @@ async def test_get_google_workspace_content() -> None:
     "connectors.content_extraction.ContentExtraction._check_configured",
     lambda *_: True,
 )
-async def test_get_google_workspace_content_with_text_extraction_enabled_adds_body() -> None:
+async def test_get_google_workspace_content_with_text_extraction_enabled_adds_body() -> (
+    None
+):
     """Test the module responsible for fetching the content of the Google Suite document."""
     with (
         patch(
@@ -1062,7 +1064,9 @@ async def test_get_generic_file_content() -> None:
     "connectors.content_extraction.ContentExtraction._check_configured",
     lambda *_: True,
 )
-async def test_get_generic_file_content_with_text_extraction_enabled_adds_body() -> None:
+async def test_get_generic_file_content_with_text_extraction_enabled_adds_body() -> (
+    None
+):
     """Test the module responsible for fetching the content of the file if it is extractable."""
     with (
         patch(

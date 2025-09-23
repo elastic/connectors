@@ -4,6 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import asyncio
+from typing import Dict, Optional
 from unittest.mock import ANY, AsyncMock, Mock, patch
 
 import pytest
@@ -15,14 +16,13 @@ from connectors.es.client import License
 from connectors.es.index import DocumentNotFoundError
 from connectors.filtering.validation import InvalidFilteringError
 from connectors.protocol import Filter, JobStatus, JobType, Pipeline
-from connectors.protocol.connectors import JobType, ProtocolError
+from connectors.protocol.connectors import ProtocolError
 from connectors.source import BaseDataSource
 from connectors.sync_job_runner import (
     SyncJobRunner,
     SyncJobStartError,
 )
 from tests.commons import AsyncIterator
-from typing import Optional, Dict
 
 SEARCH_INDEX_NAME = "search-mysql"
 ACCESS_CONTROL_INDEX_NAME = ".search-acl-filter-search-mysql"
@@ -75,13 +75,13 @@ def mock_sync_job(job_type, index_name) -> Mock:
 
 
 def create_runner(
-    source_changed: bool=True,
-    source_available: bool=True,
+    source_changed: bool = True,
+    source_available: bool = True,
     validate_config_exception=None,
-    job_type: JobType=JobType.FULL,
-    index_name: str=SEARCH_INDEX_NAME,
-    sync_cursor: Dict[str, str]=SYNC_CURSOR,
-    connector: Optional[Mock]=None,
+    job_type: JobType = JobType.FULL,
+    index_name: str = SEARCH_INDEX_NAME,
+    sync_cursor: Dict[str, str] = SYNC_CURSOR,
+    connector: Optional[Mock] = None,
     service_config=None,
     es_config=None,
 ) -> SyncJobRunner:
@@ -300,7 +300,9 @@ async def test_source_not_changed(
     ],
 )
 @pytest.mark.asyncio
-async def test_source_invalid_config(job_type: JobType, sync_cursor: Dict[str, str]) -> None:
+async def test_source_invalid_config(
+    job_type: JobType, sync_cursor: Dict[str, str]
+) -> None:
     sync_job_runner = create_runner(
         job_type=job_type,
         validate_config_exception=Exception(),
@@ -338,7 +340,9 @@ async def test_source_invalid_config(job_type: JobType, sync_cursor: Dict[str, s
     ],
 )
 @pytest.mark.asyncio
-async def test_source_not_available(job_type: JobType, sync_cursor: Dict[str, str]) -> None:
+async def test_source_not_available(
+    job_type: JobType, sync_cursor: Dict[str, str]
+) -> None:
     sync_job_runner = create_runner(
         job_type=job_type, source_available=False, sync_cursor=sync_cursor
     )
@@ -432,7 +436,9 @@ async def test_invalid_filtering_access_control_sync_still_executed(
     ],
 )
 @pytest.mark.asyncio
-async def test_async_bulk_error(job_type: JobType, sync_cursor: Dict[str, str], sync_orchestrator_mock) -> None:
+async def test_async_bulk_error(
+    job_type: JobType, sync_cursor: Dict[str, str], sync_orchestrator_mock
+) -> None:
     error = "something wrong"
     ingestion_stats = {
         "indexed_document_count": 0,
@@ -505,7 +511,9 @@ async def test_access_control_sync_fails_with_insufficient_license(
     ],
 )
 @pytest.mark.asyncio
-async def test_sync_job_runner(job_type: JobType, sync_cursor: Dict[str, str], sync_orchestrator_mock) -> None:
+async def test_sync_job_runner(
+    job_type: JobType, sync_cursor: Dict[str, str], sync_orchestrator_mock
+) -> None:
     ingestion_stats = {
         "indexed_document_count": 25,
         "indexed_document_volume": 30,
@@ -539,7 +547,9 @@ async def test_sync_job_runner(job_type: JobType, sync_cursor: Dict[str, str], s
     ],
 )
 @pytest.mark.asyncio
-async def test_sync_job_runner_suspend(job_type: JobType, sync_cursor: Dict[str, str], sync_orchestrator_mock) -> None:
+async def test_sync_job_runner_suspend(
+    job_type: JobType, sync_cursor: Dict[str, str], sync_orchestrator_mock
+) -> None:
     ingestion_stats = {
         "indexed_document_count": 25,
         "indexed_document_volume": 30,
@@ -571,7 +581,9 @@ async def test_sync_job_runner_suspend(job_type: JobType, sync_cursor: Dict[str,
 
 @patch("connectors.sync_job_runner.ES_ID_SIZE_LIMIT", 1)
 @pytest.mark.asyncio
-async def test_prepare_docs_when_original_id_and_hashed_id_too_long_then_skip_doc() -> None:
+async def test_prepare_docs_when_original_id_and_hashed_id_too_long_then_skip_doc() -> (
+    None
+):
     _id_too_long = "ab"
 
     sync_job_runner = create_runner_yielding_docs(docs=[({"_id": _id_too_long}, None)])
@@ -602,7 +614,9 @@ async def test_prepare_docs_when_original_id_below_limit_then_yield_doc_with_ori
 
 @patch("connectors.sync_job_runner.ES_ID_SIZE_LIMIT", 3)
 @pytest.mark.asyncio
-async def test_prepare_docs_when_original_id_above_limit_and_hashed_id_below_limit_then_yield_doc_with_hashed_id() -> None:
+async def test_prepare_docs_when_original_id_above_limit_and_hashed_id_below_limit_then_yield_doc_with_hashed_id() -> (
+    None
+):
     _id_too_long = "abcd"
     hashed_id = "a"
 
@@ -666,7 +680,9 @@ async def test_sync_job_runner_reporting_metadata(
 @pytest.mark.asyncio
 @patch("connectors.sync_job_runner.JOB_REPORTING_INTERVAL", 0)
 @patch("connectors.sync_job_runner.JOB_CHECK_INTERVAL", 0)
-async def test_sync_job_runner_connector_not_found(job_type: JobType, sync_orchestrator_mock) -> None:
+async def test_sync_job_runner_connector_not_found(
+    job_type: JobType, sync_orchestrator_mock
+) -> None:
     ingestion_stats = {
         "indexed_document_count": 15,
         "indexed_document_volume": 230,
@@ -742,7 +758,9 @@ async def test_sync_job_runner_sync_job_not_found(
 @pytest.mark.asyncio
 @patch("connectors.sync_job_runner.JOB_REPORTING_INTERVAL", 0)
 @patch("connectors.sync_job_runner.JOB_CHECK_INTERVAL", 0)
-async def test_sync_job_runner_canceled(job_type: JobType, sync_cursor: Dict[str, str], sync_orchestrator_mock) -> None:
+async def test_sync_job_runner_canceled(
+    job_type: JobType, sync_cursor: Dict[str, str], sync_orchestrator_mock
+) -> None:
     ingestion_stats = {
         "indexed_document_count": 15,
         "indexed_document_volume": 230,

@@ -15,7 +15,9 @@ import pprint
 import signal
 import sys
 import time
-from argparse import Namespace, ArgumentParser
+from argparse import ArgumentParser, Namespace
+from asyncio.events import AbstractEventLoop
+from typing import Optional
 
 from elastic_transport import ConnectionTimeout
 from elasticsearch import ApiError
@@ -26,8 +28,6 @@ from connectors.utils import (
     RetryStrategy,
     time_to_sleep_between_retries,
 )
-from asyncio.events import AbstractEventLoop
-from typing import Optional
 
 CONNECTORS_INDEX = ".elastic-connectors"
 
@@ -75,7 +75,7 @@ def _parser() -> ArgumentParser:
     return parser
 
 
-def retrying_transient_errors(retries: int=5):
+def retrying_transient_errors(retries: int = 5):
     def wrapper(func):
         @functools.wraps(func)
         async def wrapped(*args, **kwargs):
@@ -175,7 +175,7 @@ async def _exec_shell(cmd) -> None:
     logger.debug(f"Successfully executed cmd: {cmd}")
 
 
-async def main(args: Optional[Namespace]=None):
+async def main(args: Optional[Namespace] = None):
     parser = _parser()
     args = parser.parse_args(args=args)
     action = args.action

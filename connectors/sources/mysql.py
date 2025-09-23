@@ -6,6 +6,7 @@
 """MySQL source module responsible to fetch documents from MySQL"""
 
 import re
+from typing import Dict, List, Union
 
 import aiomysql
 import fastjsonschema
@@ -27,9 +28,10 @@ from connectors.utils import (
     retryable,
     ssl_context,
 )
-from typing import Dict, List, Union
 
-SPLIT_BY_COMMA_OUTSIDE_BACKTICKS_PATTERN: re.Pattern[str] = re.compile(r"`(?:[^`]|``)+`|\w+")
+SPLIT_BY_COMMA_OUTSIDE_BACKTICKS_PATTERN: re.Pattern[str] = re.compile(
+    r"`(?:[^`]|``)+`|\w+"
+)
 
 MAX_POOL_SIZE = 10
 DEFAULT_FETCH_SIZE = 5000
@@ -116,8 +118,8 @@ class MySQLClient:
         ssl_certificate,
         logger_,
         database=None,
-        max_pool_size: int=MAX_POOL_SIZE,
-        fetch_size: int=DEFAULT_FETCH_SIZE,
+        max_pool_size: int = MAX_POOL_SIZE,
+        fetch_size: int = DEFAULT_FETCH_SIZE,
     ) -> None:
         self.host = host
         self.port = port
@@ -151,7 +153,9 @@ class MySQLClient:
 
         return self
 
-    async def __aexit__(self, exception_type, exception_value, exception_traceback) -> None:
+    async def __aexit__(
+        self, exception_type, exception_value, exception_traceback
+    ) -> None:
         self._sleeps.cancel()
 
         self.connection_pool.release(self.connection)
@@ -362,7 +366,16 @@ class MySqlDataSource(BaseDataSource):
         self.tables = self.configuration["tables"]
 
     @classmethod
-    def get_default_configuration(cls) -> Dict[str, Union[Dict[str, Union[List[Dict[str, Union[bool, str]]], int, str]], Dict[str, Union[List[str], int, str]], Dict[str, Union[int, str]]]]:
+    def get_default_configuration(
+        cls,
+    ) -> Dict[
+        str,
+        Union[
+            Dict[str, Union[List[Dict[str, Union[bool, str]]], int, str]],
+            Dict[str, Union[List[str], int, str]],
+            Dict[str, Union[int, str]],
+        ],
+    ]:
         return {
             "host": {
                 "label": "Host",

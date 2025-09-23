@@ -10,12 +10,12 @@ import io
 import os
 import random
 import string
+from _io import BytesIO
+from typing import Any, Dict
 
 from faker import Faker
 from flask import Flask, make_response, request
-from _io import BytesIO
 from flask.wrappers import Response
-from typing import Any, Dict
 
 app = Flask(__name__)
 
@@ -23,7 +23,9 @@ app = Flask(__name__)
 DATA_SIZE: str = os.environ.get("DATA_SIZE", "medium").lower()
 _SIZES = {"small": 500000, "medium": 1000000, "large": 3000000}
 FILE_SIZE: int = _SIZES[DATA_SIZE]
-LARGE_DATA: str = "".join([random.choice(string.ascii_letters) for _ in range(FILE_SIZE)])
+LARGE_DATA: str = "".join(
+    [random.choice(string.ascii_letters) for _ in range(FILE_SIZE)]
+)
 fake = Faker()
 
 

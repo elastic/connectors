@@ -8,6 +8,7 @@ import datetime
 import itertools
 import json
 from copy import deepcopy
+from typing import Any, Dict, Optional, Union
 from unittest import mock
 from unittest.mock import ANY, AsyncMock, Mock, call, patch
 
@@ -42,7 +43,6 @@ from connectors.protocol.connectors import (
 )
 from connectors.utils import ErrorMonitor, TooManyErrors
 from tests.commons import AsyncIterator
-from typing import Any, Dict, Optional, Union
 
 INDEX = "some-index"
 TIMESTAMP = datetime.datetime(year=2023, month=1, day=1)
@@ -51,7 +51,10 @@ DOC_ONE_ID = 1
 DOC_TWO_ID = 2
 DOC_THREE_ID = 3
 
-DOC_ONE: Dict[str, Union[datetime.datetime, int]] = {"_id": DOC_ONE_ID, "_timestamp": TIMESTAMP}
+DOC_ONE: Dict[str, Union[datetime.datetime, int]] = {
+    "_id": DOC_ONE_ID,
+    "_timestamp": TIMESTAMP,
+}
 
 DOC_ONE_DIFFERENT_TIMESTAMP: Dict[str, Union[datetime.datetime, int]] = {
     "_id": DOC_ONE_ID,
@@ -59,7 +62,10 @@ DOC_ONE_DIFFERENT_TIMESTAMP: Dict[str, Union[datetime.datetime, int]] = {
 }
 
 DOC_TWO: Dict[str, Union[datetime.datetime, int]] = {"_id": 2, "_timestamp": TIMESTAMP}
-DOC_THREE: Dict[str, Union[datetime.datetime, int]] = {"_id": 3, "_timestamp": TIMESTAMP}
+DOC_THREE: Dict[str, Union[datetime.datetime, int]] = {
+    "_id": 3,
+    "_timestamp": TIMESTAMP,
+}
 DOC_FOUR: Dict[str, Union[datetime.datetime, int]] = {"_id": 4, "_timestamp": TIMESTAMP}
 
 BULK_ACTION_ERROR = "some error"
@@ -70,7 +76,7 @@ CONTENT_EXTRACTION_ENABLED = True
 CONTENT_EXTRACTION_DISABLED = False
 
 
-def failed_bulk_action(doc_id, action, result, error: str=BULK_ACTION_ERROR):
+def failed_bulk_action(doc_id, action, result, error: str = BULK_ACTION_ERROR):
     return {action: {"_id": doc_id, "result": result, "error": error}}
 
 
@@ -82,11 +88,15 @@ def successful_action_log_message(doc_id, action, result) -> str:
     return f"Successfully executed '{action}' on document with id '{doc_id}'. Result: {result}"
 
 
-def successful_operation_with_non_successful_result_log_message(doc_id, action, result) -> str:
+def successful_operation_with_non_successful_result_log_message(
+    doc_id, action, result
+) -> str:
     return f"Executed '{action}' on document with id '{doc_id}', but got non-successful result: {result}"
 
 
-def failed_action_log_message(doc_id, action, result, error: str=BULK_ACTION_ERROR) -> str:
+def failed_action_log_message(
+    doc_id, action, result, error: str = BULK_ACTION_ERROR
+) -> str:
     return (
         f"Failed to execute '{action}' on document with id '{doc_id}'. Error: {error}"
     )
@@ -215,7 +225,7 @@ async def test_prepare_content_index(mock_responses) -> None:
         create_index_mock.assert_not_called()
 
 
-def set_responses(mock_responses, ts: Optional[str]=None) -> None:
+def set_responses(mock_responses, ts: Optional[str] = None) -> None:
     if ts is None:
         ts = datetime.datetime.now().isoformat()
     headers = {"X-Elastic-Product": "Elasticsearch"}
@@ -460,8 +470,8 @@ async def lazy_downloads_mock() -> Mock:
 async def setup_extractor(
     queue,
     basic_rule_engine=None,
-    sync_rules_enabled: bool=False,
-    content_extraction_enabled: bool=False,
+    sync_rules_enabled: bool = False,
+    content_extraction_enabled: bool = False,
 ) -> Extractor:
     config = {
         "username": "elastic",

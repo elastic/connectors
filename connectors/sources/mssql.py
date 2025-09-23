@@ -9,10 +9,12 @@ import asyncio
 import os
 from functools import cached_property, partial
 from tempfile import NamedTemporaryFile
+from typing import List, Optional, Sized
 
 import fastjsonschema
 from asyncpg.exceptions._base import InternalClientError
 from fastjsonschema import JsonSchemaValueException
+from pyre_extensions import PyreReadOnly
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import URL
 from sqlalchemy.exc import ProgrammingError
@@ -39,8 +41,6 @@ from connectors.utils import (
     iso_utc,
     retryable,
 )
-from typing import Sized, Optional, List
-from pyre_extensions import PyreReadOnly
 
 # Connector will skip the below tables if it gets from the input
 TABLES_TO_SKIP = {"msdb": ["sysutility_ucp_configuration_internal"]}
@@ -159,8 +159,8 @@ class MSSQLClient:
         ssl_ca,
         validate_host,
         logger_,
-        retry_count: int=DEFAULT_RETRY_COUNT,
-        fetch_size: int=DEFAULT_FETCH_SIZE,
+        retry_count: int = DEFAULT_RETRY_COUNT,
+        fetch_size: int = DEFAULT_FETCH_SIZE,
     ) -> None:
         self.host = host
         self.port = port
@@ -257,7 +257,7 @@ class MSSQLClient:
             )
         )
 
-    async def get_tables_to_fetch(self, is_filtering: bool=False):
+    async def get_tables_to_fetch(self, is_filtering: bool = False):
         tables = configured_tables(self.tables)
         if is_wildcard(tables) or is_filtering:
             if is_filtering:
@@ -331,7 +331,7 @@ class MSSQLClient:
         ):
             return last_update_time
 
-    async def data_streamer(self, table=None, query: Optional[str]=None):
+    async def data_streamer(self, table=None, query: Optional[str] = None):
         """Streaming data from a table
 
         Args:
@@ -525,7 +525,12 @@ class MSSQLDataSource(BaseDataSource):
             column_names=primary_key_columns, schema=self.schema, tables=tables
         )
 
-    async def yield_rows_for_query(self, primary_key_columns, tables: Optional[PyreReadOnly[Sized]], query: Optional[str]=None):
+    async def yield_rows_for_query(
+        self,
+        primary_key_columns,
+        tables: Optional[PyreReadOnly[Sized]],
+        query: Optional[str] = None,
+    ):
         if query is None:
             streamer = self.mssql_client.data_streamer(table=tables[0])
         else:
@@ -587,7 +592,9 @@ class MSSQLDataSource(BaseDataSource):
                 f"Something went wrong while fetching document for query {query} and tables {', '.join(tables)}. Error: {exception}"
             )
 
-    async def _yield_docs_custom_query(self, tables, query, id_columns: Optional[List[str]]=None):
+    async def _yield_docs_custom_query(
+        self, tables, query, id_columns: Optional[List[str]] = None
+    ):
         primary_key_columns = await self.get_primary_key(tables=tables)
 
         if id_columns:

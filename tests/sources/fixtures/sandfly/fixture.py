@@ -8,12 +8,12 @@
 
 import os
 from datetime import datetime, timedelta
+from typing import Any, Dict, List, Union
 
+from faker.proxy import Faker
 from flask import Flask
 
 from tests.commons import WeightedFakeProvider
-from typing import Any, Dict, List, Union
-from faker.proxy import Faker
 
 fake_provider = WeightedFakeProvider()
 

@@ -26,7 +26,10 @@ HOST_URL = "http://127.0.0.1:8491"
 
 @asynccontextmanager
 async def create_sps_source(
-    ssl_enabled: bool=False, ssl_ca: str="", retry_count: int=3, use_text_extraction_service: bool=False
+    ssl_enabled: bool = False,
+    ssl_ca: str = "",
+    retry_count: int = 3,
+    use_text_extraction_service: bool = False,
 ):
     async with create_source(
         SharepointServerDataSource,
@@ -134,7 +137,9 @@ async def test_validate_config_when_host_url_is_empty() -> None:
 
 
 @pytest.mark.asyncio
-async def test_validate_config_for_ssl_enabled_when_ssl_ca_not_empty_does_not_raise_error() -> None:
+async def test_validate_config_for_ssl_enabled_when_ssl_ca_not_empty_does_not_raise_error() -> (
+    None
+):
     """This function test validate_config when ssl is enabled and certificate is missing"""
     with patch.object(ssl, "create_default_context", return_value=MockSSL()):
         async with create_sps_source(
@@ -1052,7 +1057,9 @@ async def test_api_call_when_status_429_exception(
 
 
 @pytest.mark.asyncio
-async def test_api_call_when_server_is_down(patch_default_wait_multiplier, caplog) -> None:
+async def test_api_call_when_server_is_down(
+    patch_default_wait_multiplier, caplog
+) -> None:
     """Tests the _api_call function while server gets disconnected."""
     async with create_sps_source(retry_count=2) as source:
         mock_response = {"access_token": "test2344", "expires_in": "1234555"}

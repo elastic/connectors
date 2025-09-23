@@ -5,6 +5,7 @@
 #
 """Tests the Box source class methods"""
 
+from typing import Dict, List, Optional, Tuple, Union
 from unittest.mock import AsyncMock, Mock, patch
 
 import aiohttp
@@ -16,7 +17,6 @@ from connectors.source import ConfigurableFieldValueError
 from connectors.sources.box import FINISHED, BoxDataSource, NotFound, TokenError
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
-from typing import Dict, List, Optional, Tuple, Union
 
 MOCK_RESPONSE = {
     "total_count": 2,
@@ -97,7 +97,9 @@ MOCK_ATTACHMENT_WITHOUT_EXTENSION = {
     "modified_at": "2023-08-04T03:17:55-07:00",
     "size": 1875887,
 }
-MOCK_RESPONSE_FETCH: List[Tuple[Dict[str, Union[int, str]], Optional[Dict[str, Union[int, str]]]]] = [
+MOCK_RESPONSE_FETCH: List[
+    Tuple[Dict[str, Union[int, str]], Optional[Dict[str, Union[int, str]]]]
+] = [
     (
         {
             "type": "file",
@@ -159,7 +161,9 @@ def get_json_mock(mock_response, status) -> AsyncMock:
     return async_mock
 
 
-def client_get_mock_func(url, headers, params) -> Union[JSONAsyncMock, StreamReaderAsyncMock]:
+def client_get_mock_func(
+    url, headers, params
+) -> Union[JSONAsyncMock, StreamReaderAsyncMock]:
     if params is not None:
         if params.get("offset") == 0 and "/2.0/folders/220376481442/items" in url:
             return JSONAsyncMock(json=FOLDER_ITEMS, status=200)

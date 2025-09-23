@@ -5,6 +5,7 @@
 #
 from contextlib import asynccontextmanager
 from datetime import datetime
+from typing import Dict
 from unittest import mock
 from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
@@ -18,13 +19,12 @@ from connectors.protocol import Filter
 from connectors.source import ConfigurableFieldValueError
 from connectors.sources.s3 import S3AdvancedRulesValidator, S3DataSource
 from tests.sources.support import create_source
-from typing import Dict
 
 ADVANCED_SNIPPET = "advanced_snippet"
 
 
 @asynccontextmanager
-async def create_s3_source(use_text_extraction_service: bool=False):
+async def create_s3_source(use_text_extraction_service: bool = False):
     async with create_source(
         S3DataSource,
         buckets="ent-search-ingest-dev",
@@ -241,7 +241,9 @@ async def test_get_content(s3_client: MagicMock) -> None:
 
 @mock.patch("aiobotocore.client.AioBaseClient")
 @pytest.mark.asyncio
-async def test_get_content_with_text_extraction_enabled_adds_body(s3_client: MagicMock) -> None:
+async def test_get_content_with_text_extraction_enabled_adds_body(
+    s3_client: MagicMock,
+) -> None:
     """Test get_content method of S3Client"""
     with (
         patch(
@@ -558,7 +560,9 @@ async def test_close_with_client_session() -> None:
     ],
 )
 @pytest.mark.asyncio
-async def test_advanced_rules_validation(advanced_rules, expected_validation_result) -> None:
+async def test_advanced_rules_validation(
+    advanced_rules, expected_validation_result
+) -> None:
     async with create_source(S3DataSource) as source:
         validation_result = await S3AdvancedRulesValidator(source).validate(
             advanced_rules

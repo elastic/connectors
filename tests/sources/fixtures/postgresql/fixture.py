@@ -7,11 +7,11 @@
 import asyncio
 import os
 import random
+from asyncio.events import AbstractEventLoop
 
 import asyncpg
 
 from tests.commons import WeightedFakeProvider
-from asyncio.events import AbstractEventLoop
 
 fake_provider = WeightedFakeProvider(weights=[0.65, 0.3, 0.05, 0])
 

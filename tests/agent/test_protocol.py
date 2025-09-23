@@ -11,8 +11,8 @@ from elastic_agent_client.generated import elastic_agent_client_pb2 as proto
 from google.protobuf.struct_pb2 import Struct
 
 from connectors.agent.config import ConnectorsAgentConfigurationWrapper
-from connectors.agent.protocol import ConnectorActionHandler, ConnectorCheckinHandler
 from connectors.agent.connector_record_manager import ConnectorRecordManager
+from connectors.agent.protocol import ConnectorActionHandler, ConnectorCheckinHandler
 
 
 @pytest.fixture(autouse=True)

@@ -10,12 +10,12 @@ import io
 import os
 import re
 import time
+from _io import BytesIO
+from typing import Dict, List, Union
 
 from flask import Flask, request
 
 from tests.commons import WeightedFakeProvider
-from _io import BytesIO
-from typing import Dict, List, Union
 
 fake_provider = WeightedFakeProvider()
 

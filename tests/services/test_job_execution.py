@@ -19,7 +19,6 @@ from connectors.services.content_sync_job_execution import (
 )
 from tests.commons import AsyncIterator
 from tests.services.test_base import create_and_run_service
-from connectors.protocol.connectors import JobStatus, JobType
 
 
 @pytest.fixture(autouse=True)
@@ -84,9 +83,9 @@ def sync_job_runner_mock():
 
 
 def mock_connector(
-    last_sync_status: JobStatus=JobStatus.COMPLETED,
-    last_access_control_sync_status: JobStatus=JobStatus.COMPLETED,
-    document_level_security_enabled: bool=True,
+    last_sync_status: JobStatus = JobStatus.COMPLETED,
+    last_access_control_sync_status: JobStatus = JobStatus.COMPLETED,
+    document_level_security_enabled: bool = True,
 ) -> Mock:
     connector = Mock()
     connector.id = "1"
@@ -100,7 +99,7 @@ def mock_connector(
     return connector
 
 
-def mock_sync_job(service_type: str="fake", job_type: JobType=JobType.FULL) -> Mock:
+def mock_sync_job(service_type: str = "fake", job_type: JobType = JobType.FULL) -> Mock:
     sync_job = Mock()
     sync_job.service_type = service_type
     sync_job.connector_id = "1"
@@ -110,7 +109,9 @@ def mock_sync_job(service_type: str="fake", job_type: JobType=JobType.FULL) -> M
 
 
 @pytest.mark.asyncio
-async def test_no_connector(connector_index_mock, concurrent_tasks_mocks, set_env) -> None:
+async def test_no_connector(
+    connector_index_mock, concurrent_tasks_mocks, set_env
+) -> None:
     sync_job_pool_mock = concurrent_tasks_mocks
 
     connector_index_mock.supported_connectors.return_value = AsyncIterator([])

@@ -8,8 +8,9 @@
 import asyncio
 import csv
 import datetime
+from typing import Any, Dict, Optional
 from unittest import mock
-from unittest.mock import Mock, ANY, MagicMock
+from unittest.mock import ANY, MagicMock, Mock
 
 import pytest
 import smbclient
@@ -37,7 +38,6 @@ from connectors.sources.network_drive import (
 )
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
-from typing import Dict, Optional
 
 READ_COUNT = 0
 MAX_CHUNK_SIZE = 65536
@@ -135,7 +135,7 @@ def side_effect_function(MAX_CHUNK_SIZE) -> Optional[bytes]:
     return b"Mock...."
 
 
-def mock_permission(sid, ace) -> Dict[str, "MockSID"]:
+def mock_permission(sid, ace) -> Dict[str, Any]:
     mock_response = {}
 
     class MockSID:
@@ -909,7 +909,9 @@ async def test_get_access_control_without_duplicate_ids() -> None:
 @mock.patch.object(NASDataSource, "fetch_groups_info", return_value=mock.AsyncMock())
 @mock.patch("smbclient.register_session")
 @pytest.mark.asyncio
-async def test_get_docs_without_dls_enabled(mock_get_files, mock_fetch_groups, session) -> None:
+async def test_get_docs_without_dls_enabled(
+    mock_get_files, mock_fetch_groups, session
+) -> None:
     async with create_source(NASDataSource) as source:
         source._dls_enabled = MagicMock(return_value=False)
 
@@ -1091,7 +1093,9 @@ async def test_list_file_permissions_with_inaccessible_file() -> None:
         mock_permission(sid="S-1-11-10", ace=1),  # Group with Deny permission
     ],
 )
-async def test_deny_permission_has_precedence_over_allow(mock_list_file_permission) -> None:
+async def test_deny_permission_has_precedence_over_allow(
+    mock_list_file_permission,
+) -> None:
     mock_groups_info = {"10": {"admin": "S-2-21-211-411"}}
     expected_result = []
     async with create_source(NASDataSource) as source:

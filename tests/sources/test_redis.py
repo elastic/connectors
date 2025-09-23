@@ -5,6 +5,7 @@
 #
 import json
 from contextlib import asynccontextmanager
+from typing import Dict, List, Set
 from unittest import mock
 from unittest.mock import ANY, AsyncMock, Mock
 
@@ -21,7 +22,6 @@ from connectors.sources.redis import (
 )
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
-from typing import Dict, List, Set
 
 ADVANCED_SNIPPET = "advanced_snippet"
 
@@ -39,10 +39,12 @@ DOCUMENTS = [
 
 
 class RedisClientMock:
-    async def execute_command(self, SELECT: str="JSON.GET", key: str="json_key") -> str:
+    async def execute_command(
+        self, SELECT: str = "JSON.GET", key: str = "json_key"
+    ) -> str:
         return json.dumps({"1": "1", "2": "2"})
 
-    async def zrange(self, key, start, skip, withscores: bool=True) -> Set[int]:
+    async def zrange(self, key, start, skip, withscores: bool = True) -> Set[int]:
         return {1, 2, 3}
 
     async def smembers(self, key) -> Set[int]:
@@ -78,7 +80,7 @@ class RedisClientMock:
     async def scan_iter(self, match, count, _type):
         yield "0"
 
-    async def validate_database(self, db: int=0) -> None:
+    async def validate_database(self, db: int = 0) -> None:
         await self.execute_command()
 
 
@@ -337,7 +339,9 @@ async def test_get_docs_with_sync_rules(filtering) -> None:
     ],
 )
 @pytest.mark.asyncio
-async def test_advanced_rules_validation(advanced_rules, expected_validation_result) -> None:
+async def test_advanced_rules_validation(
+    advanced_rules, expected_validation_result
+) -> None:
     async with create_redis_source() as source:
         source.client._client = RedisClientMock()
         validation_result = await RedisAdvancedRulesValidator(source).validate(

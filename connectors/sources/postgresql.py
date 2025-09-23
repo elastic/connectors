@@ -7,14 +7,17 @@
 
 import ssl
 from functools import cached_property, partial
+from typing import List, Optional, Sized
 from urllib.parse import quote
 
 import fastjsonschema
 from asyncpg.exceptions._base import InternalClientError
 from fastjsonschema import JsonSchemaValueException
+from pyre_extensions import PyreReadOnly
 from sqlalchemy import text
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.ext.asyncio.engine import AsyncEngine
 
 from connectors.filtering.validation import (
     AdvancedRulesValidator,
@@ -38,9 +41,6 @@ from connectors.utils import (
     iso_utc,
     retryable,
 )
-from sqlalchemy.ext.asyncio.engine import AsyncEngine
-from typing import Optional, Sized, List
-from pyre_extensions import PyreReadOnly
 
 FETCH_LIMIT = 1000
 
@@ -168,8 +168,8 @@ class PostgreSQLClient:
         ssl_enabled,
         ssl_ca,
         logger_,
-        retry_count: int=DEFAULT_RETRY_COUNT,
-        fetch_size: int=DEFAULT_FETCH_SIZE,
+        retry_count: int = DEFAULT_RETRY_COUNT,
+        fetch_size: int = DEFAULT_FETCH_SIZE,
     ) -> None:
         self.host = host
         self.port = port
@@ -227,7 +227,7 @@ class PostgreSQLClient:
             )
         )
 
-    async def get_tables_to_fetch(self, is_filtering: bool=False):
+    async def get_tables_to_fetch(self, is_filtering: bool = False):
         tables = configured_tables(self.tables)
         if is_wildcard(tables) or is_filtering:
             self._logger.info("Fetching all tables")

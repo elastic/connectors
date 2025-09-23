@@ -10,12 +10,14 @@ import os
 from copy import copy
 from datetime import date
 from functools import cached_property, partial
+from typing import Any, Dict, List, Optional, Union
 
 import aiofiles
 import aiohttp
 import exchangelib
 import requests.adapters
 from aiofiles.os import remove
+from aiohttp.client import ClientSession
 from exchangelib import (
     IMPERSONATION,
     OAUTH2,
@@ -46,9 +48,6 @@ from connectors.utils import (
     retryable,
     url_encode,
 )
-from aiohttp.client import ClientSession
-from ldap3.core.connection import Connection
-from typing import Optional, Any, Dict, List, Union
 
 RETRIES = 3
 RETRY_INTERVAL = 2
@@ -703,7 +702,22 @@ class OutlookDataSource(BaseDataSource):
         self.client.set_logger(self._logger)
 
     @classmethod
-    def get_default_configuration(cls) -> Dict[str, Union[Dict[str, Union[List[Dict[str, str]], int, str]], Dict[str, Union[List[str], int, str]], Dict[str, Union[List[Union[Dict[str, str], Dict[str, Union[bool, str]]]], int, str]], Dict[str, Union[int, str]]]]:
+    def get_default_configuration(
+        cls,
+    ) -> Dict[
+        str,
+        Union[
+            Dict[str, Union[List[Dict[str, str]], int, str]],
+            Dict[str, Union[List[str], int, str]],
+            Dict[
+                str,
+                Union[
+                    List[Union[Dict[str, str], Dict[str, Union[bool, str]]]], int, str
+                ],
+            ],
+            Dict[str, Union[int, str]],
+        ],
+    ]:
         """Get the default configuration for Outlook
 
         Returns:
@@ -890,7 +904,9 @@ class OutlookDataSource(BaseDataSource):
     async def close(self) -> None:
         await self.client._get_user_instance.close()
 
-    async def get_content(self, attachment, timezone, timestamp=None, doit: bool=False):
+    async def get_content(
+        self, attachment, timezone, timestamp=None, doit: bool = False
+    ):
         """Extracts the content for allowed file types.
 
         Args:

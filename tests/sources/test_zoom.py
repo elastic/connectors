@@ -6,6 +6,7 @@
 """Tests the Zoom source class methods"""
 
 from contextlib import asynccontextmanager
+from typing import Dict, List, Optional, Union
 from unittest import mock
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -17,7 +18,6 @@ from freezegun import freeze_time
 from connectors.source import ConfigurableFieldValueError
 from connectors.sources.zoom import TokenError, ZoomDataSource
 from tests.sources.support import create_source
-from typing import Dict, List, Optional, Union
 
 # Access token document
 SAMPLE_ACCESS_TOKEN_RESPONSE = {"access_token": "token#123", "expires_in": 3599}
@@ -116,7 +116,9 @@ EXPECTED_PREVIOUS_MEETING = {
         {"id": "participant3", "type": "participant"},
     ],
 }
-MEETING_EXPECTED_RESPONSE: List[Union[Dict[str, str], Dict[str, Union[None, List[Dict[str, str]], str]]]] = [
+MEETING_EXPECTED_RESPONSE: List[
+    Union[Dict[str, str], Dict[str, Union[None, List[Dict[str, str]], str]]]
+] = [
     {
         "id": "meeting1",
         "type": "live_meeting",
@@ -411,7 +413,7 @@ def get_mock(mock_response) -> AsyncMock:
 
 @asynccontextmanager
 async def create_zoom_source(
-    fetch_past_meeting_details: bool=False, use_text_extraction_service: bool=False
+    fetch_past_meeting_details: bool = False, use_text_extraction_service: bool = False
 ):
     async with create_source(
         ZoomDataSource,

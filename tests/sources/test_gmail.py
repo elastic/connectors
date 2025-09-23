@@ -49,7 +49,9 @@ def dls_enabled(value):
 
 
 @asynccontextmanager
-async def create_gmail_source(dls_enabled: bool=False, include_spam_and_trash: bool=False):
+async def create_gmail_source(
+    dls_enabled: bool = False, include_spam_and_trash: bool = False
+):
     async with create_source(
         GMailDataSource,
         service_account_credentials=json.dumps(JSON_CREDENTIALS),
@@ -562,7 +564,9 @@ class TestGMailDataSource:
         ],
     )
     @pytest.mark.asyncio
-    async def test_dls_enabled(self, feature_enabled_, rcf_enabled_, dls_enabled_) -> None:
+    async def test_dls_enabled(
+        self, feature_enabled_, rcf_enabled_, dls_enabled_
+    ) -> None:
         async with create_gmail_source(dls_enabled=rcf_enabled_) as source:
             # `dls_enabled` sets both the feature flag and the config value in create_gmail_source
             # -> set dls feature flag after instantiation again

@@ -167,7 +167,9 @@ async def test_extract_text_when_response_isnt_200_logs_warning(
 
 
 @pytest.mark.asyncio
-async def test_extract_text_when_response_is_error(mock_responses, patch_logger) -> None:
+async def test_extract_text_when_response_is_error(
+    mock_responses, patch_logger
+) -> None:
     filepath = "tmp/notreal.txt"
 
     with (
@@ -194,7 +196,9 @@ async def test_extract_text_when_response_is_error(mock_responses, patch_logger)
 
 
 @pytest.mark.asyncio
-async def test_extract_text_when_response_is_timeout(mock_responses, patch_logger) -> None:
+async def test_extract_text_when_response_is_timeout(
+    mock_responses, patch_logger
+) -> None:
     filepath = "tmp/notreal.txt"
 
     with (

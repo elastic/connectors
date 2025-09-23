@@ -8,11 +8,11 @@
 
 import os
 import time
+from typing import Any, Dict, List, Union
 
 from flask import Flask, request
 
 from tests.commons import WeightedFakeProvider
-from typing import Any, Dict, List, Union
 
 fake_provider = WeightedFakeProvider()
 

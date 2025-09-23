@@ -8,6 +8,7 @@ import re
 import time
 from contextlib import asynccontextmanager
 from datetime import datetime
+from typing import Any, Dict, Union
 
 import aiohttp
 from aiohttp.client_exceptions import ClientResponseError
@@ -15,7 +16,6 @@ from aiohttp.client_exceptions import ClientResponseError
 from connectors.logger import logger
 from connectors.source import BaseDataSource
 from connectors.utils import CancellableSleeps, dict_slice, retryable
-from typing import Any, Dict, Union
 
 BASE_URL = "https://slack.com/api"
 

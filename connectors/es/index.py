@@ -46,7 +46,7 @@ class ESApi(ESClient):
             partial(self.client.connector.check_in, connector_id=connector_id)
         )
 
-    async def connector_get(self, connector_id, include_deleted: bool=False):
+    async def connector_get(self, connector_id, include_deleted: bool = False):
         return await self._retrier.execute_with_retry(
             partial(self._api_wrapper.connector_get, connector_id, include_deleted)
         )
@@ -230,7 +230,9 @@ class ESIndex(ESClient):
             )
         )
 
-    async def get_all_docs(self, query=None, sort=None, page_size: int=DEFAULT_PAGE_SIZE):
+    async def get_all_docs(
+        self, query=None, sort=None, page_size: int = DEFAULT_PAGE_SIZE
+    ):
         """
         Lookup for elasticsearch documents using {query}
 

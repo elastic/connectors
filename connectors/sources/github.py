@@ -9,10 +9,12 @@ import json
 import time
 from enum import Enum
 from functools import cached_property, partial
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import aiohttp
 import fastjsonschema
 import gidgethub
+from aiohttp.client import ClientSession
 from gidgethub import QueryError, sansio
 from gidgethub.abc import (
     BadGraphQLRequest,
@@ -40,8 +42,6 @@ from connectors.utils import (
     retryable,
     ssl_context,
 )
-from aiohttp.client import ClientSession
-from typing import Optional, Any, Dict, List, Tuple, Union
 
 WILDCARD = "*"
 BLOB = "blob"
@@ -653,7 +653,14 @@ class ForbiddenException(Exception):
 
 class GitHubClient:
     def __init__(
-        self, auth_method, base_url, app_id, private_key, token, ssl_enabled, ssl_ca: str
+        self,
+        auth_method,
+        base_url,
+        app_id,
+        private_key,
+        token,
+        ssl_enabled,
+        ssl_ca: str,
     ) -> None:
         self._sleeps = CancellableSleeps()
         self._logger = logger
@@ -1152,7 +1159,17 @@ class GitHubDataSource(BaseDataSource):
         return [GitHubAdvancedRulesValidator(self)]
 
     @classmethod
-    def get_default_configuration(cls) -> Dict[str, Union[Dict[str, Union[List[Dict[str, str]], int, str]], Dict[str, Union[List[Dict[str, Union[bool, str]]], int, str]], Dict[str, Union[List[str], int, str]], Dict[str, Union[int, str]]]]:
+    def get_default_configuration(
+        cls,
+    ) -> Dict[
+        str,
+        Union[
+            Dict[str, Union[List[Dict[str, str]], int, str]],
+            Dict[str, Union[List[Dict[str, Union[bool, str]]], int, str]],
+            Dict[str, Union[List[str], int, str]],
+            Dict[str, Union[int, str]],
+        ],
+    ]:
         """Get the default configuration for GitHub.
 
         Returns:
@@ -1958,7 +1975,7 @@ class GitHubDataSource(BaseDataSource):
                 exc_info=True,
             )
 
-    async def get_content(self, attachment, timestamp=None, doit: bool=False):
+    async def get_content(self, attachment, timestamp=None, doit: bool = False):
         """Extracts the content for Apache TIKA supported file types.
 
         Args:

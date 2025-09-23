@@ -8,11 +8,12 @@
 import re
 from contextlib import asynccontextmanager
 from copy import deepcopy
+from typing import Dict, List, Union
 from unittest import TestCase, mock
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from aioresponses import CallbackResult
+from aioresponses.core import CallbackResult
 
 from connectors.access_control import DLS_QUERY
 from connectors.protocol import Filter
@@ -34,8 +35,6 @@ from connectors.sources.salesforce import (
     _prefix_user_id,
 )
 from tests.sources.support import create_source
-from aioresponses.core import CallbackResult
-from typing import Dict, List, Union
 
 TEST_DOMAIN = "fake"
 CONTENT_VERSION_ID = "content_version_id"
@@ -319,7 +318,35 @@ CASE_RESPONSE_PAYLOAD = {
     ]
 }
 
-CASE_FEED_RESPONSE_PAYLOAD: Dict[str, List[Dict[str, Union[None, Dict[str, List[Dict[str, Union[Dict[str, str], Dict[str, Union[Dict[str, str], str]], bool, str]]]], Dict[str, str], Dict[str, Union[Dict[str, str], str]], int, str]]]] = {
+CASE_FEED_RESPONSE_PAYLOAD: Dict[
+    str,
+    List[
+        Dict[
+            str,
+            Union[
+                None,
+                Dict[
+                    str,
+                    List[
+                        Dict[
+                            str,
+                            Union[
+                                Dict[str, str],
+                                Dict[str, Union[Dict[str, str], str]],
+                                bool,
+                                str,
+                            ],
+                        ]
+                    ],
+                ],
+                Dict[str, str],
+                Dict[str, Union[Dict[str, str], str]],
+                int,
+                str,
+            ],
+        ]
+    ],
+] = {
     "records": [
         {
             "attributes": {
@@ -373,7 +400,24 @@ CASE_FEED_RESPONSE_PAYLOAD: Dict[str, List[Dict[str, Union[None, Dict[str, List[
     ]
 }
 
-CONTENT_DOCUMENT_LINKS_PAYLOAD: Dict[str, List[Dict[str, Union[Dict[str, str], Dict[str, Union[Dict[str, str], Dict[str, Union[Dict[str, str], str]], int, str]], str]]]] = {
+CONTENT_DOCUMENT_LINKS_PAYLOAD: Dict[
+    str,
+    List[
+        Dict[
+            str,
+            Union[
+                Dict[str, str],
+                Dict[
+                    str,
+                    Union[
+                        Dict[str, str], Dict[str, Union[Dict[str, str], str]], int, str
+                    ],
+                ],
+                str,
+            ],
+        ]
+    ],
+] = {
     "records": [
         {
             "attributes": {
@@ -457,7 +501,40 @@ CUSTOM_OBJECT_RESPONSE_PAYLOAD = {
     ],
 }
 
-SOSL_RESPONSE_PAYLOAD: Dict[str, List[Dict[str, Union[Dict[str, List[Dict[str, Union[Dict[str, str], Dict[str, Union[Dict[str, str], Dict[str, Union[Dict[str, str], str]], int, str]], str]]]], Dict[str, str], Dict[str, Union[Dict[str, str], str]], str]]]] = {
+SOSL_RESPONSE_PAYLOAD: Dict[
+    str,
+    List[
+        Dict[
+            str,
+            Union[
+                Dict[
+                    str,
+                    List[
+                        Dict[
+                            str,
+                            Union[
+                                Dict[str, str],
+                                Dict[
+                                    str,
+                                    Union[
+                                        Dict[str, str],
+                                        Dict[str, Union[Dict[str, str], str]],
+                                        int,
+                                        str,
+                                    ],
+                                ],
+                                str,
+                            ],
+                        ]
+                    ],
+                ],
+                Dict[str, str],
+                Dict[str, Union[Dict[str, str], str]],
+                str,
+            ],
+        ]
+    ],
+] = {
     "searchRecords": [
         {
             "attributes": {
@@ -654,7 +731,9 @@ CONTENT_DOCUMENT_RESPONSE_PAYLOAD = {
 
 @asynccontextmanager
 async def create_salesforce_source(
-    use_text_extraction_service: bool=False, mock_token: bool=True, mock_queryables: bool=True
+    use_text_extraction_service: bool = False,
+    mock_token: bool = True,
+    mock_queryables: bool = True,
 ):
     async with create_source(
         SalesforceDataSource,
@@ -1131,7 +1210,9 @@ async def test_get_leads_when_not_queryable_yields_nothing(mock_responses) -> No
 
 
 @pytest.mark.asyncio
-async def test_get_opportunities_when_not_queryable_yields_nothing(mock_responses) -> None:
+async def test_get_opportunities_when_not_queryable_yields_nothing(
+    mock_responses,
+) -> None:
     async with create_salesforce_source() as source:
         source.salesforce_client._is_queryable = mock.AsyncMock(return_value=False)
         async for record in source.salesforce_client.get_opportunities():
@@ -1527,7 +1608,10 @@ async def test_get_cases_when_success(mock_responses) -> None:
     ],
 )
 async def test_get_all_with_content_docs_when_success(
-    mock_responses, response_status, response_body, expected_attachment: Union[List[str], int, str]
+    mock_responses,
+    response_status,
+    response_body,
+    expected_attachment: Union[List[str], int, str],
 ) -> None:
     async with create_salesforce_source() as source:
         expected_doc = {
@@ -1742,7 +1826,9 @@ async def test_add_id(soql_query, modified_query) -> None:
     ],
 )
 @pytest.mark.asyncio
-async def test_get_docs_for_soql_query(mock_responses, filtering, expected_docs) -> None:
+async def test_get_docs_for_soql_query(
+    mock_responses, filtering, expected_docs
+) -> None:
     async with create_salesforce_source() as source:
         mock_responses.get(
             TEST_FILE_DOWNLOAD_URL,
@@ -1855,7 +1941,9 @@ async def test_prepare_sobject_cache(mock_responses) -> None:
 
 
 @pytest.mark.asyncio
-async def test_request_when_token_invalid_refetches_token(patch_sleep, mock_responses) -> None:
+async def test_request_when_token_invalid_refetches_token(
+    patch_sleep, mock_responses
+) -> None:
     async with create_salesforce_source(mock_token=False) as source:
         payload = deepcopy(ACCOUNT_RESPONSE_PAYLOAD)
         expected_record = payload["records"][0]
@@ -1896,7 +1984,9 @@ async def test_request_when_token_invalid_refetches_token(patch_sleep, mock_resp
 
 
 @pytest.mark.asyncio
-async def test_request_when_rate_limited_raises_error_no_retries(mock_responses) -> None:
+async def test_request_when_rate_limited_raises_error_no_retries(
+    mock_responses,
+) -> None:
     async with create_salesforce_source() as source:
         response_payload = [
             {
@@ -2176,7 +2266,9 @@ async def test_get_docs_sync_custom_objects(mock_responses) -> None:
 
 
 @pytest.mark.asyncio
-async def test_queryable_sobject_fields_performance_optimization(mock_responses) -> None:
+async def test_queryable_sobject_fields_performance_optimization(
+    mock_responses,
+) -> None:
     """
     Test the performance optimization that reduces API calls from O(n*14) to O(14)
 

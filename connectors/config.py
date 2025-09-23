@@ -5,11 +5,11 @@
 #
 
 import os
+from typing import Dict, Optional, Union
 
 from envyaml import EnvYAML
 
 from connectors.logger import logger
-from typing import Optional, Dict, Union
 
 DEFAULT_ELASTICSEARCH_MAX_RETRIES = 5
 DEFAULT_ELASTICSEARCH_RETRY_INTERVAL = 10
@@ -29,7 +29,19 @@ def load_config(config_file):
     return configuration
 
 
-def add_defaults(config, default_config: Optional[Dict[str, Union[Dict[str, str], Dict[str, Union[Dict[str, Union[Dict[str, float], int]], int, str]], Dict[str, Union[int, str]]]]]=None):
+def add_defaults(
+    config,
+    default_config: Optional[
+        Dict[
+            str,
+            Union[
+                Dict[str, str],
+                Dict[str, Union[Dict[str, Union[Dict[str, float], int]], int, str]],
+                Dict[str, Union[int, str]],
+            ],
+        ]
+    ] = None,
+):
     if default_config is None:
         default_config = _default_config()
     configuration = dict(_merge_dicts(default_config, config))
@@ -58,7 +70,16 @@ log_level_mappings = {
 }
 
 
-def _default_config() -> Dict[str, Union[Dict[str, str], Dict[str, Union[Dict[str, Union[Dict[str, float], int]], int, str]], Dict[str, Union[int, str]]]]:
+def _default_config() -> (
+    Dict[
+        str,
+        Union[
+            Dict[str, str],
+            Dict[str, Union[Dict[str, Union[Dict[str, float], int]], int, str]],
+            Dict[str, Union[int, str]],
+        ],
+    ]
+):
     return {
         "elasticsearch": {
             "host": "http://localhost:9200",

@@ -210,7 +210,9 @@ async def test_get_docs() -> None:
     ],
 )
 @pytest.mark.asyncio
-async def test_advanced_rules_validation(advanced_rules, expected_validation_result) -> None:
+async def test_advanced_rules_validation(
+    advanced_rules, expected_validation_result
+) -> None:
     async with create_source(
         MSSQLDataSource, database="xe", tables="*", schema="dbo"
     ) as source:

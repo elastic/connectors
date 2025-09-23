@@ -6,8 +6,9 @@
 # ruff: noqa: T201
 """Module responsible for mocking POST call to Google Cloud Storage Data Source"""
 
-from flask import Flask
 from typing import Dict, Union
+
+from flask import Flask
 
 app = Flask(__name__)
 

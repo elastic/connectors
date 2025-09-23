@@ -4,6 +4,8 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 
+from typing import Any, Dict, Optional
+
 import fastjsonschema
 from fastjsonschema import JsonSchemaValueException
 
@@ -13,7 +15,6 @@ from connectors.filtering.validation import (
     SyncRuleValidationResult,
 )
 from connectors.utils import RetryStrategy, iso_utc, retryable
-from typing import Optional, Any, Dict
 
 RETRIES = 3
 RETRY_INTERVAL = 2

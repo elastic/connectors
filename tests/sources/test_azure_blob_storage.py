@@ -21,7 +21,7 @@ from tests.sources.support import create_source
 
 @asynccontextmanager
 async def create_abs_source(
-    use_text_extraction_service: bool=False,
+    use_text_extraction_service: bool = False,
 ):
     async with create_source(
         AzureBlobStorageDataSource,

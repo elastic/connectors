@@ -12,11 +12,13 @@ import os
 import uuid
 from enum import Enum
 from functools import cached_property, partial
+from typing import Any, Dict, List, Optional, Union
 from urllib.parse import urlencode
 
 import aiohttp
 import dateutil.parser as parser
 import fastjsonschema
+from aiohttp.client import ClientSession
 
 from connectors.access_control import (
     ACCESS_CONTROL,
@@ -37,8 +39,6 @@ from connectors.utils import (
     iso_utc,
     retryable,
 )
-from aiohttp.client import ClientSession
-from typing import Optional, Any, Dict, List, Union
 
 RETRIES = 3
 RETRY_INTERVAL = 2
@@ -457,7 +457,11 @@ class ServiceNowDataSource(BaseDataSource):
         options["concurrent_downloads"] = self.concurrent_downloads
 
     @classmethod
-    def get_default_configuration(cls) -> Dict[str, Union[Dict[str, Union[List[str], int, str]], Dict[str, Union[int, str]]]]:
+    def get_default_configuration(
+        cls,
+    ) -> Dict[
+        str, Union[Dict[str, Union[List[str], int, str]], Dict[str, Union[int, str]]]
+    ]:
         return {
             "url": {
                 "label": "Service URL",
@@ -642,7 +646,9 @@ class ServiceNowDataSource(BaseDataSource):
         )
         return data
 
-    async def _fetch_attachment_metadata(self, batched_apis, table_access_control) -> None:
+    async def _fetch_attachment_metadata(
+        self, batched_apis, table_access_control
+    ) -> None:
         try:
             async for attachments_metadata in self.servicenow_client.get_data(
                 batched_apis=batched_apis
@@ -672,7 +678,9 @@ class ServiceNowDataSource(BaseDataSource):
         finally:
             await self.queue.put(EndSignal.ATTACHMENT)
 
-    async def _attachment_metadata_producer(self, record_ids, table_access_control) -> None:
+    async def _attachment_metadata_producer(
+        self, record_ids, table_access_control
+    ) -> None:
         attachment_apis = None
         try:
             attachment_apis = self.servicenow_client.get_attachment_apis(
@@ -830,7 +838,9 @@ class ServiceNowDataSource(BaseDataSource):
                 exc_info=True,
             )
 
-    async def _table_data_producer(self, service_name, params, table_access_control) -> None:
+    async def _table_data_producer(
+        self, service_name, params, table_access_control
+    ) -> None:
         self._logger.debug(f"Fetching {service_name} data")
         try:
             async for batched_apis in self._get_batched_apis(service_name, params):
@@ -931,7 +941,7 @@ class ServiceNowDataSource(BaseDataSource):
 
         await self.fetchers.join()
 
-    async def get_content(self, metadata, timestamp=None, doit: bool=False):
+    async def get_content(self, metadata, timestamp=None, doit: bool = False):
         file_size = int(metadata["size_bytes"])
         if not (doit and file_size > 0):
             return

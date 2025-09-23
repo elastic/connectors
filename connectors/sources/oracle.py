@@ -81,8 +81,8 @@ class OracleClient:
         oracle_home,
         wallet_config,
         logger_,
-        retry_count: int=DEFAULT_RETRY_COUNT,
-        fetch_size: int=DEFAULT_FETCH_SIZE,
+        retry_count: int = DEFAULT_RETRY_COUNT,
+        fetch_size: int = DEFAULT_FETCH_SIZE,
     ) -> None:
         self.host = host
         self.port = port

@@ -5,6 +5,7 @@
 #
 from datetime import datetime
 from decimal import Decimal
+from typing import Dict, List, Union
 from unittest import TestCase, mock
 
 import pytest
@@ -27,9 +28,15 @@ from connectors.source import (
     get_source_klass,
     get_source_klasses,
 )
-from typing import Dict, List, Union
 
-CONFIG: Dict[str, Union[Dict[str, str], Dict[str, Union[None, int, str]], Dict[str, Union[List[str], str]]]] = {
+CONFIG: Dict[
+    str,
+    Union[
+        Dict[str, str],
+        Dict[str, Union[None, int, str]],
+        Dict[str, Union[List[str], str]],
+    ],
+] = {
     "host": {
         "label": "MongoDB Host",
         "type": "str",
@@ -672,7 +679,12 @@ async def test_check_valid_when_dependencies_are_invalid_raises_error() -> None:
 # ABCs
 class DataSource(BaseDataSource):
     @classmethod
-    def get_default_configuration(cls) -> Dict[str, Union[Dict[str, str], Dict[str, Union[bool, str]], Dict[str, Union[int, str]]]]:
+    def get_default_configuration(
+        cls,
+    ) -> Dict[
+        str,
+        Union[Dict[str, str], Dict[str, Union[bool, str]], Dict[str, Union[int, str]]],
+    ]:
         return {
             "host": {
                 "value": "127.0.0.1",

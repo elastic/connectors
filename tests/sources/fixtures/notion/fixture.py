@@ -7,11 +7,11 @@
 """Module to handle api calls received from connector."""
 
 import os
+from typing import Any, Dict, Union
 
 from flask import Flask, request
 
 from tests.commons import WeightedFakeProvider
-from typing import Any, Dict, Union
 
 app = Flask(__name__)
 
@@ -34,7 +34,9 @@ class NotionAPI:
             self.get_block_children
         )
 
-    def get_owner(self) -> Dict[str, Union[Dict[str, Union[Dict[str, Union[bool, str]], str]], str]]:
+    def get_owner(
+        self,
+    ) -> Dict[str, Union[Dict[str, Union[Dict[str, Union[bool, str]], str]], str]]:
         return {
             "object": "user",
             "id": "user_id",
@@ -69,7 +71,9 @@ class NotionAPI:
         }
         return users
 
-    def get_block_children(self, block_id) -> Union[Dict[str, Union[None, bool, str]], Dict[str, Union[bool, str]]]:
+    def get_block_children(
+        self, block_id
+    ) -> Union[Dict[str, Union[None, bool, str]], Dict[str, Union[bool, str]]]:
         has_start_cursor = request.args.get("start_cursor")
         if has_start_cursor:
             response = {

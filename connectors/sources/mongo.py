@@ -9,6 +9,7 @@ from contextlib import contextmanager
 from copy import deepcopy
 from datetime import datetime
 from tempfile import NamedTemporaryFile
+from typing import Dict, List, Optional, Union
 
 import fastjsonschema
 from bson import OLD_UUID_SUBTYPE, Binary, DBRef, Decimal128, ObjectId
@@ -23,7 +24,6 @@ from connectors.filtering.validation import (
 )
 from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.utils import get_pem_format
-from typing import Dict, List, Optional, Union
 
 
 class MongoAdvancedRulesValidator(AdvancedRulesValidator):
@@ -111,7 +111,16 @@ class MongoDataSource(BaseDataSource):
         self.collection = None
 
     @classmethod
-    def get_default_configuration(cls) -> Dict[str, Union[Dict[str, Union[List[Dict[str, Union[bool, str]]], List[str], int, str]], Dict[str, Union[List[Dict[str, Union[bool, str]]], int, str]], Dict[str, Union[int, str]]]]:
+    def get_default_configuration(
+        cls,
+    ) -> Dict[
+        str,
+        Union[
+            Dict[str, Union[List[Dict[str, Union[bool, str]]], List[str], int, str]],
+            Dict[str, Union[List[Dict[str, Union[bool, str]]], int, str]],
+            Dict[str, Union[int, str]],
+        ],
+    ]:
         return {
             "host": {
                 "label": "Server hostname",
@@ -217,7 +226,17 @@ class MongoDataSource(BaseDataSource):
         with self.get_client() as client:
             await client.admin.command("ping")
 
-    def remove_temp_file(self, temp_file: Union[os.PathLike[bytes], os.PathLike[str], os.PathLike[Union[bytes, str]], bytes, int, str]) -> None:
+    def remove_temp_file(
+        self,
+        temp_file: Union[
+            os.PathLike[bytes],
+            os.PathLike[str],
+            os.PathLike[Union[bytes, str]],
+            bytes,
+            int,
+            str,
+        ],
+    ) -> None:
         if os.path.exists(temp_file):
             try:
                 os.remove(temp_file)

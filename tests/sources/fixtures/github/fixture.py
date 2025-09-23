@@ -8,12 +8,12 @@
 
 import base64
 import os
+from typing import Any, Dict, List, Union
 
 from flask import Flask, make_response, request
+from flask.wrappers import Response
 
 from tests.commons import WeightedFakeProvider
-from flask.wrappers import Response
-from typing import Any, Dict, List, Union
 
 fake_provider = WeightedFakeProvider()
 
@@ -71,7 +71,13 @@ class GitHubAPI:
         subset_nodes = data["nodes"][start_index:end_index]
         return start_index, end_index, subset_nodes
 
-    def mock_graphql_response(self) -> Union[Dict[str, Dict[str, Dict[str, Dict[str, Any]]]], Dict[str, Dict[str, Dict[str, str]]], Dict[str, List[str]]]:
+    def mock_graphql_response(
+        self,
+    ) -> Union[
+        Dict[str, Dict[str, Dict[str, Dict[str, Any]]]],
+        Dict[str, Dict[str, Dict[str, str]]],
+        Dict[str, List[str]],
+    ]:
         data = request.get_json()
         query = data.get("query")
         variables = data.get("variables", {})

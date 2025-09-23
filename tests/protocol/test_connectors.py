@@ -7,6 +7,7 @@ import json
 import os
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
+from typing import Dict, List, Union
 from unittest.mock import ANY, AsyncMock, Mock, patch
 
 import pytest
@@ -39,11 +40,10 @@ from connectors.protocol import (
     SyncJob,
     SyncJobIndex,
 )
-from connectors.protocol.connectors import JobStatus, JobType, ProtocolError
+from connectors.protocol.connectors import ProtocolError
 from connectors.source import BaseDataSource
 from connectors.utils import ACCESS_CONTROL_INDEX_PREFIX, iso_utc
 from tests.commons import AsyncIterator
-from typing import Dict, List, Union
 
 HERE: str = os.path.dirname(__file__)
 FIXTURES_DIR: str = os.path.abspath(os.path.join(HERE, "..", "fixtures"))
@@ -176,7 +176,9 @@ FILTERING = [
 
 ADVANCED_RULES = {"db": {"table": "SELECT * FROM db.table"}}
 
-ADVANCED_RULES_NON_EMPTY: Dict[str, Dict[str, Dict[str, str]]] = {"advanced_snippet": ADVANCED_RULES}
+ADVANCED_RULES_NON_EMPTY: Dict[str, Dict[str, Dict[str, str]]] = {
+    "advanced_snippet": ADVANCED_RULES
+}
 
 RULES = [
     {
@@ -184,7 +186,9 @@ RULES = [
     }
 ]
 BASIC_RULES_NON_EMPTY: Dict[str, List[Dict[str, int]]] = {"rules": RULES}
-ADVANCED_AND_BASIC_RULES_NON_EMPTY: Dict[str, Union[Dict[str, Dict[str, str]], List[Dict[str, int]]]] = {
+ADVANCED_AND_BASIC_RULES_NON_EMPTY: Dict[
+    str, Union[Dict[str, Dict[str, str]], List[Dict[str, int]]]
+] = {
     "advanced_snippet": {"db": {"table": "SELECT * FROM db.table"}},
     "rules": RULES,
 }
@@ -201,7 +205,9 @@ def test_utc() -> None:
     assert now.isoformat() == then
 
 
-mongo: Dict[str, Union[None, Dict[str, Dict[str, str]], Dict[str, Union[bool, str]], str]] = {
+mongo: Dict[
+    str, Union[None, Dict[str, Dict[str, str]], Dict[str, Union[bool, str]], str]
+] = {
     "api_key_id": "",
     "api_key_secret_id": "",
     "configuration": {
@@ -475,10 +481,10 @@ async def test_connector_error() -> None:
 
 
 def mock_job(
-    status: JobStatus=JobStatus.COMPLETED,
-    job_type: JobType=JobType.FULL,
+    status: JobStatus = JobStatus.COMPLETED,
+    job_type: JobType = JobType.FULL,
     error=None,
-    terminated: bool=True,
+    terminated: bool = True,
 ) -> Mock:
     job = Mock()
     job.status = status
@@ -1013,7 +1019,9 @@ async def test_connector_prepare_different_id_invalid_source() -> None:
     ],
 )
 @pytest.mark.asyncio
-async def test_connector_prepare_with_prepared_connector(main_doc_id, this_doc_id) -> None:
+async def test_connector_prepare_with_prepared_connector(
+    main_doc_id, this_doc_id
+) -> None:
     seq_no = 1
     primary_term = 2
     connector_doc = {
@@ -1742,7 +1750,9 @@ async def test_document_count() -> None:
         (None, ACTIVE_FILTER_STATE, NON_EXISTING_DOMAIN, EMPTY_FILTER),
     ],
 )
-def test_get_filter(filtering_json, filter_state: str, domain: str, expected_filter) -> None:
+def test_get_filter(
+    filtering_json, filter_state: str, domain: str, expected_filter
+) -> None:
     filtering = Filtering(filtering_json)
 
     assert filtering.get_filter(filter_state, domain) == expected_filter

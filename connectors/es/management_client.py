@@ -91,7 +91,7 @@ class ESManagementClient(ESClient):
             )
         )
 
-    async def list_indices(self, index: str="*"):
+    async def list_indices(self, index: str = "*"):
         """
         List indices using Elasticsearch.stats API. Includes the number of documents in each index.
         """
@@ -105,7 +105,7 @@ class ESManagementClient(ESClient):
 
         return indices
 
-    async def list_indices_serverless(self, index: str="*"):
+    async def list_indices_serverless(self, index: str = "*"):
         """
         List indices in a serverless environment. This method is a workaround to the fact that
         the `indices.stats` API is not available in serverless environments.
@@ -130,7 +130,7 @@ class ESManagementClient(ESClient):
             partial(self.client.indices.exists, index=index_name)
         )
 
-    async def get_index_or_alias(self, index_name, ignore_unavailable: bool=False):
+    async def get_index_or_alias(self, index_name, ignore_unavailable: bool = False):
         """
         Get index definition (mappings and settings) by its name or its alias.
         """

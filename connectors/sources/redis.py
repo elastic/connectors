@@ -8,6 +8,7 @@ import os
 from enum import Enum
 from functools import cached_property
 from tempfile import NamedTemporaryFile
+from typing import Any, Dict, List, Union
 
 import fastjsonschema
 import redis.asyncio as redis
@@ -19,7 +20,6 @@ from connectors.filtering.validation import (
 from connectors.logger import logger
 from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.utils import get_pem_format, hash_id, iso_utc
-from typing import Any, Dict, List, Union
 
 PAGE_SIZE = 1000
 
@@ -271,7 +271,15 @@ class RedisDataSource(BaseDataSource):
         self.client = RedisClient(configuration=configuration)
 
     @classmethod
-    def get_default_configuration(cls) -> Dict[str, Union[Dict[str, Union[List[Dict[str, Union[bool, str]]], int, str]], Dict[str, Union[int, str]]]]:
+    def get_default_configuration(
+        cls,
+    ) -> Dict[
+        str,
+        Union[
+            Dict[str, Union[List[Dict[str, Union[bool, str]]], int, str]],
+            Dict[str, Union[int, str]],
+        ],
+    ]:
         return {
             "host": {"label": "Host", "order": 1, "type": "str"},
             "port": {"label": "Port", "order": 2, "type": "int"},
@@ -402,7 +410,7 @@ class RedisDataSource(BaseDataSource):
             self._logger.exception("Error while connecting to Redis.")
             raise
 
-    async def get_db_records(self, db, pattern: str="*", type_=None):
+    async def get_db_records(self, db, pattern: str = "*", type_=None):
         async for key in self.client.get_paginated_key(
             db=db, pattern=pattern, type_=type_
         ):

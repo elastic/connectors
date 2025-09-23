@@ -5,13 +5,13 @@
 #
 from copy import deepcopy
 from enum import Enum
+from typing import Any, Dict, List, Optional
 
 import fastjsonschema
 
 from connectors.filtering.basic_rule import BasicRule, Policy, Rule
 from connectors.logger import logger
 from connectors.utils import Format
-from typing import Any, Dict, List, Optional
 
 
 class InvalidFilteringError(Exception):
@@ -95,7 +95,11 @@ class FilteringValidationResult:
     These errors will be derived from a single SyncRuleValidationResult which can be added to a FilteringValidationResult.
     """
 
-    def __init__(self, state: FilteringValidationState=FilteringValidationState.VALID, errors=None) -> None:
+    def __init__(
+        self,
+        state: FilteringValidationState = FilteringValidationState.VALID,
+        errors=None,
+    ) -> None:
         if errors is None:
             errors = []
 
@@ -255,7 +259,9 @@ class BasicRulesSetSemanticValidator(BasicRulesSetValidator):
         ]
 
     @classmethod
-    def semantic_duplicates_validation_results(cls, basic_rule, semantic_duplicate) -> List[SyncRuleValidationResult]:
+    def semantic_duplicates_validation_results(
+        cls, basic_rule, semantic_duplicate
+    ) -> List[SyncRuleValidationResult]:
         def semantic_duplicate_msg(rule_one, rule_two):
             return f"{format(rule_one, Format.SHORT.value)} is semantically equal to {format(rule_two, Format.SHORT.value)}."
 

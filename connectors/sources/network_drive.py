@@ -9,6 +9,7 @@ import asyncio
 import csv
 from collections import deque
 from functools import cached_property, partial
+from typing import Any, Dict, List, Optional, Union
 
 import fastjsonschema
 import requests.exceptions
@@ -50,7 +51,6 @@ from connectors.utils import (
     iso_utc,
     retryable,
 )
-from typing import Optional, Any, Dict, List, Union
 
 ACCESS_ALLOWED_TYPE = 0
 ACCESS_DENIED_TYPE = 1
@@ -346,7 +346,34 @@ class NASDataSource(BaseDataSource):
         return SMBSession(self.server_ip, self.username, self.password, self.port)
 
     @classmethod
-    def get_default_configuration(cls) -> Dict[str, Union[Dict[str, Union[List[Dict[str, str]], List[Dict[str, Union[bool, str]]], List[str], int, str]], Dict[str, Union[List[str], List[Union[Dict[str, str], Dict[str, Union[bool, str]]]], int, str]], Dict[str, Union[List[str], int, str]], Dict[str, Union[int, str]]]]:
+    def get_default_configuration(
+        cls,
+    ) -> Dict[
+        str,
+        Union[
+            Dict[
+                str,
+                Union[
+                    List[Dict[str, str]],
+                    List[Dict[str, Union[bool, str]]],
+                    List[str],
+                    int,
+                    str,
+                ],
+            ],
+            Dict[
+                str,
+                Union[
+                    List[str],
+                    List[Union[Dict[str, str], Dict[str, Union[bool, str]]]],
+                    int,
+                    str,
+                ],
+            ],
+            Dict[str, Union[List[str], int, str]],
+            Dict[str, Union[int, str]],
+        ],
+    ]:
         """Get the default configuration for Network Drive.
 
         Returns:
@@ -718,7 +745,9 @@ class NASDataSource(BaseDataSource):
             )
         return document
 
-    async def _user_access_control_doc(self, user, sid, groups_info=None) -> Dict[str, Any]:
+    async def _user_access_control_doc(
+        self, user, sid, groups_info=None
+    ) -> Dict[str, Any]:
         rid = str(sid).split("-")[-1]
         prefixed_username = _prefix_user(user)
         rid_user = _prefix_rid(rid)

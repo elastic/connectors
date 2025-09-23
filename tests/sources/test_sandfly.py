@@ -4,6 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 from datetime import datetime
+from typing import Dict, List, Optional, Union
 from unittest.mock import Mock, patch
 
 import pytest
@@ -27,7 +28,6 @@ from connectors.sources.sandfly import (
     format_sandfly_date,
 )
 from tests.sources.support import create_source
-from typing import Dict, List, Optional, Union
 
 SANDFLY_SERVER_URL = "https://blackbird.sandflysecurity.com/v4"
 URL_SANDFLY_LOGIN: str = SANDFLY_SERVER_URL + "/auth/login"
@@ -77,7 +77,15 @@ LICENSE_RESPONSE_DATA = {
 }
 
 # Hosts Response Data
-HOSTS_RESPONSE_DATA: Dict[str, List[Union[Dict[str, Optional[str]], Dict[str, Union[Dict[str, Dict[str, Dict[str, str]]], str]]]]] = {
+HOSTS_RESPONSE_DATA: Dict[
+    str,
+    List[
+        Union[
+            Dict[str, Optional[str]],
+            Dict[str, Union[Dict[str, Dict[str, Dict[str, str]]], str]],
+        ]
+    ],
+] = {
     "data": [
         {
             "host_id": "1001",
@@ -488,7 +496,9 @@ async def test_data_source_get_docs_license_expired(
 
 
 @pytest.mark.asyncio
-async def test_data_source_get_docs_not_licensed(sandfly_data_source, mock_responses) -> None:
+async def test_data_source_get_docs_not_licensed(
+    sandfly_data_source, mock_responses
+) -> None:
     mock_responses.post(
         URL_SANDFLY_LOGIN,
         status=200,

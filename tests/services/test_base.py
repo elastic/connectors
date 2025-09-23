@@ -29,7 +29,7 @@ def create_service(service_klass, config=None, config_file=None, idling=None):
     return service
 
 
-async def run_service_with_stop_after(service, stop_after: int=0) -> None:
+async def run_service_with_stop_after(service, stop_after: int = 0) -> None:
     def _stop_running_service_without_cancelling():
         service.running = False
 
@@ -50,7 +50,7 @@ async def run_service_with_stop_after(service, stop_after: int=0) -> None:
 
 
 async def create_and_run_service(
-    service_klass, config=None, config_file: str=CONFIG_FILE, stop_after: int=0
+    service_klass, config=None, config_file: str = CONFIG_FILE, stop_after: int = 0
 ) -> None:
     service = create_service(service_klass, config=config, config_file=config_file)
     await run_service_with_stop_after(service, stop_after)
@@ -158,7 +158,9 @@ async def test_registry() -> None:
 
 
 @pytest.mark.asyncio
-async def test_multiservice_stop_gracefully_stops_service_that_takes_too_long_to_run() -> None:
+async def test_multiservice_stop_gracefully_stops_service_that_takes_too_long_to_run() -> (
+    None
+):
     service_1 = StubService()
 
     service_2 = StubService()
