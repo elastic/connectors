@@ -10,9 +10,11 @@ import json
 import math
 import os
 import uuid
+from _asyncio import Future, Task
+from asyncio.tasks import _GatheringFuture
 from enum import Enum
 from functools import cached_property, partial
-from typing import Generator, Iterator, Set, Tuple, Any, Dict, List, Optional, Union
+from typing import Any, Dict, Generator, Iterator, List, Optional, Set, Tuple, Union
 from urllib.parse import urlencode
 
 import aiohttp
@@ -30,7 +32,11 @@ from connectors.filtering.validation import (
     SyncRuleValidationResult,
 )
 from connectors.logger import logger
-from connectors.source import DataSourceConfiguration, BaseDataSource, ConfigurableFieldValueError
+from connectors.source import (
+    BaseDataSource,
+    ConfigurableFieldValueError,
+    DataSourceConfiguration,
+)
 from connectors.utils import (
     CancellableSleeps,
     ConcurrentTasks,
@@ -39,8 +45,6 @@ from connectors.utils import (
     iso_utc,
     retryable,
 )
-from _asyncio import Future, Task
-from asyncio.tasks import _GatheringFuture
 
 RETRIES = 3
 RETRY_INTERVAL = 2
@@ -199,7 +203,9 @@ class ServiceNowClient:
             full_url = f"{url}?{params_string}"
         return full_url
 
-    async def get_filter_apis(self, rules: List[Dict[str, str]], mapping: Dict[str, str]) -> List[Dict[str, Union[str, List[Dict[str, str]]]]]:
+    async def get_filter_apis(
+        self, rules: List[Dict[str, str]], mapping: Dict[str, str]
+    ) -> List[Dict[str, Union[str, List[Dict[str, str]]]]]:
         apis = []
         for rule in rules:
             params = {"sysparm_query": rule["query"]}
@@ -213,7 +219,9 @@ class ServiceNowClient:
             apis.extend(paginated_apis)
         return apis
 
-    def get_record_apis(self, url: str, params: Dict[str, str], total_count: int) -> List[Dict[str, Any]]:
+    def get_record_apis(
+        self, url: str, params: Dict[str, str], total_count: int
+    ) -> List[Dict[str, Any]]:
         headers = [
             {"name": "Content-Type", "value": "application/json"},
             {"name": "Accept", "value": "application/json"},
@@ -293,7 +301,13 @@ class ServiceNowClient:
         response = await self._api_call(url, {}, {}, "get")
         yield response
 
-    async def filter_services(self, configured_service: Union[List[str], Set[str]]) -> Union[Tuple[Dict[str, str], Set[Any]], Tuple[Dict[str, str], List[str]], Tuple[Dict[str, str], List[Any]]]:
+    async def filter_services(
+        self, configured_service: Union[List[str], Set[str]]
+    ) -> Union[
+        Tuple[Dict[str, str], Set[Any]],
+        Tuple[Dict[str, str], List[str]],
+        Tuple[Dict[str, str], List[Any]],
+    ]:
         """Filter services based on service mappings.
 
         Args:
@@ -378,7 +392,14 @@ class ServiceNowAdvancedRulesValidator(AdvancedRulesValidator):
     def __init__(self, source: "ServiceNowDataSource") -> None:
         self.source = source
 
-    async def validate(self, advanced_rules: Union[List[Dict[str, str]], List[Union[Dict[str, Union[str, List[str]]], Dict[str, str]]], List[Dict[str, Union[str, List[str]]]]]) -> SyncRuleValidationResult:
+    async def validate(
+        self,
+        advanced_rules: Union[
+            List[Dict[str, str]],
+            List[Union[Dict[str, Union[str, List[str]]], Dict[str, str]]],
+            List[Dict[str, Union[str, List[str]]]],
+        ],
+    ) -> SyncRuleValidationResult:
         if len(advanced_rules) == 0:
             return SyncRuleValidationResult.valid_result(
                 SyncRuleValidationResult.ADVANCED_RULES
@@ -386,7 +407,9 @@ class ServiceNowAdvancedRulesValidator(AdvancedRulesValidator):
 
         return await self._remote_validation(advanced_rules)
 
-    async def _remote_validation(self, advanced_rules: List[Dict[str, Union[str, List[str]]]]) -> SyncRuleValidationResult:
+    async def _remote_validation(
+        self, advanced_rules: List[Dict[str, Union[str, List[str]]]]
+    ) -> SyncRuleValidationResult:
         try:
             ServiceNowAdvancedRulesValidator.SCHEMA(advanced_rules)
         except fastjsonschema.JsonSchemaValueException as e:
@@ -583,7 +606,9 @@ class ServiceNowDataSource(BaseDataSource):
         async for user in self._fetch_all_users():
             yield await self._user_access_control_doc(user=user)
 
-    def _decorate_with_access_control(self, document: Dict[str, str], access_control: List[Union[Any, str]]) -> Dict[str, Union[str, List[str]]]:
+    def _decorate_with_access_control(
+        self, document: Dict[str, str], access_control: List[Union[Any, str]]
+    ) -> Dict[str, Union[str, List[str]]]:
         if self._dls_enabled():
             document[ACCESS_CONTROL] = list(
                 set(document.get(ACCESS_CONTROL, []) + access_control)
@@ -649,7 +674,9 @@ class ServiceNowDataSource(BaseDataSource):
         return data
 
     async def _fetch_attachment_metadata(
-        self, batched_apis: List[Dict[str, Union[str, List[Dict[str, str]]]]], table_access_control: List[Union[Any, str]]
+        self,
+        batched_apis: List[Dict[str, Union[str, List[Dict[str, str]]]]],
+        table_access_control: List[Union[Any, str]],
     ) -> None:
         try:
             async for attachments_metadata in self.servicenow_client.get_data(
@@ -728,7 +755,11 @@ class ServiceNowDataSource(BaseDataSource):
                 exc_info=True,
             )
 
-    async def _fetch_table_data(self, batched_apis: List[Dict[str, Union[str, List[Dict[str, str]]]]], table_access_control: List[Union[Any, str]]) -> None:
+    async def _fetch_table_data(
+        self,
+        batched_apis: List[Dict[str, Union[str, List[Dict[str, str]]]]],
+        table_access_control: List[Union[Any, str]],
+    ) -> None:
         try:
             async for table_data in self.servicenow_client.get_data(
                 batched_apis=batched_apis
@@ -841,7 +872,10 @@ class ServiceNowDataSource(BaseDataSource):
             )
 
     async def _table_data_producer(
-        self, service_name: str, params: Dict[Any, Any], table_access_control: List[Union[Any, str]]
+        self,
+        service_name: str,
+        params: Dict[Any, Any],
+        table_access_control: List[Union[Any, str]],
     ) -> None:
         self._logger.debug(f"Fetching {service_name} data")
         try:
@@ -872,7 +906,9 @@ class ServiceNowDataSource(BaseDataSource):
             else:
                 yield item
 
-    async def get_docs(self, filtering: None=None) -> Iterator[Union[Future, _GatheringFuture]]:
+    async def get_docs(
+        self, filtering: None = None
+    ) -> Iterator[Union[Future, _GatheringFuture]]:
         """Get documents from ServiceNow.
 
         Args:
@@ -943,7 +979,9 @@ class ServiceNowDataSource(BaseDataSource):
 
         await self.fetchers.join()
 
-    async def get_content(self, metadata: Dict[str, str], timestamp: None=None, doit: bool = False) -> Generator[Future, None, Optional[Dict[str, str]]]:
+    async def get_content(
+        self, metadata: Dict[str, str], timestamp: None = None, doit: bool = False
+    ) -> Generator[Future, None, Optional[Dict[str, str]]]:
         file_size = int(metadata["size_bytes"])
         if not (doit and file_size > 0):
             return

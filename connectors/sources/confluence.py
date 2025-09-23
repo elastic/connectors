@@ -7,17 +7,24 @@
 
 import asyncio
 import os
+from _asyncio import Future, Task
 from copy import copy
 from functools import partial
-from typing import Generator, Iterator, Set, Any, Dict, List, Union
+from typing import Any, Dict, Generator, Iterator, List, Set, Union
+from unittest.mock import AsyncMock
 from urllib.parse import urljoin
 
 import aiohttp
+from aiohttp.client import ClientSession
 from aiohttp.client_exceptions import ClientResponseError, ServerDisconnectedError
 
 from connectors.access_control import ACCESS_CONTROL
 from connectors.logger import logger
-from connectors.source import DataSourceConfiguration, BaseDataSource, ConfigurableFieldValueError
+from connectors.source import (
+    BaseDataSource,
+    ConfigurableFieldValueError,
+    DataSourceConfiguration,
+)
 from connectors.sources.atlassian import (
     AtlassianAccessControl,
     AtlassianAdvancedRulesValidator,
@@ -39,9 +46,6 @@ from connectors.utils import (
     retryable,
     ssl_context,
 )
-from _asyncio import Future, Task
-from aiohttp.client import ClientSession
-from unittest.mock import AsyncMock
 
 RETRIES = 3
 RETRY_INTERVAL = 2
@@ -201,7 +205,9 @@ class ConfluenceClient:
         await self.session.close()
         self.session = None
 
-    async def _handle_client_errors(self, url: str, exception: Union[TypeError, ValueError]) -> Iterator[Task]:
+    async def _handle_client_errors(
+        self, url: str, exception: Union[TypeError, ValueError]
+    ) -> Iterator[Task]:
         if exception.status == 429:
             response_headers = exception.headers or {}
             retry_seconds = DEFAULT_RETRY_SECONDS
@@ -249,7 +255,9 @@ class ConfluenceClient:
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
         skipped_exceptions=NotFound,
     )
-    async def api_call(self, url: str) -> Generator[Union[Task, Future], None, AsyncMock]:
+    async def api_call(
+        self, url: str
+    ) -> Generator[Union[Task, Future], None, AsyncMock]:
         """Make a GET call for Atlassian API using the passed url with retry for the failed API calls.
 
         Args:
@@ -374,7 +382,9 @@ class ConfluenceClient:
                 if (spaces == [WILDCARD]) or (space.get("key", "") in spaces):
                     yield space
 
-    async def fetch_server_space_permission(self, url: str) -> Dict[str, Dict[str, Dict[str, List[str]]]]:
+    async def fetch_server_space_permission(
+        self, url: str
+    ) -> Dict[str, Dict[str, Dict[str, List[str]]]]:
         try:
             permissions = await self.api_call(url=os.path.join(self.host_url, url))
             permission = await permissions.json()
@@ -643,7 +653,11 @@ class ConfluenceDataSource(BaseDataSource):
 
         return self.configuration["use_document_level_security"]
 
-    def _decorate_with_access_control(self, document: Dict[str, Union[str, int, List[Dict[str, str]], List[None]]], access_control: List[Union[str, Any]]) -> Dict[str, Union[str, int, List[Dict[str, str]], List[None], List[str]]]:
+    def _decorate_with_access_control(
+        self,
+        document: Dict[str, Union[str, int, List[Dict[str, str]], List[None]]],
+        access_control: List[Union[str, Any]],
+    ) -> Dict[str, Union[str, int, List[Dict[str, str]], List[None], List[str]]]:
         if self._dls_enabled():
             document[ACCESS_CONTROL] = list(
                 set(document.get(ACCESS_CONTROL, []) + access_control)
@@ -651,7 +665,9 @@ class ConfluenceDataSource(BaseDataSource):
 
         return document
 
-    async def user_access_control_confluence_server(self, user: Dict[str, str]) -> Dict[str, Any]:
+    async def user_access_control_confluence_server(
+        self, user: Dict[str, str]
+    ) -> Dict[str, Any]:
         """Generate a user access control document for confluence server.
 
         This method generates a user access control document based on the provided user information.
@@ -700,7 +716,9 @@ class ConfluenceDataSource(BaseDataSource):
             access_control=access_control
         )
 
-    async def user_access_control_data_center(self, user: Dict[str, str]) -> Dict[str, Any]:
+    async def user_access_control_data_center(
+        self, user: Dict[str, str]
+    ) -> Dict[str, Any]:
         """Generate a user access control document for confluence data enter.
 
         This method generates a user access control document based on the provided user information.
@@ -807,7 +825,23 @@ class ConfluenceDataSource(BaseDataSource):
         async for user in users:
             yield user
 
-    def _get_access_control_from_permission(self, permissions: List[Union[Dict[str, Union[int, Dict[str, Dict[str, Union[List[Dict[str, str]], int]]], Dict[str, str]]], Any]], target_type: str) -> Set[str]:
+    def _get_access_control_from_permission(
+        self,
+        permissions: List[
+            Union[
+                Dict[
+                    str,
+                    Union[
+                        int,
+                        Dict[str, Dict[str, Union[List[Dict[str, str]], int]]],
+                        Dict[str, str],
+                    ],
+                ],
+                Any,
+            ]
+        ],
+        target_type: str,
+    ) -> Set[str]:
         if not self._dls_enabled():
             return []
 
@@ -826,7 +860,12 @@ class ConfluenceDataSource(BaseDataSource):
 
         return access_control
 
-    def _extract_identities(self, response: Dict[str, Union[Dict[str, Union[List[Dict[str, str]], int]], Dict[str, int]]]) -> Set[str]:
+    def _extract_identities(
+        self,
+        response: Dict[
+            str, Union[Dict[str, Union[List[Dict[str, str]], int]], Dict[str, int]]
+        ],
+    ) -> Set[str]:
         if not self._dls_enabled():
             return set()
 
@@ -843,7 +882,9 @@ class ConfluenceDataSource(BaseDataSource):
 
         return identities
 
-    def _extract_identities_for_datacenter(self, response: Dict[str, Dict[str, List[Dict[str, str]]]]) -> Set[str]:
+    def _extract_identities_for_datacenter(
+        self, response: Dict[str, Dict[str, List[Dict[str, str]]]]
+    ) -> Set[str]:
         if not self._dls_enabled():
             return set()
         identities = set()
@@ -918,7 +959,9 @@ class ConfluenceDataSource(BaseDataSource):
 
         return permissions
 
-    async def fetch_server_space_permission(self, space_key: str) -> Dict[str, Dict[str, Dict[str, List[str]]]]:
+    async def fetch_server_space_permission(
+        self, space_key: str
+    ) -> Dict[str, Dict[str, Dict[str, List[str]]]]:
         if not self._dls_enabled():
             return {}
 
@@ -1088,7 +1131,11 @@ class ConfluenceDataSource(BaseDataSource):
             yield document, download_url
 
     async def download_attachment(
-        self, url: str, attachment: Dict[str, Union[str, int]], timestamp: None=None, doit: bool = False
+        self,
+        url: str,
+        attachment: Dict[str, Union[str, int]],
+        timestamp: None = None,
+        doit: bool = False,
     ) -> Iterator[Future]:
         """Downloads the content of the given attachment in chunks using REST API call
 
@@ -1125,7 +1172,13 @@ class ConfluenceDataSource(BaseDataSource):
             ),
         )
 
-    async def _attachment_coro(self, document: Dict[str, Union[str, int, List[Dict[str, str]], List[None], List[str]]], access_control: List[Union[str, Any]]) -> None:
+    async def _attachment_coro(
+        self,
+        document: Dict[
+            str, Union[str, int, List[Dict[str, str]], List[None], List[str]]
+        ],
+        access_control: List[Union[str, Any]],
+    ) -> None:
         """Coroutine to add attachments to Queue and download content
 
         Args:
@@ -1160,7 +1213,28 @@ class ConfluenceDataSource(BaseDataSource):
         finally:
             await self.queue.put(END_SIGNAL)  # pyright: ignore
 
-    def format_space(self, space: Dict[str, Union[int, str, Dict[str, str], List[Dict[str, Union[int, Dict[str, Dict[str, Union[List[Dict[str, str]], int]]], Dict[str, str]]]], Dict[str, Union[Dict[str, str], str]]]]) -> Dict[str, Any]:
+    def format_space(
+        self,
+        space: Dict[
+            str,
+            Union[
+                int,
+                str,
+                Dict[str, str],
+                List[
+                    Dict[
+                        str,
+                        Union[
+                            int,
+                            Dict[str, Dict[str, Union[List[Dict[str, str]], int]]],
+                            Dict[str, str],
+                        ],
+                    ]
+                ],
+                Dict[str, Union[Dict[str, str], str]],
+            ],
+        ],
+    ) -> Dict[str, Any]:
         space_url = os.path.join(
             self.confluence_client.host_url,
             space.get("_links", {}).get("webui", "")[1:],

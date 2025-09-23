@@ -6,7 +6,9 @@
 """MySQL source module responsible to fetch documents from MySQL"""
 
 import re
-from typing import Any, Optional, Tuple, Dict, List, Union
+from datetime import datetime
+from typing import Any, Dict, List, Optional, Tuple, Union
+from unittest.mock import AsyncMock, MagicMock
 
 import aiomysql
 import fastjsonschema
@@ -16,7 +18,12 @@ from connectors.filtering.validation import (
     AdvancedRulesValidator,
     SyncRuleValidationResult,
 )
-from connectors.source import DataSourceConfiguration, BaseDataSource, ConfigurableFieldValueError
+from connectors.logger import ExtraLogger
+from connectors.source import (
+    BaseDataSource,
+    ConfigurableFieldValueError,
+    DataSourceConfiguration,
+)
 from connectors.sources.generic_database import (
     configured_tables,
     is_wildcard,
@@ -28,9 +35,6 @@ from connectors.utils import (
     retryable,
     ssl_context,
 )
-from connectors.logger import ExtraLogger
-from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock
 
 SPLIT_BY_COMMA_OUTSIDE_BACKTICKS_PATTERN: re.Pattern[str] = re.compile(
     r"`(?:[^`]|``)+`|\w+"
@@ -78,7 +82,18 @@ class MySQLAdvancedRulesValidator(AdvancedRulesValidator):
         interval=RETRY_INTERVAL,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
-    async def _remote_validation(self, advanced_rules: List[Union[Dict[str, str], Dict[str, Union[str, List[str]]], Dict[str, List[str]], str, Dict[str, Union[str, bool, List[str]]]]]) -> SyncRuleValidationResult:
+    async def _remote_validation(
+        self,
+        advanced_rules: List[
+            Union[
+                Dict[str, str],
+                Dict[str, Union[str, List[str]]],
+                Dict[str, List[str]],
+                str,
+                Dict[str, Union[str, bool, List[str]]],
+            ]
+        ],
+    ) -> SyncRuleValidationResult:
         try:
             MySQLAdvancedRulesValidator.SCHEMA(advanced_rules)
         except JsonSchemaValueException as e:
@@ -120,7 +135,7 @@ class MySQLClient:
         ssl_enabled: bool,
         ssl_certificate: str,
         logger_: ExtraLogger,
-        database: None=None,
+        database: None = None,
         max_pool_size: int = MAX_POOL_SIZE,
         fetch_size: int = DEFAULT_FETCH_SIZE,
     ) -> None:
@@ -321,7 +336,13 @@ class MySQLClient:
                 )
 
 
-def row2doc(row: Union[List[str], Tuple[int, str, int]], column_names: List[str], primary_key_columns: Union[List[str], str], table: Union[List[str], str], timestamp: Optional[Union[str, datetime]]) -> Dict[str, Union[int, str, List[str], datetime]]:
+def row2doc(
+    row: Union[List[str], Tuple[int, str, int]],
+    column_names: List[str],
+    primary_key_columns: Union[List[str], str],
+    table: Union[List[str], str],
+    timestamp: Optional[Union[str, datetime]],
+) -> Dict[str, Union[int, str, List[str], datetime]]:
     row = dict(zip(column_names, row, strict=True))
     row.update(
         {
@@ -334,7 +355,11 @@ def row2doc(row: Union[List[str], Tuple[int, str, int]], column_names: List[str]
     return row
 
 
-def generate_id(tables: Union[List[str], str], row: Dict[str, Union[str, int]], primary_key_columns: Union[List[str], str]) -> str:
+def generate_id(
+    tables: Union[List[str], str],
+    row: Dict[str, Union[str, int]],
+    primary_key_columns: Union[List[str], str],
+) -> str:
     """Generates an id using table names as prefix in sorted order and primary key values.
 
     Example:
@@ -540,7 +565,9 @@ class MySqlDataSource(BaseDataSource):
             async for row in self.fetch_documents(tables):
                 yield row, None
 
-    async def fetch_documents(self, tables: List[str], query: Optional[str]=None, id_columns: None=None) -> None:
+    async def fetch_documents(
+        self, tables: List[str], query: Optional[str] = None, id_columns: None = None
+    ) -> None:
         """If query is not present it fetches all rows from all tables.
         Otherwise, the custom query is executed.
 
@@ -594,7 +621,13 @@ class MySqlDataSource(BaseDataSource):
                     timestamp=last_update_time,
                 )
 
-    async def _yield_docs_custom_query(self, client: Union[MySQLClient, MagicMock], tables: Union[List[str], str], query: str, id_columns: None) -> None:
+    async def _yield_docs_custom_query(
+        self,
+        client: Union[MySQLClient, MagicMock],
+        tables: Union[List[str], str],
+        query: str,
+        id_columns: None,
+    ) -> None:
         primary_key_columns = [
             await client.get_primary_key_column_names(table) for table in tables
         ]

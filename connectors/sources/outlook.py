@@ -7,10 +7,11 @@
 
 import asyncio
 import os
+from _asyncio import Task
 from copy import copy
 from datetime import date
 from functools import cached_property, partial
-from typing import Iterator, Any, Dict, List, Optional, Union
+from typing import Any, Dict, Iterator, List, Optional, Union
 
 import aiofiles
 import aiohttp
@@ -37,7 +38,7 @@ from connectors.access_control import (
     prefix_identity,
 )
 from connectors.logger import logger
-from connectors.source import DataSourceConfiguration, BaseDataSource
+from connectors.source import BaseDataSource, DataSourceConfiguration
 from connectors.utils import (
     CancellableSleeps,
     RetryStrategy,
@@ -48,7 +49,6 @@ from connectors.utils import (
     retryable,
     url_encode,
 )
-from _asyncio import Task
 
 RETRIES = 3
 RETRY_INTERVAL = 2
@@ -249,7 +249,14 @@ class ExchangeUsers:
     """Fetch users from Exchange Active Directory"""
 
     def __init__(
-        self, ad_server: str, domain: str, exchange_server: str, user: str, password: str, ssl_enabled: bool, ssl_ca: str
+        self,
+        ad_server: str,
+        domain: str,
+        exchange_server: str,
+        user: str,
+        password: str,
+        ssl_enabled: bool,
+        ssl_ca: str,
     ) -> None:
         self.ad_server = Server(host=ad_server)
         self.domain = domain
@@ -874,7 +881,9 @@ class OutlookDataSource(BaseDataSource):
             access_control=[_prefixed_user_id, _prefixed_display_name, _prefixed_email]
         )
 
-    async def _user_access_control_doc_for_server(self, users: Dict[str, Union[Dict[str, str], str]]) -> Dict[str, Any]:
+    async def _user_access_control_doc_for_server(
+        self, users: Dict[str, Union[Dict[str, str], str]]
+    ) -> Dict[str, Any]:
         name_metadata = users.get("dn", "").split("=", 1)[1]
         display_name = name_metadata.split(",", 1)[0]
         user_email = users.get("attributes", {}).get("mail")
@@ -895,7 +904,11 @@ class OutlookDataSource(BaseDataSource):
             access_control=[_prefixed_user_id, _prefixed_display_name, _prefixed_email]
         )
 
-    def _decorate_with_access_control(self, document: Dict[str, Union[str, List[str], int, List[int]]], access_control: List[str]) -> Dict[str, Union[str, List[str], int, List[int]]]:
+    def _decorate_with_access_control(
+        self,
+        document: Dict[str, Union[str, List[str], int, List[int]]],
+        access_control: List[str],
+    ) -> Dict[str, Union[str, List[str], int, List[int]]]:
         if self._dls_enabled():
             document[ACCESS_CONTROL] = list(
                 set(document.get(ACCESS_CONTROL, []) + access_control)

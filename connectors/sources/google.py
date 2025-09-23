@@ -5,8 +5,10 @@
 #
 import json
 import os
+from _asyncio import Future, Task
+from asyncio.tasks import _GatheringFuture
 from enum import Enum
-from typing import Any, Callable, Dict, Generator, Iterator, List, Union, Optional
+from typing import Any, Callable, Dict, Generator, Iterator, List, Optional, Union
 
 from aiogoogle import Aiogoogle, AuthError, HTTPError
 from aiogoogle.auth.creds import ServiceAccountCreds
@@ -15,8 +17,6 @@ from aiogoogle.sessions.aiohttp_session import AiohttpSession
 from connectors.logger import ExtraLogger, logger
 from connectors.source import ConfigurableFieldValueError
 from connectors.utils import RetryStrategy, retryable
-from _asyncio import Future, Task
-from asyncio.tasks import _GatheringFuture
 
 # Google Service Account JSON includes "universe_domain" key. That argument is not
 # supported in aiogoogle library in version 5.3.0. The "universe_domain" key is allowed in
@@ -60,11 +60,15 @@ class RetryableAiohttpSession(AiohttpSession):
         interval=RETRY_INTERVAL,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
-    async def send(self, *args, **kwargs) -> Generator[_GatheringFuture, None, Dict[str, Any]]:
+    async def send(
+        self, *args, **kwargs
+    ) -> Generator[_GatheringFuture, None, Dict[str, Any]]:
         return await super().send(*args, **kwargs)
 
 
-def load_service_account_json(service_account_credentials_json: str, google_service: str) -> Dict[str, str]:
+def load_service_account_json(
+    service_account_credentials_json: str, google_service: str
+) -> Dict[str, str]:
     """
     Load and parse a Google service account JSON configuration.
 
@@ -104,7 +108,9 @@ def load_service_account_json(service_account_credentials_json: str, google_serv
         raise ConfigurableFieldValueError(msg)
 
 
-def validate_service_account_json(service_account_credentials: str, google_service: str) -> None:
+def validate_service_account_json(
+    service_account_credentials: str, google_service: str
+) -> None:
     """Validates whether service account JSON is a valid JSON string and
     checks for unexpected keys.
 
@@ -125,7 +131,14 @@ def validate_service_account_json(service_account_credentials: str, google_servi
 class GoogleServiceAccountClient:
     """A Google client to handle api calls made to the Google Workspace APIs using a service account."""
 
-    def __init__(self, json_credentials: Dict[str, str], api: str, api_version: str, scopes: List[Union[str, Any]], api_timeout: int) -> None:
+    def __init__(
+        self,
+        json_credentials: Dict[str, str],
+        api: str,
+        api_version: str,
+        scopes: List[Union[str, Any]],
+        api_timeout: int,
+    ) -> None:
         """Initialize the ServiceAccountCreds class using which api calls will be made.
         Args:
             json_credentials (dict): Service account credentials json.
@@ -195,7 +208,13 @@ class GoogleServiceAccountClient:
 
         return await anext(self._execute_api_call(resource, method, _call_api, kwargs))
 
-    async def _execute_api_call(self, resource: str, method: str, call_api_func: Callable, kwargs: Dict[str, Union[str, int]]) -> Iterator[Union[_GatheringFuture, Task, None]]:
+    async def _execute_api_call(
+        self,
+        resource: str,
+        method: str,
+        call_api_func: Callable,
+        kwargs: Dict[str, Union[str, int]],
+    ) -> Iterator[Union[_GatheringFuture, Task, None]]:
         """Execute the API call with common try/except logic.
         Args:
             resource (aiogoogle.resource.Resource): Resource name for which the API call will be made.
@@ -257,7 +276,11 @@ def remove_universe_domain(json_credentials: Dict[str, str]) -> None:
 
 class GoogleDirectoryClient:
     def __init__(
-        self, json_credentials: Dict[str, str], customer_id: str, subject: str, timeout: int = DEFAULT_TIMEOUT
+        self,
+        json_credentials: Dict[str, str],
+        customer_id: str,
+        subject: str,
+        timeout: int = DEFAULT_TIMEOUT,
     ) -> None:
         remove_universe_domain(json_credentials)
 
@@ -301,7 +324,11 @@ class GoogleDirectoryClient:
 
 class GMailClient:
     def __init__(
-        self, json_credentials: Dict[str, str], customer_id: str, subject: str, timeout: int = DEFAULT_TIMEOUT
+        self,
+        json_credentials: Dict[str, str],
+        customer_id: str,
+        subject: str,
+        timeout: int = DEFAULT_TIMEOUT,
     ) -> None:
         remove_universe_domain(json_credentials)
 

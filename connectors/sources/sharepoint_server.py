@@ -7,8 +7,9 @@
 
 import os
 import re
+from _asyncio import Future, Task
 from functools import partial
-from typing import Generator, Iterator, Tuple, Any, Dict, List, Optional, Union
+from typing import Any, Dict, Generator, Iterator, List, Optional, Tuple, Union
 from urllib.parse import quote
 
 import httpx
@@ -20,7 +21,12 @@ from connectors.access_control import (
     prefix_identity,
 )
 from connectors.logger import logger
-from connectors.source import DataSourceConfiguration, CHUNK_SIZE, BaseDataSource, ConfigurableFieldValueError
+from connectors.source import (
+    CHUNK_SIZE,
+    BaseDataSource,
+    ConfigurableFieldValueError,
+    DataSourceConfiguration,
+)
 from connectors.utils import (
     TIKA_SUPPORTED_FILETYPES,
     CancellableSleeps,
@@ -28,7 +34,6 @@ from connectors.utils import (
     iso_utc,
     ssl_context,
 )
-from _asyncio import Future, Task
 
 BASIC_AUTH = "Basic"
 NTLM_AUTH = "NTLM"
@@ -194,8 +199,8 @@ class SharepointServerClient:
         self,
         site_url: str,
         relative_url: str,
-        list_item_id: Optional[str]=None,
-        content_type_id: Optional[str]=None,
+        list_item_id: Optional[str] = None,
+        content_type_id: Optional[str] = None,
         is_list_item_has_attachment: bool = False,
     ) -> str:
         if is_list_item_has_attachment:
@@ -221,7 +226,9 @@ class SharepointServerClient:
         await self.session.aclose()  # pyright: ignore
         self.session = None
 
-    async def _api_call(self, url_name: str, url: str = "", **url_kwargs) -> Iterator[Task]:
+    async def _api_call(
+        self, url_name: str, url: str = "", **url_kwargs
+    ) -> Iterator[Task]:
         """Make an API call to the SharePoint Server
 
         Args:
@@ -382,7 +389,9 @@ class SharepointServerClient:
             for site_list in list_data:
                 yield site_list
 
-    async def get_attachment(self, site_url: str, file_relative_url: str) -> Dict[str, str]:
+    async def get_attachment(
+        self, site_url: str, file_relative_url: str
+    ) -> Dict[str, str]:
         """Execute the call for fetching attachment metadata
 
         Args:
@@ -554,7 +563,9 @@ class SharepointServerClient:
             for role in roles:
                 yield role
 
-    async def site_list_has_unique_role_assignments(self, site_list_name: str, site_url: str) -> bool:
+    async def site_list_has_unique_role_assignments(
+        self, site_list_name: str, site_url: str
+    ) -> bool:
         role = await anext(
             self._api_call(
                 url_name=UNIQUE_ROLES,
@@ -766,7 +777,11 @@ class SharepointServerDataSource(BaseDataSource):
 
         return self.configuration["use_document_level_security"]
 
-    def _decorate_with_access_control(self, document: Dict[str, Optional[Union[str, int]]], access_control: List[Union[str, Any]]) -> Dict[str, Optional[Union[List[str], int, str]]]:
+    def _decorate_with_access_control(
+        self,
+        document: Dict[str, Optional[Union[str, int]]],
+        access_control: List[Union[str, Any]],
+    ) -> Dict[str, Optional[Union[List[str], int, str]]]:
         if self._dls_enabled():
             document[ACCESS_CONTROL] = list(
                 set(document.get(ACCESS_CONTROL, []) + access_control)
@@ -774,10 +789,14 @@ class SharepointServerDataSource(BaseDataSource):
 
         return document
 
-    def access_control_query(self, access_control: List[str]) -> Dict[str, Dict[str, Dict[str, Union[Dict[str, List[str]], str]]]]:
+    def access_control_query(
+        self, access_control: List[str]
+    ) -> Dict[str, Dict[str, Dict[str, Union[Dict[str, List[str]], str]]]]:
         return es_access_control_query(access_control)
 
-    async def _user_access_control_doc(self, user: Dict[str, Union[str, int, bool, Dict[str, str]]]) -> Dict[str, Any]:
+    async def _user_access_control_doc(
+        self, user: Dict[str, Union[str, int, bool, Dict[str, str]]]
+    ) -> Dict[str, Any]:
         login_name = user.get("LoginName")
         prefixed_mail = self._prefix_email(user.get("Email"))
         prefixed_title = self._prefix_user(user.get("Title"))
@@ -802,7 +821,9 @@ class SharepointServerDataSource(BaseDataSource):
             "created_at": iso_utc(),
         } | self.access_control_query(access_control)
 
-    async def _access_control_for_member(self, member: Dict[str, Union[str, int, bool, Dict[str, str]]]) -> List[Optional[str]]:
+    async def _access_control_for_member(
+        self, member: Dict[str, Union[str, int, bool, Dict[str, str]]]
+    ) -> List[Optional[str]]:
         principal_type = member.get("PrincipalType")
         is_group = principal_type != IS_USER if principal_type else False
         user_access_control = []
@@ -884,7 +905,27 @@ class SharepointServerDataSource(BaseDataSource):
             if user_doc:
                 yield user_doc
 
-    async def _get_access_control_from_role_assignment(self, role_assignment: Dict[str, Union[Dict[str, Union[str, int, List[Dict[str, Union[str, int, bool, Dict[str, str]]]], bool, Dict[str, str]]], List[Dict[str, Union[Dict[str, str], int, str]]], int, Dict[str, Union[str, int, bool, Dict[str, str]]]]]) -> List[Union[str, Any]]:
+    async def _get_access_control_from_role_assignment(
+        self,
+        role_assignment: Dict[
+            str,
+            Union[
+                Dict[
+                    str,
+                    Union[
+                        str,
+                        int,
+                        List[Dict[str, Union[str, int, bool, Dict[str, str]]]],
+                        bool,
+                        Dict[str, str],
+                    ],
+                ],
+                List[Dict[str, Union[Dict[str, str], int, str]]],
+                int,
+                Dict[str, Union[str, int, bool, Dict[str, str]]],
+            ],
+        ],
+    ) -> List[Union[str, Any]]:
         """Extracts access control from a role assignment.
 
         Args:
@@ -945,7 +986,9 @@ class SharepointServerDataSource(BaseDataSource):
 
         return access_control
 
-    async def _site_access_control(self, site_url: str) -> Union[Tuple[List[Any], List[str]], Tuple[List[Any], List[Any]]]:
+    async def _site_access_control(
+        self, site_url: str
+    ) -> Union[Tuple[List[Any], List[str]], Tuple[List[Any], List[Any]]]:
         self._logger.debug(f"Looking at site with url {site_url}")
         if not self._dls_enabled():
             return [], []
@@ -1080,7 +1123,9 @@ class SharepointServerDataSource(BaseDataSource):
         admin_access_control.extend(site_list_access_control)
         return self._decorate_with_access_control(document, admin_access_control)
 
-    def format_sites(self, item: Dict[str, Optional[Union[str, int, Dict[str, Union[int, str]]]]]) -> Dict[str, Any]:
+    def format_sites(
+        self, item: Dict[str, Optional[Union[str, int, Dict[str, Union[int, str]]]]]
+    ) -> Dict[str, Any]:
         """Prepare key mappings for site
 
         Args:
@@ -1103,7 +1148,16 @@ class SharepointServerDataSource(BaseDataSource):
         self,
         site_url: str,
         server_relative_url: Optional[str],
-        item: Dict[str, Union[Dict[str, str], int, str, Dict[str, Union[int, str]], Dict[str, Dict[Any, Any]]]],
+        item: Dict[
+            str,
+            Union[
+                Dict[str, str],
+                int,
+                str,
+                Dict[str, Union[int, str]],
+                Dict[str, Dict[Any, Any]],
+            ],
+        ],
     ) -> Dict[str, str]:
         """Prepare key mappings for drive items
 
@@ -1145,8 +1199,8 @@ class SharepointServerDataSource(BaseDataSource):
     def format_list_item(
         self,
         item: Dict[str, Union[str, int, bool, Dict[str, str]]],
-        site_url: Optional[str]=None,
-        server_relative_url: Optional[str]=None,
+        site_url: Optional[str] = None,
+        server_relative_url: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Prepare key mappings for list items
 
@@ -1214,7 +1268,11 @@ class SharepointServerDataSource(BaseDataSource):
             yield site_list, site_list_access_control
 
     async def fetch_list_item_permission(
-        self, site_url: str, site_list_name: str, list_item_id: int, site_access_control: List[Any]
+        self,
+        site_url: str,
+        site_list_name: str,
+        list_item_id: int,
+        site_access_control: List[Any],
     ) -> List[Union[str, Any]]:
         list_item_access_control = []
         has_unique_role_assignments = False
@@ -1246,7 +1304,7 @@ class SharepointServerDataSource(BaseDataSource):
             list_item_access_control.extend(site_access_control)
         return list_item_access_control
 
-    async def get_docs(self, filtering: None=None) -> None:
+    async def get_docs(self, filtering: None = None) -> None:
         """Executes the logic to fetch SharePoint objects in an async manner.
 
         Yields:
@@ -1380,7 +1438,12 @@ class SharepointServerDataSource(BaseDataSource):
                             )
 
     async def get_content(
-        self, document: Dict[str, Union[int, str]], file_relative_url: str, site_url: str, timestamp: None=None, doit: bool = False
+        self,
+        document: Dict[str, Union[int, str]],
+        file_relative_url: str,
+        site_url: str,
+        timestamp: None = None,
+        doit: bool = False,
     ) -> Generator[Future, None, Optional[Dict[str, Union[int, str]]]]:
         """Get content of list items and drive items
 
@@ -1426,7 +1489,11 @@ class SharepointServerDataSource(BaseDataSource):
         )
 
     async def get_site_pages_content(
-        self, document: Dict[str, Union[int, str]], list_response: Dict[str, Optional[str]], timestamp: None=None, doit: bool = False
+        self,
+        document: Dict[str, Union[int, str]],
+        list_response: Dict[str, Optional[str]],
+        timestamp: None = None,
+        doit: bool = False,
     ) -> Generator[Future, None, Optional[Dict[str, Union[int, str]]]]:
         """Get content of site pages for SharePoint
 

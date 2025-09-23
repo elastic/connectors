@@ -14,11 +14,11 @@
 import asyncio
 import time
 from copy import deepcopy
+from typing import Any, Callable, DefaultDict, Dict, List, Optional, Tuple, Union
+from unittest.mock import Mock
 
 from connectors.logger import DocumentLogger, logger
 from connectors.utils import CancellableSleeps
-from typing import Any, Callable, DefaultDict, Dict, List, Optional, Tuple, Type, Union
-from unittest.mock import Mock
 
 __all__ = [
     "MultiService",
@@ -52,7 +52,12 @@ def get_service(name, config):
 class _Registry(type):
     """Metaclass used to register a service class in an internal registry."""
 
-    def __new__(cls: type, name: str, bases: Tuple[()], dct: Dict[str, Optional[Union[str, Callable]]]) -> type:
+    def __new__(
+        cls: type,
+        name: str,
+        bases: Tuple[()],
+        dct: Dict[str, Optional[Union[str, Callable]]],
+    ) -> type:
         service_name = dct.get("name")
         class_instance = super().__new__(cls, name, bases, dct)
         if service_name is not None:
@@ -149,7 +154,17 @@ class BaseService(metaclass=_Registry):
 
         return connectors
 
-    def _override_es_config(self, connector: Mock) -> Dict[str, Union[str, bool, Dict[str, Union[int, bool, Dict[str, Union[bool, int, float]]]], int]]:
+    def _override_es_config(
+        self, connector: Mock
+    ) -> Dict[
+        str,
+        Union[
+            str,
+            bool,
+            Dict[str, Union[int, bool, Dict[str, Union[bool, int, float]]]],
+            int,
+        ],
+    ]:
         es_config = deepcopy(self.es_config)
         if connector.id not in self.connectors:
             return es_config

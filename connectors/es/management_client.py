@@ -4,8 +4,12 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 
+from _asyncio import Task
 from functools import partial
+from typing import Any, Dict, Generator, List, Optional, Union
+from unittest.mock import AsyncMock
 
+from elastic_transport import ApiResponse, HeadApiResponse, ObjectApiResponse
 from elasticsearch import ApiError
 from elasticsearch import (
     NotFoundError as ElasticNotFoundError,
@@ -15,10 +19,6 @@ from elasticsearch.helpers import async_scan
 from connectors.es import TIMESTAMP_FIELD
 from connectors.es.client import ESClient
 from connectors.logger import logger
-from _asyncio import Task
-from elastic_transport import ApiResponse, HeadApiResponse, ObjectApiResponse
-from typing import Any, Dict, Generator, List, Optional, Union
-from unittest.mock import AsyncMock
 
 
 class ESManagementClient(ESClient):
@@ -35,12 +35,24 @@ class ESManagementClient(ESClient):
     This client, on the contrary, is used to manage a number of indices outside of connector protocol operations.
     """
 
-    def __init__(self, config: Dict[str, Union[str, bool, Dict[str, Union[int, bool, Dict[str, Union[bool, int, float]]]], int, float]]) -> None:
+    def __init__(
+        self,
+        config: Dict[
+            str,
+            Union[
+                str,
+                bool,
+                Dict[str, Union[int, bool, Dict[str, Union[bool, int, float]]]],
+                int,
+                float,
+            ],
+        ],
+    ) -> None:
         logger.debug(f"ESManagementClient connecting to {config['host']}")
         # initialize ESIndex instance
         super().__init__(config)
 
-    async def ensure_exists(self, indices: Optional[List[str]]=None) -> None:
+    async def ensure_exists(self, indices: Optional[List[str]] = None) -> None:
         if indices is None:
             indices = []
 
@@ -54,7 +66,9 @@ class ESManagementClient(ESClient):
                 )
                 logger.debug(f"Created index {index}")
 
-    async def create_content_index(self, search_index_name: str, language_code: Optional[str]) -> Union[ObjectApiResponse, ApiResponse, AsyncMock]:
+    async def create_content_index(
+        self, search_index_name: str, language_code: Optional[str]
+    ) -> Union[ObjectApiResponse, ApiResponse, AsyncMock]:
         return await self._retrier.execute_with_retry(
             partial(
                 self.client.indices.create,
@@ -63,7 +77,11 @@ class ESManagementClient(ESClient):
         )
 
     async def ensure_ingest_pipeline_exists(
-        self, pipeline_id: Union[str, int], version: int, description: str, processors: List[Union[str, Dict[str, Dict[str, Union[str, List[str], bool]]]]]
+        self,
+        pipeline_id: Union[str, int],
+        version: int,
+        description: str,
+        processors: List[Union[str, Dict[str, Dict[str, Union[str, List[str], bool]]]]],
     ) -> None:
         try:
             await self._retrier.execute_with_retry(
@@ -134,7 +152,11 @@ class ESManagementClient(ESClient):
             partial(self.client.indices.exists, index=index_name)
         )
 
-    async def get_index_or_alias(self, index_name: str, ignore_unavailable: bool = False) -> Optional[Union[Dict[str, Dict[Any, Any]], Dict[str, Dict[str, Dict[Any, Any]]]]]:
+    async def get_index_or_alias(
+        self, index_name: str, ignore_unavailable: bool = False
+    ) -> Optional[
+        Union[Dict[str, Dict[Any, Any]], Dict[str, Dict[str, Dict[Any, Any]]]]
+    ]:
         """
         Get index definition (mappings and settings) by its name or its alias.
         """
@@ -183,7 +205,22 @@ class ESManagementClient(ESClient):
             )
         )
 
-    async def bulk_insert(self, operations: List[Union[Dict[str, Dict[str, str]], Dict[str, str], Any]], pipeline: str) -> Generator[Task, None, Union[ObjectApiResponse, Dict[str, List[Dict[str, Dict[str, str]]]], Dict[str, Union[bool, List[Dict[str, Dict[str, Union[Dict[str, str], str]]]]]], Dict[str, List[Any]]]]:
+    async def bulk_insert(
+        self,
+        operations: List[Union[Dict[str, Dict[str, str]], Dict[str, str], Any]],
+        pipeline: str,
+    ) -> Generator[
+        Task,
+        None,
+        Union[
+            ObjectApiResponse,
+            Dict[str, List[Dict[str, Dict[str, str]]]],
+            Dict[
+                str, Union[bool, List[Dict[str, Dict[str, Union[Dict[str, str], str]]]]]
+            ],
+            Dict[str, List[Any]],
+        ],
+    ]:
         return await self._retrier.execute_with_retry(
             partial(
                 self.client.bulk,

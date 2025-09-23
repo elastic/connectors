@@ -5,15 +5,15 @@
 #
 """Azure Blob Storage source module responsible to fetch documents from Azure Blob Storage"""
 
-from functools import partial
-from typing import Generator, Iterator, Optional, Any, Dict, List, Union
-
-from azure.storage.blob.aio import BlobServiceClient, ContainerClient
-
-from connectors.source import DataSourceConfiguration, BaseDataSource
-import azure.storage.blob.aio._container_client_async
 from _asyncio import Future
 from datetime import datetime
+from functools import partial
+from typing import Any, Dict, Generator, Iterator, List, Optional, Union
+
+import azure.storage.blob.aio._container_client_async
+from azure.storage.blob.aio import BlobServiceClient, ContainerClient
+
+from connectors.source import BaseDataSource, DataSourceConfiguration
 
 BLOB_SCHEMA = {
     "title": "name",
@@ -159,7 +159,11 @@ class AzureBlobStorageDataSource(BaseDataSource):
             await container_client.close()
         self.container_clients = {}
 
-    def prepare_blob_doc(self, blob: Dict[str, Union[str, Dict[str, str], datetime, int]], container_metadata: Dict[str, str]) -> Dict[str, Any]:
+    def prepare_blob_doc(
+        self,
+        blob: Dict[str, Union[str, Dict[str, str], datetime, int]],
+        container_metadata: Dict[str, str],
+    ) -> Dict[str, Any]:
         """Prepare key mappings to blob document
 
         Args:
@@ -182,7 +186,12 @@ class AzureBlobStorageDataSource(BaseDataSource):
             document[elasticsearch_field] = blob[azure_blob_storage_field]
         return document
 
-    async def get_content(self, blob: Dict[str, Union[int, str]], timestamp: None=None, doit: Optional[bool]=None) -> Generator[Future, None, Optional[Dict[str, str]]]:
+    async def get_content(
+        self,
+        blob: Dict[str, Union[int, str]],
+        timestamp: None = None,
+        doit: Optional[bool] = None,
+    ) -> Generator[Future, None, Optional[Dict[str, str]]]:
         """Get blob content via specific blob client
 
         Args:
@@ -216,7 +225,9 @@ class AzureBlobStorageDataSource(BaseDataSource):
             partial(self.blob_download_func, filename, blob["container"], file_size),
         )
 
-    def _get_container_client(self, container_name: str) -> azure.storage.blob.aio._container_client_async.ContainerClient:
+    def _get_container_client(
+        self, container_name: str
+    ) -> azure.storage.blob.aio._container_client_async.ContainerClient:
         if self.container_clients.get(container_name) is None:
             try:
                 self.container_clients[container_name] = (

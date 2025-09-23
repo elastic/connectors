@@ -6,7 +6,7 @@
 """Tests the Generic Database source class methods"""
 
 from functools import partial
-from typing import Tuple, Union, List, Optional, Sized
+from typing import List, Optional, Sized, Tuple, Union
 
 import pytest
 
@@ -69,7 +69,9 @@ class CursorSync:
         """
         return ["ids", "names"]
 
-    def fetchmany(self, size: int) -> List[Union[Tuple[str], Tuple[int, str], Tuple[int]]]:
+    def fetchmany(
+        self, size: int
+    ) -> List[Union[Tuple[str], Tuple[int, str], Tuple[int]]]:
         """This method returns response of fetchmany
 
         Args:
@@ -158,9 +160,7 @@ COLUMN_NAMES = ["Column_1", "Column_2"]
         ("Schema", ["Table1", "Table2"], "schema_table1_table2_"),
     ],
 )
-def test_map_column_names(
-    schema, tables: Optional[Sized], prefix
-) -> None:
+def test_map_column_names(schema, tables: Optional[Sized], prefix) -> None:
     mapped_column_names = map_column_names(COLUMN_NAMES, schema, tables)
 
     for column_name, mapped_column_name in zip(

@@ -6,19 +6,21 @@
 """Jira source module responsible to fetch documents from Jira on-prem or cloud server."""
 
 import asyncio
+from _asyncio import Future, Task
 from copy import copy
 from datetime import datetime
 from functools import partial
-from typing import Any, Generator, Iterator, Optional, Dict, List, Union
+from typing import Any, Dict, Generator, Iterator, List, Optional, Union
 from urllib import parse
 
 import aiohttp
 import pytz
+from aiohttp.client import ClientSession
 from aiohttp.client_exceptions import ClientResponseError, ServerConnectionError
 
 from connectors.access_control import ACCESS_CONTROL
 from connectors.logger import logger
-from connectors.source import DataSourceConfiguration, BaseDataSource
+from connectors.source import BaseDataSource, DataSourceConfiguration
 from connectors.sources.atlassian import (
     AtlassianAccessControl,
     AtlassianAdvancedRulesValidator,
@@ -35,8 +37,6 @@ from connectors.utils import (
     retryable,
     ssl_context,
 )
-from _asyncio import Future, Task
-from aiohttp.client import ClientSession
 
 FINISHED = "FINISHED"
 WILDCARD = "*"
@@ -194,7 +194,9 @@ class JiraClient:
         await self.session.close()
         self.session = None
 
-    async def _handle_client_errors(self, url: str, exception: Union[TypeError, ValueError]) -> Iterator[Task]:
+    async def _handle_client_errors(
+        self, url: str, exception: Union[TypeError, ValueError]
+    ) -> Iterator[Task]:
         if exception.status == 429:
             response_headers = exception.headers or {}
             retry_seconds = DEFAULT_RETRY_SECONDS
@@ -228,7 +230,9 @@ class JiraClient:
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
         skipped_exceptions=NotFound,
     )
-    async def api_call(self, url_name: Optional[str]=None, **url_kwargs) -> Iterator[Optional[Task]]:
+    async def api_call(
+        self, url_name: Optional[str] = None, **url_kwargs
+    ) -> Iterator[Optional[Task]]:
         """Make a GET call for Atlassian API using the passed url_name with retry for the failed API calls.
 
         Args:
@@ -619,14 +623,45 @@ class JiraDataSource(BaseDataSource):
 
         return self.configuration["use_document_level_security"]
 
-    def _decorate_with_access_control(self, document: Dict[str, Union[str, Dict[str, Union[Dict[str, str], str, List[Dict[str, Union[str, int]]], Dict[str, Dict[str, List[Dict[str, str]]]]]], Dict[str, Union[Dict[str, str], str, List[Dict[str, Union[str, int]]], Dict[str, Dict[Any, Any]]]], Dict[str, str], int]], access_control: Union[str, List[str]]) -> Dict[str, Any]:
+    def _decorate_with_access_control(
+        self,
+        document: Dict[
+            str,
+            Union[
+                str,
+                Dict[
+                    str,
+                    Union[
+                        Dict[str, str],
+                        str,
+                        List[Dict[str, Union[str, int]]],
+                        Dict[str, Dict[str, List[Dict[str, str]]]],
+                    ],
+                ],
+                Dict[
+                    str,
+                    Union[
+                        Dict[str, str],
+                        str,
+                        List[Dict[str, Union[str, int]]],
+                        Dict[str, Dict[Any, Any]],
+                    ],
+                ],
+                Dict[str, str],
+                int,
+            ],
+        ],
+        access_control: Union[str, List[str]],
+    ) -> Dict[str, Any]:
         if self._dls_enabled():
             document[ACCESS_CONTROL] = list(
                 set(document.get(ACCESS_CONTROL, []) + access_control)
             )
         return document
 
-    async def _project_access_control(self, project: Dict[str, str]) -> List[Union[Any, str]]:
+    async def _project_access_control(
+        self, project: Dict[str, str]
+    ) -> List[Union[Any, str]]:
         if not self._dls_enabled():
             return []
 
@@ -658,7 +693,9 @@ class JiraDataSource(BaseDataSource):
                     )
         return list(access_control)
 
-    async def _cache_project_access_control(self, project: Dict[str, str]) -> List[Union[Any, str]]:
+    async def _cache_project_access_control(
+        self, project: Dict[str, str]
+    ) -> List[Union[Any, str]]:
         project_key = project.get("key")
         if project_key in self.project_permission_cache.keys():
             project_access_controls = self.project_permission_cache.get(project_key)
@@ -669,7 +706,9 @@ class JiraDataSource(BaseDataSource):
             self.project_permission_cache[project_key] = project_access_controls
         return project_access_controls
 
-    async def _issue_access_control(self, issue_key: str, project: Dict[str, str]) -> List[Union[Any, str]]:
+    async def _issue_access_control(
+        self, issue_key: str, project: Dict[str, str]
+    ) -> List[Union[Any, str]]:
         if not self._dls_enabled():
             return []
 
@@ -802,7 +841,11 @@ class JiraDataSource(BaseDataSource):
         await self.jira_client.close_session()
 
     async def get_content(
-        self, issue_key: str, attachment: Dict[str, Union[str, int]], timestamp: None=None, doit: bool = False
+        self,
+        issue_key: str,
+        attachment: Dict[str, Union[str, int]],
+        timestamp: None = None,
+        doit: bool = False,
     ) -> Generator[Future, None, Optional[Dict[str, str]]]:
         """Extracts the content for allowed file types.
 
@@ -905,7 +948,33 @@ class JiraDataSource(BaseDataSource):
                 f"Skipping data for type: {PROJECT}. Error: {exception}"
             )
 
-    async def _put_issue(self, issue: Dict[str, Union[str, Dict[str, Union[Dict[str, str], str, List[Dict[str, Union[str, int]]], Dict[str, Dict[str, List[Dict[str, str]]]]]], Dict[str, Union[Dict[str, str], str, List[Dict[str, Union[str, int]]], Dict[str, Dict[Any, Any]]]]]]) -> None:
+    async def _put_issue(
+        self,
+        issue: Dict[
+            str,
+            Union[
+                str,
+                Dict[
+                    str,
+                    Union[
+                        Dict[str, str],
+                        str,
+                        List[Dict[str, Union[str, int]]],
+                        Dict[str, Dict[str, List[Dict[str, str]]]],
+                    ],
+                ],
+                Dict[
+                    str,
+                    Union[
+                        Dict[str, str],
+                        str,
+                        List[Dict[str, Union[str, int]]],
+                        Dict[str, Dict[Any, Any]],
+                    ],
+                ],
+            ],
+        ],
+    ) -> None:
         """Put specific issue as per the given issue_key in a queue
 
         Args:
@@ -989,7 +1058,12 @@ class JiraDataSource(BaseDataSource):
             self.tasks += 1
         await self.queue.put("FINISHED")  # pyright: ignore
 
-    async def _put_attachment(self, attachments: List[Dict[str, Union[str, int]]], issue_key: str, access_control: Union[str, List[str]]) -> None:
+    async def _put_attachment(
+        self,
+        attachments: List[Dict[str, Union[str, int]]],
+        issue_key: str,
+        access_control: Union[str, List[str]],
+    ) -> None:
         """Put attachments of a specific issue in a queue
 
         Args:

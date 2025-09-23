@@ -4,9 +4,13 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 from contextlib import asynccontextmanager
-
-from connectors.source import DEFAULT_CONFIGURATION, BaseDataSource, DataSourceConfiguration
 from typing import Type
+
+from connectors.source import (
+    DEFAULT_CONFIGURATION,
+    BaseDataSource,
+    DataSourceConfiguration,
+)
 
 
 @asynccontextmanager

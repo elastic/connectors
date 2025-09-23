@@ -5,15 +5,15 @@
 #
 
 import os
+from typing import Dict, Optional
 
 import aiofiles
 import aiohttp
+from aiohttp.client import ClientSession
 from aiohttp.client_exceptions import ClientConnectionError, ServerTimeoutError
+from aiohttp.client_reqrep import ClientResponse
 
 from connectors.logger import logger
-from aiohttp.client import ClientSession
-from aiohttp.client_reqrep import ClientResponse
-from typing import Dict, Optional
 
 __EXTRACTION_CONFIG = {}  # setup by cli.py on startup
 
@@ -31,7 +31,9 @@ class ContentExtraction:
         return __EXTRACTION_CONFIG
 
     @classmethod
-    def set_extraction_config(cls, extraction_config: Optional[Dict[str, Dict[str, str]]]) -> None:
+    def set_extraction_config(
+        cls, extraction_config: Optional[Dict[str, Dict[str, str]]]
+    ) -> None:
         global __EXTRACTION_CONFIG
         __EXTRACTION_CONFIG = extraction_config
 
@@ -154,7 +156,9 @@ class ContentExtraction:
                 yield chunk
                 chunk = await f.read(self.chunk_size)
 
-    async def parse_extraction_resp(self, filename: str, response: ClientResponse) -> str:
+    async def parse_extraction_resp(
+        self, filename: str, response: ClientResponse
+    ) -> str:
         """Parses the response from the tika-server and logs any extraction failures.
 
         Returns `extracted_text` from the response.

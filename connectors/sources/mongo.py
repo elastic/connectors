@@ -9,7 +9,7 @@ from contextlib import contextmanager
 from copy import deepcopy
 from datetime import datetime
 from tempfile import NamedTemporaryFile
-from typing import Any, Iterator, Dict, List, Optional, Union
+from typing import Any, Dict, Iterator, List, Optional, Union
 
 import fastjsonschema
 from bson import OLD_UUID_SUBTYPE, Binary, DBRef, Decimal128, ObjectId
@@ -22,7 +22,11 @@ from connectors.filtering.validation import (
     AdvancedRulesValidator,
     SyncRuleValidationResult,
 )
-from connectors.source import DataSourceConfiguration, BaseDataSource, ConfigurableFieldValueError
+from connectors.source import (
+    BaseDataSource,
+    ConfigurableFieldValueError,
+    DataSourceConfiguration,
+)
 from connectors.utils import get_pem_format
 
 
@@ -76,7 +80,9 @@ class MongoAdvancedRulesValidator(AdvancedRulesValidator):
 
     SCHEMA = fastjsonschema.compile(definition=SCHEMA_DEFINITION)
 
-    async def validate(self, advanced_rules: Dict[str, Any]) -> SyncRuleValidationResult:
+    async def validate(
+        self, advanced_rules: Dict[str, Any]
+    ) -> SyncRuleValidationResult:
         try:
             MongoAdvancedRulesValidator.SCHEMA(advanced_rules)
 

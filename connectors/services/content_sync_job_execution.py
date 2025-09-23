@@ -5,17 +5,37 @@
 #
 
 from functools import cached_property
+from typing import Dict, List, Union
+from unittest.mock import Mock
 
 from connectors.protocol import JobStatus, JobType
 from connectors.services.job_execution import JobExecutionService
-from typing import Dict, List, Union
-from unittest.mock import Mock
 
 
 class ContentSyncJobExecutionService(JobExecutionService):
     name = "sync_content"
 
-    def __init__(self, config: Dict[str, Union[str, Dict[str, Union[float, int, str]], List[Dict[str, str]], Dict[str, str], Dict[str, Union[str, bool, Dict[str, Union[int, bool, Dict[str, Union[bool, int, float]]]], int]]]]) -> None:
+    def __init__(
+        self,
+        config: Dict[
+            str,
+            Union[
+                str,
+                Dict[str, Union[float, int, str]],
+                List[Dict[str, str]],
+                Dict[str, str],
+                Dict[
+                    str,
+                    Union[
+                        str,
+                        bool,
+                        Dict[str, Union[int, bool, Dict[str, Union[bool, int, float]]]],
+                        int,
+                    ],
+                ],
+            ],
+        ],
+    ) -> None:
         super().__init__(config, "content_sync_job_execution_service")
 
     @cached_property

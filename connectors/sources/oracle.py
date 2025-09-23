@@ -7,14 +7,17 @@
 
 import asyncio
 import os
+from _asyncio import Future
 from functools import cached_property, partial
+from typing import Any, Dict, Generator, List, Optional, Tuple, Union
 from urllib.parse import quote
 
 from asyncpg.exceptions._base import InternalClientError
 from sqlalchemy import CursorResult, create_engine, text
 from sqlalchemy.exc import ProgrammingError
 
-from connectors.source import DataSourceConfiguration, BaseDataSource
+from connectors.logger import ExtraLogger
+from connectors.source import BaseDataSource, DataSourceConfiguration
 from connectors.sources.generic_database import (
     DEFAULT_FETCH_SIZE,
     DEFAULT_RETRY_COUNT,
@@ -25,9 +28,6 @@ from connectors.sources.generic_database import (
     map_column_names,
 )
 from connectors.utils import iso_utc
-from _asyncio import Future
-from connectors.logger import ExtraLogger
-from typing import Any, Dict, Generator, List, Optional, Tuple, Union
 
 DEFAULT_PROTOCOL = "TCP"
 DEFAULT_ORACLE_HOME = ""
@@ -208,7 +208,9 @@ class OracleClient:
         )
         return row_count
 
-    async def get_table_primary_key(self, table: str) -> Generator[Future, None, List[str]]:
+    async def get_table_primary_key(
+        self, table: str
+    ) -> Generator[Future, None, List[str]]:
         self._logger.debug(f"Extracting primary keys for table '{table}'")
         primary_keys = [
             key
@@ -227,7 +229,9 @@ class OracleClient:
         self._logger.debug(f"Found primary keys for table '{table}'")
         return primary_keys
 
-    async def get_table_last_update_time(self, table: str) -> Generator[Future, None, str]:
+    async def get_table_last_update_time(
+        self, table: str
+    ) -> Generator[Future, None, str]:
         self._logger.debug(f"Fetching last updated time for table '{table}'")
         [last_update_time] = await anext(
             fetch(
@@ -312,7 +316,9 @@ class OracleDataSource(BaseDataSource):
         self.oracle_client.set_logger(self._logger)
 
     @classmethod
-    def get_default_configuration(cls) -> Dict[str, Dict[str, Union[str, int, bool, List[Dict[str, str]], List[str]]]]:
+    def get_default_configuration(
+        cls,
+    ) -> Dict[str, Dict[str, Union[str, int, bool, List[Dict[str, str]], List[str]]]]:
         return {
             "host": {
                 "label": "Host",

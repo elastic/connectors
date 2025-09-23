@@ -8,7 +8,7 @@ import os
 from enum import Enum
 from functools import cached_property
 from tempfile import NamedTemporaryFile
-from typing import Set, Tuple, Any, Dict, List, Union
+from typing import Any, Dict, List, Set, Tuple, Union
 
 import fastjsonschema
 import redis.asyncio as redis
@@ -18,7 +18,11 @@ from connectors.filtering.validation import (
     SyncRuleValidationResult,
 )
 from connectors.logger import logger
-from connectors.source import DataSourceConfiguration, BaseDataSource, ConfigurableFieldValueError
+from connectors.source import (
+    BaseDataSource,
+    ConfigurableFieldValueError,
+    DataSourceConfiguration,
+)
 from connectors.utils import get_pem_format, hash_id, iso_utc
 
 PAGE_SIZE = 1000
@@ -150,7 +154,9 @@ class RedisClient:
         ):
             yield key
 
-    async def get_key_value(self, key: str, key_type: str) -> Union[str, Set[int], Dict[str, str], List[int]]:
+    async def get_key_value(
+        self, key: str, key_type: str
+    ) -> Union[str, Set[int], Dict[str, str], List[int]]:
         """Fetch value of key for database.
 
         Args:
@@ -225,14 +231,32 @@ class RedisAdvancedRulesValidator(AdvancedRulesValidator):
     def __init__(self, source: "RedisDataSource") -> None:
         self.source = source
 
-    async def validate(self, advanced_rules: Union[List[Dict[str, int]], Dict[str, int], Dict[str, List[str]], Dict[str, Union[str, int]], List[Dict[str, Union[str, int]]]]) -> SyncRuleValidationResult:
+    async def validate(
+        self,
+        advanced_rules: Union[
+            List[Dict[str, int]],
+            Dict[str, int],
+            Dict[str, List[str]],
+            Dict[str, Union[str, int]],
+            List[Dict[str, Union[str, int]]],
+        ],
+    ) -> SyncRuleValidationResult:
         if len(advanced_rules) == 0:
             return SyncRuleValidationResult.valid_result(
                 SyncRuleValidationResult.ADVANCED_RULES
             )
         return await self._remote_validation(advanced_rules)
 
-    async def _remote_validation(self, advanced_rules: Union[List[Dict[str, int]], Dict[str, int], Dict[str, List[str]], Dict[str, Union[str, int]], List[Dict[str, Union[str, int]]]]) -> SyncRuleValidationResult:
+    async def _remote_validation(
+        self,
+        advanced_rules: Union[
+            List[Dict[str, int]],
+            Dict[str, int],
+            Dict[str, List[str]],
+            Dict[str, Union[str, int]],
+            List[Dict[str, Union[str, int]]],
+        ],
+    ) -> SyncRuleValidationResult:
         try:
             RedisAdvancedRulesValidator.SCHEMA(advanced_rules)
         except fastjsonschema.JsonSchemaValueException as e:

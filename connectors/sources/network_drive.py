@@ -7,19 +7,22 @@
 
 import asyncio
 import csv
+from _asyncio import Future
 from collections import deque
 from functools import cached_property, partial
-from typing import Generator, Iterator, Set, Tuple, Any, Dict, List, Optional, Union
+from typing import Any, Dict, Generator, Iterator, List, Optional, Set, Tuple, Union
+from unittest.mock import Mock
 
 import fastjsonschema
 import requests.exceptions
 import smbclient
 import winrm
 from smbprotocol.exceptions import (
-    Unsuccessful, SMBConnectionClosed,
+    SMBConnectionClosed,
     SMBException,
     SMBOSError,
     SMBResponseException,
+    Unsuccessful,
 )
 from smbprotocol.file_info import (
     InfoType,
@@ -45,15 +48,17 @@ from connectors.filtering.validation import (
     SyncRuleValidationResult,
 )
 from connectors.logger import logger
-from connectors.source import DataSourceConfiguration, BaseDataSource, ConfigurableFieldValueError
+from connectors.protocol.connectors import Filter
+from connectors.source import (
+    BaseDataSource,
+    ConfigurableFieldValueError,
+    DataSourceConfiguration,
+)
 from connectors.utils import (
     RetryStrategy,
     iso_utc,
     retryable,
 )
-from _asyncio import Future
-from connectors.protocol.connectors import Filter
-from unittest.mock import Mock
 
 ACCESS_ALLOWED_TYPE = 0
 ACCESS_DENIED_TYPE = 1
@@ -125,7 +130,9 @@ class NetworkDriveAdvancedRulesValidator(AdvancedRulesValidator):
     def __init__(self, source: "NASDataSource") -> None:
         self.source = source
 
-    async def validate(self, advanced_rules: Union[Dict[str, List[str]], List[Dict[str, str]]]) -> SyncRuleValidationResult:
+    async def validate(
+        self, advanced_rules: Union[Dict[str, List[str]], List[Dict[str, str]]]
+    ) -> SyncRuleValidationResult:
         if len(advanced_rules) == 0:
             return SyncRuleValidationResult.valid_result(
                 SyncRuleValidationResult.ADVANCED_RULES
@@ -133,7 +140,9 @@ class NetworkDriveAdvancedRulesValidator(AdvancedRulesValidator):
 
         return await self.validate_pattern(advanced_rules)
 
-    async def validate_pattern(self, advanced_rules: Union[Dict[str, List[str]], List[Dict[str, str]]]) -> SyncRuleValidationResult:
+    async def validate_pattern(
+        self, advanced_rules: Union[Dict[str, List[str]], List[Dict[str, str]]]
+    ) -> SyncRuleValidationResult:
         try:
             NetworkDriveAdvancedRulesValidator.SCHEMA(advanced_rules)
         except fastjsonschema.JsonSchemaValueException as e:
@@ -265,7 +274,9 @@ class SecurityInfo:
 class SMBSession:
     _connection = None
 
-    def __init__(self, server_ip: str, username: str, password: str, port: None) -> None:
+    def __init__(
+        self, server_ip: str, username: str, password: str, port: None
+    ) -> None:
         self.server_ip = server_ip
         self.username = username
         self.password = password
@@ -533,7 +544,9 @@ class NASDataSource(BaseDataSource):
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
         skipped_exceptions=[SMBOSError, SMBException],
     )
-    async def traverse_directory_for_syncrule(self, path: str, glob_pattern: str, indexed_rules: Set[str]) -> Iterator[Future]:
+    async def traverse_directory_for_syncrule(
+        self, path: str, glob_pattern: str, indexed_rules: Set[str]
+    ) -> Iterator[Future]:
         self._logger.debug(
             "Fetching the directory tree from remote server and content of directory on path"
         )
@@ -584,7 +597,9 @@ class NASDataSource(BaseDataSource):
                 return rf"\\{self.server_ip}/{pattern[:i].rsplit('/', 1)[0]}/"
         return rf"\\{self.server_ip}/{pattern}"
 
-    async def fetch_filtered_directory(self, advanced_rules: List[Dict[str, str]]) -> Iterator[Future]:
+    async def fetch_filtered_directory(
+        self, advanced_rules: List[Dict[str, str]]
+    ) -> Iterator[Future]:
         """
         Fetch file and folder based on advanced rules.
 
@@ -672,7 +687,12 @@ class NASDataSource(BaseDataSource):
                 f"Cannot read the contents of file on path:{path}. Error {error}"
             )
 
-    async def get_content(self, file: Dict[str, Union[str, int]], timestamp: None=None, doit: Optional[bool]=None) -> Optional[Dict[str, str]]:
+    async def get_content(
+        self,
+        file: Dict[str, Union[str, int]],
+        timestamp: None = None,
+        doit: Optional[bool] = None,
+    ) -> Optional[Dict[str, str]]:
         """Get the content for a given file
 
         Args:
@@ -707,7 +727,9 @@ class NASDataSource(BaseDataSource):
             partial(self.fetch_file_content, path=file["path"]),
         )
 
-    def list_file_permission(self, file_path: str, file_type: str, mode: str, access: str) -> Optional[List[str]]:
+    def list_file_permission(
+        self, file_path: str, file_type: str, mode: str, access: str
+    ) -> Optional[List[str]]:
         try:
             with smbclient.open_file(
                 file_path,
@@ -736,7 +758,11 @@ class NASDataSource(BaseDataSource):
         return self.configuration["use_document_level_security"]
 
     async def _decorate_with_access_control(
-        self, document: Dict[str, str], file_path: str, file_type: str, groups_info: Dict[str, Dict[str, str]]
+        self,
+        document: Dict[str, str],
+        file_path: str,
+        file_type: str,
+        groups_info: Dict[str, Dict[str, str]],
     ) -> Generator[Future, None, Dict[str, Union[str, List[str]]]]:
         if self._dls_enabled():
             allow_permissions, deny_permissions = await self.get_entity_permission(
@@ -749,7 +775,7 @@ class NASDataSource(BaseDataSource):
         return document
 
     async def _user_access_control_doc(
-        self, user: str, sid: str, groups_info: Optional[List[str]]=None
+        self, user: str, sid: str, groups_info: Optional[List[str]] = None
     ) -> Dict[str, Any]:
         rid = str(sid).split("-")[-1]
         prefixed_username = _prefix_user(user)
@@ -770,7 +796,9 @@ class NASDataSource(BaseDataSource):
             "created_at": iso_utc(),
         } | es_access_control_query(access_control)
 
-    def read_user_info_csv(self) -> List[Union[Dict[str, str], Any, Dict[str, Union[str, List[str]]]]]:
+    def read_user_info_csv(
+        self,
+    ) -> List[Union[Dict[str, str], Any, Dict[str, Union[str, List[str]]]]]:
         with open(self.identity_mappings, encoding="utf-8") as file:
             user_info = []
             try:
@@ -790,7 +818,9 @@ class NASDataSource(BaseDataSource):
                 )
             return user_info
 
-    async def fetch_groups_info(self) -> Generator[Future, None, Dict[str, Dict[str, str]]]:
+    async def fetch_groups_info(
+        self,
+    ) -> Generator[Future, None, Dict[str, Dict[str, str]]]:
         self._logger.info(
             f"Fetching all groups and members for drive at path '{self.drive_path}'"
         )
@@ -842,7 +872,11 @@ class NASDataSource(BaseDataSource):
                 msg = "Something went wrong"
                 raise requests.exceptions.ConnectionError(msg) from exception
 
-    async def get_entity_permission(self, file_path: str, file_type: str, groups_info: Dict[str, Dict[str, str]]) -> Generator[Future, None, Union[Tuple[List[str], List[Any]], Tuple[List[str], List[str]]]]:
+    async def get_entity_permission(
+        self, file_path: str, file_type: str, groups_info: Dict[str, Dict[str, str]]
+    ) -> Generator[
+        Future, None, Union[Tuple[List[str], List[Any]], Tuple[List[str], List[str]]]
+    ]:
         """Processes permissions for a network drive, focusing on key terms:
 
         - SID (Security Identifier): The unique identifier for a user or group, it undergoes revision.
@@ -904,7 +938,7 @@ class NASDataSource(BaseDataSource):
 
         return allow_permissions, deny_permissions
 
-    async def get_docs(self, filtering: Optional[Filter]=None) -> Iterator[Future]:
+    async def get_docs(self, filtering: Optional[Filter] = None) -> Iterator[Future]:
         """Executes the logic to fetch files and folders in async manner.
         Yields:
             dictionary: Dictionary containing the Network Drive files and folders as documents

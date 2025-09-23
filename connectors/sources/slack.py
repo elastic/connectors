@@ -6,17 +6,17 @@
 
 import re
 import time
+from _asyncio import Task
 from contextlib import asynccontextmanager
 from datetime import datetime
-from typing import Generator, List, Optional, Any, Dict, Union
+from typing import Any, Dict, Generator, List, Optional, Union
 
 import aiohttp
 from aiohttp.client_exceptions import ClientResponseError
 
 from connectors.logger import ExtraLogger, logger
-from connectors.source import DataSourceConfiguration, BaseDataSource
+from connectors.source import BaseDataSource, DataSourceConfiguration
 from connectors.utils import CancellableSleeps, dict_slice, retryable
-from _asyncio import Task
 
 BASE_URL = "https://slack.com/api"
 
@@ -53,7 +53,10 @@ class SlackAPIError(Exception):
 
 
 class SlackClient:
-    def __init__(self, configuration: Union[Dict[str, Union[bool, str, int]], DataSourceConfiguration]) -> None:
+    def __init__(
+        self,
+        configuration: Union[Dict[str, Union[bool, str, int]], DataSourceConfiguration],
+    ) -> None:
         self.token = configuration["token"]
         self._http_session = aiohttp.ClientSession(
             headers=self._headers(),
@@ -153,10 +156,24 @@ class SlackClient:
     def _add_cursor(self, url: str, cursor: str) -> str:
         return f"{url}&{CURSOR}={cursor}"
 
-    def _get_next_cursor(self, response: Dict[str, Union[bool, List[Dict[str, Union[bool, str]]], Dict[str, str], List[Dict[str, str]], List[Union[Dict[str, Union[int, str]], Dict[str, str]]]]]) -> Optional[str]:
+    def _get_next_cursor(
+        self,
+        response: Dict[
+            str,
+            Union[
+                bool,
+                List[Dict[str, Union[bool, str]]],
+                Dict[str, str],
+                List[Dict[str, str]],
+                List[Union[Dict[str, Union[int, str]], Dict[str, str]]],
+            ],
+        ],
+    ) -> Optional[str]:
         return response.get(RESPONSE_METADATA, {}).get(NEXT_CURSOR)
 
-    async def _get_json(self, absolute_url: str) -> Generator[Task, None, Dict[str, Any]]:
+    async def _get_json(
+        self, absolute_url: str
+    ) -> Generator[Task, None, Dict[str, Any]]:
         self._logger.debug(f"Fetching url: {absolute_url}")
         async with self._call_api(absolute_url) as resp:
             json_content = await resp.json()
@@ -375,7 +392,11 @@ class SlackDataSource(BaseDataSource):
             ),
         )
 
-    def remap_message(self, message: Dict[str, Union[int, str]], channel: Dict[str, Union[bool, str, int]]) -> Dict[str, Any]:
+    def remap_message(
+        self,
+        message: Dict[str, Union[int, str]],
+        channel: Dict[str, Union[bool, str, int]],
+    ) -> Dict[str, Any]:
         user_id = message.get("user", message.get("bot_id"))
 
         def convert_usernames(

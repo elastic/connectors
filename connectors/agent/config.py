@@ -5,13 +5,14 @@
 #
 import base64
 from logging import Logger
+from typing import Any, Dict, List, Union
+from unittest.mock import Mock
+
+from elastic_agent_client.client import Unit
 
 from connectors.agent.logger import get_logger
 from connectors.config import add_defaults
 from connectors.utils import nested_get_from_dict
-from elastic_agent_client.client import Unit
-from typing import Any, Dict, List, Union
-from unittest.mock import Mock
 
 logger: Logger = get_logger("config")
 
@@ -41,7 +42,9 @@ class ConnectorsAgentConfigurationWrapper:
 
         self.specific_config = {}
 
-    def try_update(self, connector_id: str, service_type: str, output_unit: Union[Mock, Unit]) -> bool:
+    def try_update(
+        self, connector_id: str, service_type: str, output_unit: Union[Mock, Unit]
+    ) -> bool:
         """Try update the configuration and see if it changed.
 
         This method takes the check-in event data (connector_id, service_type and output) coming
@@ -198,5 +201,7 @@ class ConnectorsAgentConfigurationWrapper:
 
         return configuration
 
-    def get_specific_config(self) -> Dict[str, Union[List[Dict[str, str]], Dict[str, int]]]:
+    def get_specific_config(
+        self,
+    ) -> Dict[str, Union[List[Dict[str, str]], Dict[str, int]]]:
         return self.specific_config

@@ -13,7 +13,10 @@ Event loop
 
 import functools
 from datetime import datetime, timezone
+from typing import Dict, List, Union
+from unittest.mock import Mock
 
+import connectors.protocol.connectors
 from connectors.es.client import License, with_concurrency_control
 from connectors.es.index import DocumentNotFoundError
 from connectors.protocol import (
@@ -29,15 +32,32 @@ from connectors.protocol import (
 from connectors.services.base import BaseService
 from connectors.source import get_source_klass
 from connectors.utils import ConcurrentTasks
-import connectors.protocol.connectors
-from typing import Dict, List, Union
-from unittest.mock import Mock
 
 
 class JobSchedulingService(BaseService):
     name = "schedule"
 
-    def __init__(self, config: Dict[str, Union[str, Dict[str, Union[float, int, str]], List[Dict[str, str]], Dict[str, str], Dict[str, Union[str, bool, Dict[str, Union[int, bool, Dict[str, Union[bool, int, float]]]], int]]]]) -> None:
+    def __init__(
+        self,
+        config: Dict[
+            str,
+            Union[
+                str,
+                Dict[str, Union[float, int, str]],
+                List[Dict[str, str]],
+                Dict[str, str],
+                Dict[
+                    str,
+                    Union[
+                        str,
+                        bool,
+                        Dict[str, Union[int, bool, Dict[str, Union[bool, int, float]]]],
+                        int,
+                    ],
+                ],
+            ],
+        ],
+    ) -> None:
         super().__init__(config, "job_scheduling_service")
         self.idling = self.service_config["idling"]
         self.heartbeat_interval = self.service_config["heartbeat"]
@@ -206,7 +226,9 @@ class JobSchedulingService(BaseService):
                 await self.sync_job_index.close()
         return 0
 
-    async def _try_schedule_sync(self, connector: Mock, job_type: connectors.protocol.connectors.JobType) -> None:
+    async def _try_schedule_sync(
+        self, connector: Mock, job_type: connectors.protocol.connectors.JobType
+    ) -> None:
         this_wake_up_time = datetime.now(timezone.utc)
         last_wake_up_time = self.last_wake_up_time
 

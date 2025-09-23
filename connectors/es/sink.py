@@ -30,9 +30,9 @@ from connectors.config import (
     DEFAULT_ELASTICSEARCH_RETRY_INTERVAL,
 )
 from connectors.es import TIMESTAMP_FIELD
-from connectors.exceptions import DocumentIngestionError
 from connectors.es.client import License
 from connectors.es.management_client import ESManagementClient
+from connectors.exceptions import DocumentIngestionError
 from connectors.filtering.basic_rule import BasicRuleEngine, parse
 from connectors.logger import logger, tracer
 from connectors.protocol import JobType

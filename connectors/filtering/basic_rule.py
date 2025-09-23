@@ -18,7 +18,9 @@ IS_BOOL_FALSE: re.Pattern[str] = re.compile("^(false|f|no|n|off)$", re.I)
 IS_BOOL_TRUE: re.Pattern[str] = re.compile("^(true|t|yes|y|on)$", re.I)
 
 
-def parse(basic_rules_json: Optional[List[Dict[str, Union[str, int]]]]) -> List[Union["BasicRule", Any]]:
+def parse(
+    basic_rules_json: Optional[List[Dict[str, Union[str, int]]]],
+) -> List[Union["BasicRule", Any]]:
     """Parse a basic rules json array to BasicRule objects.
 
     Arguments:
@@ -121,7 +123,9 @@ class BasicRuleEngine:
             BasicRule.DEFAULT_RULE_ID: RuleMatchStats(Policy.INCLUDE, 0)
         }
 
-    def should_ingest(self, document: Dict[str, Union[str, float, int, datetime.datetime]]) -> bool:
+    def should_ingest(
+        self, document: Dict[str, Union[str, float, int, datetime.datetime]]
+    ) -> bool:
         """Check, whether a document should be ingested or not.
 
         By default, the document will be ingested, if it doesn't match any rule.
@@ -238,7 +242,15 @@ class BasicRule:
     DEFAULT_RULE_ID = "DEFAULT"
     SHORTEN_UUID_BY = 26  # UUID: 32 random chars + 4 hyphens; keep 10 characters
 
-    def __init__(self, id_: Union[str, int], order: int, policy: Policy, field: str, rule: Rule, value: Union[str, int, float]) -> None:
+    def __init__(
+        self,
+        id_: Union[str, int],
+        order: int,
+        policy: Policy,
+        field: str,
+        rule: Rule,
+        value: Union[str, int, float],
+    ) -> None:
         self.id_ = id_
         self.order = order
         self.policy = policy
@@ -257,7 +269,9 @@ class BasicRule:
             value=basic_rule_json["value"],
         )
 
-    def matches(self, document: Dict[str, Union[str, float, int, datetime.datetime]]) -> bool:
+    def matches(
+        self, document: Dict[str, Union[str, float, int, datetime.datetime]]
+    ) -> bool:
         """Check whether a document matches the basic rule.
 
         A basic rule matches or doesn't match a document based on the following comparisons:
@@ -308,7 +322,9 @@ class BasicRule:
     def is_include(self) -> bool:
         return self.policy == Policy.INCLUDE
 
-    def coerce_rule_value_based_on_document_value(self, doc_value: Any) -> Union[float, str, datetime.datetime]:
+    def coerce_rule_value_based_on_document_value(
+        self, doc_value: Any
+    ) -> Union[float, str, datetime.datetime]:
         """Coerce the value inside the basic rule.
 
         This method tries to coerce the value inside the basic rule to the type used in the document.

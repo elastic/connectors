@@ -5,18 +5,21 @@
 #
 """Zoom source module responsible to fetch documents from Zoom."""
 
-from logging import Logger
 import os
+from _asyncio import Future, Task
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from functools import cached_property, partial
-from typing import Any, Generator, Optional, Tuple, Dict, List, Union
+from logging import Logger
+from typing import Any, Dict, Generator, List, Optional, Tuple, Union
 
 import aiohttp
+from aiohttp.client import ClientSession
 from aiohttp.client_exceptions import ClientResponseError
+from freezegun.api import FakeDatetime
 
 from connectors.logger import ExtraLogger, logger
-from connectors.source import DataSourceConfiguration, BaseDataSource
+from connectors.source import BaseDataSource, DataSourceConfiguration
 from connectors.utils import (
     CacheWithTimeout,
     CancellableSleeps,
@@ -25,9 +28,6 @@ from connectors.utils import (
     iso_utc,
     retryable,
 )
-from _asyncio import Future, Task
-from aiohttp.client import ClientSession
-from freezegun.api import FakeDatetime
 
 RETRIES = 3
 RETRY_INTERVAL = 2
@@ -73,7 +73,12 @@ class ZoomResourceNotFound(Exception):
 
 
 class ZoomAPIToken:
-    def __init__(self, http_session: ClientSession, configuration: DataSourceConfiguration, logger_: Logger) -> None:
+    def __init__(
+        self,
+        http_session: ClientSession,
+        configuration: DataSourceConfiguration,
+        logger_: Logger,
+    ) -> None:
         self._http_session = http_session
         self._token_cache = CacheWithTimeout()
         self._logger = logger_
@@ -125,7 +130,9 @@ class ZoomAPIToken:
 
 
 class ZoomAPISession:
-    def __init__(self, http_session: ClientSession, api_token: ZoomAPIToken, logger_: ExtraLogger) -> None:
+    def __init__(
+        self, http_session: ClientSession, api_token: ZoomAPIToken, logger_: ExtraLogger
+    ) -> None:
         self._sleeps = CancellableSleeps()
         self._logger = logger_
 
@@ -393,7 +400,11 @@ class ZoomDataSource(BaseDataSource):
     async def close(self) -> None:
         await self.client.close()
 
-    def _format_doc(self, doc: Dict[str, Union[str, int, List[Dict[str, str]]]], doc_time: Optional[str]) -> Dict[str, Optional[Union[str, List[Dict[str, str]], int]]]:
+    def _format_doc(
+        self,
+        doc: Dict[str, Union[str, int, List[Dict[str, str]]]],
+        doc_time: Optional[str],
+    ) -> Dict[str, Optional[Union[str, List[Dict[str, str]], int]]]:
         doc = self.serialize(doc=doc)
         doc.update(
             {
@@ -403,7 +414,12 @@ class ZoomDataSource(BaseDataSource):
         )
         return doc
 
-    async def get_content(self, chat_file: Dict[str, Union[int, str]], timestamp: None=None, doit: bool = False) -> Generator[Future, None, Optional[Dict[str, str]]]:
+    async def get_content(
+        self,
+        chat_file: Dict[str, Union[int, str]],
+        timestamp: None = None,
+        doit: bool = False,
+    ) -> Generator[Future, None, Optional[Dict[str, str]]]:
         file_size = chat_file["file_size"]
         if not (doit and file_size > 0):
             return
@@ -431,7 +447,9 @@ class ZoomDataSource(BaseDataSource):
             ),
         )
 
-    async def fetch_previous_meeting_details(self, meeting_id: str) -> Dict[str, Union[str, List[Dict[str, str]]]]:
+    async def fetch_previous_meeting_details(
+        self, meeting_id: str
+    ) -> Dict[str, Union[str, List[Dict[str, str]]]]:
         previous_meeting = await self.client.get_past_meeting(meeting_id=meeting_id)
 
         if not previous_meeting:

@@ -4,15 +4,15 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import asyncio
+from _asyncio import Future, Task
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Iterator, Union, List, Optional, Sized
+from functools import partial
+from typing import Any, Dict, Iterator, List, Optional, Sized, Union
 
 from asyncpg.exceptions._base import InternalClientError
 from sqlalchemy.exc import ProgrammingError
 
 from connectors.utils import RetryStrategy, retryable
-from _asyncio import Future, Task
-from functools import partial
 
 WILDCARD = "*"
 
@@ -51,7 +51,9 @@ def is_wildcard(tables: Union[str, List[str]]) -> bool:
 
 
 def map_column_names(
-    column_names: List[Union[str, Any]], schema: Optional[str]=None, tables: Optional[Sized] = None
+    column_names: List[Union[str, Any]],
+    schema: Optional[str] = None,
+    tables: Optional[Sized] = None,
 ) -> List[str]:
     prefix = ""
     if schema and len(schema.strip()) > 0:
@@ -61,7 +63,9 @@ def map_column_names(
     return [f"{prefix}{column}".lower() for column in column_names]
 
 
-def hash_id(tables: List[str], row: Dict[str, Union[str, int]], primary_key_columns: List[str]) -> str:
+def hash_id(
+    tables: List[str], row: Dict[str, Union[str, int]], primary_key_columns: List[str]
+) -> str:
     """Generates an id using table names as prefix in sorted order and primary key values.
 
     Example:

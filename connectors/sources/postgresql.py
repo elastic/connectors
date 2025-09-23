@@ -6,8 +6,9 @@
 """Postgresql source module is responsible to fetch documents from PostgreSQL."""
 
 import ssl
+from _asyncio import Task
 from functools import cached_property, partial
-from typing import Any, Dict, Generator, Tuple, Union, List, Optional, Sized
+from typing import Any, Dict, Generator, List, Optional, Sized, Tuple, Union
 from urllib.parse import quote
 
 import fastjsonschema
@@ -22,7 +23,8 @@ from connectors.filtering.validation import (
     AdvancedRulesValidator,
     SyncRuleValidationResult,
 )
-from connectors.source import DataSourceConfiguration, BaseDataSource
+from connectors.logger import ExtraLogger
+from connectors.source import BaseDataSource, DataSourceConfiguration
 from connectors.sources.generic_database import (
     DEFAULT_FETCH_SIZE,
     DEFAULT_RETRY_COUNT,
@@ -40,8 +42,6 @@ from connectors.utils import (
     iso_utc,
     retryable,
 )
-from _asyncio import Task
-from connectors.logger import ExtraLogger
 
 FETCH_LIMIT = 1000
 
@@ -107,7 +107,12 @@ class PostgreSQLAdvancedRulesValidator(AdvancedRulesValidator):
     def __init__(self, source: "PostgreSQLDataSource") -> None:
         self.source = source
 
-    async def validate(self, advanced_rules: Union[List[Dict[str, Union[str, List[str]]]], List[Dict[str, str]]]) -> SyncRuleValidationResult:
+    async def validate(
+        self,
+        advanced_rules: Union[
+            List[Dict[str, Union[str, List[str]]]], List[Dict[str, str]]
+        ],
+    ) -> SyncRuleValidationResult:
         if len(advanced_rules) == 0:
             return SyncRuleValidationResult.valid_result(
                 SyncRuleValidationResult.ADVANCED_RULES
@@ -120,7 +125,9 @@ class PostgreSQLAdvancedRulesValidator(AdvancedRulesValidator):
         interval=DEFAULT_WAIT_MULTIPLIER,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
-    async def _remote_validation(self, advanced_rules: List[Dict[str, Union[str, List[str]]]]) -> SyncRuleValidationResult:
+    async def _remote_validation(
+        self, advanced_rules: List[Dict[str, Union[str, List[str]]]]
+    ) -> SyncRuleValidationResult:
         try:
             PostgreSQLAdvancedRulesValidator.SCHEMA(advanced_rules)
         except JsonSchemaValueException as e:
@@ -426,7 +433,12 @@ class PostgreSQLDataSource(BaseDataSource):
         self.postgresql_client.set_logger(self._logger)
 
     @classmethod
-    def get_default_configuration(cls) -> Dict[str, Dict[str, Union[str, int, bool, List[str], List[Dict[str, Union[bool, str]]]]]]:
+    def get_default_configuration(
+        cls,
+    ) -> Dict[
+        str,
+        Dict[str, Union[str, int, bool, List[str], List[Dict[str, Union[bool, str]]]]],
+    ]:
         return {
             "host": {
                 "label": "Host",
@@ -514,7 +526,13 @@ class PostgreSQLDataSource(BaseDataSource):
             msg = f"Can't connect to Postgresql on {self.postgresql_client.host}."
             raise Exception(msg) from e
 
-    def row2doc(self, row: Dict[str, Union[str, int]], doc_id: str, table: Union[List[str], str], timestamp: str) -> Dict[str, Union[str, int, List[str]]]:
+    def row2doc(
+        self,
+        row: Dict[str, Union[str, int]],
+        doc_id: str,
+        table: Union[List[str], str],
+        timestamp: str,
+    ) -> Dict[str, Union[str, int, List[str]]]:
         row.update(
             {
                 "_id": doc_id,

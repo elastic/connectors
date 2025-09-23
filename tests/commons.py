@@ -78,9 +78,7 @@ class AsyncIterator:
 
 
 class WeightedFakeProvider:
-    def __init__(
-        self, seed=None, weights: Optional[Sized] = None
-    ) -> None:
+    def __init__(self, seed=None, weights: Optional[Sized] = None) -> None:
         self.seed = seed
         if weights and len(weights) != 4:
             msg = f"Exactly 4 weights should be provided. Got {len(weights)}: {weights}"

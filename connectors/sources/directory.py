@@ -10,12 +10,12 @@ Demo of a standalone source
 import functools
 import os
 from datetime import datetime, timezone
-from pathlib import PosixPath, Path
-from typing import Union, Any, Dict, Optional
+from pathlib import Path, PosixPath
+from typing import Any, Dict, Optional, Union
 
 import aiofiles
 
-from connectors.source import DataSourceConfiguration, BaseDataSource
+from connectors.source import BaseDataSource, DataSourceConfiguration
 from connectors.utils import TIKA_SUPPORTED_FILETYPES, get_base64_value, hash_id
 
 DEFAULT_DIR: str = os.environ.get("SYSTEM_DIR", os.path.dirname(__file__))
@@ -61,7 +61,7 @@ class DirectoryDataSource(BaseDataSource):
         return hash_id(str(path))
 
     async def _download(
-        self, path: str, timestamp: Optional[str]=None, doit: Optional[bool]=None
+        self, path: str, timestamp: Optional[str] = None, doit: Optional[bool] = None
     ) -> Optional[Dict[str, Any]]:
         if not (doit and os.path.splitext(path)[-1] in TIKA_SUPPORTED_FILETYPES):
             return

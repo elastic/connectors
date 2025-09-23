@@ -7,16 +7,21 @@
 
 import json
 import os
+from _asyncio import Future, Task
 from datetime import datetime
 from enum import Enum
 from functools import cached_property, partial
-from typing import Generator, Iterator, Tuple, Any, Dict, List, Optional, Union
+from typing import Any, Dict, Generator, Iterator, List, Optional, Tuple, Union
 from urllib import parse
 
 import aiohttp
 import fastjsonschema
 from aiohttp.client import ClientSession
-from aiohttp.client_exceptions import ServerTimeoutError, ClientResponseError, ServerDisconnectedError
+from aiohttp.client_exceptions import (
+    ClientResponseError,
+    ServerDisconnectedError,
+    ServerTimeoutError,
+)
 
 from connectors.access_control import (
     ACCESS_CONTROL,
@@ -28,7 +33,7 @@ from connectors.filtering.validation import (
     SyncRuleValidationResult,
 )
 from connectors.logger import logger
-from connectors.source import DataSourceConfiguration, BaseDataSource
+from connectors.source import BaseDataSource, DataSourceConfiguration
 from connectors.utils import (
     CancellableSleeps,
     RetryStrategy,
@@ -37,7 +42,6 @@ from connectors.utils import (
     iso_utc,
     retryable,
 )
-from _asyncio import Future, Task
 
 RETRY_COUNT = 3
 DEFAULT_RETRY_AFTER = 300  # seconds
@@ -245,7 +249,9 @@ class DropboxClient:
         await self._get_session.close()
         del self._get_session
 
-    def _get_request_headers(self, file_type: Optional[str], url_name: str, **kwargs) -> Dict[str, str]:
+    def _get_request_headers(
+        self, file_type: Optional[str], url_name: str, **kwargs
+    ) -> Dict[str, str]:
         kwargs = kwargs["kwargs"]
         request_headers = {
             "Authorization": f"Bearer {self.access_token}",
@@ -286,7 +292,13 @@ class DropboxClient:
             )
         return request_headers
 
-    def _get_retry_after(self, retry: int, exception: Union[ServerDisconnectedError, ClientResponseError, ServerTimeoutError, Exception]) -> Tuple[int, int]:
+    def _get_retry_after(
+        self,
+        retry: int,
+        exception: Union[
+            ServerDisconnectedError, ClientResponseError, ServerTimeoutError, Exception
+        ],
+    ) -> Tuple[int, int]:
         self._logger.warning(
             f"Retry count: {retry} out of {self.retry_count}. Exception: {exception}"
         )
@@ -295,7 +307,9 @@ class DropboxClient:
         retry += 1
         return retry, RETRY_INTERVAL**retry
 
-    async def _handle_client_errors(self, retry: int, exception: ClientResponseError) -> Generator[Task, None, int]:
+    async def _handle_client_errors(
+        self, retry: int, exception: ClientResponseError
+    ) -> Generator[Task, None, int]:
         retry, retry_seconds = self._get_retry_after(retry=retry, exception=exception)
         match exception.status:
             case 401:
@@ -322,7 +336,14 @@ class DropboxClient:
         await self._sleeps.sleep(retry_seconds)
         return retry
 
-    async def api_call(self, base_url: str, url_name: str, data: Optional[str]=None, file_type: None=None, **kwargs) -> Iterator[Optional[Task]]:
+    async def api_call(
+        self,
+        base_url: str,
+        url_name: str,
+        data: Optional[str] = None,
+        file_type: None = None,
+        **kwargs,
+    ) -> Iterator[Optional[Task]]:
         retry = 1
         url = parse.urljoin(base_url, url_name)
         while True:
@@ -355,7 +376,11 @@ class DropboxClient:
                 await self._sleeps.sleep(retry_seconds)
 
     async def _paginated_api_call(
-        self, base_url: str, breaking_field: str, continue_endpoint: Optional[str]=None, **kwargs
+        self,
+        base_url: str,
+        breaking_field: str,
+        continue_endpoint: Optional[str] = None,
+        **kwargs,
     ) -> None:
         """Make a paginated API call for fetching Dropbox files/folders.
 
@@ -617,7 +642,12 @@ class DropBoxAdvancedRulesValidator(AdvancedRulesValidator):
     def __init__(self, source: "DropboxDataSource") -> None:
         self.source = source
 
-    async def validate(self, advanced_rules: List[Dict[str, Union[str, Dict[str, Union[Dict[str, str], str]]]]]) -> SyncRuleValidationResult:
+    async def validate(
+        self,
+        advanced_rules: List[
+            Dict[str, Union[str, Dict[str, Union[Dict[str, str], str]]]]
+        ],
+    ) -> SyncRuleValidationResult:
         if len(advanced_rules) == 0:
             return SyncRuleValidationResult.valid_result(
                 SyncRuleValidationResult.ADVANCED_RULES
@@ -630,7 +660,12 @@ class DropBoxAdvancedRulesValidator(AdvancedRulesValidator):
         interval=RETRY_INTERVAL,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
-    async def _remote_validation(self, advanced_rules: List[Dict[str, Union[str, Dict[str, Union[Dict[str, str], str]]]]]) -> SyncRuleValidationResult:
+    async def _remote_validation(
+        self,
+        advanced_rules: List[
+            Dict[str, Union[str, Dict[str, Union[Dict[str, str], str]]]]
+        ],
+    ) -> SyncRuleValidationResult:
         try:
             DropBoxAdvancedRulesValidator.SCHEMA(advanced_rules)
         except fastjsonschema.JsonSchemaValueException as e:
@@ -786,14 +821,18 @@ class DropboxDataSource(BaseDataSource):
 
         return self.configuration["use_document_level_security"]
 
-    def _decorate_with_access_control(self, document: Dict[str, Union[str, int, List[str]]], access_control: List[str]) -> Dict[str, Union[str, int, List[str]]]:
+    def _decorate_with_access_control(
+        self, document: Dict[str, Union[str, int, List[str]]], access_control: List[str]
+    ) -> Dict[str, Union[str, int, List[str]]]:
         if self._dls_enabled():
             document[ACCESS_CONTROL] = list(
                 set(document.get(ACCESS_CONTROL, []) + access_control)
             )
         return document
 
-    async def _user_access_control_doc(self, user: Dict[str, Dict[str, Union[str, Dict[str, str], List[str]]]]) -> Dict[str, Any]:
+    async def _user_access_control_doc(
+        self, user: Dict[str, Dict[str, Union[str, Dict[str, str], List[str]]]]
+    ) -> Dict[str, Any]:
         profile = user.get("profile", {})
         email = profile.get("email")
         username = profile.get("name", {}).get("display_name")
@@ -905,8 +944,8 @@ class DropboxDataSource(BaseDataSource):
         self,
         attachment: Dict[str, Union[bool, str, int]],
         is_shared: bool = False,
-        folder_id: None=None,
-        timestamp: None=None,
+        folder_id: None = None,
+        timestamp: None = None,
         doit: bool = False,
     ) -> Generator[Future, None, Optional[Dict[str, str]]]:
         """Extracts the content for allowed file types.
@@ -954,7 +993,13 @@ class DropboxDataSource(BaseDataSource):
             ),
         )
 
-    def download_func(self, is_shared: bool, attachment: Dict[str, Union[bool, str, int]], filename: str, folder_id: None) -> Optional[partial]:
+    def download_func(
+        self,
+        is_shared: bool,
+        attachment: Dict[str, Union[bool, str, int]],
+        filename: str,
+        folder_id: None,
+    ) -> Optional[partial]:
         if is_shared:
             return partial(
                 self.dropbox_client.download_shared_file, url=attachment["url"]
@@ -974,7 +1019,9 @@ class DropboxDataSource(BaseDataSource):
         else:
             return
 
-    def _adapt_dropbox_doc_to_es_doc(self, response: Dict[str, Union[bool, str, int]]) -> Dict[str, Any]:
+    def _adapt_dropbox_doc_to_es_doc(
+        self, response: Dict[str, Union[bool, str, int]]
+    ) -> Dict[str, Any]:
         is_file = response.get(".tag") == "file"
         if is_file and response.get("name").split(".")[-1] == PAPER:
             timestamp = response.get("client_modified")
@@ -989,7 +1036,9 @@ class DropboxDataSource(BaseDataSource):
             "_timestamp": timestamp,
         }
 
-    def _adapt_dropbox_shared_file_doc_to_es_doc(self, response: Dict[str, Union[bool, str, int]]) -> Dict[str, Any]:
+    def _adapt_dropbox_shared_file_doc_to_es_doc(
+        self, response: Dict[str, Union[bool, str, int]]
+    ) -> Dict[str, Any]:
         return {
             "_id": response.get("id"),
             "type": FILE,
@@ -1020,7 +1069,12 @@ class DropboxDataSource(BaseDataSource):
                         json_metadata,
                     )
 
-    async def advanced_sync(self, rule: Dict[str, Union[str, Dict[str, List[Dict[str, str]]], Dict[str, List[str]]]]) -> None:
+    async def advanced_sync(
+        self,
+        rule: Dict[
+            str, Union[str, Dict[str, List[Dict[str, str]]], Dict[str, List[str]]]
+        ],
+    ) -> None:
         async for response in self.dropbox_client.search_files_folders(rule=rule):
             for entry in response.get("matches"):
                 data = entry.get("metadata", {}).get("metadata")
@@ -1040,7 +1094,11 @@ class DropboxDataSource(BaseDataSource):
                 else:
                     yield self._adapt_dropbox_doc_to_es_doc(response=data), data
 
-    def get_group_id(self, permission: Dict[str, Union[Dict[str, str], Dict[str, Union[str, int]]]], identity: str) -> str:
+    def get_group_id(
+        self,
+        permission: Dict[str, Union[Dict[str, str], Dict[str, Union[str, int]]]],
+        identity: str,
+    ) -> str:
         if identity in permission:
             return permission.get(identity).get("group_id")
 
@@ -1048,7 +1106,19 @@ class DropboxDataSource(BaseDataSource):
         if identity in permission:
             return permission.get(identity).get("email")
 
-    async def get_permission(self, permission: Dict[str, Union[List[Dict[str, Dict[str, str]]], str, bool, List[Union[Any, Dict[str, Dict[str, Union[str, int]]]]]]], account_id: int) -> List[Optional[str]]:
+    async def get_permission(
+        self,
+        permission: Dict[
+            str,
+            Union[
+                List[Dict[str, Dict[str, str]]],
+                str,
+                bool,
+                List[Union[Any, Dict[str, Dict[str, Union[str, int]]]]],
+            ],
+        ],
+        account_id: int,
+    ) -> List[Optional[str]]:
         permissions = []
         if identities := permission.get("users"):
             for identity in identities:
@@ -1073,7 +1143,9 @@ class DropboxDataSource(BaseDataSource):
             permissions.append(_prefix_user_id(account_id))
         return permissions
 
-    async def get_folder_permission(self, shared_folder_id: int, account_id: int) -> List[str]:
+    async def get_folder_permission(
+        self, shared_folder_id: int, account_id: int
+    ) -> List[str]:
         if (
             not shared_folder_id
             or shared_folder_id == self.dropbox_client.root_namespace_id
@@ -1087,7 +1159,9 @@ class DropboxDataSource(BaseDataSource):
                 permission=permission, account_id=account_id
             )
 
-    async def get_file_permission_without_batching(self, file_id: int, account_id: int) -> List[str]:
+    async def get_file_permission_without_batching(
+        self, file_id: int, account_id: int
+    ) -> List[str]:
         async for (
             permission
         ) in self.dropbox_client.list_file_permission_without_batching(file_id=file_id):
@@ -1108,7 +1182,9 @@ class DropboxDataSource(BaseDataSource):
         member_id = account_details.get("admin_profile", {}).get("team_member_id")
         return account_id, member_id
 
-    async def get_permission_list(self, item_type: str, item: Dict[str, int], account_id: int) -> List[str]:
+    async def get_permission_list(
+        self, item_type: str, item: Dict[str, int], account_id: int
+    ) -> List[str]:
         if item_type == FOLDER:
             shared_folder_id = item.get("shared_folder_id") or item.get(
                 "parent_shared_folder_id"
@@ -1145,7 +1221,18 @@ class DropboxDataSource(BaseDataSource):
                     file_id[1],
                 )
 
-    def document_tuple(self, document: Dict[str, Union[str, int, List[str]]], attachment: Union[Dict[str, Union[str, int]], str, Dict[str, Union[bool, str, int]]], folder_id: None=None) -> Union[Tuple[Dict[str, Union[List[str], int, str]], partial], Tuple[Dict[str, Union[int, str]], None], Tuple[Dict[str, Union[int, str]], partial]]:
+    def document_tuple(
+        self,
+        document: Dict[str, Union[str, int, List[str]]],
+        attachment: Union[
+            Dict[str, Union[str, int]], str, Dict[str, Union[bool, str, int]]
+        ],
+        folder_id: None = None,
+    ) -> Union[
+        Tuple[Dict[str, Union[List[str], int, str]], partial],
+        Tuple[Dict[str, Union[int, str]], None],
+        Tuple[Dict[str, Union[int, str]], partial],
+    ]:
         if document.get("type") == FILE:
             if document.get("url"):
                 return document, partial(

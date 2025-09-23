@@ -7,11 +7,12 @@
 
 import asyncio
 import os
+from _asyncio import Task
 from calendar import month_name
 from datetime import datetime, timedelta
 from enum import Enum
 from functools import cached_property, partial
-from typing import Callable, Iterator, List, Any, Dict, Optional, Union
+from typing import Any, Callable, Dict, Iterator, List, Optional, Union
 
 import aiofiles
 import aiohttp
@@ -21,7 +22,7 @@ from aiohttp.client_exceptions import ClientResponseError
 from msal import ConfidentialClientApplication
 
 from connectors.logger import ExtraLogger, logger
-from connectors.source import DataSourceConfiguration, BaseDataSource
+from connectors.source import BaseDataSource, DataSourceConfiguration
 from connectors.utils import (
     TIKA_SUPPORTED_FILETYPES,
     CacheWithTimeout,
@@ -34,7 +35,6 @@ from connectors.utils import (
     retryable,
     url_encode,
 )
-from _asyncio import Task
 
 QUEUE_MEM_SIZE: int = 5 * 1024 * 1024  # Size in Megabytes
 MAX_CONCURRENCY = 80
@@ -251,7 +251,14 @@ class TokenFetchFailed(Exception):
 class GraphAPIToken:
     """Class for handling access token for Microsoft Graph APIs"""
 
-    def __init__(self, tenant_id: Optional[str], client_id: Optional[str], client_secret: Optional[str], username: Optional[str], password: Optional[str]) -> None:
+    def __init__(
+        self,
+        tenant_id: Optional[str],
+        client_id: Optional[str],
+        client_secret: Optional[str],
+        username: Optional[str],
+        password: Optional[str],
+    ) -> None:
         """Initializer.
 
         Args:
@@ -363,7 +370,14 @@ class GraphAPIToken:
 class MicrosoftTeamsClient:
     """Client Class for API calls to Microsoft Teams"""
 
-    def __init__(self, tenant_id: Optional[str], client_id: Optional[str], client_secret: Optional[str], username: Optional[str], password: Optional[str]) -> None:
+    def __init__(
+        self,
+        tenant_id: Optional[str],
+        client_id: Optional[str],
+        client_secret: Optional[str],
+        username: Optional[str],
+        password: Optional[str],
+    ) -> None:
         self._sleeps = CancellableSleeps()
         self._http_session = aiohttp.ClientSession(
             headers={
@@ -462,7 +476,9 @@ class MicrosoftTeamsClient:
         except ClientResponseError as e:
             await self._handle_client_response_error(absolute_url, e)
 
-    async def _handle_client_response_error(self, absolute_url: str, e: ClientResponseError) -> Iterator[Task]:
+    async def _handle_client_response_error(
+        self, absolute_url: str, e: ClientResponseError
+    ) -> Iterator[Task]:
         if e.status == 429 or e.status == 503:
             response_headers = e.headers or {}
             updated_response_headers = {
@@ -595,7 +611,9 @@ class MicrosoftTeamsClient:
         ):
             yield channel_messages
 
-    async def get_channel_file(self, team_id: str, channel_id: str) -> Dict[str, Union[Dict[str, str], int, str]]:
+    async def get_channel_file(
+        self, team_id: str, channel_id: str
+    ) -> Dict[str, Union[Dict[str, str], int, str]]:
         file = await self.fetch(
             url=URLS[TeamEndpointName.FILE.value].format(
                 base_url=BASE_URL, team_id=team_id, channel_id=channel_id
@@ -647,7 +665,9 @@ class MicrosoftTeamsFormatter:
         for elasticsearch_field, sharepoint_field in document_type().items():
             document[elasticsearch_field] = item.get(sharepoint_field)
 
-    def format_doc(self, item: Dict[str, Any], document_type: Callable, **kwargs) -> Dict[str, Optional[Union[datetime, str, int]]]:
+    def format_doc(
+        self, item: Dict[str, Any], document_type: Callable, **kwargs
+    ) -> Dict[str, Optional[Union[datetime, str, int]]]:
         document = {}
         for elasticsearch_field, sharepoint_field in kwargs["document"].items():
             document[elasticsearch_field] = sharepoint_field
@@ -656,7 +676,47 @@ class MicrosoftTeamsFormatter:
         )
         return document
 
-    def format_user_chat_meeting_recording(self, item: Dict[str, Optional[Union[str, Dict[str, str], Dict[str, Optional[Union[str, Dict[str, Optional[Dict[str, Optional[str]]]]]]], List[Dict[str, Optional[Union[str, Dict[str, str], Dict[str, Optional[Union[str, List[Dict[str, Dict[str, Dict[str, str]]]]]]]]]]]]]], url: str) -> Dict[str, Any]:
+    def format_user_chat_meeting_recording(
+        self,
+        item: Dict[
+            str,
+            Optional[
+                Union[
+                    str,
+                    Dict[str, str],
+                    Dict[
+                        str,
+                        Optional[
+                            Union[str, Dict[str, Optional[Dict[str, Optional[str]]]]]
+                        ],
+                    ],
+                    List[
+                        Dict[
+                            str,
+                            Optional[
+                                Union[
+                                    str,
+                                    Dict[str, str],
+                                    Dict[
+                                        str,
+                                        Optional[
+                                            Union[
+                                                str,
+                                                List[
+                                                    Dict[str, Dict[str, Dict[str, str]]]
+                                                ],
+                                            ]
+                                        ],
+                                    ],
+                                ]
+                            ],
+                        ]
+                    ],
+                ]
+            ],
+        ],
+        url: str,
+    ) -> Dict[str, Any]:
         document = {"type": UserEndpointName.MEETING_RECORDING.value}
         document.update(
             {
@@ -758,7 +818,27 @@ class MicrosoftTeamsFormatter:
         return document
 
     def format_channel_message(
-        self, item: Dict[str, Optional[Union[str, Dict[str, Dict[str, str]], Dict[str, str], List[Dict[str, Optional[Union[str, Dict[str, Dict[str, str]], Dict[str, str]]]]]]]], channel_name: str, message_content: str
+        self,
+        item: Dict[
+            str,
+            Optional[
+                Union[
+                    str,
+                    Dict[str, Dict[str, str]],
+                    Dict[str, str],
+                    List[
+                        Dict[
+                            str,
+                            Optional[
+                                Union[str, Dict[str, Dict[str, str]], Dict[str, str]]
+                            ],
+                        ]
+                    ],
+                ]
+            ],
+        ],
+        channel_name: str,
+        message_content: str,
     ) -> Dict[str, Any]:
         document = {"type": TeamEndpointName.MESSAGE.value}
         document.update(
@@ -778,7 +858,24 @@ class MicrosoftTeamsFormatter:
         )
         return document
 
-    def format_channel_meeting(self, reply: Dict[str, Optional[Union[str, Dict[str, str], Dict[str, Optional[Union[str, List[Dict[str, Dict[str, Dict[str, str]]]]]]]]]]) -> Dict[str, Any]:
+    def format_channel_meeting(
+        self,
+        reply: Dict[
+            str,
+            Optional[
+                Union[
+                    str,
+                    Dict[str, str],
+                    Dict[
+                        str,
+                        Optional[
+                            Union[str, List[Dict[str, Dict[str, Dict[str, str]]]]]
+                        ],
+                    ],
+                ]
+            ],
+        ],
+    ) -> Dict[str, Any]:
         document = {"type": TeamEndpointName.MEETING.value}
         event = reply["eventDetail"]
         if event.get("@odata.type") == "#microsoft.graph.callEndedEventMessageDetail":
@@ -810,7 +907,45 @@ class MicrosoftTeamsFormatter:
                 )
         return document
 
-    async def format_user_chat_messages(self, chat: Dict[str, Optional[Union[List[Dict[str, str]], str]]], message: Dict[str, Optional[Union[str, Dict[str, Dict[str, str]], Dict[str, str], List[Dict[str, Optional[Union[str, Dict[str, Dict[str, str]], Dict[str, str]]]]]]]], message_content: str, members: Optional[str]) -> Dict[str, Optional[Union[str, Dict[str, Dict[str, str]], Dict[str, str], List[Dict[str, Optional[Union[str, Dict[str, Dict[str, str]], Dict[str, str]]]]]]]]:
+    async def format_user_chat_messages(
+        self,
+        chat: Dict[str, Optional[Union[List[Dict[str, str]], str]]],
+        message: Dict[
+            str,
+            Optional[
+                Union[
+                    str,
+                    Dict[str, Dict[str, str]],
+                    Dict[str, str],
+                    List[
+                        Dict[
+                            str,
+                            Optional[
+                                Union[str, Dict[str, Dict[str, str]], Dict[str, str]]
+                            ],
+                        ]
+                    ],
+                ]
+            ],
+        ],
+        message_content: str,
+        members: Optional[str],
+    ) -> Dict[
+        str,
+        Optional[
+            Union[
+                str,
+                Dict[str, Dict[str, str]],
+                Dict[str, str],
+                List[
+                    Dict[
+                        str,
+                        Optional[Union[str, Dict[str, Dict[str, str]], Dict[str, str]]],
+                    ]
+                ],
+            ]
+        ],
+    ]:
         if chat.get("topic"):
             message.update({"title": chat["topic"]})
         else:
@@ -971,7 +1106,11 @@ class MicrosoftTeamsDataSource(BaseDataSource):
                 )
 
     async def get_content(
-        self, user_attachment: Dict[str, Union[int, str]], download_url: str, timestamp: None=None, doit: bool = False
+        self,
+        user_attachment: Dict[str, Union[int, str]],
+        download_url: str,
+        timestamp: None = None,
+        doit: bool = False,
     ) -> Optional[Dict[str, Any]]:
         """Extracts the content for allowed file types.
 
@@ -1010,7 +1149,12 @@ class MicrosoftTeamsDataSource(BaseDataSource):
         return document
 
     async def get_messages(
-        self, message: Dict[str, Any], document_type: Optional[str]=None, chat: Optional[Dict[str, Union[List[Dict[str, str]], str]]]=None, channel_name: Optional[str]=None, members: Optional[str]=None
+        self,
+        message: Dict[str, Any],
+        document_type: Optional[str] = None,
+        chat: Optional[Dict[str, Union[List[Dict[str, str]], str]]] = None,
+        channel_name: Optional[str] = None,
+        members: Optional[str] = None,
     ) -> None:
         if not message.get("deletedDateTime") and (
             "unknownFutureValue" not in message.get("messageType")
@@ -1072,7 +1216,9 @@ class MicrosoftTeamsDataSource(BaseDataSource):
             if member.get("displayName", "")
         )
 
-    async def user_chat_producer(self, chat: Dict[str, Union[List[Dict[str, str]], str]]) -> None:
+    async def user_chat_producer(
+        self, chat: Dict[str, Union[List[Dict[str, str]], str]]
+    ) -> None:
         members = self.get_chat_members(chat.get("members", []))
         async for messages in self.client.get_user_chat_messages(chat_id=chat["id"]):
             for message in messages:
@@ -1116,7 +1262,9 @@ class MicrosoftTeamsDataSource(BaseDataSource):
                 )
         await self.queue.put(EndSignal.USER_CHAT_TASK_FINISHED)
 
-    async def get_channel_messages(self, message: Dict[str, Any], channel_name: str) -> None:
+    async def get_channel_messages(
+        self, message: Dict[str, Any], channel_name: str
+    ) -> None:
         await self.get_messages(message=message, channel_name=channel_name)
         meeting_document = {}
         for reply in message.get("replies", []):
@@ -1146,7 +1294,9 @@ class MicrosoftTeamsDataSource(BaseDataSource):
         for document in meeting_document.values():
             await self.queue.put((document, None))
 
-    async def team_channel_producer(self, channel: Dict[str, Optional[str]], team_id: str, team_name: str) -> None:
+    async def team_channel_producer(
+        self, channel: Dict[str, Optional[str]], team_id: str, team_name: str
+    ) -> None:
         channel_name = channel.get("displayName")
         await self.queue.put(
             (

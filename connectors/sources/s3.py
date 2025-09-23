@@ -5,9 +5,11 @@
 #
 import asyncio
 import os
+from _asyncio import Future
 from contextlib import AsyncExitStack
 from functools import partial
-from typing import Generator, Optional, Dict, List, Union
+from typing import Dict, Generator, List, Optional, Union
+from unittest.mock import MagicMock
 
 import aioboto3
 import fastjsonschema
@@ -20,10 +22,8 @@ from connectors.filtering.validation import (
     SyncRuleValidationResult,
 )
 from connectors.logger import logger
-from connectors.source import DataSourceConfiguration, BaseDataSource
+from connectors.source import BaseDataSource, DataSourceConfiguration
 from connectors.utils import hash_id
-from _asyncio import Future
-from unittest.mock import MagicMock
 
 DEFAULT_PAGE_SIZE = 100
 DEFAULT_MAX_RETRY_ATTEMPTS = 5
@@ -57,7 +57,7 @@ class S3Client:
     def set_logger(self, logger_) -> None:
         self._logger = logger_
 
-    async def client(self, region: None=None):
+    async def client(self, region: None = None):
         """This method creates context manager and client session object for s3.
         Args:
             region (str): Name of bucket region. Defaults to None
@@ -184,7 +184,9 @@ class S3AdvancedRulesValidator(AdvancedRulesValidator):
     def __init__(self, source: "S3DataSource") -> None:
         self.source = source
 
-    async def validate(self, advanced_rules: Union[Dict[str, List[str]], List[Dict[str, str]]]) -> SyncRuleValidationResult:
+    async def validate(
+        self, advanced_rules: Union[Dict[str, List[str]], List[Dict[str, str]]]
+    ) -> SyncRuleValidationResult:
         if len(advanced_rules) == 0:
             return SyncRuleValidationResult.valid_result(
                 SyncRuleValidationResult.ADVANCED_RULES
@@ -308,7 +310,15 @@ class S3DataSource(BaseDataSource):
                         ),
                     )
 
-    async def get_content(self, doc: Dict[str, Union[str, int]], s3_client: Union[MagicMock, str], timestamp: None=None, doit: Optional[Union[bool, int]]=None) -> Generator[Future, None, Optional[Union[Dict[str, str], Dict[str, Union[str, bytes]]]]]:
+    async def get_content(
+        self,
+        doc: Dict[str, Union[str, int]],
+        s3_client: Union[MagicMock, str],
+        timestamp: None = None,
+        doit: Optional[Union[bool, int]] = None,
+    ) -> Generator[
+        Future, None, Optional[Union[Dict[str, str], Dict[str, Union[str, bytes]]]]
+    ]:
         if not (doit):
             return
 

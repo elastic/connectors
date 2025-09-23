@@ -18,7 +18,8 @@ from collections import UserDict
 from copy import deepcopy
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Dict, List, Set, Type, Union, Optional, Sized, Tuple
+from typing import Any, Dict, List, Optional, Set, Sized, Tuple, Type, Union
+from unittest.mock import MagicMock, Mock
 
 from elasticsearch import (
     ApiError,
@@ -50,7 +51,6 @@ from connectors.utils import (
     parse_datetime_string,
     with_utc_tz,
 )
-from unittest.mock import MagicMock, Mock
 
 __all__ = [
     "CONNECTORS_INDEX",
@@ -159,7 +159,18 @@ class ProtocolError(Exception):
 
 
 class ConnectorIndex(ESIndex):
-    def __init__(self, elastic_config: Dict[str, Union[str, bool, Dict[str, Union[int, bool, Dict[str, Union[bool, int, float]]]], int]]) -> None:
+    def __init__(
+        self,
+        elastic_config: Dict[
+            str,
+            Union[
+                str,
+                bool,
+                Dict[str, Union[int, bool, Dict[str, Union[bool, int, float]]]],
+                int,
+            ],
+        ],
+    ) -> None:
         logger.debug(f"ConnectorIndex connecting to {elastic_config['host']}")
         # initialize ESIndex instance
         super().__init__(index_name=CONNECTORS_INDEX, elastic_config=elastic_config)
@@ -174,8 +185,8 @@ class ConnectorIndex(ESIndex):
         self,
         connector_id: str,
         service_type: str,
-        connector_name: Optional[str]=None,
-        index_name: Optional[str]=None,
+        connector_name: Optional[str] = None,
+        index_name: Optional[str] = None,
         is_native: bool = False,
     ) -> None:
         await self.api.connector_put(
@@ -203,7 +214,11 @@ class ConnectorIndex(ESIndex):
             raise e
 
     async def connector_update_scheduling(
-        self, connector_id: str, full: Optional[Dict[str, Union[bool, str]]]=None, incremental: None=None, access_control: None=None
+        self,
+        connector_id: str,
+        full: Optional[Dict[str, Union[bool, str]]] = None,
+        incremental: None = None,
+        access_control: None = None,
     ) -> None:
         scheduling = {}
 
@@ -221,7 +236,10 @@ class ConnectorIndex(ESIndex):
         )
 
     async def connector_update_configuration(
-        self, connector_id: str, schema: Optional[Dict[str, Dict[str, Union[str, bool, int]]]]=None, values: None=None
+        self,
+        connector_id: str,
+        schema: Optional[Dict[str, Dict[str, Union[str, bool, int]]]] = None,
+        values: None = None,
     ) -> None:
         await self.api.connector_update_configuration(
             connector_id=connector_id, configuration=schema, values=values
@@ -270,7 +288,24 @@ class ConnectorIndex(ESIndex):
         async for connector in self.get_all_docs(query=query):
             yield connector
 
-    def _create_object(self, doc_source: Dict[str, Union[Dict[str, str], str, Dict[str, Optional[Union[Dict[str, Dict[str, str]], Dict[str, Union[bool, str]], str]]]]]) -> "Connector":
+    def _create_object(
+        self,
+        doc_source: Dict[
+            str,
+            Union[
+                Dict[str, str],
+                str,
+                Dict[
+                    str,
+                    Optional[
+                        Union[
+                            Dict[str, Dict[str, str]], Dict[str, Union[bool, str]], str
+                        ]
+                    ],
+                ],
+            ],
+        ],
+    ) -> "Connector":
         return Connector(
             self,
             doc_source,
@@ -391,7 +426,7 @@ class SyncJob(ESDocument):
             msg = f"Failed to {operation_name} for job {self.id} because of {e.__class__.__name__}: {str(e)}"
             raise ProtocolError(msg) from e
 
-    async def claim(self, sync_cursor: Optional[Dict[str, str]]=None) -> None:
+    async def claim(self, sync_cursor: Optional[Dict[str, str]] = None) -> None:
         try:
             if self.index.feature_use_connectors_api:
                 await self.index.api.connector_sync_job_claim(
@@ -413,7 +448,7 @@ class SyncJob(ESDocument):
 
     async def update_metadata(
         self,
-        ingestion_stats: Optional[Dict[str, int]]=None,
+        ingestion_stats: Optional[Dict[str, int]] = None,
         connector_metadata: Optional[Sized] = None,
     ) -> None:
         try:
@@ -440,7 +475,7 @@ class SyncJob(ESDocument):
 
     async def done(
         self,
-        ingestion_stats: None=None,
+        ingestion_stats: None = None,
         connector_metadata: Optional[Sized] = None,
     ) -> None:
         try:
@@ -453,7 +488,7 @@ class SyncJob(ESDocument):
     async def fail(
         self,
         error: Union[str, int, Exception],
-        ingestion_stats: None=None,
+        ingestion_stats: None = None,
         connector_metadata: Optional[Sized] = None,
     ) -> None:
         try:
@@ -473,7 +508,7 @@ class SyncJob(ESDocument):
 
     async def cancel(
         self,
-        ingestion_stats: None=None,
+        ingestion_stats: None = None,
         connector_metadata: Optional[Sized] = None,
     ) -> None:
         try:
@@ -485,7 +520,7 @@ class SyncJob(ESDocument):
 
     async def suspend(
         self,
-        ingestion_stats: None=None,
+        ingestion_stats: None = None,
         connector_metadata: Optional[Sized] = None,
     ) -> None:
         try:
@@ -498,8 +533,8 @@ class SyncJob(ESDocument):
     async def _terminate(
         self,
         status: JobStatus,
-        error: Optional[str]=None,
-        ingestion_stats: None=None,
+        error: Optional[str] = None,
+        ingestion_stats: None = None,
         connector_metadata: Optional[Sized] = None,
     ) -> None:
         ingestion_stats = filter_ingestion_stats(ingestion_stats)
@@ -535,7 +570,57 @@ class SyncJob(ESDocument):
 class Filtering:
     DEFAULT_DOMAIN = "DEFAULT"
 
-    def __init__(self, filtering: Optional[Union[List[Union[Dict[str, Union[str, Dict[str, Union[Dict[str, Dict[str, Dict[str, Dict[Any, Any]]]], List[Dict[str, int]], Dict[str, str]]], Dict[str, str]]], Dict[str, Union[Dict[str, str], str]]]], List[Union[Dict[str, Union[str, Dict[str, Union[Dict[str, Dict[str, Dict[str, Dict[Any, Any]]]], List[Dict[str, int]], Dict[str, str]]]]], Dict[str, Union[str, Dict[str, Union[str, List[Dict[str, List[str]]]]]]]]]]]=None) -> None:
+    def __init__(
+        self,
+        filtering: Optional[
+            Union[
+                List[
+                    Union[
+                        Dict[
+                            str,
+                            Union[
+                                str,
+                                Dict[
+                                    str,
+                                    Union[
+                                        Dict[str, Dict[str, Dict[str, Dict[Any, Any]]]],
+                                        List[Dict[str, int]],
+                                        Dict[str, str],
+                                    ],
+                                ],
+                                Dict[str, str],
+                            ],
+                        ],
+                        Dict[str, Union[Dict[str, str], str]],
+                    ]
+                ],
+                List[
+                    Union[
+                        Dict[
+                            str,
+                            Union[
+                                str,
+                                Dict[
+                                    str,
+                                    Union[
+                                        Dict[str, Dict[str, Dict[str, Dict[Any, Any]]]],
+                                        List[Dict[str, int]],
+                                        Dict[str, str],
+                                    ],
+                                ],
+                            ],
+                        ],
+                        Dict[
+                            str,
+                            Union[
+                                str, Dict[str, Union[str, List[Dict[str, List[str]]]]]
+                            ],
+                        ],
+                    ]
+                ],
+            ]
+        ] = None,
+    ) -> None:
         if filtering is None:
             filtering = []
 
@@ -559,12 +644,30 @@ class Filtering:
             Filter(),
         )
 
-    def to_list(self) -> List[Dict[str, Union[str, Dict[str, Union[Dict[str, Dict[str, Dict[str, Dict[Any, Any]]]], List[Dict[str, int]], Dict[str, str]]], Dict[str, Union[str, List[Dict[str, List[str]]]]]]]]:
+    def to_list(
+        self,
+    ) -> List[
+        Dict[
+            str,
+            Union[
+                str,
+                Dict[
+                    str,
+                    Union[
+                        Dict[str, Dict[str, Dict[str, Dict[Any, Any]]]],
+                        List[Dict[str, int]],
+                        Dict[str, str],
+                    ],
+                ],
+                Dict[str, Union[str, List[Dict[str, List[str]]]]],
+            ],
+        ]
+    ]:
         return list(self.filtering)
 
 
 class Filter(dict):
-    def __init__(self, filter_: Optional[Any]=None) -> None:
+    def __init__(self, filter_: Optional[Any] = None) -> None:
         if filter_ is None:
             filter_ = {}
 
@@ -586,7 +689,9 @@ class Filter(dict):
     def has_validation_state(self, validation_state: FilteringValidationState) -> bool:
         return FilteringValidationState(self.validation["state"]) == validation_state
 
-    def transform_filtering(self) -> Union[Dict[str, Union[Dict[Any, Any], List[Any]]],"Filter"]:
+    def transform_filtering(
+        self,
+    ) -> Union[Dict[str, Union[Dict[Any, Any], List[Any]]], "Filter"]:
         """
         Transform the filtering in .elastic-connectors to filtering ready-to-use in .elastic-connectors-sync-jobs
         """
@@ -627,7 +732,7 @@ class Features:
 
     NATIVE_CONNECTOR_API_KEYS = "native_connector_api_keys"
 
-    def __init__(self, features: Optional[Any]=None) -> None:
+    def __init__(self, features: Optional[Any] = None) -> None:
         if features is None:
             features = {}
 
@@ -813,7 +918,9 @@ class Connector(ESDocument):
             if_primary_term=self._primary_term,
         )
 
-    async def update_last_sync_scheduled_at_by_job_type(self, job_type: JobType, new_ts: datetime) -> None:
+    async def update_last_sync_scheduled_at_by_job_type(
+        self, job_type: JobType, new_ts: datetime
+    ) -> None:
         match job_type:
             case JobType.ACCESS_CONTROL:
                 await self._update_datetime(
@@ -867,7 +974,9 @@ class Connector(ESDocument):
         doc = {"status": Status.CONNECTED.value, "error": None}
         await self.index.update(doc_id=self.id, doc=doc)
 
-    async def sync_done(self, job: Optional[Mock], cursor: Optional[Dict[str, str]]=None) -> None:
+    async def sync_done(
+        self, job: Optional[Mock], cursor: Optional[Dict[str, str]] = None
+    ) -> None:
         job_status = JobStatus.ERROR if job is None else job.status
         job_error = JOB_NOT_FOUND_ERROR if job is None else job.error
         job_type = job.job_type if job is not None else None
@@ -994,7 +1103,9 @@ class Connector(ESDocument):
         )
         await self.reload()
 
-    def validated_doc(self, source_klass: Type[BaseDataSource]) -> Dict[str, Union[Dict[str, Dict[str, Optional[Union[str, int, bool]]]], str]]:
+    def validated_doc(
+        self, source_klass: Type[BaseDataSource]
+    ) -> Dict[str, Union[Dict[str, Dict[str, Optional[Union[str, int, bool]]]], str]]:
         simple_config = source_klass.get_simple_configuration()
         current_config = self.configuration.to_dict()
 
@@ -1029,8 +1140,33 @@ class Connector(ESDocument):
         return doc
 
     def updated_configuration_fields(
-        self, missing_keys: Union[List[str], Set[str]], current_config: Dict[str, Union[Dict[str, Optional[Union[str, int, bool]]], Dict[str, Union[str, int]], Dict[str, Union[str, bool, int]]]], simple_default_config: Dict[str, Union[Dict[str, Optional[Union[str, int, bool]]], Dict[str, Union[str, int]], Dict[str, Union[str, bool, int]]]]
-    ) -> Dict[str, Union[Dict[str, Optional[Union[str, int, bool]]], Dict[str, Union[str, bool, int]], Dict[str, str], Dict[str, int]]]:
+        self,
+        missing_keys: Union[List[str], Set[str]],
+        current_config: Dict[
+            str,
+            Union[
+                Dict[str, Optional[Union[str, int, bool]]],
+                Dict[str, Union[str, int]],
+                Dict[str, Union[str, bool, int]],
+            ],
+        ],
+        simple_default_config: Dict[
+            str,
+            Union[
+                Dict[str, Optional[Union[str, int, bool]]],
+                Dict[str, Union[str, int]],
+                Dict[str, Union[str, bool, int]],
+            ],
+        ],
+    ) -> Dict[
+        str,
+        Union[
+            Dict[str, Optional[Union[str, int, bool]]],
+            Dict[str, Union[str, bool, int]],
+            Dict[str, str],
+            Dict[str, int],
+        ],
+    ]:
         self.log_warning(
             f"Detected an existing connector: {self.id} ({self.service_type}) that was previously {Status.CONNECTED.value} but is now missing configuration: {missing_keys}. Values for the new fields will be automatically set. Please review these configuration values as part of your upgrade."
         )
@@ -1050,7 +1186,9 @@ class Connector(ESDocument):
         return draft_config
 
     def updated_configuration_field_properties(
-        self, fields_missing_properties: Dict[str, Dict[str, str]], simple_config: Dict[str, Dict[str, Optional[Union[str, int, bool]]]]
+        self,
+        fields_missing_properties: Dict[str, Dict[str, str]],
+        simple_config: Dict[str, Dict[str, Optional[Union[str, int, bool]]]],
     ) -> Dict[str, Dict[str, Optional[Union[str, int, bool]]]]:
         """Checks the field properties for every field in a configuration.
         If a field is missing field properties, add those field properties
@@ -1142,7 +1280,18 @@ class SyncJobIndex(ESIndex):
         elastic_config (dict): Elasticsearch configuration and credentials
     """
 
-    def __init__(self, elastic_config: Dict[str, Union[str, bool, Dict[str, Union[int, bool, Dict[str, Union[bool, int, float]]]], int]]) -> None:
+    def __init__(
+        self,
+        elastic_config: Dict[
+            str,
+            Union[
+                str,
+                bool,
+                Dict[str, Union[int, bool, Dict[str, Union[bool, int, float]]]],
+                int,
+            ],
+        ],
+    ) -> None:
         super().__init__(index_name=JOBS_INDEX, elastic_config=elastic_config)
 
     def _create_object(self, doc_source) -> SyncJob:
@@ -1157,7 +1306,9 @@ class SyncJobIndex(ESIndex):
             doc_source=doc_source,
         )
 
-    async def create(self, connector: Mock, trigger_method: JobTriggerMethod, job_type: JobType) -> MagicMock:
+    async def create(
+        self, connector: Mock, trigger_method: JobTriggerMethod, job_type: JobType
+    ) -> MagicMock:
         if self.feature_use_connectors_api:
             response = await self.api.connector_sync_job_create(
                 connector_id=connector.id,
@@ -1195,7 +1346,9 @@ class SyncJobIndex(ESIndex):
 
             return api_response["_id"]
 
-    async def pending_jobs(self, connector_ids: List[int], job_types: Optional[str]) -> None:
+    async def pending_jobs(
+        self, connector_ids: List[int], job_types: Optional[str]
+    ) -> None:
         if not job_types:
             return
         if not isinstance(job_types, list):

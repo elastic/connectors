@@ -5,18 +5,24 @@
 #
 import asyncio
 import os
+from typing import Optional
 
 import yaml
 from elasticsearch import ApiError
 
 from connectors.es.cli_client import CLIClient
-from typing import Optional
 
 CONFIG_FILE_PATH = ".cli/config.yml"
 
 
 class Auth:
-    def __init__(self, host: str, username: Optional[str]=None, password: Optional[str]=None, api_key: Optional[str]=None) -> None:
+    def __init__(
+        self,
+        host: str,
+        username: Optional[str] = None,
+        password: Optional[str] = None,
+        api_key: Optional[str] = None,
+    ) -> None:
         elastic_config = {
             "host": host,
             "username": username,

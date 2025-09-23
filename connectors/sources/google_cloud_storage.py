@@ -7,21 +7,21 @@
 
 import os
 import urllib.parse
+from _asyncio import Future, Task
+from asyncio.tasks import _GatheringFuture
 from functools import cached_property, partial
-from typing import Any, Generator, Iterator, Dict, List, Optional, Union
+from typing import Any, Dict, Generator, Iterator, List, Optional, Union
 
 from aiogoogle import Aiogoogle, HTTPError
 from aiogoogle.auth.creds import ServiceAccountCreds
 
 from connectors.logger import logger
-from connectors.source import DataSourceConfiguration, BaseDataSource
+from connectors.source import BaseDataSource, DataSourceConfiguration
 from connectors.sources.google import (
     load_service_account_json,
     validate_service_account_json,
 )
 from connectors.utils import RetryStrategy, get_pem_format, retryable
-from _asyncio import Future, Task
-from asyncio.tasks import _GatheringFuture
 
 CLOUD_STORAGE_READ_ONLY_SCOPE = "https://www.googleapis.com/auth/devstorage.read_only"
 CLOUD_STORAGE_BASE_URL = "https://console.cloud.google.com/storage/browser/_details/"
@@ -90,7 +90,7 @@ class GoogleCloudStorageClient:
         self,
         resource: str,
         method: str,
-        sub_method: Optional[str]=None,
+        sub_method: Optional[str] = None,
         full_response: bool = False,
         **kwargs,
     ) -> Iterator[None]:
@@ -292,7 +292,9 @@ class GoogleCloudStorageDataSource(BaseDataSource):
             for bucket in buckets:
                 yield {"items": [{"id": bucket, "name": bucket}]}
 
-    async def fetch_blobs(self, buckets: Dict[str, Union[str, List[Dict[str, str]]]]) -> Iterator[Optional[Task]]:
+    async def fetch_blobs(
+        self, buckets: Dict[str, Union[str, List[Dict[str, str]]]]
+    ) -> Iterator[Optional[Task]]:
         """Fetches blobs stored in the bucket from Google Cloud Storage.
 
         Args:
@@ -344,7 +346,9 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         )
         return blob_document
 
-    def get_blob_document(self, blobs: Dict[str, Union[str, List[Dict[str, str]]]]) -> Iterator[Dict[str, Optional[str]]]:
+    def get_blob_document(
+        self, blobs: Dict[str, Union[str, List[Dict[str, str]]]]
+    ) -> Iterator[Dict[str, Optional[str]]]:
         """Generate blob document.
 
         Args:
@@ -356,7 +360,12 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         for blob in blobs.get("items", []):
             yield self.prepare_blob_document(blob=blob)
 
-    async def get_content(self, blob: Dict[str, Optional[Union[str, int]]], timestamp: None=None, doit: Optional[bool]=None) -> Generator[Union[Future, _GatheringFuture], None, Optional[Dict[str, str]]]:
+    async def get_content(
+        self,
+        blob: Dict[str, Optional[Union[str, int]]],
+        timestamp: None = None,
+        doit: Optional[bool] = None,
+    ) -> Generator[Union[Future, _GatheringFuture], None, Optional[Dict[str, str]]]:
         """Extracts the content for allowed file types.
 
         Args:
@@ -412,7 +421,7 @@ class GoogleCloudStorageDataSource(BaseDataSource):
 
         return document
 
-    async def get_docs(self, filtering: None=None) -> None:
+    async def get_docs(self, filtering: None = None) -> None:
         """Get buckets & blob documents from Google Cloud Storage.
 
         Yields:

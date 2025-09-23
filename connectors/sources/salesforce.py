@@ -7,15 +7,17 @@
 
 import os
 import re
+from _asyncio import Future, Task
 from datetime import datetime
 from functools import cached_property, partial
 from itertools import groupby
-from typing import Generator, Iterator, Tuple, Any, Dict, List, Optional, Union
+from typing import Any, Dict, Generator, Iterator, List, Optional, Tuple, Union
 
 import aiohttp
 import fastjsonschema
 from aiohttp.client import ClientSession
 from aiohttp.client_exceptions import ClientResponseError
+from aiohttp.client_reqrep import ClientResponse
 
 from connectors.access_control import (
     ACCESS_CONTROL,
@@ -27,7 +29,12 @@ from connectors.filtering.validation import (
     SyncRuleValidationResult,
 )
 from connectors.logger import logger
-from connectors.source import DataSourceConfiguration, BaseDataSource, ConfigurableFieldValueError
+from connectors.protocol.connectors import Filter
+from connectors.source import (
+    BaseDataSource,
+    ConfigurableFieldValueError,
+    DataSourceConfiguration,
+)
 from connectors.utils import (
     TIKA_SUPPORTED_FILETYPES,
     CancellableSleeps,
@@ -35,9 +42,6 @@ from connectors.utils import (
     iso_utc,
     retryable,
 )
-from _asyncio import Future, Task
-from aiohttp.client_reqrep import ClientResponse
-from connectors.protocol.connectors import Filter
 
 SALESFORCE_EMULATOR_HOST: Optional[str] = os.environ.get("SALESFORCE_EMULATOR_HOST")
 RUNNING_FTEST: bool = (
@@ -556,7 +560,9 @@ class SalesforceClient:
         """
         return sobject.lower() in await self.queryable_sobjects()
 
-    async def _select_queryable_fields(self, sobject: str, fields: List[str]) -> List[str]:
+    async def _select_queryable_fields(
+        self, sobject: str, fields: List[str]
+    ) -> List[str]:
         """User settings can cause fields to be non-queryable
         Querying these causes errors, so we try to filter those out in advance
         """
@@ -631,7 +637,22 @@ class SalesforceClient:
         )
         yield response.get("searchRecords", [])
 
-    async def _execute_non_paginated_query(self, soql_query: None) -> List[Dict[str, Union[Dict[str, str], str, Dict[str, Union[str, Dict[str, str]]], Dict[str, Union[int, bool, List[Dict[str, Union[str, Dict[str, str]]]]]], Dict[str, Union[str, int]]]]]:
+    async def _execute_non_paginated_query(
+        self, soql_query: None
+    ) -> List[
+        Dict[
+            str,
+            Union[
+                Dict[str, str],
+                str,
+                Dict[str, Union[str, Dict[str, str]]],
+                Dict[
+                    str, Union[int, bool, List[Dict[str, Union[str, Dict[str, str]]]]]
+                ],
+                Dict[str, Union[str, int]],
+            ],
+        ]
+    ]:
         """For quick queries, ignores pagination"""
         url = f"{self.base_url}{QUERY_ENDPOINT}"
         params = {"q": soql_query}
@@ -650,7 +671,9 @@ class SalesforceClient:
         interval=RETRY_INTERVAL,
         skipped_exceptions=[RateLimitedException, InvalidQueryException],
     )
-    async def _get_json(self, url: str, params: Optional[Dict[str, str]]=None) -> Dict[str, Any]:
+    async def _get_json(
+        self, url: str, params: Optional[Dict[str, str]] = None
+    ) -> Dict[str, Any]:
         response_body = None
         try:
             response = await self._get(url, params=params)
@@ -663,7 +686,9 @@ class SalesforceClient:
         except Exception as e:
             raise e
 
-    async def _get(self, url: str, params: Optional[Dict[str, str]]=None) -> ClientResponse:
+    async def _get(
+        self, url: str, params: Optional[Dict[str, str]] = None
+    ) -> ClientResponse:
         self._logger.debug(f"Sending request. Url: {url}, params: {params}")
         headers = await self._auth_headers()
         return await self.session.get(
@@ -679,7 +704,9 @@ class SalesforceClient:
         response = await self._get(f"{self.base_url}{endpoint}")
         yield response
 
-    async def _handle_client_response_error(self, response_body: Optional[List[Dict[str, str]]], e: ClientResponseError):
+    async def _handle_client_response_error(
+        self, response_body: Optional[List[Dict[str, str]]], e: ClientResponseError
+    ):
         exception_details = f"status: {e.status}, message: {e.message}"
 
         if e.status == 401:
@@ -720,7 +747,9 @@ class SalesforceClient:
             )
             raise SalesforceServerError(msg)
 
-    def _handle_response_body_error(self, error_list: Optional[List[Dict[str, str]]]) -> List[Dict[str, str]]:
+    def _handle_response_body_error(
+        self, error_list: Optional[List[Dict[str, str]]]
+    ) -> List[Dict[str, str]]:
         if error_list is None or len(error_list) < 1:
             return [{"errorCode": "unknown"}]
 
@@ -1106,7 +1135,9 @@ class SalesforceClient:
 
 
 class SalesforceAPIToken:
-    def __init__(self, session: ClientSession, base_url: str, client_id: str, client_secret: str) -> None:
+    def __init__(
+        self, session: ClientSession, base_url: str, client_id: str, client_secret: str
+    ) -> None:
         self._token = None
         self.session = session
         self.url = f"{base_url}{TOKEN_ENDPOINT}"
@@ -1208,7 +1239,19 @@ class SalesforceDocMapper:
     def __init__(self, base_url: str) -> None:
         self.base_url = base_url
 
-    def map_content_document(self, content_document: Dict[str, Union[Dict[str, str], str, int, Dict[str, Union[str, Dict[str, str]]], List[str]]]) -> Dict[str, Any]:
+    def map_content_document(
+        self,
+        content_document: Dict[
+            str,
+            Union[
+                Dict[str, str],
+                str,
+                int,
+                Dict[str, Union[str, Dict[str, str]]],
+                List[str],
+            ],
+        ],
+    ) -> Dict[str, Any]:
         content_version = content_document.get("LatestPublishedVersion", {}) or {}
         owner = content_document.get("Owner", {}) or {}
         created_by = content_document.get("CreatedBy", {}) or {}
@@ -1268,7 +1311,9 @@ class SalesforceAdvancedRulesValidator(AdvancedRulesValidator):
     def __init__(self, source: "SalesforceDataSource") -> None:
         self.source = source
 
-    async def validate(self, advanced_rules: List[Dict[str, str]]) -> SyncRuleValidationResult:
+    async def validate(
+        self, advanced_rules: List[Dict[str, str]]
+    ) -> SyncRuleValidationResult:
         return await self._remote_validation(advanced_rules)
 
     @retryable(
@@ -1276,7 +1321,9 @@ class SalesforceAdvancedRulesValidator(AdvancedRulesValidator):
         interval=RETRY_INTERVAL,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
-    async def _remote_validation(self, advanced_rules: List[Dict[str, str]]) -> SyncRuleValidationResult:
+    async def _remote_validation(
+        self, advanced_rules: List[Dict[str, str]]
+    ) -> SyncRuleValidationResult:
         try:
             SalesforceAdvancedRulesValidator.SCHEMA(advanced_rules)
         except fastjsonschema.JsonSchemaValueException as e:
@@ -1436,14 +1483,18 @@ class SalesforceDataSource(BaseDataSource):
 
         return self.configuration["use_document_level_security"]
 
-    def _decorate_with_access_control(self, document: Dict[str, Any], access_control: List[Union[str, Any]]) -> Dict[str, Any]:
+    def _decorate_with_access_control(
+        self, document: Dict[str, Any], access_control: List[Union[str, Any]]
+    ) -> Dict[str, Any]:
         if self._dls_enabled():
             document[ACCESS_CONTROL] = list(
                 set(document.get(ACCESS_CONTROL, []) + access_control)
             )
         return document
 
-    async def _user_access_control_doc(self, user: Dict[str, Union[str, Dict[str, str]]]) -> Dict[str, Any]:
+    async def _user_access_control_doc(
+        self, user: Dict[str, Union[str, Dict[str, str]]]
+    ) -> Dict[str, Any]:
         email = user.get("Email")
         username = user.get("Name")
 
@@ -1563,7 +1614,7 @@ class SalesforceDataSource(BaseDataSource):
 
         self.permissions[sobject] = list(access_control)
 
-    async def get_docs(self, filtering: Optional[Filter]=None) -> None:
+    async def get_docs(self, filtering: Optional[Filter] = None) -> None:
         # We collect all content documents and de-duplicate them before downloading and yielding
         content_docs = []
 
@@ -1711,7 +1762,9 @@ class SalesforceDataSource(BaseDataSource):
 
             yield self._decorate_with_access_control(doc, access_control), None
 
-    async def get_content(self, doc: Dict[str, Union[int, str, List[str]]], content_version_id: str) -> Generator[Future, None, Dict[str, Union[int, str, List[str]]]]:
+    async def get_content(
+        self, doc: Dict[str, Union[int, str, List[str]]], content_version_id: str
+    ) -> Generator[Future, None, Dict[str, Union[int, str, List[str]]]]:
         file_size = doc["content_size"]
         filename = doc["title"]
         file_extension = self.get_file_extension(filename)
@@ -1732,7 +1785,13 @@ class SalesforceDataSource(BaseDataSource):
             return_doc_if_failed=True,  # we still ingest on download failure for Salesforce
         )
 
-    def _parse_content_documents(self, record: Dict[str, Any]) -> List[Dict[str, Union[Dict[str, str], str, int, Dict[str, Union[str, Dict[str, str]]]]]]:
+    def _parse_content_documents(
+        self, record: Dict[str, Any]
+    ) -> List[
+        Dict[
+            str, Union[Dict[str, str], str, int, Dict[str, Union[str, Dict[str, str]]]]
+        ]
+    ]:
         content_docs = []
         content_links = record.get("ContentDocumentLinks", {}) or {}
         content_links = content_links.get("records", []) or []
@@ -1746,7 +1805,36 @@ class SalesforceDataSource(BaseDataSource):
 
         return content_docs
 
-    def _combine_duplicate_content_docs(self, content_docs: List[Union[Dict[str, str], Any, Dict[str, Union[Dict[str, str], str, int, Dict[str, Union[str, Dict[str, str]]]]]]]) -> List[Union[Dict[str, Union[Dict[str, str], str, int, Dict[str, Union[str, Dict[str, str]]], List[str]]], Any, Dict[str, Union[str, List[str]]]]]:
+    def _combine_duplicate_content_docs(
+        self,
+        content_docs: List[
+            Union[
+                Dict[str, str],
+                Any,
+                Dict[
+                    str,
+                    Union[
+                        Dict[str, str], str, int, Dict[str, Union[str, Dict[str, str]]]
+                    ],
+                ],
+            ]
+        ],
+    ) -> List[
+        Union[
+            Dict[
+                str,
+                Union[
+                    Dict[str, str],
+                    str,
+                    int,
+                    Dict[str, Union[str, Dict[str, str]]],
+                    List[str],
+                ],
+            ],
+            Any,
+            Dict[str, Union[str, List[str]]],
+        ]
+    ]:
         """Duplicate ContentDocuments may appear linked to multiple SObjects
         Here we ensure that we don't download any duplicates while retaining links"""
         grouped = {}

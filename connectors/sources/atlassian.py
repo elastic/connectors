@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, List, Type, Union, Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Type, Union
 
 if TYPE_CHECKING:
     from connectors.sources.confluence import ConfluenceClient, ConfluenceDataSource
@@ -45,7 +45,9 @@ class AtlassianAdvancedRulesValidator(AdvancedRulesValidator):
     def __init__(self, source: Type[AdvancedRulesValidator]) -> None:
         self.source = source
 
-    async def validate(self, advanced_rules: Union[List[Dict[str, str]], Dict[str, List[str]]]) -> SyncRuleValidationResult:
+    async def validate(
+        self, advanced_rules: Union[List[Dict[str, str]], Dict[str, List[str]]]
+    ) -> SyncRuleValidationResult:
         if len(advanced_rules) == 0:
             return SyncRuleValidationResult.valid_result(
                 SyncRuleValidationResult.ADVANCED_RULES
@@ -58,7 +60,9 @@ class AtlassianAdvancedRulesValidator(AdvancedRulesValidator):
         interval=RETRY_INTERVAL,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
-    async def _remote_validation(self, advanced_rules: Union[List[Dict[str, str]], Dict[str, List[str]]]) -> SyncRuleValidationResult:
+    async def _remote_validation(
+        self, advanced_rules: Union[List[Dict[str, str]], Dict[str, List[str]]]
+    ) -> SyncRuleValidationResult:
         try:
             AtlassianAdvancedRulesValidator.SCHEMA(advanced_rules)
         except JsonSchemaValueException as e:
@@ -108,11 +112,17 @@ def prefix_group(group: str) -> Optional[str]:
 
 
 class AtlassianAccessControl:
-    def __init__(self, source: Union[JiraDataSource, ConfluenceDataSource], client: Union[Type[JiraClient], ConfluenceClient, JiraClient]) -> None:
+    def __init__(
+        self,
+        source: Union[JiraDataSource, ConfluenceDataSource],
+        client: Union[Type[JiraClient], ConfluenceClient, JiraClient],
+    ) -> None:
         self.source = source
         self.client = client
 
-    def access_control_query(self, access_control: List[str]) -> Dict[str, Dict[str, Dict[str, Union[Dict[str, List[str]], str]]]]:
+    def access_control_query(
+        self, access_control: List[str]
+    ) -> Dict[str, Dict[str, Dict[str, Union[Dict[str, List[str]], str]]]]:
         return es_access_control_query(access_control)
 
     async def fetch_all_users(self, url):
@@ -163,7 +173,10 @@ class AtlassianAccessControl:
         user = await self.client.api_call(url=url)
         yield await user.json()
 
-    async def user_access_control_doc(self, user: Dict[str, Union[str, bool, Dict[str, Union[List[Dict[str, str]], int]]]]) -> Dict[str, Any]:
+    async def user_access_control_doc(
+        self,
+        user: Dict[str, Union[str, bool, Dict[str, Union[List[Dict[str, str]], int]]]],
+    ) -> Dict[str, Any]:
         """Generate a user access control document.
 
         This method generates a user access control document based on the provided user information.

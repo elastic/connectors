@@ -18,25 +18,35 @@ import string
 import subprocess  # noqa S404
 import time
 import urllib.parse
+from _asyncio import Future, Task
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from time import strftime
-from typing import Any, Callable, Dict, Generator, Iterator, List, Tuple, Optional, Union
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Generator,
+    Iterator,
+    List,
+    Optional,
+    Tuple,
+    Union,
+)
+from unittest.mock import AsyncMock, Mock
 
 import dateutil.parser as parser
 import pytz
 import tzcron
 from base64io import Base64IO
 from bs4 import BeautifulSoup
+from freezegun.api import FakeDatetime
 from pympler import asizeof
 from typing_extensions import Buffer
 
-from connectors.logger import _TracedAsyncGenerator, logger
-from _asyncio import Future, Task
 from connectors.exceptions import DocumentIngestionError
-from freezegun.api import FakeDatetime
-from unittest.mock import AsyncMock, Mock
+from connectors.logger import _TracedAsyncGenerator, logger
 
 ACCESS_CONTROL_INDEX_PREFIX = ".search-acl-filter-"
 DEFAULT_CHUNK_SIZE = 500
@@ -184,7 +194,9 @@ class CancellableSleeps:
     def __init__(self) -> None:
         self._sleeps = set()
 
-    async def sleep(self, delay: Union[float, Mock, int], result: None=None, *, loop=None) -> None:
+    async def sleep(
+        self, delay: Union[float, Mock, int], result: None = None, *, loop=None
+    ) -> None:
         async def _sleep(delay, result=None, *, loop=None):
             coro = asyncio.sleep(delay, result=result)
             task = asyncio.ensure_future(coro)
@@ -199,7 +211,7 @@ class CancellableSleeps:
 
         await _sleep(delay, result=result, loop=loop)
 
-    def cancel(self, sig: None=None) -> None:
+    def cancel(self, sig: None = None) -> None:
         if sig:
             logger.debug(f"Caught {sig}. Cancelling sleeps...")
         else:
@@ -484,7 +496,9 @@ class ConcurrentTasks:
                 f"Exception found for task {task.get_name()}", exc_info=task.exception()
             )
 
-    def _add_task(self, coroutine: Union[functools.partial, Callable], name: Optional[str] = None) -> Task:
+    def _add_task(
+        self, coroutine: Union[functools.partial, Callable], name: Optional[str] = None
+    ) -> Task:
         task = asyncio.create_task(coroutine(), name=name)
         self.tasks.append(task)
         # _callback will be executed when the task is done,
@@ -493,7 +507,9 @@ class ConcurrentTasks:
         task.add_done_callback(functools.partial(self._callback))
         return task
 
-    async def put(self, coroutine: Union[functools.partial, Callable], name: Optional[str] = None) -> Generator[Future, None, Task]:
+    async def put(
+        self, coroutine: Union[functools.partial, Callable], name: Optional[str] = None
+    ) -> Generator[Future, None, Task]:
         """Adds a coroutine for immediate execution.
 
         If the number of running tasks reach `max_concurrency`, this
@@ -502,7 +518,9 @@ class ConcurrentTasks:
         await self._sem.acquire()
         return self._add_task(coroutine, name=name)
 
-    def try_put(self, coroutine: functools.partial, name: Optional[str] = None) -> Optional[Task]:
+    def try_put(
+        self, coroutine: functools.partial, name: Optional[str] = None
+    ) -> Optional[Task]:
         """Tries to add a coroutine for immediate execution.
 
         If the number of running tasks reach `max_concurrency`, this
@@ -554,7 +572,7 @@ def retryable(
     retries: int = 3,
     interval: float = 1.0,
     strategy: RetryStrategy = RetryStrategy.LINEAR_BACKOFF,
-    skipped_exceptions: Optional[Any]=None,
+    skipped_exceptions: Optional[Any] = None,
 ) -> Callable:
     def wrapper(func):
         if skipped_exceptions is None:
@@ -583,7 +601,13 @@ def retryable(
     return wrapper
 
 
-def retryable_async_function(func: Callable, retries: int, interval: Union[float, int], strategy: RetryStrategy, skipped_exceptions: List[Any]) -> Callable:
+def retryable_async_function(
+    func: Callable,
+    retries: int,
+    interval: Union[float, int],
+    strategy: RetryStrategy,
+    skipped_exceptions: List[Any],
+) -> Callable:
     @functools.wraps(func)
     async def wrapped(*args, **kwargs):
         retry = 1
@@ -604,7 +628,13 @@ def retryable_async_function(func: Callable, retries: int, interval: Union[float
     return wrapped
 
 
-def retryable_async_generator(func: Callable, retries: int, interval: Union[float, int], strategy: RetryStrategy, skipped_exceptions: List[Any]) -> Callable:
+def retryable_async_generator(
+    func: Callable,
+    retries: int,
+    interval: Union[float, int],
+    strategy: RetryStrategy,
+    skipped_exceptions: List[Any],
+) -> Callable:
     @functools.wraps(func)
     async def wrapped(*args, **kwargs):
         retry = 1
@@ -628,7 +658,13 @@ def retryable_async_generator(func: Callable, retries: int, interval: Union[floa
     return wrapped
 
 
-def retryable_sync_function(func: Callable, retries: int, interval: int, strategy: RetryStrategy, skipped_exceptions: List[Any]) -> Callable:
+def retryable_sync_function(
+    func: Callable,
+    retries: int,
+    interval: int,
+    strategy: RetryStrategy,
+    skipped_exceptions: List[Any],
+) -> Callable:
     @functools.wraps(func)
     def wrapped(*args, **kwargs):
         retry = 1
@@ -647,7 +683,9 @@ def retryable_sync_function(func: Callable, retries: int, interval: int, strateg
     return wrapped
 
 
-def time_to_sleep_between_retries(strategy: Union[RetryStrategy, str], interval: Union[float, int], retry: int) -> Union[float, int]:
+def time_to_sleep_between_retries(
+    strategy: Union[RetryStrategy, str], interval: Union[float, int], retry: int
+) -> Union[float, int]:
     match strategy:
         case RetryStrategy.CONSTANT:
             return interval
@@ -785,7 +823,10 @@ def has_duplicates(strings_list: List[Union[str, Any]]) -> bool:
     return False
 
 
-def filter_nested_dict_by_keys(key_list: List[Union[str, Any]], source_dict: Dict[str, Union[Dict[str, int], Dict[Any, Any]]]) -> Dict[str, Union[Dict[str, int], Dict[Any, Any]]]:
+def filter_nested_dict_by_keys(
+    key_list: List[Union[str, Any]],
+    source_dict: Dict[str, Union[Dict[str, int], Dict[Any, Any]]],
+) -> Dict[str, Union[Dict[str, int], Dict[Any, Any]]]:
     """Filters a nested dict by the keys of the sub-level dict.
     This is used for checking if any configuration fields are missing properties.
 
@@ -804,7 +845,9 @@ def filter_nested_dict_by_keys(key_list: List[Union[str, Any]], source_dict: Dic
     return filtered_dict
 
 
-def deep_merge_dicts(base_dict: Dict[str, Any], new_dict: Dict[str, Any]) -> Dict[str, Any]:
+def deep_merge_dicts(
+    base_dict: Dict[str, Any], new_dict: Dict[str, Any]
+) -> Dict[str, Any]:
     """Deep merges two nested dicts.
 
     Args:
@@ -855,7 +898,9 @@ class CacheWithTimeout:
 
         return None
 
-    def set_value(self, value: str, expiration_date: Union[FakeDatetime, float, datetime]) -> None:
+    def set_value(
+        self, value: str, expiration_date: Union[FakeDatetime, float, datetime]
+    ) -> None:
         """Set the value in the cache with expiration date.
 
         Once expiration_date is past due, the value will be lost.
@@ -884,7 +929,12 @@ async def aenumerate(asequence: _TracedAsyncGenerator, start: int = 0) -> None:
             i += 1
 
 
-def iterable_batches_generator(iterable: List[Union[Dict[str, str], Dict[str, Union[Dict[str, str], str]], int, Any]], batch_size: int) -> Iterator[List[Union[Dict[str, str], Dict[str, Union[Dict[str, str], str]], int]]]:
+def iterable_batches_generator(
+    iterable: List[
+        Union[Dict[str, str], Dict[str, Union[Dict[str, str], str]], int, Any]
+    ],
+    batch_size: int,
+) -> Iterator[List[Union[Dict[str, str], Dict[str, Union[Dict[str, str], str]], int]]]:
     """Iterate over an iterable in batches.
 
     If the batch size is bigger than the number of remaining elements then all remaining elements will be returned.
@@ -902,7 +952,15 @@ def iterable_batches_generator(iterable: List[Union[Dict[str, str], Dict[str, Un
         yield iterable[idx : min(idx + batch_size, num_items)]
 
 
-def dict_slice(hsh: Dict[str, Union[bool, str, int]], keys: Union[Tuple[str, str, str, str], Tuple[str, str, str, str, str, str], Tuple[str, str, str, str, str, str, str]], default: None=None) -> Dict[str, Optional[Union[str, int]]]:
+def dict_slice(
+    hsh: Dict[str, Union[bool, str, int]],
+    keys: Union[
+        Tuple[str, str, str, str],
+        Tuple[str, str, str, str, str, str],
+        Tuple[str, str, str, str, str, str, str],
+    ],
+    default: None = None,
+) -> Dict[str, Optional[Union[str, int]]]:
     """
     Slice a dict by a subset of its keys.
     :param hsh: The input dictionary to slice
@@ -974,7 +1032,9 @@ def shorten_str(string: Optional[str], shorten_by: int) -> str:
         return f"{string[:keep + 1]}...{string[-keep:]}"
 
 
-def func_human_readable_name(func: Union[AsyncMock, functools.partial, Callable]) -> str:
+def func_human_readable_name(
+    func: Union[AsyncMock, functools.partial, Callable],
+) -> str:
     if isinstance(func, functools.partial):
         return func.func.__name__
 
@@ -984,7 +1044,11 @@ def func_human_readable_name(func: Union[AsyncMock, functools.partial, Callable]
         return str(func)
 
 
-def nested_get_from_dict(dictionary: Any, keys: Union[List[str], Tuple[str, str]], default: Optional[Union[bool, str, float]]=None) -> Any:
+def nested_get_from_dict(
+    dictionary: Any,
+    keys: Union[List[str], Tuple[str, str]],
+    default: Optional[Union[bool, str, float]] = None,
+) -> Any:
     def nested_get(dictionary_, keys_, default_=None):
         if dictionary_ is None:
             return default_
@@ -1000,7 +1064,9 @@ def nested_get_from_dict(dictionary: Any, keys: Union[List[str], Tuple[str, str]
     return nested_get(dictionary, keys, default)
 
 
-def sanitize(doc: Dict[str, Union[int, datetime, str]]) -> Dict[str, Union[datetime, str]]:
+def sanitize(
+    doc: Dict[str, Union[int, datetime, str]],
+) -> Dict[str, Union[datetime, str]]:
     if doc["_id"]:
         # guarantee that IDs are strings, and not numeric
         doc["_id"] = str(doc["_id"])
@@ -1017,7 +1083,9 @@ class Counters:
     def __init__(self) -> None:
         self._storage = {}
 
-    def increment(self, key: str, value: int = 1, namespace: Optional[str]=None) -> None:
+    def increment(
+        self, key: str, value: int = 1, namespace: Optional[str] = None
+    ) -> None:
         if namespace:
             key = f"{namespace}.{key}"
         self._storage[key] = self._storage.get(key, 0) + value
@@ -1066,7 +1134,9 @@ class ErrorMonitor:
         self.total_success_count += 1
         self._update_error_window(False)
 
-    def track_error(self, error: Union[InvalidIndexNameError, DocumentIngestionError, Exception]) -> None:
+    def track_error(
+        self, error: Union[InvalidIndexNameError, DocumentIngestionError, Exception]
+    ) -> None:
         self.total_error_count += 1
         self.consecutive_error_count += 1
 

@@ -9,7 +9,8 @@ import json
 import re
 from copy import deepcopy
 from functools import cached_property
-from typing import Iterator, Optional, Tuple, Dict, List, Union
+from typing import Dict, Iterator, List, Optional, Tuple, Union
+from unittest.mock import AsyncMock
 
 import aiohttp
 from aiohttp.client import ClientSession
@@ -20,14 +21,17 @@ from graphql.language.source import Source
 from graphql.language.visitor import Visitor
 
 from connectors.logger import logger
-from connectors.source import DataSourceConfiguration, BaseDataSource, ConfigurableFieldValueError
+from connectors.source import (
+    BaseDataSource,
+    ConfigurableFieldValueError,
+    DataSourceConfiguration,
+)
 from connectors.utils import (
     CancellableSleeps,
     RetryStrategy,
     iso_utc,
     retryable,
 )
-from unittest.mock import AsyncMock
 
 RETRIES = 3
 RETRY_INTERVAL = 2
@@ -124,7 +128,19 @@ class GraphQLClient:
                 raise_for_status=True,
             )
 
-    def extract_graphql_data_items(self, data: Dict[str, Union[Dict[str, str], Dict[str, Union[str, Dict[str, str], Dict[str, Union[bool, str]]]], List[Dict[str, str]], Dict[str, Dict[str, str]], List[Dict[str, Union[Dict[str, str], str]]]]]) -> Iterator[Dict[str, Union[str, Dict[str, str], Dict[str, Union[bool, str]]]]]:
+    def extract_graphql_data_items(
+        self,
+        data: Dict[
+            str,
+            Union[
+                Dict[str, str],
+                Dict[str, Union[str, Dict[str, str], Dict[str, Union[bool, str]]]],
+                List[Dict[str, str]],
+                Dict[str, Dict[str, str]],
+                List[Dict[str, Union[Dict[str, str], str]]],
+            ],
+        ],
+    ) -> Iterator[Dict[str, Union[str, Dict[str, str], Dict[str, Union[bool, str]]]]]:
         """Returns sub objects from the response based on graphql_object_to_id_map
 
         Args:
@@ -159,7 +175,16 @@ class GraphQLClient:
                     doc["_id"] = doc.get(field_id)
                     yield doc
 
-    def extract_pagination_info(self, data: Dict[str, Union[Dict[str, Dict[str, str]], Dict[str, Union[str, Dict[str, str], Dict[str, Union[bool, str]]]]]]) -> Tuple[bool, str, str]:
+    def extract_pagination_info(
+        self,
+        data: Dict[
+            str,
+            Union[
+                Dict[str, Dict[str, str]],
+                Dict[str, Union[str, Dict[str, str], Dict[str, Union[bool, str]]]],
+            ],
+        ],
+    ) -> Tuple[bool, str, str]:
         pagination_key_path = self.pagination_key.split(".")
         for key in pagination_key_path:
             if isinstance(data, dict):
@@ -185,7 +210,9 @@ class GraphQLClient:
             msg = "Pagination is enabled but the query is missing 'pageInfo'. Please include 'pageInfo { hasNextPage endCursor }' in the query to support pagination."
             raise ConfigurableFieldValueError(msg)
 
-    def validate_paginated_query(self, graphql_query: str, visitor: FieldVisitor) -> None:
+    def validate_paginated_query(
+        self, graphql_query: str, visitor: FieldVisitor
+    ) -> None:
         graphql_object = self.pagination_key.split(".")[-1]
         self._logger.debug(f"Finding pageInfo field in {graphql_object}.")
         if not (
@@ -232,7 +259,13 @@ class GraphQLClient:
         interval=RETRY_INTERVAL,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
-    async def make_request(self, graphql_query: str) -> Union[AsyncMock, Dict[str, Dict[str, Union[str, Dict[str, str], Dict[str, Union[bool, str]]]]], Dict[str, List[Dict[str, Union[Dict[str, str], str]]]]]:
+    async def make_request(
+        self, graphql_query: str
+    ) -> Union[
+        AsyncMock,
+        Dict[str, Dict[str, Union[str, Dict[str, str], Dict[str, Union[bool, str]]]]],
+        Dict[str, List[Dict[str, Union[Dict[str, str], str]]]],
+    ]:
         try:
             if self.http_method == GET:
                 return await self.get(graphql_query=graphql_query)
@@ -449,7 +482,11 @@ class GraphQLDataSource(BaseDataSource):
         return False
 
     def check_field_existence(
-        self, ast: DocumentNode, field_path: str, graphql_field_id: Optional[str]=None, check_id: bool = False
+        self,
+        ast: DocumentNode,
+        field_path: str,
+        graphql_field_id: Optional[str] = None,
+        check_id: bool = False,
     ) -> Tuple[bool, bool]:
         def traverse(selections, path):
             for selection in selections:
@@ -568,7 +605,10 @@ class GraphQLDataSource(BaseDataSource):
             self._logger.exception("Error while connecting to GraphQL Instance.")
             raise
 
-    def yield_dict(self, documents: Dict[str, Union[str, Dict[str, str], Dict[str, Union[bool, str]]]]) -> Iterator[Dict[str, Union[str, Dict[str, str], Dict[str, Union[bool, str]]]]]:
+    def yield_dict(
+        self,
+        documents: Dict[str, Union[str, Dict[str, str], Dict[str, Union[bool, str]]]],
+    ) -> Iterator[Dict[str, Union[str, Dict[str, str], Dict[str, Union[bool, str]]]]]:
         if isinstance(documents, dict):
             yield documents
         elif isinstance(documents, list):
@@ -589,7 +629,7 @@ class GraphQLDataSource(BaseDataSource):
                 for document in self.yield_dict(data):
                     yield document
 
-    async def get_docs(self, filtering: None=None):
+    async def get_docs(self, filtering: None = None):
         """Executes the logic to fetch GraphQL response in async manner.
 
         Args:

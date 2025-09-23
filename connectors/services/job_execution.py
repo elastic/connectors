@@ -4,6 +4,8 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 from functools import cached_property
+from typing import Dict, List, Union
+from unittest.mock import Mock
 
 from connectors.es.client import License
 from connectors.es.index import DocumentNotFoundError
@@ -17,14 +19,33 @@ from connectors.services.base import BaseService
 from connectors.source import get_source_klass
 from connectors.sync_job_runner import SyncJobRunner
 from connectors.utils import ConcurrentTasks
-from typing import Dict, List, Union
-from unittest.mock import Mock
 
 
 class JobExecutionService(BaseService):
     name = "execute"
 
-    def __init__(self, config: Dict[str, Union[str, Dict[str, Union[float, int, str]], List[Dict[str, str]], Dict[str, str], Dict[str, Union[str, bool, Dict[str, Union[int, bool, Dict[str, Union[bool, int, float]]]], int]]]], service_name: str) -> None:
+    def __init__(
+        self,
+        config: Dict[
+            str,
+            Union[
+                str,
+                Dict[str, Union[float, int, str]],
+                List[Dict[str, str]],
+                Dict[str, str],
+                Dict[
+                    str,
+                    Union[
+                        str,
+                        bool,
+                        Dict[str, Union[int, bool, Dict[str, Union[bool, int, float]]]],
+                        int,
+                    ],
+                ],
+            ],
+        ],
+        service_name: str,
+    ) -> None:
         super().__init__(config, service_name)
         self.idling = self.service_config["idling"]
         self.source_list = config["sources"]

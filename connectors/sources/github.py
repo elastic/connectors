@@ -7,9 +7,10 @@
 
 import json
 import time
+from _asyncio import Future, Task
 from enum import Enum
 from functools import cached_property, partial
-from typing import Generator, Iterator, Set, Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, Generator, Iterator, List, Optional, Set, Tuple, Union
 
 import aiohttp
 import fastjsonschema
@@ -33,7 +34,11 @@ from connectors.filtering.validation import (
     SyncRuleValidationResult,
 )
 from connectors.logger import logger
-from connectors.source import DataSourceConfiguration, BaseDataSource, ConfigurableFieldValueError
+from connectors.source import (
+    BaseDataSource,
+    ConfigurableFieldValueError,
+    DataSourceConfiguration,
+)
 from connectors.utils import (
     CancellableSleeps,
     RetryStrategy,
@@ -42,7 +47,6 @@ from connectors.utils import (
     retryable,
     ssl_context,
 )
-from _asyncio import Future, Task
 
 WILDCARD = "*"
 BLOB = "blob"
@@ -777,7 +781,9 @@ class GitHubClient:
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
         skipped_exceptions=UnauthorizedException,
     )
-    async def graphql(self, query: str, variables: Optional[Dict[str, str]]=None) -> Generator[Task, None, Dict[str, str]]:
+    async def graphql(
+        self, query: str, variables: Optional[Dict[str, str]] = None
+    ) -> Generator[Task, None, Dict[str, str]]:
         """Invoke GraphQL request to fetch repositories, pull requests, and issues.
 
         Args:
@@ -836,7 +842,9 @@ class GitHubClient:
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
         skipped_exceptions=UnauthorizedException,
     )
-    async def get_github_item(self, resource: str) -> Dict[str, Union[str, int, Dict[str, Dict[str, int]]]]:
+    async def get_github_item(
+        self, resource: str
+    ) -> Dict[str, Union[str, int, Dict[str, Dict[str, int]]]]:
         """Execute request using getitem method of GitHubAPI which is using REST API.
         Using Rest API for fetching files and folder along with content.
 
@@ -874,7 +882,9 @@ class GitHubClient:
             )
             raise
 
-    async def paginated_api_call(self, query: str, variables: Dict[str, Optional[str]], keys: List[str]):
+    async def paginated_api_call(
+        self, query: str, variables: Dict[str, Optional[str]], keys: List[str]
+    ):
         """Make a paginated API call for fetching GitHub objects.
 
         Args:
@@ -1043,7 +1053,9 @@ class GitHubClient:
         await self._get_session.close()
         del self._get_session
 
-    def bifurcate_repos(self, repos: List[str], owner: str) -> Tuple[List[str], List[str]]:
+    def bifurcate_repos(
+        self, repos: List[str], owner: str
+    ) -> Tuple[List[str], List[str]]:
         foreign_repos, configured_repos = [], []
         for repo_name in repos:
             if repo_name not in ["", None]:
@@ -1082,7 +1094,14 @@ class GitHubAdvancedRulesValidator(AdvancedRulesValidator):
     def __init__(self, source: "GitHubDataSource") -> None:
         self.source = source
 
-    async def validate(self, advanced_rules: Union[List[Dict[str, Dict[str, str]]], List[Dict[str, Union[Dict[str, str], str]]], List[Dict[str, Union[str, List[Dict[str, str]]]]]]) -> SyncRuleValidationResult:
+    async def validate(
+        self,
+        advanced_rules: Union[
+            List[Dict[str, Dict[str, str]]],
+            List[Dict[str, Union[Dict[str, str], str]]],
+            List[Dict[str, Union[str, List[Dict[str, str]]]]],
+        ],
+    ) -> SyncRuleValidationResult:
         if len(advanced_rules) == 0:
             return SyncRuleValidationResult.valid_result(
                 SyncRuleValidationResult.ADVANCED_RULES
@@ -1090,7 +1109,12 @@ class GitHubAdvancedRulesValidator(AdvancedRulesValidator):
 
         return await self._remote_validation(advanced_rules)
 
-    async def _remote_validation(self, advanced_rules: List[Dict[str, Union[Dict[str, str], str, List[Dict[str, str]]]]]) -> SyncRuleValidationResult:
+    async def _remote_validation(
+        self,
+        advanced_rules: List[
+            Dict[str, Union[Dict[str, str], str, List[Dict[str, str]]]]
+        ],
+    ) -> SyncRuleValidationResult:
         try:
             GitHubAdvancedRulesValidator.SCHEMA(advanced_rules)
         except fastjsonschema.JsonSchemaValueException as e:
@@ -1356,7 +1380,9 @@ class GitHubDataSource(BaseDataSource):
 
         return list(invalid_repos)
 
-    async def _get_repo_object_for_github_app(self, owner: str, repo_name: str) -> Optional[Dict[str, str]]:
+    async def _get_repo_object_for_github_app(
+        self, owner: str, repo_name: str
+    ) -> Optional[Dict[str, str]]:
         await self._fetch_installations()
         full_repo_name = f"{owner}/{repo_name}"
         if owner not in self._installations:
@@ -1541,13 +1567,19 @@ class GitHubDataSource(BaseDataSource):
             self._logger.exception("Error while connecting to GitHub.")
             raise
 
-    def adapt_gh_doc_to_es_doc(self, github_document: Dict[str, Union[str, int]], schema: Dict[str, str]) -> Dict[str, Union[str, int]]:
+    def adapt_gh_doc_to_es_doc(
+        self, github_document: Dict[str, Union[str, int]], schema: Dict[str, str]
+    ) -> Dict[str, Union[str, int]]:
         return {
             es_field: github_document[github_field]
             for es_field, github_field in schema.items()
         }
 
-    def _prepare_pull_request_doc(self, pull_request: Dict[str, Any], reviews: List[Dict[str, Union[str, List[Dict[str, str]]]]]) -> Dict[str, Any]:
+    def _prepare_pull_request_doc(
+        self,
+        pull_request: Dict[str, Any],
+        reviews: List[Dict[str, Union[str, List[Dict[str, str]]]]],
+    ) -> Dict[str, Any]:
         return {
             "_id": pull_request.pop("id"),
             "_timestamp": pull_request.pop("updatedAt"),
@@ -1569,7 +1601,19 @@ class GitHubDataSource(BaseDataSource):
             "assignees_list": issue.get("assignees", {}).get("nodes"),
         }
 
-    def _prepare_review_doc(self, review: Dict[str, Optional[Union[Dict[str, str], str, Dict[str, Union[Dict[str, Union[bool, str]], List[Dict[str, str]]]]]]]) -> Dict[str, Any]:
+    def _prepare_review_doc(
+        self,
+        review: Dict[
+            str,
+            Optional[
+                Union[
+                    Dict[str, str],
+                    str,
+                    Dict[str, Union[Dict[str, Union[bool, str]], List[Dict[str, str]]]],
+                ]
+            ],
+        ],
+    ) -> Dict[str, Any]:
         # review.author can be None if the user was deleted, so need to be extra null-safe
         author = review.get("author", {}) or {}
 
@@ -1696,7 +1740,9 @@ class GitHubDataSource(BaseDataSource):
                 exc_info=True,
             )
 
-    def _convert_repo_object_to_doc(self, repo_object: Dict[str, str]) -> Dict[str, str]:
+    def _convert_repo_object_to_doc(
+        self, repo_object: Dict[str, str]
+    ) -> Dict[str, str]:
         repo_object = repo_object.copy()
         repo_object.update(
             {
@@ -1718,7 +1764,12 @@ class GitHubDataSource(BaseDataSource):
             )
 
     async def _fetch_remaining_fields(
-        self, type_obj: Dict[str, Any], object_type: str, owner: str, repo: str, field_type: str
+        self,
+        type_obj: Dict[str, Any],
+        object_type: str,
+        owner: str,
+        repo: str,
+        field_type: str,
     ) -> None:
         sample_dict = {
             "reviews": {
@@ -1771,7 +1822,9 @@ class GitHubDataSource(BaseDataSource):
                 else:
                     type_obj[sample_dict[field_type]["es_field"]].extend(response)
 
-    async def _extract_pull_request(self, pull_request: Dict[str, Any], owner: str, repo: str):
+    async def _extract_pull_request(
+        self, pull_request: Dict[str, Any], owner: str, repo: str
+    ):
         reviews = [
             self._prepare_review_doc(review=review)
             for review in pull_request.get("reviews", {}).get("nodes")
@@ -1794,7 +1847,7 @@ class GitHubDataSource(BaseDataSource):
         self,
         repo_name: str,
         response_key: List[str],
-        filter_query: None=None,
+        filter_query: None = None,
     ) -> None:
         self._logger.info(
             f"Fetching pull requests from '{repo_name}' with response_key '{response_key}' and filter query: '{filter_query}'"
@@ -1854,7 +1907,7 @@ class GitHubDataSource(BaseDataSource):
         self,
         repo_name: str,
         response_key: List[str],
-        filter_query: None=None,
+        filter_query: None = None,
     ):
         self._logger.info(
             f"Fetching issues from repo: {repo_name} with response_key: '{response_key}' and filter_query: '{filter_query}'"
@@ -1899,7 +1952,12 @@ class GitHubDataSource(BaseDataSource):
         )
         return commit["commit"]["committer"]["date"]
 
-    async def _format_file_document(self, repo_object: Dict[str, Union[str, int]], repo_name: str, schema: Dict[str, str]) -> Tuple[Dict[str, Union[int, str]], Dict[str, Union[int, str]]]:
+    async def _format_file_document(
+        self,
+        repo_object: Dict[str, Union[str, int]],
+        repo_name: str,
+        schema: Dict[str, str],
+    ) -> Tuple[Dict[str, Union[int, str]], Dict[str, Union[int, str]]]:
         file_name = repo_object["path"].split("/")[-1]
         file_extension = (
             file_name[file_name.rfind(".") :] if "." in file_name else ""  # noqa
@@ -1976,7 +2034,12 @@ class GitHubDataSource(BaseDataSource):
                 exc_info=True,
             )
 
-    async def get_content(self, attachment: Dict[str, Union[str, int]], timestamp: None=None, doit: bool = False) -> Generator[Future, None, Optional[Dict[str, str]]]:
+    async def get_content(
+        self,
+        attachment: Dict[str, Union[str, int]],
+        timestamp: None = None,
+        doit: bool = False,
+    ) -> Generator[Future, None, Optional[Dict[str, str]]]:
         """Extracts the content for Apache TIKA supported file types.
 
         Args:
@@ -2017,7 +2080,9 @@ class GitHubDataSource(BaseDataSource):
         else:
             yield
 
-    def _filter_rule_query(self, repo: str, query: str, query_type: str) -> Tuple[bool, str]:
+    def _filter_rule_query(
+        self, repo: str, query: str, query_type: str
+    ) -> Tuple[bool, str]:
         """
         Filters a query based on the query type.
 
@@ -2050,7 +2115,9 @@ class GitHubDataSource(BaseDataSource):
         self.prev_repos.append(repo_name)
         return False
 
-    def _decorate_with_access_control(self, document: Dict[str, Any], access_control: List[str]) -> Dict[str, Any]:
+    def _decorate_with_access_control(
+        self, document: Dict[str, Any], access_control: List[str]
+    ) -> Dict[str, Any]:
         if self._dls_enabled():
             document[ACCESS_CONTROL] = list(
                 set(document.get(ACCESS_CONTROL, []) + access_control)

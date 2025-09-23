@@ -4,8 +4,21 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import asyncio
+from _asyncio import Future, Task
+from asyncio.tasks import _GatheringFuture
 from functools import cached_property, partial
-from typing import Callable, Generator, Iterator, Tuple, Any, Dict, List, Optional, Union
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Generator,
+    Iterator,
+    List,
+    Optional,
+    Tuple,
+    Union,
+)
+from unittest.mock import AsyncMock, MagicMock
 
 from aiogoogle import HTTPError
 
@@ -16,9 +29,10 @@ from connectors.access_control import (
 )
 from connectors.es.sink import OP_DELETE, OP_INDEX
 from connectors.source import (
-    DataSourceConfiguration, CURSOR_SYNC_TIMESTAMP,
+    CURSOR_SYNC_TIMESTAMP,
     BaseDataSource,
     ConfigurableFieldValueError,
+    DataSourceConfiguration,
 )
 from connectors.sources.google import (
     GoogleServiceAccountClient,
@@ -32,9 +46,6 @@ from connectors.utils import (
     iso_zulu,
     validate_email_address,
 )
-from _asyncio import Future, Task
-from asyncio.tasks import _GatheringFuture
-from unittest.mock import AsyncMock, MagicMock
 
 GOOGLE_DRIVE_SERVICE_NAME = "Google Drive"
 GOOGLE_ADMIN_DIRECTORY_SERVICE_NAME = "Google Admin Directory"
@@ -70,7 +81,7 @@ class SyncCursorEmpty(Exception):
 class GoogleDriveClient(GoogleServiceAccountClient):
     """A google drive client to handle api calls made to Google Drive API."""
 
-    def __init__(self, json_credentials: Dict[str, str], subject: None=None) -> None:
+    def __init__(self, json_credentials: Dict[str, str], subject: None = None) -> None:
         """Initialize the GoogleApiClient superclass.
 
         Args:
@@ -92,7 +103,9 @@ class GoogleDriveClient(GoogleServiceAccountClient):
             api_timeout=DRIVE_API_TIMEOUT,
         )
 
-    async def ping(self) -> Generator[Optional[Union[_GatheringFuture, Task]], None, Future]:
+    async def ping(
+        self,
+    ) -> Generator[Optional[Union[_GatheringFuture, Task]], None, Future]:
         return await self.api_call(resource="about", method="get", fields="kind")
 
     async def list_drives(self) -> Iterator[_GatheringFuture]:
@@ -110,7 +123,9 @@ class GoogleDriveClient(GoogleServiceAccountClient):
         ):
             yield drive
 
-    async def get_all_drives(self) -> Generator[Union[_GatheringFuture, Task], None, Dict[Any, Any]]:
+    async def get_all_drives(
+        self,
+    ) -> Generator[Union[_GatheringFuture, Task], None, Dict[Any, Any]]:
         """Retrieves all shared drives from Google Drive
 
         Returns:
@@ -142,7 +157,11 @@ class GoogleDriveClient(GoogleServiceAccountClient):
         ):
             yield folder
 
-    async def get_all_folders(self) -> Generator[Union[_GatheringFuture, Task], None, Dict[str, Dict[str, Union[str, List[str]]]]]:
+    async def get_all_folders(
+        self,
+    ) -> Generator[
+        Union[_GatheringFuture, Task], None, Dict[str, Dict[str, Union[str, List[str]]]]
+    ]:
         """Retrieves all folders from Google Drive
 
         Returns:
@@ -475,7 +494,7 @@ class GoogleDriveDataSource(BaseDataSource):
             },
         }
 
-    def google_drive_client(self, impersonate_email: None=None) -> GoogleDriveClient:
+    def google_drive_client(self, impersonate_email: None = None) -> GoogleDriveClient:
         """
         Initialize and return an instance of the GoogleDriveClient.
 
@@ -673,10 +692,33 @@ class GoogleDriveDataSource(BaseDataSource):
         """Get maximum concurrent open connections from the user config"""
         return self.configuration.get("max_concurrency") or GOOGLE_API_MAX_CONCURRENCY
 
-    def access_control_query(self, access_control: List[str]) -> Dict[str, Dict[str, Dict[str, Union[str, Dict[str, List[str]]]]]]:
+    def access_control_query(
+        self, access_control: List[str]
+    ) -> Dict[str, Dict[str, Dict[str, Union[str, Dict[str, List[str]]]]]]:
         return es_access_control_query(access_control)
 
-    async def _process_items_concurrently(self, items: List[Dict[str, Union[str, bool, List[str], Dict[str, str]]]], process_item_func: Union[AsyncMock, Callable]) -> Generator[_GatheringFuture, None, List[Union[Dict[str, Union[Dict[str, str], str]], Dict[str, Union[str, Dict[str, str], Dict[str, Dict[str, Union[str, Dict[str, List[str]]]]]]], Tuple[Dict[str, Optional[Union[str, bool]]], None]]]]:
+    async def _process_items_concurrently(
+        self,
+        items: List[Dict[str, Union[str, bool, List[str], Dict[str, str]]]],
+        process_item_func: Union[AsyncMock, Callable],
+    ) -> Generator[
+        _GatheringFuture,
+        None,
+        List[
+            Union[
+                Dict[str, Union[Dict[str, str], str]],
+                Dict[
+                    str,
+                    Union[
+                        str,
+                        Dict[str, str],
+                        Dict[str, Dict[str, Union[str, Dict[str, List[str]]]]],
+                    ],
+                ],
+                Tuple[Dict[str, Optional[Union[str, bool]]], None],
+            ]
+        ],
+    ]:
         """Process a list of items concurrently using a semaphore for concurrency control.
 
         This function applies the `process_item_func` to each item in the `items` list
@@ -709,7 +751,9 @@ class GoogleDriveDataSource(BaseDataSource):
         # Gather the results of all tasks concurrently
         return await asyncio.gather(*tasks)
 
-    async def prepare_single_access_control_document(self, user: Dict[str, Union[Dict[str, str], str]]) -> Dict[str, Any]:
+    async def prepare_single_access_control_document(
+        self, user: Dict[str, Union[Dict[str, str], str]]
+    ) -> Dict[str, Any]:
         """Generate access control document for a single user. Fetch group memberships for a given user.
         Generate a user_access_control query that includes information about user email, groups and domain.
 
@@ -778,7 +822,11 @@ class GoogleDriveDataSource(BaseDataSource):
 
     async def resolve_paths(
         self, google_drive_client: Optional[GoogleDriveClient] = None
-    ) -> Generator[Union[_GatheringFuture, Task], None, Dict[str, Union[Dict[str, Union[str, List[str]]], Dict[str, str]]]]:
+    ) -> Generator[
+        Union[_GatheringFuture, Task],
+        None,
+        Dict[str, Union[Dict[str, Union[str, List[str]]], Dict[str, str]]],
+    ]:
         """Builds a lookup between a folder id and its absolute path in Google Drive structure
 
         Returns:
@@ -819,7 +867,12 @@ class GoogleDriveDataSource(BaseDataSource):
 
         return folders
 
-    async def _download_content(self, file: Dict[str, Optional[Union[str, int]]], file_extension: str, download_func: partial) -> Generator[Union[Future, _GatheringFuture], None, Tuple[str, None, int]]:
+    async def _download_content(
+        self,
+        file: Dict[str, Optional[Union[str, int]]],
+        file_extension: str,
+        download_func: partial,
+    ) -> Generator[Union[Future, _GatheringFuture], None, Tuple[str, None, int]]:
         """Downloads the file from Google Drive and returns the encoded file content.
 
         Args:
@@ -848,7 +901,10 @@ class GoogleDriveDataSource(BaseDataSource):
         return attachment, body, file_size
 
     async def get_google_workspace_content(
-        self, client: GoogleDriveClient, file: Dict[str, Optional[Union[str, int]]], timestamp: None=None
+        self,
+        client: GoogleDriveClient,
+        file: Dict[str, Optional[Union[str, int]]],
+        timestamp: None = None,
     ) -> Optional[Dict[str, Any]]:
         """Exports Google Workspace documents to an allowed file type and extracts its text content.
 
@@ -903,7 +959,10 @@ class GoogleDriveDataSource(BaseDataSource):
         return document
 
     async def get_generic_file_content(
-        self, client: GoogleDriveClient, file: Dict[str, Optional[Union[str, int]]], timestamp: None=None
+        self,
+        client: GoogleDriveClient,
+        file: Dict[str, Optional[Union[str, int]]],
+        timestamp: None = None,
     ) -> Optional[Dict[str, Any]]:
         """Extracts the content from allowed file types supported by Apache Tika.
 
@@ -954,7 +1013,11 @@ class GoogleDriveDataSource(BaseDataSource):
         return document
 
     async def get_content(
-        self, client: GoogleDriveClient, file: Dict[str, Optional[Union[str, int]]], timestamp: Optional[str]=None, doit: Optional[bool]=None
+        self,
+        client: GoogleDriveClient,
+        file: Dict[str, Optional[Union[str, int]]],
+        timestamp: Optional[str] = None,
+        doit: Optional[bool] = None,
     ) -> Optional[Dict[str, Any]]:
         """Extracts the content from a file file.
 
@@ -983,7 +1046,9 @@ class GoogleDriveDataSource(BaseDataSource):
                 client, file, timestamp=timestamp
             )
 
-    async def _get_permissions_on_shared_drive(self, client: GoogleDriveClient, file_id: str) -> Generator[Union[_GatheringFuture, Task], None, List[Dict[str, str]]]:
+    async def _get_permissions_on_shared_drive(
+        self, client: GoogleDriveClient, file_id: str
+    ) -> Generator[Union[_GatheringFuture, Task], None, List[Dict[str, str]]]:
         """Retrieves the permissions on a shared drive for the given file ID.
 
         Args:
@@ -1000,7 +1065,9 @@ class GoogleDriveDataSource(BaseDataSource):
 
         return permissions
 
-    def _process_permissions(self, permissions: List[Dict[str, str]]) -> List[Optional[str]]:
+    def _process_permissions(
+        self, permissions: List[Dict[str, str]]
+    ) -> List[Optional[str]]:
         """Formats the access permission list for Google Drive object.
 
         Args:
@@ -1034,7 +1101,22 @@ class GoogleDriveDataSource(BaseDataSource):
 
         return processed_permissions
 
-    async def prepare_file(self, client: Union[GoogleDriveClient, MagicMock], file: Dict[str, Any], paths: Dict[str, Union[Dict[str, Union[str, List[str]]], Dict[str, str]]]) -> Generator[Union[_GatheringFuture, Task], None, Union[Tuple[Dict[str, Optional[Union[str, bool]]], None], Tuple[Dict[str, Optional[Union[str, List[str], bool]]], None], Tuple[Dict[str, Optional[Union[str, int, bool, List[str]]]], None], Tuple[Dict[str, Optional[Union[str, bool]]], str], Tuple[Dict[str, Optional[Union[str, int, bool]]], None]]]:
+    async def prepare_file(
+        self,
+        client: Union[GoogleDriveClient, MagicMock],
+        file: Dict[str, Any],
+        paths: Dict[str, Union[Dict[str, Union[str, List[str]]], Dict[str, str]]],
+    ) -> Generator[
+        Union[_GatheringFuture, Task],
+        None,
+        Union[
+            Tuple[Dict[str, Optional[Union[str, bool]]], None],
+            Tuple[Dict[str, Optional[Union[str, List[str], bool]]], None],
+            Tuple[Dict[str, Optional[Union[str, int, bool, List[str]]]], None],
+            Tuple[Dict[str, Optional[Union[str, bool]]], str],
+            Tuple[Dict[str, Optional[Union[str, int, bool]]], None],
+        ],
+    ]:
         """Apply key mappings to the file document.
 
         Args:
@@ -1224,7 +1306,7 @@ class GoogleDriveDataSource(BaseDataSource):
                 ):
                     yield file, partial(self.get_content, google_drive_client, file)
 
-    async def get_docs_incrementally(self, sync_cursor: None, filtering: None=None):
+    async def get_docs_incrementally(self, sync_cursor: None, filtering: None = None):
         """Executes the logic to fetch Google Drive objects incrementally in an async manner.
 
         Args:
