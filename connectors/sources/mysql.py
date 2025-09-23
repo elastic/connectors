@@ -232,9 +232,19 @@ class MySQLClient:
     async def yield_rows_for_table(self, table, primary_keys, table_row_count):
         offset = 0
         while offset < table_row_count:
-            async for row in self._fetchmany_in_batches(
-                f"SELECT * FROM `{self.database}`.`{table}` ORDER BY '{', '.join(primary_keys)}' LIMIT {self.fetch_size} OFFSET {offset}"
-            ):
+
+            primary_keys_str = ", ".join(f"`{pk}`" for pk in primary_keys)
+            pk_query = f"SELECT {primary_keys_str} FROM `{self.database}`.`{table}` ORDER BY {primary_keys_str} LIMIT {self.fetch_size} OFFSET {offset}"
+
+            # join back to get full rows
+            full_query = f"""
+                SELECT t.* 
+                FROM `{self.database}`.`{table}` t
+                JOIN ({pk_query}) pk_subset ON {' AND '.join(f"t.`{pk}` = pk_subset.`{pk}`" for pk in primary_keys)}
+                ORDER BY {", ".join(f"t.`{pk}`" for pk in primary_keys)}
+            """
+
+            async for row in self._fetchmany_in_batches(full_query):
                 if row:
                     yield row
                 else:
