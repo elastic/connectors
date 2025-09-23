@@ -13,14 +13,15 @@ executes the `main` function of this module, which starts the service.
 
 import os
 import sys
+
 # temporary, will remove once connectors_sdk/_protocol become importable packages
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 import asyncio
 import json
+
 import click
 import yaml
-
 from colorama import Fore, Style
 from simple_term_menu import TerminalMenu
 from tabulate import tabulate

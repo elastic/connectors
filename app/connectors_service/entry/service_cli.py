@@ -10,8 +10,10 @@ This is the main entry point of the framework. When the project is installed as
 a Python package, an `elastic-ingest` executable is added in the PATH and
 executes the `main` function of this module, which starts the service.
 """
+
 import os
 import sys
+
 # TEMPORARY, will remove once connectors_sdk/_protocol become importable packages
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
@@ -23,11 +25,11 @@ import signal
 
 import click
 from click import ClickException, UsageError
-
 from connectors_service.preflight_check import PreflightCheck
-from connectors.config import load_config
+
 from connectors import __version__
 from connectors.build_info import __build_info__
+from connectors.config import load_config
 from connectors.content_extraction import ContentExtraction
 from connectors.logger import logger, set_logger
 from connectors.services import get_services

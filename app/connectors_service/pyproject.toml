@@ -10,13 +10,13 @@ readme = "README.md"
 authors = [
     { name = "Search Extract and Transform Team", email = "enterprise-search-ingestion-team@elastic.co" }
 ]
-# classifiers = [
-#     "Programming Language :: Python",
-#     "Programming Language :: Python :: 3.10",
-#     "Programming Language :: Python :: 3.11",
-#     "License :: OSI Approved :: Apache Software License",
-#     "Programming Language :: Python :: 3 :: Only",
-# ]
+classifiers = [
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3 :: Only",
+]
 requires-python = ">=3.10,<3.12"
 dependencies = [
     "SQLAlchemy==2.0.1",
@@ -116,9 +116,6 @@ connectors = "connectors_cli:main"
 
 [tool.setuptools]
 packages = ["cli", "entry"]
-# [tool.setuptools.packages.find]
-# where = ["."]
-# include = ["service_cli*", "connectors_cli*"]
 
 [tool.setuptools.dynamic]
 version = {file = "VERSION"}

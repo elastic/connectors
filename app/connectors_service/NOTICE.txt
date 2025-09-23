@@ -3547,7 +3547,7 @@ Apache Software License
 
 elasticsearch-connectors-service
 9.2.0
-UNKNOWN
+Apache Software License
 UNKNOWN
 
 envyaml
