@@ -6,15 +6,20 @@
 """Zoom source module responsible to fetch documents from Zoom."""
 
 import os
+from _asyncio import Future, Task
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from functools import cached_property, partial
+from logging import Logger
+from typing import Any, Dict, Generator, List, Optional, Tuple, Union
 
 import aiohttp
+from aiohttp.client import ClientSession
 from aiohttp.client_exceptions import ClientResponseError
+from freezegun.api import FakeDatetime
 
-from connectors.logger import logger
-from connectors.source import BaseDataSource
+from connectors.logger import ExtraLogger, logger
+from connectors.source import BaseDataSource, DataSourceConfiguration
 from connectors.utils import (
     CacheWithTimeout,
     CancellableSleeps,
@@ -30,12 +35,12 @@ CHAT_PAGE_SIZE = 50
 MEETING_PAGE_SIZE = 300
 
 if "OVERRIDE_URL" in os.environ:
-    override_url = os.environ["OVERRIDE_URL"]
-    BASE_URL = override_url
-    BASE_AUTH_URL = override_url
+    override_url: str = os.environ["OVERRIDE_URL"]
+    BASE_URL: str = override_url
+    BASE_AUTH_URL: str = override_url
 else:
-    BASE_URL = "https://api.zoom.us/v2"
-    BASE_AUTH_URL = "https://zoom.us"
+    BASE_URL: str = "https://api.zoom.us/v2"
+    BASE_AUTH_URL: str = "https://zoom.us"
 
 AUTH = (
     "{base_auth_url}/oauth/token?grant_type=account_credentials&account_id={account_id}"
@@ -51,11 +56,11 @@ APIS = {
 }
 
 
-def format_recording_date(date):
+def format_recording_date(date: FakeDatetime) -> str:
     return date.strftime("%Y-%m-%d")
 
 
-def format_chat_date(date):
+def format_chat_date(date: FakeDatetime) -> str:
     return date.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
@@ -68,7 +73,12 @@ class ZoomResourceNotFound(Exception):
 
 
 class ZoomAPIToken:
-    def __init__(self, http_session, configuration, logger_):
+    def __init__(
+        self,
+        http_session: ClientSession,
+        configuration: DataSourceConfiguration,
+        logger_: Logger,
+    ) -> None:
         self._http_session = http_session
         self._token_cache = CacheWithTimeout()
         self._logger = logger_
@@ -76,10 +86,10 @@ class ZoomAPIToken:
         self.client_id = configuration["client_id"]
         self.client_secret = configuration["client_secret"]
 
-    def set_logger(self, logger_):
+    def set_logger(self, logger_) -> None:
         self._logger = logger_
 
-    async def get(self, is_cache=True):
+    async def get(self, is_cache: bool = True) -> Generator[Task, None, str]:
         cached_value = self._token_cache.get_value() if is_cache else None
 
         if cached_value:
@@ -96,7 +106,7 @@ class ZoomAPIToken:
         interval=RETRY_INTERVAL,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
-    async def _fetch_token(self):
+    async def _fetch_token(self) -> Tuple[str, int]:
         self._logger.debug("Generating access token.")
         url = AUTH.format(base_auth_url=BASE_AUTH_URL, account_id=self.account_id)
         content = f"{self.client_id}:{self.client_secret}"
@@ -120,17 +130,19 @@ class ZoomAPIToken:
 
 
 class ZoomAPISession:
-    def __init__(self, http_session, api_token, logger_):
+    def __init__(
+        self, http_session: ClientSession, api_token: ZoomAPIToken, logger_: ExtraLogger
+    ) -> None:
         self._sleeps = CancellableSleeps()
         self._logger = logger_
 
         self._http_session = http_session
         self._api_token = api_token
 
-    def set_logger(self, logger_):
+    def set_logger(self, logger_) -> None:
         self._logger = logger_
 
-    def close(self):
+    def close(self) -> None:
         self._sleeps.cancel()
 
     @asynccontextmanager
@@ -140,7 +152,7 @@ class ZoomAPISession:
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
         skipped_exceptions=ZoomResourceNotFound,
     )
-    async def _get(self, absolute_url):
+    async def _get(self, absolute_url: str):
         try:
             token = await self._api_token.get()
             headers = {
@@ -164,7 +176,7 @@ class ZoomAPISession:
         except Exception:
             raise
 
-    async def fetch(self, url):
+    async def fetch(self, url: str) -> Generator[Task, None, Any]:
         try:
             async with self._get(absolute_url=url) as response:
                 return await response.json()
@@ -173,7 +185,7 @@ class ZoomAPISession:
                 f"Data for {url} is being skipped. Error: {exception}."
             )
 
-    async def content(self, url):
+    async def content(self, url: str) -> Generator[Task, None, Optional[str]]:
         try:
             async with self._get(absolute_url=url) as response:
                 return await response.text()
@@ -182,7 +194,7 @@ class ZoomAPISession:
                 f"Content for {url} is being skipped. Error: {exception}."
             )
 
-    async def scroll(self, url):
+    async def scroll(self, url: str) -> None:
         scroll_url = url
 
         while True:
@@ -200,7 +212,7 @@ class ZoomAPISession:
 
 
 class ZoomClient:
-    def __init__(self, configuration):
+    def __init__(self, configuration: DataSourceConfiguration) -> None:
         self._sleeps = CancellableSleeps()
         self._logger = logger
 
@@ -218,12 +230,12 @@ class ZoomClient:
             logger_=self._logger,
         )
 
-    def set_logger(self, logger_):
+    def set_logger(self, logger_) -> None:
         self._logger = logger_
         self.api_token.set_logger(self._logger)
         self.api_client.set_logger(self._logger)
 
-    async def close(self):
+    async def close(self) -> None:
         await self.http_session.close()
         self.api_client.close()
 
@@ -244,7 +256,7 @@ class ZoomClient:
             for meeting in meetings.get("meetings", []) or []:
                 yield meeting
 
-    async def get_past_meeting(self, meeting_id):
+    async def get_past_meeting(self, meeting_id: str) -> Dict[str, str]:
         url = APIS["PAST_MEETING"].format(base_url=BASE_URL, meeting_id=meeting_id)
         return await self.api_client.fetch(url=url)
 
@@ -307,19 +319,28 @@ class ZoomDataSource(BaseDataSource):
     service_type = "zoom"
     incremental_sync_enabled = True
 
-    def __init__(self, configuration):
+    def __init__(self, configuration: DataSourceConfiguration) -> None:
         super().__init__(configuration=configuration)
         self.configuration = configuration
 
-    def _set_internal_logger(self):
+    def _set_internal_logger(self) -> None:
         self.client.set_logger(self._logger)
 
     @cached_property
-    def client(self):
+    def client(self) -> ZoomClient:
         return ZoomClient(configuration=self.configuration)
 
     @classmethod
-    def get_default_configuration(cls):
+    def get_default_configuration(
+        cls,
+    ) -> Dict[
+        str,
+        Union[
+            Dict[str, Union[List[Dict[str, Union[int, str]]], int, str]],
+            Dict[str, Union[List[str], int, str]],
+            Dict[str, Union[int, str]],
+        ],
+    ]:
         return {
             "account_id": {
                 "label": "Account ID",
@@ -364,11 +385,11 @@ class ZoomDataSource(BaseDataSource):
             },
         }
 
-    async def validate_config(self):
+    async def validate_config(self) -> None:
         await super().validate_config()
         await self.client.api_token.get()
 
-    async def ping(self):
+    async def ping(self) -> None:
         try:
             await self.client.api_token.get()
             self._logger.debug("Successfully connected to Zoom.")
@@ -376,10 +397,14 @@ class ZoomDataSource(BaseDataSource):
             self._logger.debug("Error while connecting to Zoom.")
             raise
 
-    async def close(self):
+    async def close(self) -> None:
         await self.client.close()
 
-    def _format_doc(self, doc, doc_time):
+    def _format_doc(
+        self,
+        doc: Dict[str, Union[str, int, List[Dict[str, str]]]],
+        doc_time: Optional[str],
+    ) -> Dict[str, Optional[Union[str, List[Dict[str, str]], int]]]:
         doc = self.serialize(doc=doc)
         doc.update(
             {
@@ -389,7 +414,12 @@ class ZoomDataSource(BaseDataSource):
         )
         return doc
 
-    async def get_content(self, chat_file, timestamp=None, doit=False):
+    async def get_content(
+        self,
+        chat_file: Dict[str, Union[int, str]],
+        timestamp: None = None,
+        doit: bool = False,
+    ) -> Generator[Future, None, Optional[Dict[str, str]]]:
         file_size = chat_file["file_size"]
         if not (doit and file_size > 0):
             return
@@ -417,7 +447,9 @@ class ZoomDataSource(BaseDataSource):
             ),
         )
 
-    async def fetch_previous_meeting_details(self, meeting_id):
+    async def fetch_previous_meeting_details(
+        self, meeting_id: str
+    ) -> Dict[str, Union[str, List[Dict[str, str]]]]:
         previous_meeting = await self.client.get_past_meeting(meeting_id=meeting_id)
 
         if not previous_meeting:

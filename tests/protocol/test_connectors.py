@@ -7,6 +7,7 @@ import json
 import os
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
+from typing import Dict, List, Union
 from unittest.mock import ANY, AsyncMock, Mock, patch
 
 import pytest
@@ -44,10 +45,10 @@ from connectors.source import BaseDataSource
 from connectors.utils import ACCESS_CONTROL_INDEX_PREFIX, iso_utc
 from tests.commons import AsyncIterator
 
-HERE = os.path.dirname(__file__)
-FIXTURES_DIR = os.path.abspath(os.path.join(HERE, "..", "fixtures"))
+HERE: str = os.path.dirname(__file__)
+FIXTURES_DIR: str = os.path.abspath(os.path.join(HERE, "..", "fixtures"))
 
-CONFIG = os.path.join(FIXTURES_DIR, "config.yml")
+CONFIG: str = os.path.join(FIXTURES_DIR, "config.yml")
 
 DEFAULT_DOMAIN = "DEFAULT"
 
@@ -175,15 +176,19 @@ FILTERING = [
 
 ADVANCED_RULES = {"db": {"table": "SELECT * FROM db.table"}}
 
-ADVANCED_RULES_NON_EMPTY = {"advanced_snippet": ADVANCED_RULES}
+ADVANCED_RULES_NON_EMPTY: Dict[str, Dict[str, Dict[str, str]]] = {
+    "advanced_snippet": ADVANCED_RULES
+}
 
 RULES = [
     {
         "id": 1,
     }
 ]
-BASIC_RULES_NON_EMPTY = {"rules": RULES}
-ADVANCED_AND_BASIC_RULES_NON_EMPTY = {
+BASIC_RULES_NON_EMPTY: Dict[str, List[Dict[str, int]]] = {"rules": RULES}
+ADVANCED_AND_BASIC_RULES_NON_EMPTY: Dict[
+    str, Union[Dict[str, Dict[str, str]], List[Dict[str, int]]]
+] = {
     "advanced_snippet": {"db": {"table": "SELECT * FROM db.table"}},
     "rules": RULES,
 }
@@ -193,14 +198,16 @@ SYNC_CURSOR = {"foo": "bar"}
 INDEX_NAME = "index_name"
 
 
-def test_utc():
+def test_utc() -> None:
     # All dates are in ISO 8601 UTC so we can serialize them
     now = datetime.utcnow()
     then = json.loads(json.dumps({"date": iso_utc(when=now)}))["date"]
     assert now.isoformat() == then
 
 
-mongo = {
+mongo: Dict[
+    str, Union[None, Dict[str, Dict[str, str]], Dict[str, Union[bool, str]], str]
+] = {
     "api_key_id": "",
     "api_key_secret_id": "",
     "configuration": {
@@ -237,7 +244,7 @@ mongo = {
 )
 async def test_supported_connectors(
     native_service_types, connector_ids, expected_connector_count, mock_responses
-):
+) -> None:
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
     native_connectors_query = {
         "bool": {
@@ -296,7 +303,7 @@ async def test_supported_connectors(
 
 
 @pytest.mark.asyncio
-async def test_all_connectors(mock_responses):
+async def test_all_connectors(mock_responses) -> None:
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
     headers = {"X-Elastic-Product": "Elasticsearch"}
     mock_responses.post(
@@ -321,7 +328,7 @@ async def test_all_connectors(mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_connector_properties():
+async def test_connector_properties() -> None:
     connector_src = {
         "_id": "test",
         "_source": {
@@ -387,7 +394,7 @@ async def test_connector_properties():
         (60, iso_utc(datetime.now(timezone.utc) - timedelta(seconds=70)), True),
     ],
 )
-async def test_heartbeat(interval, last_seen, should_send_heartbeat):
+async def test_heartbeat(interval, last_seen, should_send_heartbeat) -> None:
     source = {
         "_id": "1",
         "_source": {
@@ -439,7 +446,7 @@ async def test_heartbeat(interval, last_seen, should_send_heartbeat):
     ],
 )
 @pytest.mark.asyncio
-async def test_sync_starts(job_type, expected_doc_source_update):
+async def test_sync_starts(job_type, expected_doc_source_update) -> None:
     doc_id = "1"
     seq_no = 1
     primary_term = 2
@@ -458,7 +465,7 @@ async def test_sync_starts(job_type, expected_doc_source_update):
 
 
 @pytest.mark.asyncio
-async def test_connector_error():
+async def test_connector_error() -> None:
     connector_doc = {"_id": "1"}
     error = "something wrong"
     index = Mock()
@@ -474,11 +481,11 @@ async def test_connector_error():
 
 
 def mock_job(
-    status=JobStatus.COMPLETED,
-    job_type=JobType.FULL,
+    status: JobStatus = JobStatus.COMPLETED,
+    job_type: JobType = JobType.FULL,
     error=None,
-    terminated=True,
-):
+    terminated: bool = True,
+) -> Mock:
     job = Mock()
     job.status = status
     job.error = error
@@ -625,7 +632,7 @@ def mock_job(
         ),
     ],
 )
-async def test_sync_done(job, expected_doc_source_update):
+async def test_sync_done(job, expected_doc_source_update) -> None:
     connector_doc = {"_id": "1"}
     index = Mock()
     index.update = AsyncMock(return_value=1)
@@ -635,7 +642,7 @@ async def test_sync_done(job, expected_doc_source_update):
     index.update.assert_called_with(doc_id=connector.id, doc=expected_doc_source_update)
 
 
-mock_next_run = iso_utc()
+mock_next_run: str = iso_utc()
 
 
 @pytest.mark.asyncio
@@ -653,7 +660,7 @@ mock_next_run = iso_utc()
 @patch("connectors.protocol.connectors.next_run")
 async def test_connector_next_sync(
     next_run, scheduling_enabled, expected_next_sync, job_type
-):
+) -> None:
     connector_doc = {
         "_id": "1",
         "_source": {
@@ -681,7 +688,7 @@ async def test_connector_next_sync(
 
 
 @pytest.mark.asyncio
-async def test_sync_job_properties():
+async def test_sync_job_properties() -> None:
     sync_job_src = {
         "_id": "test",
         "_source": {
@@ -737,7 +744,7 @@ async def test_sync_job_properties():
         (JobType.ACCESS_CONTROL, False),
     ],
 )
-def test_is_content_sync(job_type, is_content_sync):
+def test_is_content_sync(job_type, is_content_sync) -> None:
     source = {"_id": "1", "_source": {"job_type": job_type.value}}
     sync_job = SyncJob(elastic_index=None, doc_source=source)
     assert sync_job.is_content_sync() == is_content_sync
@@ -761,7 +768,7 @@ def test_is_content_sync(job_type, is_content_sync):
 )
 async def test_sync_job_validate_filtering(
     validation_result_state, validation_result_errors, should_raise_exception
-):
+) -> None:
     source = {"_id": "1"}
     index = Mock()
     validator = Mock()
@@ -779,7 +786,7 @@ async def test_sync_job_validate_filtering(
 
 
 @pytest.mark.asyncio
-async def test_sync_job_claim():
+async def test_sync_job_claim() -> None:
     source = {"_id": "1"}
     index = Mock()
     index.update = AsyncMock(return_value=1)
@@ -799,7 +806,7 @@ async def test_sync_job_claim():
 
 
 @pytest.mark.asyncio
-async def test_sync_job_claim_with_connector_api(set_env):
+async def test_sync_job_claim_with_connector_api(set_env) -> None:
     source = {"_id": "1"}
     index = Mock()
     index.api.connector_sync_job_claim = AsyncMock(return_value={"result": "updated"})
@@ -814,7 +821,7 @@ async def test_sync_job_claim_with_connector_api(set_env):
 
 
 @pytest.mark.asyncio
-async def test_sync_job_claim_fails():
+async def test_sync_job_claim_fails() -> None:
     source = {"_id": "1"}
     index = Mock()
     api_meta = Mock()
@@ -836,7 +843,7 @@ async def test_sync_job_claim_fails():
 
 
 @pytest.mark.asyncio
-async def test_sync_job_update_metadata():
+async def test_sync_job_update_metadata() -> None:
     source = {"_id": "1"}
     index = Mock()
     index.feature_use_connectors_api = False
@@ -865,7 +872,7 @@ async def test_sync_job_update_metadata():
 
 
 @pytest.mark.asyncio
-async def test_sync_job_update_metadata_with_connector_api():
+async def test_sync_job_update_metadata_with_connector_api() -> None:
     source = {"_id": "1"}
     index = Mock()
     index.feature_use_connectors_api = True
@@ -892,7 +899,7 @@ async def test_sync_job_update_metadata_with_connector_api():
 
 
 @pytest.mark.asyncio
-async def test_sync_job_done():
+async def test_sync_job_done() -> None:
     source = {"_id": "1"}
     index = Mock()
     index.update = AsyncMock(return_value=1)
@@ -919,7 +926,7 @@ async def test_sync_job_done():
         (123, "123"),
     ],
 )
-async def test_sync_job_fail(error, expected_message):
+async def test_sync_job_fail(error, expected_message) -> None:
     source = {"_id": "1"}
     index = Mock()
     index.update = AsyncMock(return_value=1)
@@ -937,7 +944,7 @@ async def test_sync_job_fail(error, expected_message):
 
 
 @pytest.mark.asyncio
-async def test_sync_job_cancel():
+async def test_sync_job_cancel() -> None:
     source = {"_id": "1"}
     index = Mock()
     index.update = AsyncMock(return_value=1)
@@ -956,7 +963,7 @@ async def test_sync_job_cancel():
 
 
 @pytest.mark.asyncio
-async def test_sync_job_suspend():
+async def test_sync_job_suspend() -> None:
     source = {"_id": "1"}
     index = Mock()
     index.update = AsyncMock(return_value=1)
@@ -976,12 +983,12 @@ class Banana(BaseDataSource):
     """Banana"""
 
     @classmethod
-    def get_default_configuration(cls):
+    def get_default_configuration(cls) -> Dict[str, Dict[str, None]]:
         return {"one": {"value": None}, "two": {"value": None}}
 
 
 @pytest.mark.asyncio
-async def test_connector_prepare_different_id_invalid_source():
+async def test_connector_prepare_different_id_invalid_source() -> None:
     doc_id = "1"
     seq_no = 1
     primary_term = 2
@@ -1012,7 +1019,9 @@ async def test_connector_prepare_different_id_invalid_source():
     ],
 )
 @pytest.mark.asyncio
-async def test_connector_prepare_with_prepared_connector(main_doc_id, this_doc_id):
+async def test_connector_prepare_with_prepared_connector(
+    main_doc_id, this_doc_id
+) -> None:
     seq_no = 1
     primary_term = 2
     connector_doc = {
@@ -1079,7 +1088,7 @@ async def test_connector_prepare_with_prepared_connector(main_doc_id, this_doc_i
 @pytest.mark.asyncio
 async def test_connector_prepare_with_connector_empty_config_creates_default(
     main_doc_id, this_doc_id
-):
+) -> None:
     seq_no = 1
     primary_term = 2
     connector_doc = {
@@ -1124,7 +1133,7 @@ async def test_connector_prepare_with_connector_empty_config_creates_default(
 @pytest.mark.asyncio
 async def test_connector_prepare_with_connector_missing_fields_creates_them(
     main_doc_id, this_doc_id
-):
+) -> None:
     seq_no = 1
     primary_term = 2
     connector_doc = {
@@ -1186,7 +1195,7 @@ async def test_connector_prepare_with_connector_missing_fields_creates_them(
 @pytest.mark.asyncio
 async def test_connector_prepare_with_connector_missing_field_properties_creates_them(
     main_doc_id, this_doc_id
-):
+) -> None:
     seq_no = 1
     primary_term = 2
     connector_doc = {
@@ -1243,7 +1252,7 @@ async def test_connector_prepare_with_connector_missing_field_properties_creates
 
 
 @pytest.mark.asyncio
-async def test_connector_prepare_with_service_type_not_configured():
+async def test_connector_prepare_with_service_type_not_configured() -> None:
     doc_id = "1"
     seq_no = 1
     primary_term = 2
@@ -1267,7 +1276,7 @@ async def test_connector_prepare_with_service_type_not_configured():
 
 
 @pytest.mark.asyncio
-async def test_connector_prepare_with_service_type_not_supported():
+async def test_connector_prepare_with_service_type_not_supported() -> None:
     doc_id = "1"
     seq_no = 1
     primary_term = 2
@@ -1292,7 +1301,7 @@ async def test_connector_prepare_with_service_type_not_supported():
 
 
 @pytest.mark.asyncio
-async def test_connector_prepare_with_data_source_error():
+async def test_connector_prepare_with_data_source_error() -> None:
     doc_id = "1"
     seq_no = 1
     primary_term = 2
@@ -1317,7 +1326,7 @@ async def test_connector_prepare_with_data_source_error():
 
 
 @pytest.mark.asyncio
-async def test_connector_prepare_with_different_features():
+async def test_connector_prepare_with_different_features() -> None:
     doc_id = "1"
     seq_no = 1
     primary_term = 2
@@ -1350,7 +1359,7 @@ async def test_connector_prepare_with_different_features():
 
 
 @pytest.mark.asyncio
-async def test_connector_prepare():
+async def test_connector_prepare() -> None:
     doc_id = "1"
     seq_no = 1
     primary_term = 2
@@ -1384,7 +1393,7 @@ async def test_connector_prepare():
 
 
 @pytest.mark.asyncio
-async def test_connector_prepare_with_race_condition():
+async def test_connector_prepare_with_race_condition() -> None:
     doc_id = "1"
     seq_no = 1
     primary_term = 2
@@ -1443,7 +1452,7 @@ async def test_connector_prepare_with_race_condition():
 @pytest.mark.asyncio
 async def test_connector_update_last_sync_scheduled_at_by_job_type(
     job_type, date_field_to_update
-):
+) -> None:
     doc_id = "2"
     seq_no = 2
     primary_term = 1
@@ -1468,7 +1477,7 @@ async def test_connector_update_last_sync_scheduled_at_by_job_type(
 
 
 @pytest.mark.asyncio
-async def test_connector_validate_filtering_not_edited():
+async def test_connector_validate_filtering_not_edited() -> None:
     index = Mock()
     index.update = AsyncMock()
     index.feature_use_connectors_api = False
@@ -1484,7 +1493,7 @@ async def test_connector_validate_filtering_not_edited():
 
 
 @pytest.mark.asyncio
-async def test_connector_validate_filtering_invalid():
+async def test_connector_validate_filtering_invalid() -> None:
     doc_source = deepcopy(DOC_SOURCE_WITH_EDITED_FILTERING)
     index = Mock()
     index.update = AsyncMock()
@@ -1521,7 +1530,7 @@ async def test_connector_validate_filtering_invalid():
 
 
 @pytest.mark.asyncio
-async def test_connector_validate_filtering_valid():
+async def test_connector_validate_filtering_valid() -> None:
     doc_source = deepcopy(DOC_SOURCE_WITH_EDITED_FILTERING)
     index = Mock()
     index.update = AsyncMock()
@@ -1556,7 +1565,7 @@ async def test_connector_validate_filtering_valid():
 
 
 @pytest.mark.asyncio
-async def test_connector_validate_filtering_with_race_condition():
+async def test_connector_validate_filtering_with_race_condition() -> None:
     doc_source = deepcopy(DOC_SOURCE_WITH_EDITED_FILTERING)
     index = Mock()
     index.update = AsyncMock()
@@ -1594,7 +1603,7 @@ async def test_connector_validate_filtering_with_race_condition():
 
 
 @pytest.mark.asyncio
-async def test_connector_validate_filtering_invalid_with_connector_api(set_env):
+async def test_connector_validate_filtering_invalid_with_connector_api(set_env) -> None:
     doc_source = deepcopy(DOC_SOURCE_WITH_EDITED_FILTERING)
     index = Mock()
     index.api.connector_update_filtering_draft_validation = AsyncMock()
@@ -1620,7 +1629,7 @@ async def test_connector_validate_filtering_invalid_with_connector_api(set_env):
 
 
 @pytest.mark.asyncio
-async def test_connector_validate_filtering_valid_with_connector_api(set_env):
+async def test_connector_validate_filtering_valid_with_connector_api(set_env) -> None:
     doc_source = deepcopy(DOC_SOURCE_WITH_EDITED_FILTERING)
     index = Mock()
     index.api.connector_update_filtering_draft_validation = AsyncMock()
@@ -1649,7 +1658,7 @@ async def test_connector_validate_filtering_valid_with_connector_api(set_env):
 
 
 @pytest.mark.asyncio
-async def test_connector_exists_returns_true_when_found():
+async def test_connector_exists_returns_true_when_found() -> None:
     config = {
         "username": "elastic",
         "password": "changeme",
@@ -1664,7 +1673,7 @@ async def test_connector_exists_returns_true_when_found():
 
 
 @pytest.mark.asyncio
-async def test_connector_exists_returns_false_when_not_found():
+async def test_connector_exists_returns_false_when_not_found() -> None:
     config = {
         "username": "elastic",
         "password": "changeme",
@@ -1686,7 +1695,7 @@ async def test_connector_exists_returns_false_when_not_found():
 
 
 @pytest.mark.asyncio
-async def test_connector_exists_raises_non_404_exception():
+async def test_connector_exists_raises_non_404_exception() -> None:
     config = {
         "username": "elastic",
         "password": "changeme",
@@ -1701,7 +1710,7 @@ async def test_connector_exists_raises_non_404_exception():
 
 
 @pytest.mark.asyncio
-async def test_document_count():
+async def test_document_count() -> None:
     expected_count = 20
     index = Mock()
     index.serverless = False
@@ -1741,7 +1750,9 @@ async def test_document_count():
         (None, ACTIVE_FILTER_STATE, NON_EXISTING_DOMAIN, EMPTY_FILTER),
     ],
 )
-def test_get_filter(filtering_json, filter_state, domain, expected_filter):
+def test_get_filter(
+    filtering_json, filter_state: str, domain: str, expected_filter
+) -> None:
     filtering = Filtering(filtering_json)
 
     assert filtering.get_filter(filter_state, domain) == expected_filter
@@ -1754,7 +1765,7 @@ def test_get_filter(filtering_json, filter_state, domain, expected_filter):
         (None, ACTIVE_FILTERING_DEFAULT_DOMAIN),
     ],
 )
-def test_get_active_filter(domain, expected_filter):
+def test_get_active_filter(domain: str, expected_filter) -> None:
     filtering = Filtering(FILTERING)
 
     if domain is not None:
@@ -1770,7 +1781,7 @@ def test_get_active_filter(domain, expected_filter):
         (None, DRAFT_FILTERING_DEFAULT_DOMAIN),
     ],
 )
-def test_get_draft_filter(domain, expected_filter):
+def test_get_draft_filter(domain: str, expected_filter) -> None:
     filtering = Filtering(FILTERING)
 
     if domain is not None:
@@ -1795,7 +1806,7 @@ def test_get_draft_filter(domain, expected_filter):
         (None, {"advanced_snippet": {}, "rules": []}),
     ],
 )
-def test_transform_filtering(filtering, expected_transformed_filtering):
+def test_transform_filtering(filtering, expected_transformed_filtering) -> None:
     assert (
         Filter(filter_=filtering).transform_filtering()
         == expected_transformed_filtering
@@ -1912,7 +1923,7 @@ def test_transform_filtering(filtering, expected_transformed_filtering):
         ),
     ],
 )
-def test_feature_enabled(features_json, feature_enabled):
+def test_feature_enabled(features_json, feature_enabled) -> None:
     features = Features(features_json)
 
     assert all(
@@ -1988,7 +1999,7 @@ def test_feature_enabled(features_json, feature_enabled):
         ({}, False),
     ],
 )
-def test_sync_rules_enabled(features_json, sync_rules_enabled):
+def test_sync_rules_enabled(features_json, sync_rules_enabled) -> None:
     features = Features(features_json)
 
     assert features.sync_rules_enabled() == sync_rules_enabled
@@ -2022,7 +2033,7 @@ def test_sync_rules_enabled(features_json, sync_rules_enabled):
         ({}, False),
     ],
 )
-def test_incremental_sync_enabled(features_json, incremental_sync_enabled):
+def test_incremental_sync_enabled(features_json, incremental_sync_enabled) -> None:
     features = Features(features_json)
 
     assert features.incremental_sync_enabled() == incremental_sync_enabled
@@ -2037,7 +2048,7 @@ def test_incremental_sync_enabled(features_json, incremental_sync_enabled):
     ],
 )
 @patch("connectors.protocol.SyncJobIndex.index")
-async def test_create_job(index_method, trigger_method, set_env):
+async def test_create_job(index_method, trigger_method, set_env) -> None:
     connector = Mock()
     connector.id = "id"
     connector.index_name = "index_name"
@@ -2079,7 +2090,7 @@ async def test_create_job(index_method, trigger_method, set_env):
         (JobTriggerMethod.SCHEDULED, JobType.ACCESS_CONTROL),
     ],
 )
-async def test_create_job_with_connector_api(trigger_method, job_type, set_env):
+async def test_create_job_with_connector_api(trigger_method, job_type, set_env) -> None:
     connector = Mock()
     connector.id = "id"
     config = load_config(CONFIG)
@@ -2113,7 +2124,7 @@ async def test_create_job_with_connector_api(trigger_method, job_type, set_env):
 )
 async def test_create_jobs_with_correct_target_index(
     index_method, job_type, target_index_name, set_env
-):
+) -> None:
     connector = Mock()
     connector.index_name = INDEX_NAME
     config = load_config(CONFIG)
@@ -2166,7 +2177,7 @@ async def test_create_jobs_with_correct_target_index(
 @patch("connectors.protocol.SyncJobIndex.get_all_docs")
 async def test_pending_jobs(
     get_all_docs, job_types, job_type_query, remote_call, set_env
-):
+) -> None:
     job = Mock()
     get_all_docs.return_value = AsyncIterator([job])
     config = load_config(CONFIG)
@@ -2208,7 +2219,7 @@ async def test_pending_jobs(
 
 @pytest.mark.asyncio
 @patch("connectors.protocol.SyncJobIndex.get_all_docs")
-async def test_orphaned_idle_jobs(get_all_docs, set_env):
+async def test_orphaned_idle_jobs(get_all_docs, set_env) -> None:
     job = Mock()
     get_all_docs.return_value = AsyncIterator([job])
     config = load_config(CONFIG)
@@ -2242,7 +2253,7 @@ async def test_orphaned_idle_jobs(get_all_docs, set_env):
 
 @pytest.mark.asyncio
 @patch("connectors.protocol.SyncJobIndex.get_all_docs")
-async def test_idle_jobs(get_all_docs, set_env):
+async def test_idle_jobs(get_all_docs, set_env) -> None:
     job = Mock()
     get_all_docs.return_value = AsyncIterator([job])
     config = load_config(CONFIG)
@@ -2283,7 +2294,7 @@ async def test_idle_jobs(get_all_docs, set_env):
         (None, False),
     ],
 )
-def test_advanced_rules_present(filtering, should_advanced_rules_be_present):
+def test_advanced_rules_present(filtering, should_advanced_rules_be_present) -> None:
     assert Filter(filtering).has_advanced_rules() == should_advanced_rules_be_present
 
 
@@ -2298,7 +2309,7 @@ def test_advanced_rules_present(filtering, should_advanced_rules_be_present):
 )
 def test_has_validation_state(
     filtering, validation_state, has_expected_validation_state
-):
+) -> None:
     assert (
         Filter(filtering).has_validation_state(validation_state)
         == has_expected_validation_state
@@ -2314,7 +2325,7 @@ def test_has_validation_state(
         ("run_ml_inference", False, True),
     ],
 )
-def test_pipeline_properties(key, value, default_value):
+def test_pipeline_properties(key, value, default_value) -> None:
     assert Pipeline({})[key] == default_value
     assert Pipeline({key: value})[key] == value
 
@@ -2329,11 +2340,11 @@ def test_pipeline_properties(key, value, default_value):
         (None, {}),
     ],
 )
-def test_get_advanced_rules(filtering, expected_advanced_rules):
+def test_get_advanced_rules(filtering, expected_advanced_rules) -> None:
     assert Filter(filtering).get_advanced_rules() == expected_advanced_rules
 
 
-def test_updated_configuration_fields():
+def test_updated_configuration_fields() -> None:
     current = {
         "tenant_id": {"label": "Tenant ID", "order": 1, "type": "str", "value": "foo"},
         "tenant_name": {
@@ -2412,7 +2423,7 @@ def test_updated_configuration_fields():
 
 
 @pytest.mark.asyncio
-async def test_native_connector_missing_features():
+async def test_native_connector_missing_features() -> None:
     doc_id = "1"
     seq_no = 1
     primary_term = 2
@@ -2452,7 +2463,7 @@ async def test_native_connector_missing_features():
 
 
 @pytest.mark.asyncio
-async def test_get_connector_by_index():
+async def test_get_connector_by_index() -> None:
     config = {
         "username": "elastic",
         "password": "changeme",
@@ -2489,7 +2500,7 @@ async def test_get_connector_by_index():
         ),
     ],
 )
-def test_property_as_datetime(indexed_timestamp, expected_datetime):
+def test_property_as_datetime(indexed_timestamp, expected_datetime) -> None:
     connector = Connector(
         elastic_index=Mock(),
         doc_source={

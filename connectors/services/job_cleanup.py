@@ -7,6 +7,8 @@
 A task periodically clean up orphaned and idle jobs.
 """
 
+from typing import Dict, List, Union
+
 from connectors.es.index import DocumentNotFoundError
 from connectors.es.management_client import ESManagementClient
 from connectors.protocol import ConnectorIndex, SyncJobIndex
@@ -18,13 +20,15 @@ IDLE_JOB_ERROR = "The job has not seen any update for some time."
 class JobCleanUpService(BaseService):
     name = "cleanup"
 
-    def __init__(self, config):
+    def __init__(
+        self, config: Dict[str, Union[Dict[str, str], Dict[str, int], List[str]]]
+    ) -> None:
         super().__init__(config, "job_cleanup_service")
         self.idling = int(self.service_config.get("job_cleanup_interval", 60 * 5))
         self.native_service_types = self.config.get("native_service_types", []) or []
         self.connector_ids = list(self.connectors.keys())
 
-    async def _run(self):
+    async def _run(self) -> int:
         self.logger.debug("Successfully started Job cleanup task...")
         self.connector_index = ConnectorIndex(self.es_config)
         self.es_management_client = ESManagementClient(self.es_config)
@@ -46,7 +50,7 @@ class JobCleanUpService(BaseService):
                 await self.sync_job_index.close()
         return 0
 
-    async def _process_orphaned_idle_jobs(self):
+    async def _process_orphaned_idle_jobs(self) -> None:
         try:
             self.logger.debug("Cleaning up orphaned idle jobs")
             connector_ids = [
@@ -78,7 +82,7 @@ class JobCleanUpService(BaseService):
             self.logger.error(e, exc_info=True)
             self.raise_if_spurious(e)
 
-    async def _process_idle_jobs(self):
+    async def _process_idle_jobs(self) -> None:
         try:
             self.logger.debug("Start cleaning up idle jobs...")
             connector_ids = [

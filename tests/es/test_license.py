@@ -11,14 +11,14 @@ from connectors.es.license import requires_platinum_license
 from connectors.protocol import JobType
 
 
-def mock_source_klass(is_premium):
+def mock_source_klass(is_premium) -> Mock:
     source_klass = Mock()
     source_klass.is_premium = Mock(return_value=is_premium)
 
     return source_klass
 
 
-def mock_connector(document_level_security_enabled):
+def mock_connector(document_level_security_enabled) -> Mock:
     connector = Mock()
     connector.features = Mock()
     connector.features.document_level_security_enabled = Mock(
@@ -28,7 +28,7 @@ def mock_connector(document_level_security_enabled):
     return connector
 
 
-def mock_sync_job(job_type):
+def mock_sync_job(job_type) -> Mock:
     sync_job = Mock()
     sync_job.job_type = job_type
 
@@ -45,7 +45,7 @@ def mock_sync_job(job_type):
 )
 def test_requires_platinum_license(
     job_type, document_level_security_enabled, is_premium
-):
+) -> None:
     sync_job = mock_sync_job(job_type)
     connector = mock_connector(document_level_security_enabled)
     source_klass = mock_source_klass(is_premium)
@@ -63,7 +63,7 @@ def test_requires_platinum_license(
 )
 def test_does_not_require_platinum_license(
     job_type, document_level_security_enabled, is_premium
-):
+) -> None:
     sync_job = mock_sync_job(job_type)
     connector = mock_connector(document_level_security_enabled)
     source_klass = mock_source_klass(is_premium)

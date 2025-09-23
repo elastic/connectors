@@ -9,6 +9,7 @@ import logging
 import os
 import sys
 from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser
+from typing import Optional, Sequence
 
 from connectors.config import load_config
 from connectors.es import DEFAULT_LANGUAGE
@@ -20,7 +21,7 @@ from connectors.utils import validate_index_name
 
 CONNECTORS_INDEX = ".elastic-connectors-v1"
 JOBS_INDEX = ".elastic-connectors-sync-jobs-v1"
-DEFAULT_CONFIG = os.path.join(os.path.dirname(__file__), "..", "config.yml")
+DEFAULT_CONFIG: str = os.path.join(os.path.dirname(__file__), "..", "config.yml")
 DEFAULT_PIPELINE = {
     "version": 1,
     "description": "For testing",
@@ -43,11 +44,11 @@ DEFAULT_PIPELINE = {
     ],
 }
 
-logger = logging.getLogger("kibana-fake")
+logger: logging.Logger = logging.getLogger("kibana-fake")
 set_extra_logger(logger, log_level=logging.DEBUG, prefix="KBN-FAKE")
 
 
-async def prepare(service_type, index_name, config, connector_definition=None):
+async def prepare(service_type, index_name, config, connector_definition=None) -> None:
     klass = get_source_klass(config["sources"][service_type])
     es = ESManagementClient(config["elasticsearch"])
     connector_index = ConnectorIndex(config["elasticsearch"])
@@ -100,7 +101,7 @@ async def prepare(service_type, index_name, config, connector_definition=None):
         await es.close()
 
 
-async def upsert_index(es, index):
+async def upsert_index(es, index) -> None:
     """Override the index with new mappings and settings.
 
     If the index with such name exists, it's deleted and then created again
@@ -124,7 +125,7 @@ async def upsert_index(es, index):
     await es.create_content_index(index, DEFAULT_LANGUAGE)
 
 
-def _parser():
+def _parser() -> ArgumentParser:
     parser = ArgumentParser(
         prog="fake-kibana", formatter_class=ArgumentDefaultsHelpFormatter
     )
@@ -156,9 +157,9 @@ def _parser():
     return parser
 
 
-def main(args=None):
+def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = _parser()
-    args = parser.parse_args(args=args)
+    args = parser.parse_args(args=argv)
 
     connector_definition_file = args.connector_definition
     config_file = args.config_file

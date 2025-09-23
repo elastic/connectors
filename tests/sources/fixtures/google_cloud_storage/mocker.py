@@ -6,13 +6,15 @@
 # ruff: noqa: T201
 """Module responsible for mocking POST call to Google Cloud Storage Data Source"""
 
+from typing import Dict, Union
+
 from flask import Flask
 
 app = Flask(__name__)
 
 
 @app.route("/token", methods=["POST"])
-def post_auth_token():
+def post_auth_token() -> Dict[str, Union[int, str]]:
     """Function to load"""
     return {
         "access_token": "XXXXXXStBkRnGyZ2mUYOLgls7QVBxOg82XhBCFo8UIT5gM",

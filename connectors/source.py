@@ -13,7 +13,9 @@ from datetime import date, datetime, time
 from decimal import Decimal
 from enum import Enum
 from functools import cache
+from os import PathLike
 from pydoc import locate
+from typing import Dict, List, Type, Union
 
 import aiofiles
 from aiofiles.os import remove
@@ -26,6 +28,7 @@ from connectors.filtering.validation import (
     BasicRuleAgainstSchemaValidator,
     BasicRuleNoMatchAllRegexValidator,
     BasicRulesSetSemanticValidator,
+    FilteringValidationResult,
     FilteringValidator,
 )
 from connectors.logger import logger
@@ -37,7 +40,7 @@ from connectors.utils import (
     hash_id,
 )
 
-CHUNK_SIZE = 1024 * 64  # 64KB default SSD page size
+CHUNK_SIZE: int = 1024 * 64  # 64KB default SSD page size
 CURSOR_SYNC_TIMESTAMP = "cursor_timestamp"
 
 DEFAULT_CONFIGURATION = {
@@ -81,11 +84,11 @@ class Field:
         default_value=None,
         depends_on=None,
         label=None,
-        required=True,
-        field_type="str",
+        required: bool = True,
+        field_type: str = "str",
         validations=None,
         value=None,
-    ):
+    ) -> None:
         if depends_on is None:
             depends_on = []
         if label is None:
@@ -129,7 +132,7 @@ class Field:
     def value(self, value):
         self._value = value
 
-    def _convert(self, value, field_type_):
+    def _convert(self, value, field_type_: str):
         cast_type = locate(field_type_)
         if cast_type not in TYPE_DEFAULTS:
             # unsupported type
@@ -166,7 +169,7 @@ class Field:
 
         return cast_type(value)
 
-    def is_value_empty(self):
+    def is_value_empty(self) -> bool:
         """Checks if the `value` field is empty or not.
         This always checks `value` and never `default_value`.
         """
@@ -185,7 +188,7 @@ class Field:
                 # int and bool
                 return value is None
 
-    def validate(self):
+    def validate(self) -> List[str]:
         """Used to validate the `value` of a Field using its `validations`.
         If `value` is empty and the field is not required,
         the validation is run on the `default_value` instead.
@@ -263,7 +266,7 @@ class Field:
 class DataSourceConfiguration:
     """Holds the configuration needed by the source class"""
 
-    def __init__(self, config):
+    def __init__(self, config) -> None:
         self._raw_config = config
         self._config = {}
         self._defaults = {}
@@ -283,7 +286,7 @@ class DataSourceConfiguration:
                 else:
                     self.set_field(key, label=key.capitalize(), value=str(value))
 
-    def set_defaults(self, default_config):
+    def set_defaults(self, default_config) -> None:
         for name, item in default_config.items():
             self._defaults[name] = item.get("value")
             if name in self._config:
@@ -308,11 +311,11 @@ class DataSourceConfiguration:
         default_value=None,
         depends_on=None,
         label=None,
-        required=True,
-        field_type="str",
+        required: bool = True,
+        field_type: str = "str",
         validations=None,
         value=None,
-    ):
+    ) -> None:
         self._config[name] = Field(
             name,
             default_value,
@@ -330,13 +333,13 @@ class DataSourceConfiguration:
     def get_fields(self):
         return self._config.values()
 
-    def is_empty(self):
+    def is_empty(self) -> bool:
         return len(self._config) == 0
 
     def to_dict(self):
         return dict(self._raw_config)
 
-    def check_valid(self):
+    def check_valid(self) -> None:
         """Validates every Field against its `validations`.
 
         Raises ConfigurableFieldValueError if any validation errors are found.
@@ -364,7 +367,7 @@ class DataSourceConfiguration:
             msg = f"Field validation errors: {'; '.join(validation_errors)}"
             raise ConfigurableFieldValueError(msg)
 
-    def dependencies_satisfied(self, field):
+    def dependencies_satisfied(self, field) -> bool:
         """Used to check if a Field has its dependencies satisfied.
 
         Returns True if all dependencies are satisfied, or no dependencies exist.
@@ -419,20 +422,20 @@ class BaseDataSource:
         # this will be overwritten by set_framework_config()
         self.framework_config = DataSourceFrameworkConfig.Builder().build()
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"Datasource `{self.__class__.name}`"
 
-    def set_logger(self, logger_):
+    def set_logger(self, logger_) -> None:
         self._logger = logger_
         self._set_internal_logger()
 
-    def _set_internal_logger(self):
+    def _set_internal_logger(self) -> None:
         # no op for BaseDataSource
         # if there are internal class (e.g. Client class) to which the logger need to be set,
         # this method needs to be implemented
         pass
 
-    def set_framework_config(self, framework_config):
+    def set_framework_config(self, framework_config) -> None:
         """Called by the framework, this exposes framework-wide configuration to be used by the DataSource"""
         self.framework_config = framework_config
 
@@ -459,7 +462,17 @@ class BaseDataSource:
         raise NotImplementedError
 
     @classmethod
-    def basic_rules_validators(cls):
+    def basic_rules_validators(
+        cls,
+    ) -> List[
+        Type[
+            Union[
+                BasicRuleAgainstSchemaValidator,
+                BasicRuleNoMatchAllRegexValidator,
+                BasicRulesSetSemanticValidator,
+            ]
+        ]
+    ]:
         """Return default basic rule validators.
 
         Basic rule validators are executed in the order they appear in the list.
@@ -472,7 +485,7 @@ class BaseDataSource:
         ]
 
     @classmethod
-    def hash_id(cls, _id):
+    def hash_id(cls, _id) -> str:
         """Called, when an `_id` is too long to be ingested into elasticsearch.
 
         This method can be overridden to execute a hash function on a document `_id`,
@@ -483,7 +496,7 @@ class BaseDataSource:
         return hash_id(_id)
 
     @classmethod
-    def features(cls):
+    def features(cls) -> Dict[str, Union[Dict[str, Dict[str, bool]], Dict[str, bool]]]:
         """Returns features available for the data source"""
         return {
             "sync_rules": {
@@ -505,13 +518,13 @@ class BaseDataSource:
             },
         }
 
-    def set_features(self, features):
+    def set_features(self, features) -> None:
         if self._features is not None:
             self._logger.warning(f"'_features' already set in {self.__class__.name}")
         self._logger.debug(f"Setting '_features' for {self.__class__.name}")
         self._features = features
 
-    async def validate_filtering(self, filtering):
+    async def validate_filtering(self, filtering) -> FilteringValidationResult:
         """Execute all basic rule and advanced rule validators."""
 
         return await FilteringValidator(
@@ -528,7 +541,7 @@ class BaseDataSource:
         """
         return []
 
-    async def changed(self):
+    async def changed(self) -> bool:
         """When called, returns True if something has changed in the backend.
 
         Otherwise, returns False and the next sync is skipped.
@@ -538,7 +551,7 @@ class BaseDataSource:
         """
         return True
 
-    async def validate_config(self):
+    async def validate_config(self) -> None:
         """When called, validates configuration of the connector that is contained in self.configuration
 
         If connector configuration is invalid, this method will raise an exception
@@ -546,7 +559,7 @@ class BaseDataSource:
         """
         self.configuration.check_valid()
 
-    def validate_config_fields(self):
+    def validate_config_fields(self) -> None:
         """ "Checks if any fields in a configuration are missing.
         If a field is missing, raises an error.
         Ignores additional non-standard fields.
@@ -574,7 +587,7 @@ class BaseDataSource:
         """
         raise NotImplementedError
 
-    async def close(self):
+    async def close(self) -> None:
         """Called when the source is closed.
 
         Can be used to close connections
@@ -646,7 +659,7 @@ class BaseDataSource:
         """
         raise NotImplementedError
 
-    def tweak_bulk_options(self, options):
+    def tweak_bulk_options(self, options) -> None:
         """Receives the bulk options every time a sync happens, so they can be
         tweaked if needed.
 
@@ -699,7 +712,7 @@ class BaseDataSource:
         return self._sync_cursor
 
     @staticmethod
-    def is_premium():
+    def is_premium() -> bool:
         """Returns True if this DataSource is a Premium (paid license gated) connector.
         Otherwise, returns False.
 
@@ -710,12 +723,12 @@ class BaseDataSource:
     def get_file_extension(self, filename):
         return get_file_extension(filename)
 
-    def can_file_be_downloaded(self, file_extension, filename, file_size):
+    def can_file_be_downloaded(self, file_extension, filename, file_size) -> bool:
         return self.is_valid_file_type(
             file_extension, filename
         ) and self.is_file_size_within_limit(file_size, filename)
 
-    def is_valid_file_type(self, file_extension, filename):
+    def is_valid_file_type(self, file_extension, filename) -> bool:
         if file_extension == "":
             self._logger.debug(
                 f"Files without extension are not supported, skipping {filename}."
@@ -730,7 +743,7 @@ class BaseDataSource:
 
         return True
 
-    def is_file_size_within_limit(self, file_size, filename):
+    def is_file_size_within_limit(self, file_size, filename) -> bool:
         if (
             file_size > self.framework_config.max_file_size
             and not self.configuration.get("use_text_extraction_service")
@@ -748,7 +761,7 @@ class BaseDataSource:
         source_filename,
         file_extension,
         download_func,
-        return_doc_if_failed=False,
+        return_doc_if_failed: bool = False,
     ):
         """
         Performs all the steps required for handling binary content:
@@ -808,7 +821,7 @@ class BaseDataSource:
 
     async def download_to_temp_file(
         self, temp_filename, source_filename, async_buffer, chunked_download_func
-    ):
+    ) -> None:
         self._logger.debug(f"Download beginning for file: {source_filename}.")
         async for data in chunked_download_func():
             await async_buffer.write(data)
@@ -850,7 +863,9 @@ class BaseDataSource:
 
         return doc
 
-    async def remove_temp_file(self, temp_filename):
+    async def remove_temp_file(
+        self, temp_filename: Union[PathLike[bytes], PathLike[str], bytes, str]
+    ) -> None:
         try:
             await remove(temp_filename)
         except Exception as e:
@@ -864,7 +879,7 @@ class BaseDataSource:
             return default_time
         return self._sync_cursor.get(CURSOR_SYNC_TIMESTAMP, default_time)
 
-    def update_sync_timestamp_cursor(self, timestamp):
+    def update_sync_timestamp_cursor(self, timestamp) -> None:
         if self._sync_cursor is None:
             self._sync_cursor = {}
         self._sync_cursor[CURSOR_SYNC_TIMESTAMP] = timestamp

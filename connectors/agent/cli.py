@@ -6,6 +6,7 @@
 import asyncio
 import functools
 import signal
+from logging import Logger
 
 from elastic_agent_client.util.async_tools import (
     sleeps_for_retryable,
@@ -14,10 +15,10 @@ from elastic_agent_client.util.async_tools import (
 from connectors.agent.component import ConnectorsAgentComponent
 from connectors.agent.logger import get_logger
 
-logger = get_logger("cli")
+logger: Logger = get_logger("cli")
 
 
-def main(args=None):
+def main(args=None) -> None:
     """Script entry point into running Connectors Service on Agent.
 
     It initialises an event loop, creates a component and runs the component.

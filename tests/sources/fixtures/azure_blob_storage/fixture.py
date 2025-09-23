@@ -14,7 +14,7 @@ CONNECTION_STRING = "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;
 
 fake_provider = WeightedFakeProvider()
 
-DATA_SIZE = os.environ.get("DATA_SIZE", "medium")
+DATA_SIZE: str = os.environ.get("DATA_SIZE", "medium")
 
 CONTAINERS_TO_DELETE = 1
 
@@ -30,11 +30,11 @@ match DATA_SIZE:
         BLOB_COUNT = 1000
 
 
-def get_num_docs():
+def get_num_docs() -> None:
     print((CONTAINER_COUNT - CONTAINERS_TO_DELETE) * BLOB_COUNT)
 
 
-async def load():
+async def load() -> None:
     """Method for generating document for azurite emulator"""
     try:
         blob_service_client = BlobServiceClient.from_connection_string(
@@ -57,7 +57,7 @@ async def load():
         print(f"Exception: {exception}")
 
 
-async def remove():
+async def remove() -> None:
     """Method for removing 2k document for azurite emulator"""
     try:
         blob_service_client = BlobServiceClient.from_connection_string(

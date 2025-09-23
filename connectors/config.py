@@ -5,6 +5,7 @@
 #
 
 import os
+from typing import Dict, Optional, Union
 
 from envyaml import EnvYAML
 
@@ -28,7 +29,19 @@ def load_config(config_file):
     return configuration
 
 
-def add_defaults(config, default_config=None):
+def add_defaults(
+    config,
+    default_config: Optional[
+        Dict[
+            str,
+            Union[
+                Dict[str, str],
+                Dict[str, Union[Dict[str, Union[Dict[str, float], int]], int, str]],
+                Dict[str, Union[int, str]],
+            ],
+        ]
+    ] = None,
+):
     if default_config is None:
         default_config = _default_config()
     configuration = dict(_merge_dicts(default_config, config))
@@ -57,7 +70,16 @@ log_level_mappings = {
 }
 
 
-def _default_config():
+def _default_config() -> (
+    Dict[
+        str,
+        Union[
+            Dict[str, str],
+            Dict[str, Union[Dict[str, Union[Dict[str, float], int]], int, str]],
+            Dict[str, Union[int, str]],
+        ],
+    ]
+):
     return {
         "elasticsearch": {
             "host": "http://localhost:9200",
@@ -146,7 +168,7 @@ def _default_config():
     }
 
 
-def _ent_search_config(configuration):
+def _ent_search_config(configuration) -> None:
     if "ENT_SEARCH_CONFIG_PATH" not in os.environ:
         return
     logger.info("Found ENT_SEARCH_CONFIG_PATH, loading ent-search config")
@@ -169,7 +191,7 @@ def _ent_search_config(configuration):
         logger.debug(f"Overridden {connector_field}")
 
 
-def _nest_configs(configuration, field, value):
+def _nest_configs(configuration, field, value) -> None:
     """
     Update configuration field value taking into account the nesting.
 
@@ -221,7 +243,7 @@ class DataSourceFrameworkConfig:
     preventing them from requiring substantial changes to access new configs that may be added.
     """
 
-    def __init__(self, max_file_size):
+    def __init__(self, max_file_size) -> None:
         """
         Should not be called directly. Use the Builder.
         """

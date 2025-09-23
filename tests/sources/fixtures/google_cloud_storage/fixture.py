@@ -14,12 +14,12 @@ from google.cloud import storage
 from tests.commons import WeightedFakeProvider
 
 client_connection = None
-HERE = os.path.dirname(__file__)
+HERE: str = os.path.dirname(__file__)
 HOSTS = "/etc/hosts"
 
 fake_provider = WeightedFakeProvider()
 
-DATA_SIZE = os.environ.get("DATA_SIZE", "medium").lower()
+DATA_SIZE: str = os.environ.get("DATA_SIZE", "medium").lower()
 
 match DATA_SIZE:
     case "small":
@@ -38,14 +38,14 @@ NUMBER_OF_BLOBS_TO_BE_DELETED = 10
 class PrerequisiteException(Exception):
     """This class is used to generate the custom error exception when prerequisites are not satisfied."""
 
-    def __init__(self, errors):
+    def __init__(self, errors) -> None:
         super().__init__(
             f"Error while running e2e test for the Google Cloud Storage connector. \nReason: {errors}"
         )
         self.errors = errors
 
 
-def get_num_docs():
+def get_num_docs() -> None:
     print(
         FIRST_BUCKET_FILE_COUNT
         + SECOND_BUCKET_FILE_COUNT
@@ -53,7 +53,7 @@ def get_num_docs():
     )
 
 
-async def verify():
+async def verify() -> None:
     "Method to verify if prerequisites are satisfied for e2e or not"
     storage_emulator_host = os.getenv(key="STORAGE_EMULATOR_HOST", default=None)
     if storage_emulator_host != "http://localhost:4443":
@@ -61,7 +61,7 @@ async def verify():
         raise PrerequisiteException(msg)
 
 
-def create_connection():
+def create_connection() -> None:
     """Method for creating connection to the fake Google Cloud Storage server"""
     try:
         global client_connection
@@ -76,7 +76,7 @@ def create_connection():
         raise
 
 
-def generate_files(bucket_name, number_of_files):
+def generate_files(bucket_name, number_of_files) -> None:
     """Method for generating files on the fake Google Cloud Storage server"""
     client_connection.create_bucket(bucket_name)
     bucket = client_connection.bucket(bucket_name)
@@ -90,7 +90,7 @@ def generate_files(bucket_name, number_of_files):
     )
 
 
-async def load():
+async def load() -> None:
     create_connection()
     print("Started loading files on the fake Google Cloud Storage server....")
     if FIRST_BUCKET_FILE_COUNT:
@@ -102,7 +102,7 @@ async def load():
     )
 
 
-async def remove():
+async def remove() -> None:
     """Method for removing random blobs from the fake Google Cloud Storage server"""
     create_connection()
     print("Started removing random blobs from the fake Google Cloud Storage server....")
@@ -117,5 +117,5 @@ async def remove():
     )
 
 
-async def setup():
+async def setup() -> None:
     await verify()

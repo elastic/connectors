@@ -11,7 +11,7 @@ import bson
 from faker import Faker
 from pymongo import MongoClient
 
-DATA_SIZE = os.environ.get("DATA_SIZE", "small").lower()
+DATA_SIZE: str = os.environ.get("DATA_SIZE", "small").lower()
 _SIZES = {"small": 750, "medium": 1500, "large": 3000}
 NUMBER_OF_RECORDS_TO_DELETE = 50
 
@@ -21,7 +21,7 @@ client = MongoClient(
 )
 
 
-async def load():
+async def load() -> None:
     def _random_record():
         return {
             "id": bson.ObjectId(),
@@ -45,7 +45,7 @@ async def load():
     collection.insert_many(data)
 
 
-async def remove():
+async def remove() -> None:
     db = client.sample_database
     collection = db.sample_collection
 

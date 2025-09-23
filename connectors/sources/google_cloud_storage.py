@@ -7,13 +7,16 @@
 
 import os
 import urllib.parse
+from _asyncio import Future, Task
+from asyncio.tasks import _GatheringFuture
 from functools import cached_property, partial
+from typing import Any, Dict, Generator, Iterator, List, Optional, Union
 
 from aiogoogle import Aiogoogle, HTTPError
 from aiogoogle.auth.creds import ServiceAccountCreds
 
 from connectors.logger import logger
-from connectors.source import BaseDataSource
+from connectors.source import BaseDataSource, DataSourceConfiguration
 from connectors.sources.google import (
     load_service_account_json,
     validate_service_account_json,
@@ -43,8 +46,8 @@ BLOB_ADAPTER = {
 }
 RETRY_COUNT = 3
 RETRY_INTERVAL = 2
-STORAGE_EMULATOR_HOST = os.environ.get("STORAGE_EMULATOR_HOST")
-RUNNING_FTEST = (
+STORAGE_EMULATOR_HOST: Optional[str] = os.environ.get("STORAGE_EMULATOR_HOST")
+RUNNING_FTEST: bool = (
     "RUNNING_FTEST" in os.environ
 )  # Flag to check if a connector is run for ftest or not.
 REQUIRED_CREDENTIAL_KEYS = [
@@ -62,7 +65,7 @@ REQUIRED_CREDENTIAL_KEYS = [
 class GoogleCloudStorageClient:
     """A google client to handle api calls made to Google Cloud Storage."""
 
-    def __init__(self, json_credentials):
+    def __init__(self, json_credentials: Dict[str, str]) -> None:
         """Initialize the ServiceAccountCreds class using which api calls will be made.
 
         Args:
@@ -75,7 +78,7 @@ class GoogleCloudStorageClient:
         self.user_project_id = self.service_account_credentials.project_id
         self._logger = logger
 
-    def set_logger(self, logger_):
+    def set_logger(self, logger_) -> None:
         self._logger = logger_
 
     @retryable(
@@ -85,12 +88,12 @@ class GoogleCloudStorageClient:
     )
     async def api_call(
         self,
-        resource,
-        method,
-        sub_method=None,
-        full_response=False,
+        resource: str,
+        method: str,
+        sub_method: Optional[str] = None,
+        full_response: bool = False,
         **kwargs,
-    ):
+    ) -> Iterator[None]:
         """Make a GET call for Google Cloud Storage with retry for the failed API calls.
 
         Args:
@@ -156,7 +159,7 @@ class GoogleCloudStorageDataSource(BaseDataSource):
     service_type = "google_cloud_storage"
     incremental_sync_enabled = True
 
-    def __init__(self, configuration):
+    def __init__(self, configuration: DataSourceConfiguration) -> None:
         """Set up the connection to the Google Cloud Storage Client.
 
         Args:
@@ -164,11 +167,15 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         """
         super().__init__(configuration=configuration)
 
-    def _set_internal_logger(self):
+    def _set_internal_logger(self) -> None:
         self._google_storage_client.set_logger(self._logger)
 
     @classmethod
-    def get_default_configuration(cls):
+    def get_default_configuration(
+        cls,
+    ) -> Dict[
+        str, Union[Dict[str, Union[List[str], int, str]], Dict[str, Union[int, str]]]
+    ]:
         """Get the default configuration for Google Cloud Storage.
 
         Returns:
@@ -200,7 +207,7 @@ class GoogleCloudStorageDataSource(BaseDataSource):
             },
         }
 
-    async def validate_config(self):
+    async def validate_config(self) -> None:
         """Validates whether user inputs are valid or not for configuration field.
 
         Raises:
@@ -213,7 +220,7 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         )
 
     @cached_property
-    def _google_storage_client(self):
+    def _google_storage_client(self) -> GoogleCloudStorageClient:
         """Initialize and return the GoogleCloudStorageClient
 
         Returns:
@@ -240,7 +247,7 @@ class GoogleCloudStorageDataSource(BaseDataSource):
 
         return GoogleCloudStorageClient(json_credentials=required_credentials)
 
-    async def ping(self):
+    async def ping(self) -> None:
         """Verify the connection with Google Cloud Storage"""
         if RUNNING_FTEST:
             return
@@ -260,7 +267,7 @@ class GoogleCloudStorageDataSource(BaseDataSource):
             )
             raise
 
-    async def fetch_buckets(self, buckets):
+    async def fetch_buckets(self, buckets: List[Any]) -> None:
         """Fetch the buckets from the Google Cloud Storage.
         Args:
             buckets (List): List of buckets.
@@ -285,7 +292,9 @@ class GoogleCloudStorageDataSource(BaseDataSource):
             for bucket in buckets:
                 yield {"items": [{"id": bucket, "name": bucket}]}
 
-    async def fetch_blobs(self, buckets):
+    async def fetch_blobs(
+        self, buckets: Dict[str, Union[str, List[Dict[str, str]]]]
+    ) -> Iterator[Optional[Task]]:
         """Fetches blobs stored in the bucket from Google Cloud Storage.
 
         Args:
@@ -319,7 +328,7 @@ class GoogleCloudStorageDataSource(BaseDataSource):
                         f"Something went wrong while fetching blobs from {bucket['name']}. Error: {exception}"
                     )
 
-    def prepare_blob_document(self, blob):
+    def prepare_blob_document(self, blob: Dict[str, str]) -> Dict[str, str]:
         """Apply key mappings to the blob document.
 
         Args:
@@ -337,7 +346,9 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         )
         return blob_document
 
-    def get_blob_document(self, blobs):
+    def get_blob_document(
+        self, blobs: Dict[str, Union[str, List[Dict[str, str]]]]
+    ) -> Iterator[Dict[str, Optional[str]]]:
         """Generate blob document.
 
         Args:
@@ -349,7 +360,12 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         for blob in blobs.get("items", []):
             yield self.prepare_blob_document(blob=blob)
 
-    async def get_content(self, blob, timestamp=None, doit=None):
+    async def get_content(
+        self,
+        blob: Dict[str, Optional[Union[str, int]]],
+        timestamp: None = None,
+        doit: Optional[bool] = None,
+    ) -> Generator[Union[Future, _GatheringFuture], None, Optional[Dict[str, str]]]:
         """Extracts the content for allowed file types.
 
         Args:
@@ -405,7 +421,7 @@ class GoogleCloudStorageDataSource(BaseDataSource):
 
         return document
 
-    async def get_docs(self, filtering=None):
+    async def get_docs(self, filtering: None = None) -> None:
         """Get buckets & blob documents from Google Cloud Storage.
 
         Yields:

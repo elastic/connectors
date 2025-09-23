@@ -5,6 +5,8 @@
 #
 
 from functools import cached_property
+from typing import Dict, List, Union
+from unittest.mock import Mock
 
 from connectors.protocol import JobStatus, JobType
 from connectors.services.job_execution import JobExecutionService
@@ -13,15 +15,35 @@ from connectors.services.job_execution import JobExecutionService
 class ContentSyncJobExecutionService(JobExecutionService):
     name = "sync_content"
 
-    def __init__(self, config):
+    def __init__(
+        self,
+        config: Dict[
+            str,
+            Union[
+                str,
+                Dict[str, Union[float, int, str]],
+                List[Dict[str, str]],
+                Dict[str, str],
+                Dict[
+                    str,
+                    Union[
+                        str,
+                        bool,
+                        Dict[str, Union[int, bool, Dict[str, Union[bool, int, float]]]],
+                        int,
+                    ],
+                ],
+            ],
+        ],
+    ) -> None:
         super().__init__(config, "content_sync_job_execution_service")
 
     @cached_property
-    def display_name(self):
+    def display_name(self) -> str:
         return "content sync job execution"
 
     @cached_property
-    def max_concurrency_config(self):
+    def max_concurrency_config(self) -> str:
         return "service.max_concurrent_content_syncs"
 
     @cached_property
@@ -32,7 +54,7 @@ class ContentSyncJobExecutionService(JobExecutionService):
     def max_concurrency(self):
         return self.service_config.get("max_concurrent_content_syncs")
 
-    def should_execute(self, connector, sync_job):
+    def should_execute(self, connector: Mock, sync_job: Mock) -> bool:
         if connector.last_sync_status == JobStatus.IN_PROGRESS:
             sync_job.log_debug("Connector is still syncing content, skip the job...")
             return False

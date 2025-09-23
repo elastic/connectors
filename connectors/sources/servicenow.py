@@ -10,13 +10,17 @@ import json
 import math
 import os
 import uuid
+from _asyncio import Future, Task
+from asyncio.tasks import _GatheringFuture
 from enum import Enum
 from functools import cached_property, partial
+from typing import Any, Dict, Generator, Iterator, List, Optional, Set, Tuple, Union
 from urllib.parse import urlencode
 
 import aiohttp
 import dateutil.parser as parser
 import fastjsonschema
+from aiohttp.client import ClientSession
 
 from connectors.access_control import (
     ACCESS_CONTROL,
@@ -28,7 +32,11 @@ from connectors.filtering.validation import (
     SyncRuleValidationResult,
 )
 from connectors.logger import logger
-from connectors.source import BaseDataSource, ConfigurableFieldValueError
+from connectors.source import (
+    BaseDataSource,
+    ConfigurableFieldValueError,
+    DataSourceConfiguration,
+)
 from connectors.utils import (
     CancellableSleeps,
     ConcurrentTasks,
@@ -40,14 +48,14 @@ from connectors.utils import (
 
 RETRIES = 3
 RETRY_INTERVAL = 2
-QUEUE_MEM_SIZE = 25 * 1024 * 1024  # Size in Megabytes
+QUEUE_MEM_SIZE: int = 25 * 1024 * 1024  # Size in Megabytes
 CONCURRENT_TASKS = 1000  # Depends on total number of services and size of each service
 MAX_CONCURRENT_CLIENT_SUPPORT = 10
 TABLE_FETCH_SIZE = 50
 TABLE_BATCH_SIZE = 5
 ATTACHMENT_BATCH_SIZE = 10
 
-RUNNING_FTEST = (
+RUNNING_FTEST: bool = (
     "RUNNING_FTEST" in os.environ
 )  # Flag to check if a connector is run for ftest or not.
 
@@ -74,15 +82,15 @@ DEFAULT_SERVICE_NAMES = {
 ACLS_QUERY = "sys_security_acl.operation=read^sys_security_acl.name={table_name}"
 
 
-def _prefix_email(email):
+def _prefix_email(email: str) -> Optional[str]:
     return prefix_identity("email", email)
 
 
-def _prefix_username(user):
+def _prefix_username(user: str) -> Optional[str]:
     return prefix_identity("username", user)
 
 
-def _prefix_user_id(user_id):
+def _prefix_user_id(user_id: str) -> Optional[str]:
     return prefix_identity("user_id", user_id)
 
 
@@ -99,7 +107,7 @@ class InvalidResponse(Exception):
 class ServiceNowClient:
     """ServiceNow Client"""
 
-    def __init__(self, configuration):
+    def __init__(self, configuration: DataSourceConfiguration) -> None:
         """Setup the ServiceNow client.
 
         Args:
@@ -112,11 +120,11 @@ class ServiceNowClient:
         self.retry_count = self.configuration["retry_count"]
         self._logger = logger
 
-    def set_logger(self, logger_):
+    def set_logger(self, logger_) -> None:
         self._logger = logger_
 
     @cached_property
-    def _get_session(self):
+    def _get_session(self) -> ClientSession:
         """Generate aiohttp client session with configuration fields.
 
         Returns:
@@ -162,7 +170,7 @@ class ServiceNowClient:
         interval=RETRY_INTERVAL,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
-    async def get_table_length(self, table_name):
+    async def get_table_length(self, table_name: str) -> int:
         try:
             url = ENDPOINTS["TABLE"].format(table=table_name)
             params = {"sysparm_limit": 1}
@@ -177,7 +185,7 @@ class ServiceNowClient:
             )
             raise
 
-    def _prepare_url(self, url, params, offset):
+    def _prepare_url(self, url: str, params: Dict[str, str], offset: int) -> str:
         if not url.endswith("/file"):
             query = ORDER_BY_CREATION_DATE_QUERY
             if "sysparm_query" in params.keys():
@@ -195,7 +203,9 @@ class ServiceNowClient:
             full_url = f"{url}?{params_string}"
         return full_url
 
-    async def get_filter_apis(self, rules, mapping):
+    async def get_filter_apis(
+        self, rules: List[Dict[str, str]], mapping: Dict[str, str]
+    ) -> List[Dict[str, Union[str, List[Dict[str, str]]]]]:
         apis = []
         for rule in rules:
             params = {"sysparm_query": rule["query"]}
@@ -209,7 +219,9 @@ class ServiceNowClient:
             apis.extend(paginated_apis)
         return apis
 
-    def get_record_apis(self, url, params, total_count):
+    def get_record_apis(
+        self, url: str, params: Dict[str, str], total_count: int
+    ) -> List[Dict[str, Any]]:
         headers = [
             {"name": "Content-Type", "value": "application/json"},
             {"name": "Accept", "value": "application/json"},
@@ -230,7 +242,7 @@ class ServiceNowClient:
             )
         return apis
 
-    def get_attachment_apis(self, url, ids):
+    def get_attachment_apis(self, url: str, ids: List[str]) -> List[Dict[str, Any]]:
         headers = [
             {"name": "Content-Type", "value": "application/json"},
             {"name": "Accept", "value": "application/json"},
@@ -248,7 +260,7 @@ class ServiceNowClient:
             )
         return apis
 
-    async def get_data(self, batched_apis):
+    async def get_data(self, batched_apis: Set[str]) -> Iterator[Task]:
         try:
             batch_data = self._prepare_batch(requests=batched_apis)
             async for response in self._batch_api_call(batch_data=batch_data):
@@ -259,7 +271,7 @@ class ServiceNowClient:
             )
             raise
 
-    def _prepare_batch(self, requests):
+    def _prepare_batch(self, requests: Set[str]) -> Dict[str, str]:
         return {"batch_request_id": str(uuid.uuid4()), "rest_requests": requests}
 
     @retryable(
@@ -267,7 +279,7 @@ class ServiceNowClient:
         interval=RETRY_INTERVAL,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
-    async def _batch_api_call(self, batch_data):
+    async def _batch_api_call(self, batch_data: Dict[str, Union[str, Set[str]]]):
         response = await self._api_call(
             url=ENDPOINTS["BATCH"], params={}, actions=batch_data, method="post"
         )
@@ -285,11 +297,17 @@ class ServiceNowClient:
             url=url, params=params, json=actions
         )
 
-    async def download_func(self, url):
+    async def download_func(self, url: str):
         response = await self._api_call(url, {}, {}, "get")
         yield response
 
-    async def filter_services(self, configured_service):
+    async def filter_services(
+        self, configured_service: Union[List[str], Set[str]]
+    ) -> Union[
+        Tuple[Dict[str, str], Set[Any]],
+        Tuple[Dict[str, str], List[str]],
+        Tuple[Dict[str, str], List[Any]],
+    ]:
         """Filter services based on service mappings.
 
         Args:
@@ -342,14 +360,14 @@ class ServiceNowClient:
             )
             raise
 
-    def _log_missing_sysparm_field(self, sys_id, field):
+    def _log_missing_sysparm_field(self, sys_id: str, field: str) -> None:
         msg = f"Entry in sys_db_object with sys_id '{sys_id}' is missing sysparm_field '{field}'. This is a non-issue if no invalid services are flagged."
         self._logger.debug(msg)
 
-    async def ping(self):
+    async def ping(self) -> None:
         await self.get_table_length(table_name="sys_db_object")
 
-    async def close_session(self):
+    async def close_session(self) -> None:
         """Closes unclosed client session"""
         self._sleeps.cancel()
         await self._get_session.close()
@@ -371,10 +389,17 @@ class ServiceNowAdvancedRulesValidator(AdvancedRulesValidator):
 
     SCHEMA = fastjsonschema.compile(definition=SCHEMA_DEFINITION)
 
-    def __init__(self, source):
+    def __init__(self, source: "ServiceNowDataSource") -> None:
         self.source = source
 
-    async def validate(self, advanced_rules):
+    async def validate(
+        self,
+        advanced_rules: Union[
+            List[Dict[str, str]],
+            List[Union[Dict[str, Union[str, List[str]]], Dict[str, str]]],
+            List[Dict[str, Union[str, List[str]]]],
+        ],
+    ) -> SyncRuleValidationResult:
         if len(advanced_rules) == 0:
             return SyncRuleValidationResult.valid_result(
                 SyncRuleValidationResult.ADVANCED_RULES
@@ -382,7 +407,9 @@ class ServiceNowAdvancedRulesValidator(AdvancedRulesValidator):
 
         return await self._remote_validation(advanced_rules)
 
-    async def _remote_validation(self, advanced_rules):
+    async def _remote_validation(
+        self, advanced_rules: List[Dict[str, Union[str, List[str]]]]
+    ) -> SyncRuleValidationResult:
         try:
             ServiceNowAdvancedRulesValidator.SCHEMA(advanced_rules)
         except fastjsonschema.JsonSchemaValueException as e:
@@ -424,7 +451,7 @@ class ServiceNowDataSource(BaseDataSource):
     dls_enabled = True
     incremental_sync_enabled = True
 
-    def __init__(self, configuration):
+    def __init__(self, configuration: DataSourceConfiguration) -> None:
         """Setup the connection to the ServiceNow instance.
 
         Args:
@@ -442,10 +469,10 @@ class ServiceNowDataSource(BaseDataSource):
         self.queue = MemQueue(maxmemsize=QUEUE_MEM_SIZE, refresh_timeout=120)
         self.fetchers = ConcurrentTasks(max_concurrency=CONCURRENT_TASKS)
 
-    def advanced_rules_validators(self):
+    def advanced_rules_validators(self) -> List[ServiceNowAdvancedRulesValidator]:
         return [ServiceNowAdvancedRulesValidator(self)]
 
-    def tweak_bulk_options(self, options):
+    def tweak_bulk_options(self, options: Dict[str, int]) -> None:
         """Tweak bulk options as per concurrent downloads support by ServiceNow
 
         Args:
@@ -455,7 +482,11 @@ class ServiceNowDataSource(BaseDataSource):
         options["concurrent_downloads"] = self.concurrent_downloads
 
     @classmethod
-    def get_default_configuration(cls):
+    def get_default_configuration(
+        cls,
+    ) -> Dict[
+        str, Union[Dict[str, Union[List[str], int, str]], Dict[str, Union[int, str]]]
+    ]:
         return {
             "url": {
                 "label": "Service URL",
@@ -518,7 +549,7 @@ class ServiceNowDataSource(BaseDataSource):
             },
         }
 
-    def _dls_enabled(self):
+    def _dls_enabled(self) -> bool:
         """Check if document level security is enabled. This method checks whether document level security (DLS) is enabled based on the provided configuration.
 
         Returns:
@@ -532,7 +563,7 @@ class ServiceNowDataSource(BaseDataSource):
 
         return self.configuration["use_document_level_security"]
 
-    async def _user_access_control_doc(self, user):
+    async def _user_access_control_doc(self, user: Dict[str, str]) -> Dict[str, Any]:
         user_id = user.get("_id", "")
         user_name = user.get("user_name", "")
         user_email = user.get("email", "")
@@ -567,7 +598,7 @@ class ServiceNowDataSource(BaseDataSource):
         ):
             yield user
 
-    async def get_access_control(self):
+    async def get_access_control(self) -> None:
         if not self._dls_enabled():
             self._logger.warning("DLS is not enabled. Skipping")
             return
@@ -575,14 +606,16 @@ class ServiceNowDataSource(BaseDataSource):
         async for user in self._fetch_all_users():
             yield await self._user_access_control_doc(user=user)
 
-    def _decorate_with_access_control(self, document, access_control):
+    def _decorate_with_access_control(
+        self, document: Dict[str, str], access_control: List[Union[Any, str]]
+    ) -> Dict[str, Union[str, List[str]]]:
         if self._dls_enabled():
             document[ACCESS_CONTROL] = list(
                 set(document.get(ACCESS_CONTROL, []) + access_control)
             )
         return document
 
-    async def _remote_validation(self):
+    async def _remote_validation(self) -> None:
         """Validate configured services
 
         Raises:
@@ -600,17 +633,17 @@ class ServiceNowDataSource(BaseDataSource):
             msg = f"Services '{', '.join(self.invalid_services)}' are not available. Available services are: '{', '.join(set(self.servicenow_client.services) - set(self.invalid_services))}'"
             raise ConfigurableFieldValueError(msg)
 
-    async def validate_config(self):
+    async def validate_config(self) -> None:
         """Validates whether user input is empty or not for configuration fields
         Also validate, if user configured services are available in ServiceNow."""
 
         await super().validate_config()
         await self._remote_validation()
 
-    async def close(self):
+    async def close(self) -> None:
         await self.servicenow_client.close_session()
 
-    async def ping(self):
+    async def ping(self) -> None:
         """Verify the connection with ServiceNow."""
 
         try:
@@ -621,7 +654,7 @@ class ServiceNowDataSource(BaseDataSource):
             self._logger.exception("Error while connecting to the ServiceNow.")
             raise
 
-    def _format_doc(self, data):
+    def _format_doc(self, data: Dict[str, str]) -> Dict[str, str]:
         """Format document for handling empty values & type casting.
 
         Args:
@@ -640,7 +673,11 @@ class ServiceNowDataSource(BaseDataSource):
         )
         return data
 
-    async def _fetch_attachment_metadata(self, batched_apis, table_access_control):
+    async def _fetch_attachment_metadata(
+        self,
+        batched_apis: List[Dict[str, Union[str, List[Dict[str, str]]]]],
+        table_access_control: List[Union[Any, str]],
+    ) -> None:
         try:
             async for attachments_metadata in self.servicenow_client.get_data(
                 batched_apis=batched_apis
@@ -670,7 +707,9 @@ class ServiceNowDataSource(BaseDataSource):
         finally:
             await self.queue.put(EndSignal.ATTACHMENT)
 
-    async def _attachment_metadata_producer(self, record_ids, table_access_control):
+    async def _attachment_metadata_producer(
+        self, record_ids: List[str], table_access_control: List[Union[Any, str]]
+    ) -> None:
         attachment_apis = None
         try:
             attachment_apis = self.servicenow_client.get_attachment_apis(
@@ -716,7 +755,11 @@ class ServiceNowDataSource(BaseDataSource):
                 exc_info=True,
             )
 
-    async def _fetch_table_data(self, batched_apis, table_access_control):
+    async def _fetch_table_data(
+        self,
+        batched_apis: List[Dict[str, Union[str, List[Dict[str, str]]]]],
+        table_access_control: List[Union[Any, str]],
+    ) -> None:
         try:
             async for table_data in self.servicenow_client.get_data(
                 batched_apis=batched_apis
@@ -751,7 +794,7 @@ class ServiceNowDataSource(BaseDataSource):
         finally:
             await self.queue.put(EndSignal.RECORD)
 
-    async def _fetch_access_controls(self, table_name):
+    async def _fetch_access_controls(self, table_name: str) -> List[str]:
         access_control, user_roles, roles = [], [], {}
         if table_name in DEFAULT_SERVICE_NAMES.keys():
             async for role in self._table_data_generator(
@@ -828,7 +871,12 @@ class ServiceNowDataSource(BaseDataSource):
                 exc_info=True,
             )
 
-    async def _table_data_producer(self, service_name, params, table_access_control):
+    async def _table_data_producer(
+        self,
+        service_name: str,
+        params: Dict[Any, Any],
+        table_access_control: List[Union[Any, str]],
+    ) -> None:
         self._logger.debug(f"Fetching {service_name} data")
         try:
             async for batched_apis in self._get_batched_apis(service_name, params):
@@ -843,7 +891,7 @@ class ServiceNowDataSource(BaseDataSource):
         finally:
             await self.queue.put(EndSignal.SERVICE)
 
-    async def _consumer(self):
+    async def _consumer(self) -> Iterator[Future]:
         """Consume the queue for the documents.
 
         Yields:
@@ -858,7 +906,9 @@ class ServiceNowDataSource(BaseDataSource):
             else:
                 yield item
 
-    async def get_docs(self, filtering=None):
+    async def get_docs(
+        self, filtering: None = None
+    ) -> Iterator[Union[Future, _GatheringFuture]]:
         """Get documents from ServiceNow.
 
         Args:
@@ -929,7 +979,9 @@ class ServiceNowDataSource(BaseDataSource):
 
         await self.fetchers.join()
 
-    async def get_content(self, metadata, timestamp=None, doit=False):
+    async def get_content(
+        self, metadata: Dict[str, str], timestamp: None = None, doit: bool = False
+    ) -> Generator[Future, None, Optional[Dict[str, str]]]:
         file_size = int(metadata["size_bytes"])
         if not (doit and file_size > 0):
             return

@@ -9,19 +9,26 @@ Sandfly Security source module to fetch documents from a Sandfly Security Server
 
 import json
 import socket
+from _asyncio import Task
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from functools import cached_property
+from typing import Any, Dict, Generator, Iterator, List, Optional, Tuple, Union
 
 # import aiofiles
 import aiohttp
+from aiohttp.client import ClientSession
 from aiohttp.client_exceptions import (
     ClientResponseError,
 )
 
 from connectors.es.sink import OP_INDEX
-from connectors.logger import logger
-from connectors.source import CURSOR_SYNC_TIMESTAMP, BaseDataSource
+from connectors.logger import ExtraLogger, logger
+from connectors.source import (
+    CURSOR_SYNC_TIMESTAMP,
+    BaseDataSource,
+    DataSourceConfiguration,
+)
 from connectors.utils import (
     CacheWithTimeout,
     CancellableSleeps,
@@ -38,11 +45,11 @@ RESULTS_SIZE = 999
 CURSOR_SEQUENCE_ID_KEY = "sequence_id"
 
 
-def extract_sandfly_date(datestr):
+def extract_sandfly_date(datestr: str) -> datetime:
     return datetime.strptime(datestr, "%Y-%m-%dT%H:%M:%SZ")
 
 
-def format_sandfly_date(date, flag):
+def format_sandfly_date(date: datetime, flag: bool) -> str:
     if flag:
         return date.strftime("%Y-%m-%dT00:00:00Z")  # date with time as midnight
     return date.strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -73,7 +80,12 @@ class SandflyNotLicensed(Exception):
 
 
 class SandflyAccessToken:
-    def __init__(self, http_session, configuration, logger_):
+    def __init__(
+        self,
+        http_session: ClientSession,
+        configuration: Union[Dict[str, Union[bool, str, int]], DataSourceConfiguration],
+        logger_: ExtraLogger,
+    ) -> None:
         self._token_cache = CacheWithTimeout()
         self._http_session = http_session
         self._logger = logger_
@@ -82,10 +94,10 @@ class SandflyAccessToken:
         self.username = configuration["username"]
         self.password = configuration["password"]
 
-    def set_logger(self, logger_):
+    def set_logger(self, logger_: ExtraLogger) -> None:
         self._logger = logger_
 
-    async def get(self, is_cache=True):
+    async def get(self, is_cache: bool = True) -> Generator[Task, None, str]:
         cached_value = self._token_cache.get_value() if is_cache else None
 
         if cached_value:
@@ -102,7 +114,7 @@ class SandflyAccessToken:
         interval=RETRY_INTERVAL,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
-    async def _fetch_token(self):
+    async def _fetch_token(self) -> Tuple[str, int]:
         url = f"{self.server_url}/auth/login"
         request_headers = {
             "Accept": "application/json",
@@ -125,20 +137,25 @@ class SandflyAccessToken:
 
 
 class SandflySession:
-    def __init__(self, http_session, token, logger_):
+    def __init__(
+        self,
+        http_session: ClientSession,
+        token: SandflyAccessToken,
+        logger_: ExtraLogger,
+    ) -> None:
         self._sleeps = CancellableSleeps()
         self._logger = logger_
 
         self._http_session = http_session
         self._token = token
 
-    def set_logger(self, logger_):
+    def set_logger(self, logger_: ExtraLogger) -> None:
         self._logger = logger_
 
-    def close(self):
+    def close(self) -> None:
         self._sleeps.cancel()
 
-    async def ping(self, server_url):
+    async def ping(self, server_url: str) -> bool:
         try:
             await self._http_session.head(server_url)
             return True
@@ -158,7 +175,7 @@ class SandflySession:
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
         skipped_exceptions=[ResourceNotFound, FetchTokenError],
     )
-    async def _get(self, absolute_url):
+    async def _get(self, absolute_url: str) -> Iterator[Task]:
         try:
             access_token = await self._token.get()
             headers = {
@@ -192,7 +209,13 @@ class SandflySession:
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
         skipped_exceptions=[ResourceNotFound, FetchTokenError],
     )
-    async def _post(self, absolute_url, payload):
+    async def _post(
+        self,
+        absolute_url: str,
+        payload: Dict[
+            str, Union[int, str, Dict[str, List[Dict[str, str]]], List[Dict[str, str]]]
+        ],
+    ) -> Iterator[Task]:
         try:
             access_token = await self._token.get()
             headers = {
@@ -219,7 +242,7 @@ class SandflySession:
         except Exception:
             raise
 
-    async def content_get(self, url):
+    async def content_get(self, url: str) -> Generator[Task, None, str]:
         try:
             async with self._get(absolute_url=url) as response:
                 return await response.text()
@@ -229,7 +252,20 @@ class SandflySession:
             )
             raise
 
-    async def content_post(self, url, payload):
+    async def content_post(
+        self,
+        url: str,
+        payload: Dict[
+            str,
+            Union[
+                int,
+                Dict[str, List[Dict[str, str]]],
+                List[Dict[str, str]],
+                Dict[str, Union[str, List[Dict[str, str]]]],
+                str,
+            ],
+        ],
+    ) -> Generator[Task, None, str]:
         try:
             async with self._post(absolute_url=url, payload=payload) as response:
                 return await response.text()
@@ -241,7 +277,10 @@ class SandflySession:
 
 
 class SandflyClient:
-    def __init__(self, configuration):
+    def __init__(
+        self,
+        configuration: Union[Dict[str, Union[bool, str, int]], DataSourceConfiguration],
+    ) -> None:
         self._sleeps = CancellableSleeps()
         self._logger = logger
 
@@ -268,16 +307,16 @@ class SandflyClient:
             logger_=self._logger,
         )
 
-    def set_logger(self, logger_):
+    def set_logger(self, logger_: ExtraLogger) -> None:
         self._logger = logger_
         self.token.set_logger(self._logger)
         self.client.set_logger(self._logger)
 
-    async def close(self):
+    async def close(self) -> None:
         await self.http_session.close()
         self.client.close()
 
-    async def ping(self):
+    async def ping(self) -> bool:
         try:
             await self.client.ping(self.server_url)
             self._logger.info(
@@ -352,7 +391,9 @@ class SandflyClient:
             for result_item in data_list:
                 yield result_item, more_results
 
-    async def get_results_by_time(self, time_since, enable_pass):
+    async def get_results_by_time(
+        self, time_since: str, enable_pass: bool
+    ) -> Iterator[Task]:
         results_url = f"{self.server_url}/results"
 
         if enable_pass:
@@ -429,7 +470,7 @@ class SandflyClient:
             for host in data_list:
                 yield host
 
-    async def get_license(self):
+    async def get_license(self) -> Iterator[Task]:
         license_url = f"{self.server_url}/license"
         content = await self.client.content_get(url=license_url)
 
@@ -445,7 +486,7 @@ class SandflyDataSource(BaseDataSource):
     service_type = "sandfly"
     incremental_sync_enabled = True
 
-    def __init__(self, configuration):
+    def __init__(self, configuration: DataSourceConfiguration) -> None:
         super().__init__(configuration=configuration)
         self._logger = logger
 
@@ -457,11 +498,11 @@ class SandflyDataSource(BaseDataSource):
         self.fetch_days = self.configuration["fetch_days"]
 
     @cached_property
-    def client(self):
+    def client(self) -> SandflyClient:
         return SandflyClient(configuration=self.configuration)
 
     @classmethod
-    def get_default_configuration(cls):
+    def get_default_configuration(cls) -> Dict[str, Dict[str, Union[bool, str, int]]]:
         return {
             "server_url": {
                 "label": "Sandfly Server URL",
@@ -512,17 +553,17 @@ class SandflyDataSource(BaseDataSource):
             },
         }
 
-    async def ping(self):
+    async def ping(self) -> bool:
         try:
             await self.client.ping()
             return True
         except Exception:
             raise
 
-    async def close(self):
+    async def close(self) -> None:
         await self.client.close()
 
-    def init_sync_cursor(self):
+    def init_sync_cursor(self) -> Dict[str, Union[str, int]]:
         if not self._sync_cursor:
             self._sync_cursor = {
                 CURSOR_SEQUENCE_ID_KEY: 0,
@@ -531,7 +572,17 @@ class SandflyDataSource(BaseDataSource):
 
         return self._sync_cursor
 
-    def _format_doc(self, doc_id, doc_time, doc_text, doc_field, doc_data):
+    def _format_doc(
+        self,
+        doc_id: str,
+        doc_time: str,
+        doc_text: str,
+        doc_field: str,
+        doc_data: Dict[
+            str,
+            Optional[Union[str, Dict[str, Dict[str, Dict[str, str]]], Dict[str, str]]],
+        ],
+    ) -> Dict[str, Any]:
         document = {
             "_id": doc_id,
             "_timestamp": doc_time,
@@ -541,7 +592,9 @@ class SandflyDataSource(BaseDataSource):
         }
         return document
 
-    def extract_results_data(self, result_item, get_more_results):
+    def extract_results_data(
+        self, result_item: Dict[str, Union[Dict[str, str], str]], get_more_results: bool
+    ) -> Tuple[str, str, str, str]:
         last_sequence_id = result_item["sequence_id"]
         external_id = result_item["external_id"]
         timestamp = result_item["header"]["end_time"]
@@ -559,7 +612,7 @@ class SandflyDataSource(BaseDataSource):
 
         return timestamp, key_data, last_sequence_id, doc_id
 
-    def extract_sshkey_data(self, key_item):
+    def extract_sshkey_data(self, key_item: Dict[str, str]) -> Tuple[str, str]:
         friendly = key_item["friendly_name"]
         key_value = key_item["key_value"]
 
@@ -569,7 +622,12 @@ class SandflyDataSource(BaseDataSource):
 
         return friendly, doc_id
 
-    def extract_host_data(self, host_item):
+    def extract_host_data(
+        self,
+        host_item: Dict[
+            str, Optional[Union[str, Dict[str, Dict[str, Dict[str, str]]]]]
+        ],
+    ) -> Tuple[str, str]:
         hostid = host_item["host_id"]
         hostname = host_item["hostname"]
 
@@ -588,7 +646,9 @@ class SandflyDataSource(BaseDataSource):
 
         return key_data, doc_id
 
-    def validate_license(self, license_data):
+    def validate_license(
+        self, license_data: Dict[str, Union[int, Dict[str, str], Dict[str, List[str]]]]
+    ) -> None:
         customer = license_data["customer"]["name"]
         expiry = license_data["date"]["expiry"]
 
@@ -612,7 +672,7 @@ class SandflyDataSource(BaseDataSource):
             msg = f"Sandfly Server [{self.server_url}] is not licensed for Elasticsearch Replication"
             raise SandflyNotLicensed(msg)
 
-    async def get_docs(self, filtering=None):
+    async def get_docs(self, filtering: None = None):
         self.init_sync_cursor()
 
         async for license_data in self.client.get_license():
@@ -708,7 +768,9 @@ class SandflyDataSource(BaseDataSource):
             if last_sequence_id is not None:
                 self._sync_cursor[CURSOR_SEQUENCE_ID_KEY] = last_sequence_id
 
-    async def get_docs_incrementally(self, sync_cursor, filtering=None):
+    async def get_docs_incrementally(
+        self, sync_cursor: Optional[Dict[str, str]], filtering: None = None
+    ):
         self._sync_cursor = sync_cursor
         timestamp = iso_utc()
 

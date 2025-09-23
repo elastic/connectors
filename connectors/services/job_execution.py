@@ -4,6 +4,8 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 from functools import cached_property
+from typing import Dict, List, Union
+from unittest.mock import Mock
 
 from connectors.es.client import License
 from connectors.es.index import DocumentNotFoundError
@@ -22,13 +24,34 @@ from connectors.utils import ConcurrentTasks
 class JobExecutionService(BaseService):
     name = "execute"
 
-    def __init__(self, config, service_name):
+    def __init__(
+        self,
+        config: Dict[
+            str,
+            Union[
+                str,
+                Dict[str, Union[float, int, str]],
+                List[Dict[str, str]],
+                Dict[str, str],
+                Dict[
+                    str,
+                    Union[
+                        str,
+                        bool,
+                        Dict[str, Union[int, bool, Dict[str, Union[bool, int, float]]]],
+                        int,
+                    ],
+                ],
+            ],
+        ],
+        service_name: str,
+    ) -> None:
         super().__init__(config, service_name)
         self.idling = self.service_config["idling"]
         self.source_list = config["sources"]
         self.sync_job_pool = ConcurrentTasks(max_concurrency=self.max_concurrency)
 
-    def stop(self):
+    def stop(self) -> None:
         super().stop()
         self.sync_job_pool.cancel()
 
@@ -51,7 +74,7 @@ class JobExecutionService(BaseService):
     def should_execute(self, connector, sync_job):
         raise NotImplementedError()
 
-    async def _sync(self, sync_job):
+    async def _sync(self, sync_job: Mock) -> None:
         if sync_job.service_type not in self.source_list:
             msg = f"Couldn't find data source class for {sync_job.service_type}"
             raise DataSourceError(msg)
@@ -96,7 +119,7 @@ class JobExecutionService(BaseService):
                 f"{self.display_name.capitalize()} service is already running {self.max_concurrency} sync jobs and can't run more at this poinit. Increase '{self.max_concurrency_config}' in config if you want the service to run more sync jobs."  # pyright: ignore
             )
 
-    async def _run(self):
+    async def _run(self) -> int:
         self.connector_index = ConnectorIndex(self.es_config)
         self.sync_job_index = SyncJobIndex(self.es_config)
 

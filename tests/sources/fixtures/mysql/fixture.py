@@ -13,7 +13,7 @@ from tests.commons import WeightedFakeProvider
 
 fake_provider = WeightedFakeProvider(weights=[0.65, 0.3, 0.05, 0])
 
-DATA_SIZE = os.environ.get("DATA_SIZE", "medium").lower()
+DATA_SIZE: str = os.environ.get("DATA_SIZE", "medium").lower()
 
 match DATA_SIZE:
     case "small":
@@ -31,11 +31,11 @@ BATCH_SIZE = 100
 DATABASE_NAME = "customerinfo"
 
 
-def get_num_docs():
+def get_num_docs() -> None:
     print(NUM_TABLES * (RECORD_COUNT - RECORDS_TO_DELETE))
 
 
-def inject_lines(table, cursor, lines):
+def inject_lines(table, cursor, lines) -> None:
     batch_count = max(int(lines / BATCH_SIZE), 1)
 
     inserted = 0
@@ -51,7 +51,7 @@ def inject_lines(table, cursor, lines):
         print(f"Inserting batch #{batch} of {batch_size} documents.")
 
 
-async def load():
+async def load() -> None:
     """N tables of 10001 rows each. each row is ~ 1024*20 bytes"""
     database = connect(host="127.0.0.1", port=3306, user="root", password="changeme")
     cursor = database.cursor()
@@ -67,7 +67,7 @@ async def load():
     database.commit()
 
 
-async def remove():
+async def remove() -> None:
     """Removes 10 random items per table"""
     database = connect(host="127.0.0.1", port=3306, user="root", password="changeme")
     cursor = database.cursor()

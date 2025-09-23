@@ -21,7 +21,7 @@ from connectors.protocol import (
 
 
 class Job:
-    def __init__(self, config):
+    def __init__(self, config) -> None:
         self.config = config
         self.cli_client = CLIClient(self.config)
         self.sync_job_index = SyncJobIndex(self.config)

@@ -15,7 +15,7 @@ from connectors.utils import CancellableSleeps
 
 
 class PreflightCheck:
-    def __init__(self, config, version):
+    def __init__(self, config, version) -> None:
         self.version = version
         self.config = config
         self.elastic_config = config["elasticsearch"]
@@ -29,13 +29,13 @@ class PreflightCheck:
         self._sleeps = CancellableSleeps()
         self.running = False
 
-    def stop(self):
+    def stop(self) -> None:
         self.running = False
         self._sleeps.cancel()
         if self.es_management_client is not None:
             self.es_management_client.stop_waiting()
 
-    def shutdown(self, sig):
+    def shutdown(self, sig) -> None:
         logger.info(f"Caught {sig.name}. Graceful shutdown.")
         self.stop()
 
@@ -84,7 +84,7 @@ class PreflightCheck:
         versions_compatible = await self._versions_compatible(version.get("number"))
         return versions_compatible, is_serverless
 
-    async def _versions_compatible(self, es_version):
+    async def _versions_compatible(self, es_version) -> bool:
         """
         Checks if the Connector and ES versions are compatible
         """
@@ -128,7 +128,7 @@ class PreflightCheck:
         )
         return True
 
-    async def _check_local_extraction_setup(self):
+    async def _check_local_extraction_setup(self) -> None:
         if self.extraction_config is None:
             logger.info(
                 "Extraction service is not configured, skipping its preflight check."
@@ -161,7 +161,7 @@ class PreflightCheck:
         finally:
             await session.close()
 
-    async def _check_system_indices_with_retries(self):
+    async def _check_system_indices_with_retries(self) -> bool:
         attempts = 0
         while self.running:
             try:
@@ -189,7 +189,7 @@ class PreflightCheck:
                     await self._sleeps.sleep(self.preflight_idle)
         return False
 
-    def _validate_configuration(self):
+    def _validate_configuration(self) -> bool:
         # "Native" mode
         configured_native_types = "native_service_types" in self.config
         force_allowed_native = self.config.get("_force_allow_native", False)

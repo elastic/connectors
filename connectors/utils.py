@@ -18,19 +18,35 @@ import string
 import subprocess  # noqa S404
 import time
 import urllib.parse
+from _asyncio import Future, Task
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from time import strftime
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Generator,
+    Iterator,
+    List,
+    Optional,
+    Tuple,
+    Union,
+)
+from unittest.mock import AsyncMock, Mock
 
 import dateutil.parser as parser
 import pytz
 import tzcron
 from base64io import Base64IO
 from bs4 import BeautifulSoup
+from freezegun.api import FakeDatetime
 from pympler import asizeof
+from typing_extensions import Buffer
 
-from connectors.logger import logger
+from connectors.exceptions import DocumentIngestionError
+from connectors.logger import _TracedAsyncGenerator, logger
 
 ACCESS_CONTROL_INDEX_PREFIX = ".search-acl-filter-"
 DEFAULT_CHUNK_SIZE = 500
@@ -86,17 +102,17 @@ class Format(Enum):
     SHORT = "short"
 
 
-def parse_datetime_string(datetime):
+def parse_datetime_string(datetime: str) -> datetime:
     return parser.parse(datetime)
 
 
-def iso_utc(when=None):
+def iso_utc(when: Optional[datetime] = None) -> str:
     if when is None:
         when = datetime.now(timezone.utc)
     return when.isoformat()
 
 
-def with_utc_tz(ts):
+def with_utc_tz(ts: datetime) -> datetime:
     """Ensure the timestmap has a timezone of UTC."""
     if ts.tzinfo is None:
         return ts.replace(tzinfo=timezone.utc)
@@ -104,17 +120,17 @@ def with_utc_tz(ts):
         return ts.astimezone(timezone.utc)
 
 
-def iso_zulu():
+def iso_zulu() -> str:
     """Returns the current time in ISO Zulu format"""
     return datetime.now(timezone.utc).strftime(ISO_ZULU_TIMESTAMP_FORMAT)
 
 
-def epoch_timestamp_zulu():
+def epoch_timestamp_zulu() -> str:
     """Returns the timestamp of the start of the epoch, in ISO Zulu format"""
     return strftime(ISO_ZULU_TIMESTAMP_FORMAT, time.gmtime(0))
 
 
-def next_run(quartz_definition, now):
+def next_run(quartz_definition: str, now: datetime) -> datetime:
     """Returns the datetime in UTC timezone of the next run."""
     # Year is optional and is never present.
     _, minutes, hours, day_of_month, month, day_of_week, year = (
@@ -153,7 +169,7 @@ class InvalidIndexNameError(ValueError):
     pass
 
 
-def validate_index_name(name):
+def validate_index_name(name: str) -> str:
     for char in INVALID_CHARS:
         if char in name:
             msg = f"Invalid character {char}"
@@ -175,10 +191,12 @@ def validate_index_name(name):
 
 
 class CancellableSleeps:
-    def __init__(self):
+    def __init__(self) -> None:
         self._sleeps = set()
 
-    async def sleep(self, delay, result=None, *, loop=None):
+    async def sleep(
+        self, delay: Union[float, Mock, int], result: None = None, *, loop=None
+    ) -> None:
         async def _sleep(delay, result=None, *, loop=None):
             coro = asyncio.sleep(delay, result=result)
             task = asyncio.ensure_future(coro)
@@ -193,7 +211,7 @@ class CancellableSleeps:
 
         await _sleep(delay, result=result, loop=loop)
 
-    def cancel(self, sig=None):
+    def cancel(self, sig: None = None) -> None:
         if sig:
             logger.debug(f"Caught {sig}. Cancelling sleeps...")
         else:
@@ -203,16 +221,16 @@ class CancellableSleeps:
             task.cancel()
 
 
-def get_size(ob):
+def get_size(ob: Any) -> int:
     """Returns size in Bytes"""
     return asizeof.asizeof(ob)
 
 
-def get_file_extension(filename):
+def get_file_extension(filename: str) -> str:
     return os.path.splitext(filename)[-1]
 
 
-def get_base64_value(content):
+def get_base64_value(content: Buffer) -> str:
     """
     Returns the converted file passed into a base64 encoded value
     Args:
@@ -221,7 +239,7 @@ def get_base64_value(content):
     return base64.b64encode(content).decode("utf-8")
 
 
-def decode_base64_value(content):
+def decode_base64_value(content: Union[str, Buffer]) -> bytes:
     """
     Decodes the base64 encoded content
     Args:
@@ -230,10 +248,22 @@ def decode_base64_value(content):
     return base64.b64decode(content)
 
 
-_BASE64 = shutil.which("base64")
+_BASE64: Optional[str] = shutil.which("base64")
 
 
-def convert_to_b64(source, target=None, overwrite=False):
+def convert_to_b64(
+    source: Union[os.PathLike[bytes], os.PathLike[str], bytes, str],
+    target: Union[None, os.PathLike[bytes], os.PathLike[str], bytes, int, str] = None,
+    overwrite: bool = False,
+) -> Union[
+    os.PathLike[bytes],
+    os.PathLike[str],
+    os.PathLike[Union[bytes, str]],
+    bytes,
+    int,
+    str,
+    None,
+]:
     """Converts a `source` file to base64 using the system's `base64`
 
     When `target` is not provided, done in-place.
@@ -289,27 +319,31 @@ def convert_to_b64(source, target=None, overwrite=False):
 
 class MemQueue(asyncio.Queue):
     def __init__(
-        self, maxsize=0, maxmemsize=0, refresh_interval=1.0, refresh_timeout=60
-    ):
+        self,
+        maxsize: int = 0,
+        maxmemsize: int = 0,
+        refresh_interval: float = 1.0,
+        refresh_timeout: float = 60,
+    ) -> None:
         super().__init__(maxsize)
         self.maxmemsize = maxmemsize
         self.refresh_interval = refresh_interval
         self._current_memsize = 0
         self.refresh_timeout = refresh_timeout
 
-    def qmemsize(self):
+    def qmemsize(self) -> int:
         return self._current_memsize
 
-    def _get(self):
+    def _get(self) -> Any:
         item_size, item = self._queue.popleft()  # pyright: ignore
         self._current_memsize -= item_size
         return item_size, item
 
-    def _put(self, item):
+    def _put(self, item: Any) -> None:
         self._current_memsize += item[0]  # pyright: ignore
         self._queue.append(item)  # pyright: ignore
 
-    def full(self, next_item_size=0):
+    def full(self, next_item_size: int = 0) -> bool:
         full_by_numbers = super().full()
 
         if full_by_numbers:
@@ -323,7 +357,7 @@ class MemQueue(asyncio.Queue):
 
         return self._current_memsize + next_item_size >= self.maxmemsize
 
-    async def _putter_timeout(self, putter):
+    async def _putter_timeout(self, putter: Future) -> None:
         """This coroutine will set the result of the putter to QueueFull when a certain timeout it reached."""
         start = time.time()
         while not putter.done():
@@ -338,7 +372,7 @@ class MemQueue(asyncio.Queue):
             logger.debug("Queue Full")
             await asyncio.sleep(self.refresh_interval)
 
-    async def put(self, item):
+    async def put(self, item: Any) -> None:
         item_size = get_size(item)
 
         # This block is taken from the original put() method but with two
@@ -387,14 +421,14 @@ class MemQueue(asyncio.Queue):
 
         super().put_nowait((item_size, item))
 
-    def clear(self):
+    def clear(self) -> None:
         while not self.empty():
             # Depending on your program, you may want to
             # catch QueueEmpty
             self.get_nowait()
             self.task_done()
 
-    def put_nowait(self, item):
+    def put_nowait(self, item: Union[str, int]) -> None:
         item_size = get_size(item)
         if self.full(item_size):
             msg = f"Queue is full: attempting to add item of size {item_size} bytes while {self.maxmemsize - self._current_memsize} free bytes left."
@@ -408,7 +442,7 @@ class NonBlockingBoundedSemaphore(asyncio.BoundedSemaphore):
     This introduces a new try_acquire method, which will return if it can't acquire immediately.
     """
 
-    def try_acquire(self):
+    def try_acquire(self) -> bool:
         if self.locked():
             return False
 
@@ -443,14 +477,14 @@ class ConcurrentTasks:
         await task_pool.join()
     """
 
-    def __init__(self, max_concurrency=5):
+    def __init__(self, max_concurrency: int = 5) -> None:
         self.tasks = []
         self._sem = NonBlockingBoundedSemaphore(max_concurrency)
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.tasks)
 
-    def _callback(self, task):
+    def _callback(self, task: Task) -> None:
         self.tasks.remove(task)
         self._sem.release()
         if task.cancelled():
@@ -462,7 +496,9 @@ class ConcurrentTasks:
                 f"Exception found for task {task.get_name()}", exc_info=task.exception()
             )
 
-    def _add_task(self, coroutine, name=None):
+    def _add_task(
+        self, coroutine: Union[functools.partial, Callable], name: Optional[str] = None
+    ) -> Task:
         task = asyncio.create_task(coroutine(), name=name)
         self.tasks.append(task)
         # _callback will be executed when the task is done,
@@ -471,7 +507,9 @@ class ConcurrentTasks:
         task.add_done_callback(functools.partial(self._callback))
         return task
 
-    async def put(self, coroutine, name=None):
+    async def put(
+        self, coroutine: Union[functools.partial, Callable], name: Optional[str] = None
+    ) -> Generator[Future, None, Task]:
         """Adds a coroutine for immediate execution.
 
         If the number of running tasks reach `max_concurrency`, this
@@ -480,7 +518,9 @@ class ConcurrentTasks:
         await self._sem.acquire()
         return self._add_task(coroutine, name=name)
 
-    def try_put(self, coroutine, name=None):
+    def try_put(
+        self, coroutine: functools.partial, name: Optional[str] = None
+    ) -> Optional[Task]:
         """Tries to add a coroutine for immediate execution.
 
         If the number of running tasks reach `max_concurrency`, this
@@ -491,7 +531,7 @@ class ConcurrentTasks:
             return self._add_task(coroutine, name=name)
         return None
 
-    async def join(self, raise_on_error=False):
+    async def join(self, raise_on_error: bool = False) -> None:
         """Wait for all tasks to finish."""
         try:
             await asyncio.gather(*self.tasks, return_exceptions=(not raise_on_error))
@@ -499,7 +539,7 @@ class ConcurrentTasks:
             self.cancel()
             raise
 
-    def raise_any_exception(self):
+    def raise_any_exception(self) -> None:
         for task in self.tasks:
             if task.done() and not task.cancelled():
                 if task.exception():
@@ -509,7 +549,7 @@ class ConcurrentTasks:
                     self.cancel()  # cancel all the pending tasks
                     raise task.exception()
 
-    def cancel(self):
+    def cancel(self) -> None:
         """Cancels all tasks"""
         for task in self.tasks:
             task.cancel()
@@ -529,11 +569,11 @@ sleeps_for_retryable = CancellableSleeps()
 
 
 def retryable(
-    retries=3,
-    interval=1.0,
-    strategy=RetryStrategy.LINEAR_BACKOFF,
-    skipped_exceptions=None,
-):
+    retries: int = 3,
+    interval: float = 1.0,
+    strategy: RetryStrategy = RetryStrategy.LINEAR_BACKOFF,
+    skipped_exceptions: Optional[Any] = None,
+) -> Callable:
     def wrapper(func):
         if skipped_exceptions is None:
             processed_skipped_exceptions = []
@@ -561,7 +601,13 @@ def retryable(
     return wrapper
 
 
-def retryable_async_function(func, retries, interval, strategy, skipped_exceptions):
+def retryable_async_function(
+    func: Callable,
+    retries: int,
+    interval: Union[float, int],
+    strategy: RetryStrategy,
+    skipped_exceptions: List[Any],
+) -> Callable:
     @functools.wraps(func)
     async def wrapped(*args, **kwargs):
         retry = 1
@@ -582,7 +628,13 @@ def retryable_async_function(func, retries, interval, strategy, skipped_exceptio
     return wrapped
 
 
-def retryable_async_generator(func, retries, interval, strategy, skipped_exceptions):
+def retryable_async_generator(
+    func: Callable,
+    retries: int,
+    interval: Union[float, int],
+    strategy: RetryStrategy,
+    skipped_exceptions: List[Any],
+) -> Callable:
     @functools.wraps(func)
     async def wrapped(*args, **kwargs):
         retry = 1
@@ -606,7 +658,13 @@ def retryable_async_generator(func, retries, interval, strategy, skipped_excepti
     return wrapped
 
 
-def retryable_sync_function(func, retries, interval, strategy, skipped_exceptions):
+def retryable_sync_function(
+    func: Callable,
+    retries: int,
+    interval: int,
+    strategy: RetryStrategy,
+    skipped_exceptions: List[Any],
+) -> Callable:
     @functools.wraps(func)
     def wrapped(*args, **kwargs):
         retry = 1
@@ -625,7 +683,9 @@ def retryable_sync_function(func, retries, interval, strategy, skipped_exception
     return wrapped
 
 
-def time_to_sleep_between_retries(strategy, interval, retry):
+def time_to_sleep_between_retries(
+    strategy: Union[RetryStrategy, str], interval: Union[float, int], retry: int
+) -> Union[float, int]:
     match strategy:
         case RetryStrategy.CONSTANT:
             return interval
@@ -637,7 +697,7 @@ def time_to_sleep_between_retries(strategy, interval, retry):
             raise UnknownRetryStrategyError()
 
 
-def ssl_context(certificate):
+def ssl_context(certificate: str) -> ssl.SSLContext:
     """Convert string to pem format and create a SSL context
 
     Args:
@@ -652,7 +712,7 @@ def ssl_context(certificate):
     return ctx
 
 
-def url_encode(original_string):
+def url_encode(original_string: str) -> str:
     """Performs encoding on the objects
     containing special characters in their url, and
     replaces single quote with two single quote since quote
@@ -667,7 +727,7 @@ def url_encode(original_string):
     return urllib.parse.quote(original_string, safe="'")
 
 
-def evaluate_timedelta(seconds, time_skew=0):
+def evaluate_timedelta(seconds: int, time_skew: int = 0) -> str:
     """Adds seconds to the current utc time.
 
     Args:
@@ -680,7 +740,7 @@ def evaluate_timedelta(seconds, time_skew=0):
     return iso_utc(when=modified_time)
 
 
-def is_expired(expires_at):
+def is_expired(expires_at: Optional[Union[FakeDatetime, datetime]]) -> bool:
     """Compares the given time with present time
 
     Args:
@@ -692,7 +752,7 @@ def is_expired(expires_at):
     return datetime.utcnow() >= expires_at
 
 
-def get_pem_format(key, postfix="-----END CERTIFICATE-----"):
+def get_pem_format(key: str, postfix: str = "-----END CERTIFICATE-----") -> str:
     """Convert key into PEM format.
 
     Args:
@@ -726,14 +786,14 @@ def get_pem_format(key, postfix="-----END CERTIFICATE-----"):
     return pem_format
 
 
-def hash_id(_id):
+def hash_id(_id: str) -> str:
     # Collision probability: 1.47*10^-29
     # S105 rule considers this code unsafe, but we're not using it for security-related
     # things, only to generate pseudo-ids for documents
     return hashlib.md5(_id.encode("utf8")).hexdigest()  # noqa S105
 
 
-def truncate_id(_id):
+def truncate_id(_id: str) -> str:
     """Truncate ID of an object.
 
     We cannot guarantee that connector returns small IDs.
@@ -754,7 +814,7 @@ def truncate_id(_id):
     return _id
 
 
-def has_duplicates(strings_list):
+def has_duplicates(strings_list: List[Union[str, Any]]) -> bool:
     seen = set()
     for s in strings_list:
         if s in seen:
@@ -763,7 +823,10 @@ def has_duplicates(strings_list):
     return False
 
 
-def filter_nested_dict_by_keys(key_list, source_dict):
+def filter_nested_dict_by_keys(
+    key_list: List[Union[str, Any]],
+    source_dict: Dict[str, Union[Dict[str, int], Dict[Any, Any]]],
+) -> Dict[str, Union[Dict[str, int], Dict[Any, Any]]]:
     """Filters a nested dict by the keys of the sub-level dict.
     This is used for checking if any configuration fields are missing properties.
 
@@ -782,7 +845,9 @@ def filter_nested_dict_by_keys(key_list, source_dict):
     return filtered_dict
 
 
-def deep_merge_dicts(base_dict, new_dict):
+def deep_merge_dicts(
+    base_dict: Dict[str, Any], new_dict: Dict[str, Any]
+) -> Dict[str, Any]:
     """Deep merges two nested dicts.
 
     Args:
@@ -810,17 +875,17 @@ class CacheWithTimeout:
     Example of usage:
 
     cache = CacheWithTimeout()
-    cache.set_value(50, datetime.datetime.now() + datetime.timedelta(5)
+    cache.set_value(50, datetime.now() + timedelta(5)
     value = cache.get() # 50
     sleep(5)
     value = cache.get() # None
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._value = None
         self._expiration_date = None
 
-    def get_value(self):
+    def get_value(self) -> Optional[str]:
         """Get the value that's stored inside if it hasn't expired.
 
         If the expiration_date is past due, None is returned instead.
@@ -833,7 +898,9 @@ class CacheWithTimeout:
 
         return None
 
-    def set_value(self, value, expiration_date):
+    def set_value(
+        self, value: str, expiration_date: Union[FakeDatetime, float, datetime]
+    ) -> None:
         """Set the value in the cache with expiration date.
 
         Once expiration_date is past due, the value will be lost.
@@ -842,7 +909,7 @@ class CacheWithTimeout:
         self._expiration_date = expiration_date
 
 
-def html_to_text(html):
+def html_to_text(html: Optional[str]) -> Optional[Union[Mock, str]]:
     if not html:
         return html
     try:
@@ -853,7 +920,7 @@ def html_to_text(html):
         return BeautifulSoup(html, features="html.parser").get_text(separator="\n")
 
 
-async def aenumerate(asequence, start=0):
+async def aenumerate(asequence: _TracedAsyncGenerator, start: int = 0) -> None:
     i = start
     async for elem in asequence:
         try:
@@ -862,7 +929,12 @@ async def aenumerate(asequence, start=0):
             i += 1
 
 
-def iterable_batches_generator(iterable, batch_size):
+def iterable_batches_generator(
+    iterable: List[
+        Union[Dict[str, str], Dict[str, Union[Dict[str, str], str]], int, Any]
+    ],
+    batch_size: int,
+) -> Iterator[List[Union[Dict[str, str], Dict[str, Union[Dict[str, str], str]], int]]]:
     """Iterate over an iterable in batches.
 
     If the batch size is bigger than the number of remaining elements then all remaining elements will be returned.
@@ -880,7 +952,15 @@ def iterable_batches_generator(iterable, batch_size):
         yield iterable[idx : min(idx + batch_size, num_items)]
 
 
-def dict_slice(hsh, keys, default=None):
+def dict_slice(
+    hsh: Dict[str, Union[bool, str, int]],
+    keys: Union[
+        Tuple[str, str, str, str],
+        Tuple[str, str, str, str, str, str],
+        Tuple[str, str, str, str, str, str, str],
+    ],
+    default: None = None,
+) -> Dict[str, Optional[Union[str, int]]]:
     """
     Slice a dict by a subset of its keys.
     :param hsh: The input dictionary to slice
@@ -890,7 +970,7 @@ def dict_slice(hsh, keys, default=None):
     return {k: hsh.get(k, default) for k in keys}
 
 
-def base64url_to_base64(string):
+def base64url_to_base64(string: Optional[str]) -> Optional[str]:
     if string is None:
         return string
 
@@ -901,7 +981,7 @@ def base64url_to_base64(string):
     return string.replace("_", "/")
 
 
-def validate_email_address(email_address):
+def validate_email_address(email_address: str) -> bool:
     """Validates an email address against a regular expression.
     This method does not include any remote check against an SMTP server for example."""
 
@@ -909,7 +989,7 @@ def validate_email_address(email_address):
     return re.fullmatch(EMAIL_REGEX_PATTERN, email_address) is not None
 
 
-def shorten_str(string, shorten_by):
+def shorten_str(string: Optional[str], shorten_by: int) -> str:
     """
     Shorten a string by removing characters from the middle, replacing them with '...'.
 
@@ -952,7 +1032,9 @@ def shorten_str(string, shorten_by):
         return f"{string[:keep + 1]}...{string[-keep:]}"
 
 
-def func_human_readable_name(func):
+def func_human_readable_name(
+    func: Union[AsyncMock, functools.partial, Callable],
+) -> str:
     if isinstance(func, functools.partial):
         return func.func.__name__
 
@@ -962,7 +1044,11 @@ def func_human_readable_name(func):
         return str(func)
 
 
-def nested_get_from_dict(dictionary, keys, default=None):
+def nested_get_from_dict(
+    dictionary: Any,
+    keys: Union[List[str], Tuple[str, str]],
+    default: Optional[Union[bool, str, float]] = None,
+) -> Any:
     def nested_get(dictionary_, keys_, default_=None):
         if dictionary_ is None:
             return default_
@@ -978,7 +1064,9 @@ def nested_get_from_dict(dictionary, keys, default=None):
     return nested_get(dictionary, keys, default)
 
 
-def sanitize(doc):
+def sanitize(
+    doc: Dict[str, Union[int, datetime, str]],
+) -> Dict[str, Union[datetime, str]]:
     if doc["_id"]:
         # guarantee that IDs are strings, and not numeric
         doc["_id"] = str(doc["_id"])
@@ -992,18 +1080,20 @@ class Counters:
     A utility to provide code readability to managing a collection of counts
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._storage = {}
 
-    def increment(self, key, value=1, namespace=None):
+    def increment(
+        self, key: str, value: int = 1, namespace: Optional[str] = None
+    ) -> None:
         if namespace:
             key = f"{namespace}.{key}"
         self._storage[key] = self._storage.get(key, 0) + value
 
-    def get(self, key) -> int:
+    def get(self, key: str) -> int:
         return self._storage.get(key, 0)
 
-    def to_dict(self):
+    def to_dict(self) -> Dict[str, int]:
         return deepcopy(self._storage)
 
 
@@ -1014,13 +1104,13 @@ class TooManyErrors(Exception):
 class ErrorMonitor:
     def __init__(
         self,
-        enabled=True,
-        max_total_errors=1000,
-        max_consecutive_errors=10,
-        max_error_rate=0.15,
-        error_window_size=100,
-        error_queue_size=10,
-    ):
+        enabled: bool = True,
+        max_total_errors: int = 1000,
+        max_consecutive_errors: int = 10,
+        max_error_rate: float = 0.15,
+        error_window_size: int = 100,
+        error_queue_size: int = 10,
+    ) -> None:
         # When disabled, only track errors
         self.enabled = enabled
 
@@ -1039,12 +1129,14 @@ class ErrorMonitor:
         self.total_success_count = 0
         self.total_error_count = 0
 
-    def track_success(self):
+    def track_success(self) -> None:
         self.consecutive_error_count = 0
         self.total_success_count += 1
         self._update_error_window(False)
 
-    def track_error(self, error):
+    def track_error(
+        self, error: Union[InvalidIndexNameError, DocumentIngestionError, Exception]
+    ) -> None:
         self.total_error_count += 1
         self.consecutive_error_count += 1
 
@@ -1058,7 +1150,7 @@ class ErrorMonitor:
 
         self._raise_if_necessary()
 
-    def _update_error_window(self, value):
+    def _update_error_window(self, value: bool) -> None:
         # We keep the errors array of the size self.error_window_size this way, imagine self.error_window_size = 5
         # Error array inits as falses:
         # [ false, false, false, false, false ]
@@ -1083,7 +1175,7 @@ class ErrorMonitor:
         self.error_window[self.error_window_index] = value
         self.error_window_index = (self.error_window_index + 1) % self.error_window_size
 
-    def _error_window_error_rate(self):
+    def _error_window_error_rate(self) -> float:
         if self.error_window_size == 0:
             return 0
 
@@ -1093,7 +1185,7 @@ class ErrorMonitor:
 
         return error_rate
 
-    def _raise_if_necessary(self):
+    def _raise_if_necessary(self) -> None:
         if not self.enabled:
             return
 
@@ -1110,7 +1202,7 @@ class ErrorMonitor:
                 raise TooManyErrors(msg) from self.last_error
 
 
-def generate_random_id(length=4):
+def generate_random_id(length: int = 4) -> str:
     return "".join(
         secrets.choice(string.ascii_letters + string.digits) for _ in range(length)
     )

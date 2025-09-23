@@ -4,6 +4,14 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Type, Union
+
+if TYPE_CHECKING:
+    from connectors.sources.confluence import ConfluenceClient, ConfluenceDataSource
+    from connectors.sources.jira import JiraClient, JiraDataSource
+
 import fastjsonschema
 from fastjsonschema import JsonSchemaValueException
 
@@ -34,10 +42,12 @@ class AtlassianAdvancedRulesValidator(AdvancedRulesValidator):
 
     SCHEMA = fastjsonschema.compile(definition=SCHEMA_DEFINITION)
 
-    def __init__(self, source):
+    def __init__(self, source: Type[AdvancedRulesValidator]) -> None:
         self.source = source
 
-    async def validate(self, advanced_rules):
+    async def validate(
+        self, advanced_rules: Union[List[Dict[str, str]], Dict[str, List[str]]]
+    ) -> SyncRuleValidationResult:
         if len(advanced_rules) == 0:
             return SyncRuleValidationResult.valid_result(
                 SyncRuleValidationResult.ADVANCED_RULES
@@ -50,7 +60,9 @@ class AtlassianAdvancedRulesValidator(AdvancedRulesValidator):
         interval=RETRY_INTERVAL,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
-    async def _remote_validation(self, advanced_rules):
+    async def _remote_validation(
+        self, advanced_rules: Union[List[Dict[str, str]], Dict[str, List[str]]]
+    ) -> SyncRuleValidationResult:
         try:
             AtlassianAdvancedRulesValidator.SCHEMA(advanced_rules)
         except JsonSchemaValueException as e:
@@ -65,46 +77,52 @@ class AtlassianAdvancedRulesValidator(AdvancedRulesValidator):
         )
 
 
-def prefix_account_id(account_id):
+def prefix_account_id(account_id: str) -> Optional[str]:
     return prefix_identity("account_id", account_id)
 
 
-def prefix_group_id(group_id):
+def prefix_group_id(group_id: str) -> Optional[str]:
     return prefix_identity("group_id", group_id)
 
 
-def prefix_role_key(role_key):
+def prefix_role_key(role_key: str) -> Optional[str]:
     return prefix_identity("role_key", role_key)
 
 
-def prefix_account_name(account_name):
+def prefix_account_name(account_name: str) -> Optional[str]:
     return prefix_identity("name", account_name.replace(" ", "-"))
 
 
-def prefix_account_email(email):
+def prefix_account_email(email: str) -> Optional[str]:
     return prefix_identity("email_address", email)
 
 
-def prefix_account_locale(locale):
+def prefix_account_locale(locale: str) -> Optional[str]:
     return prefix_identity("locale", locale)
 
 
-def prefix_user(user):
+def prefix_user(user: str) -> Optional[str]:
     if not user:
         return
     return prefix_identity("user", user)
 
 
-def prefix_group(group):
+def prefix_group(group: str) -> Optional[str]:
     return prefix_identity("group", group)
 
 
 class AtlassianAccessControl:
-    def __init__(self, source, client):
+    def __init__(
+        self,
+        source: Union[JiraDataSource, ConfluenceDataSource],
+        client: Union[Type[JiraClient], ConfluenceClient, JiraClient],
+    ) -> None:
         self.source = source
         self.client = client
 
-    def access_control_query(self, access_control):
+    def access_control_query(
+        self, access_control: List[str]
+    ) -> Dict[str, Dict[str, Dict[str, Union[Dict[str, List[str]], str]]]]:
         return es_access_control_query(access_control)
 
     async def fetch_all_users(self, url):
@@ -155,7 +173,10 @@ class AtlassianAccessControl:
         user = await self.client.api_call(url=url)
         yield await user.json()
 
-    async def user_access_control_doc(self, user):
+    async def user_access_control_doc(
+        self,
+        user: Dict[str, Union[str, bool, Dict[str, Union[List[Dict[str, str]], int]]]],
+    ) -> Dict[str, Any]:
         """Generate a user access control document.
 
         This method generates a user access control document based on the provided user information.
@@ -216,7 +237,7 @@ class AtlassianAccessControl:
 
         return user_document | self.access_control_query(access_control=access_control)
 
-    def is_active_atlassian_user(self, user_info):
+    def is_active_atlassian_user(self, user_info: Dict[str, Union[bool, str]]) -> bool:
         from connectors.sources.confluence import CONFLUENCE_CLOUD
         from connectors.sources.jira import JIRA_CLOUD
 

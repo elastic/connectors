@@ -16,7 +16,7 @@ from connectors.protocol import (
 
 
 class Index:
-    def __init__(self, config):
+    def __init__(self, config) -> None:
         self.elastic_config = config
         self.cli_client = CLIClient(self.elastic_config)
         self.connectors_index = ConnectorIndex(self.elastic_config)

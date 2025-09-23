@@ -4,8 +4,13 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 from contextlib import asynccontextmanager
+from typing import Type
 
-from connectors.source import DEFAULT_CONFIGURATION, DataSourceConfiguration
+from connectors.source import (
+    DEFAULT_CONFIGURATION,
+    BaseDataSource,
+    DataSourceConfiguration,
+)
 
 
 @asynccontextmanager
@@ -24,7 +29,7 @@ async def create_source(klass, **extras):
         await source.close()
 
 
-async def assert_basics(klass, field, value):
+async def assert_basics(klass: Type[BaseDataSource], field: str, value: str) -> None:
     config = DataSourceConfiguration(klass.get_default_configuration())
     assert config[field] == value
     async with create_source(klass) as source:

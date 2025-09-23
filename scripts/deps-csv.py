@@ -14,7 +14,7 @@ LICENSE = 2
 URL = 3
 
 
-def main(dependencies_csv):
+def main(dependencies_csv) -> None:
     """
     The input is what we get from `pip-licenses --format=csv --with-urls`
     See: https://pypi.org/project/pip-licenses/#csv
@@ -44,7 +44,7 @@ def main(dependencies_csv):
 
 
 if __name__ == "__main__":
-    depenencies_csv = sys.argv[1]
+    depenencies_csv: str = sys.argv[1]
     print(f"post-processing {depenencies_csv}")  # noqa
     main(depenencies_csv)
     print(f"wrote output to {depenencies_csv}")  # noqa

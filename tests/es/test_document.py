@@ -20,18 +20,18 @@ from connectors.es import ESDocument, InvalidDocumentSourceError
         {"_id": "1", "_source": "hahaha"},
     ],
 )
-def test_es_document_raise(doc_source):
+def test_es_document_raise(doc_source) -> None:
     with pytest.raises(InvalidDocumentSourceError):
         ESDocument(elastic_index=None, doc_source=doc_source)
 
 
-def test_es_document_ok():
+def test_es_document_ok() -> None:
     doc_source = {"_id": "1", "_source": {}}
     es_document = ESDocument(elastic_index=None, doc_source=doc_source)
     assert isinstance(es_document, ESDocument)
 
 
-def test_es_document_get():
+def test_es_document_get() -> None:
     source = {
         "_id": "test",
         "_seq_no": 1,
@@ -62,7 +62,7 @@ def test_es_document_get():
 
 
 @pytest.mark.asyncio
-async def test_reload():
+async def test_reload() -> None:
     source = {
         "_id": "test",
         "_seq_no": 1,

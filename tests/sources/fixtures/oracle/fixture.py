@@ -25,7 +25,7 @@ USER = "c##admin"
 PASSWORD = "Password_123"
 DSN = "localhost:1521/FREE"
 
-DATA_SIZE = os.environ.get("DATA_SIZE", "medium").lower()
+DATA_SIZE: str = os.environ.get("DATA_SIZE", "medium").lower()
 
 match DATA_SIZE:
     case "small":
@@ -41,11 +41,11 @@ match DATA_SIZE:
 RECORDS_TO_DELETE = 10
 
 
-def get_num_docs():
+def get_num_docs() -> None:
     print(NUM_TABLES * (RECORD_COUNT - RECORDS_TO_DELETE))
 
 
-def inject_lines(table, cursor, lines):
+def inject_lines(table, cursor, lines) -> None:
     batch_count = max(int(lines / BATCH_SIZE), 1)
     inserted = 0
     print(f"Inserting {lines} lines in {batch_count} batches")
@@ -62,7 +62,7 @@ def inject_lines(table, cursor, lines):
         print(f"Inserted batch #{batch} of {batch_size} documents.")
 
 
-async def load():
+async def load() -> None:
     """Generate tables and loads table data in the oracle server."""
     """N tables of RECORD_COUNT rows each"""
     connection = oracledb.connect(user="system", password=PASSWORD, dsn=DSN)
@@ -81,7 +81,7 @@ async def load():
     connection.commit()
 
 
-async def remove():
+async def remove() -> None:
     """Removes 10 random items per table"""
     connection = oracledb.connect(user=USER, password=PASSWORD, dsn=DSN)
     cursor = connection.cursor()

@@ -7,6 +7,7 @@
 """Module to handle api calls received from connector."""
 
 import os
+from typing import Any, Dict, Union
 
 from flask import Flask, request
 
@@ -15,15 +16,15 @@ from tests.commons import WeightedFakeProvider
 app = Flask(__name__)
 
 
-DATA_SIZE = os.environ.get("DATA_SIZE", "medium").lower()
+DATA_SIZE: str = os.environ.get("DATA_SIZE", "medium").lower()
 _SIZES = {"small": 5, "medium": 10, "large": 15}
-NUMBER_OF_DATABASES_PAGES = _SIZES[DATA_SIZE]
+NUMBER_OF_DATABASES_PAGES: int = _SIZES[DATA_SIZE]
 
 fake_provider = WeightedFakeProvider()
 
 
 class NotionAPI:
-    def __init__(self):
+    def __init__(self) -> None:
         self.app = Flask(__name__)
         self.first_sync = True
         self.app.route("/v1/users/me", methods=["GET"])(self.get_owner)
@@ -33,7 +34,9 @@ class NotionAPI:
             self.get_block_children
         )
 
-    def get_owner(self):
+    def get_owner(
+        self,
+    ) -> Dict[str, Union[Dict[str, Union[Dict[str, Union[bool, str]], str]], str]]:
         return {
             "object": "user",
             "id": "user_id",
@@ -68,7 +71,9 @@ class NotionAPI:
         }
         return users
 
-    def get_block_children(self, block_id):
+    def get_block_children(
+        self, block_id
+    ) -> Union[Dict[str, Union[None, bool, str]], Dict[str, Union[bool, str]]]:
         has_start_cursor = request.args.get("start_cursor")
         if has_start_cursor:
             response = {
@@ -234,7 +239,7 @@ class NotionAPI:
         databases_pages.extend(pages)
         return databases_pages
 
-    def search_by_query(self):
+    def search_by_query(self) -> Dict[str, Any]:
         return {
             "object": "list",
             "results": self.get_page_database(),

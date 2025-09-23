@@ -16,7 +16,7 @@ BUCKET_NAME = "ent-search-ingest-dev"
 REGION_NAME = "us-west-2"
 AWS_ENDPOINT_URL = "http://127.0.0.1"
 AWS_PORT = int(os.environ.get("AWS_PORT", "5001"))
-DATA_SIZE = os.environ.get("DATA_SIZE", "small").lower()
+DATA_SIZE: str = os.environ.get("DATA_SIZE", "small").lower()
 AWS_SECRET_KEY = "dummy_secret_key"
 AWS_ACCESS_KEY_ID = "dummy_access_key"
 
@@ -36,16 +36,16 @@ else:
 fake_provider = WeightedFakeProvider()
 
 
-def get_num_docs():
+def get_num_docs() -> None:
     print(FOLDER_COUNT + FILE_COUNT - OBJECT_TO_DELETE_COUNT)
 
 
-async def setup():
+async def setup() -> None:
     os.environ["AWS_ENDPOINT_URL"] = AWS_ENDPOINT_URL
     os.environ["AWS_PORT"] = str(AWS_PORT)
 
 
-async def load():
+async def load() -> None:
     """Method for generating 10k document for aws s3 emulator"""
     s3_client = boto3.client(
         "s3",
@@ -82,7 +82,7 @@ async def load():
         )
 
 
-async def remove():
+async def remove() -> None:
     """Method for removing 15 random document from aws s3 emulator"""
     s3_client = boto3.client(
         "s3",

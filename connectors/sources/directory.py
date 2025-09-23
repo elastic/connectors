@@ -10,14 +10,15 @@ Demo of a standalone source
 import functools
 import os
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PosixPath
+from typing import Any, Dict, Optional, Union
 
 import aiofiles
 
-from connectors.source import BaseDataSource
+from connectors.source import BaseDataSource, DataSourceConfiguration
 from connectors.utils import TIKA_SUPPORTED_FILETYPES, get_base64_value, hash_id
 
-DEFAULT_DIR = os.environ.get("SYSTEM_DIR", os.path.dirname(__file__))
+DEFAULT_DIR: str = os.environ.get("SYSTEM_DIR", os.path.dirname(__file__))
 
 
 class DirectoryDataSource(BaseDataSource):
@@ -26,13 +27,13 @@ class DirectoryDataSource(BaseDataSource):
     name = "System Directory"
     service_type = "dir"
 
-    def __init__(self, configuration):
+    def __init__(self, configuration: DataSourceConfiguration) -> None:
         super().__init__(configuration=configuration)
         self.directory = os.path.abspath(self.configuration["directory"])
         self.pattern = self.configuration["pattern"]
 
     @classmethod
-    def get_default_configuration(cls):
+    def get_default_configuration(cls) -> Dict[str, Dict[str, Any]]:
         return {
             "directory": {
                 "label": "Directory path",
@@ -50,16 +51,18 @@ class DirectoryDataSource(BaseDataSource):
             },
         }
 
-    async def ping(self):
+    async def ping(self) -> bool:
         return True
 
-    async def changed(self):
+    async def changed(self) -> bool:
         return True
 
-    def get_id(self, path):
+    def get_id(self, path: Union[str, PosixPath]) -> str:
         return hash_id(str(path))
 
-    async def _download(self, path, timestamp=None, doit=None):
+    async def _download(
+        self, path: str, timestamp: Optional[str] = None, doit: Optional[bool] = None
+    ) -> Optional[Dict[str, Any]]:
         if not (doit and os.path.splitext(path)[-1] in TIKA_SUPPORTED_FILETYPES):
             return
 

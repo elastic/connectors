@@ -11,9 +11,9 @@ import redis.asyncio as redis
 
 from tests.commons import WeightedFakeProvider
 
-DATA_SIZE = os.environ.get("DATA_SIZE", "small").lower()
+DATA_SIZE: str = os.environ.get("DATA_SIZE", "small").lower()
 _NUM_DB = {"small": 2, "medium": 4, "large": 16}
-NUM_DB = _NUM_DB[DATA_SIZE]
+NUM_DB: int = _NUM_DB[DATA_SIZE]
 RECORDS_TO_DELETE = 10
 EACH_ROW_ITEMS = 500
 ENDPOINT = "redis://localhost:6379/"
@@ -21,7 +21,7 @@ ENDPOINT = "redis://localhost:6379/"
 fake_provider = WeightedFakeProvider(weights=[0.65, 0.3, 0.05, 0])
 
 
-async def inject_lines(redis_client, lines):
+async def inject_lines(redis_client, lines) -> None:
     text = fake_provider.get_text()
     rows = {}
     for row_id in range(lines):
@@ -30,7 +30,7 @@ async def inject_lines(redis_client, lines):
     await redis_client.mset(rows)
 
 
-async def load():
+async def load() -> None:
     """N databases of 500 rows each. each row is ~ 1024*20 bytes"""
     redis_client = await redis.from_url(f"{ENDPOINT}")
     for db in range(NUM_DB):
@@ -39,7 +39,7 @@ async def load():
         await inject_lines(redis_client, EACH_ROW_ITEMS)
 
 
-async def remove():
+async def remove() -> None:
     """Removes 10 random items per db"""
     redis_client = await redis.from_url(f"{ENDPOINT}")
     for db in range(NUM_DB):
