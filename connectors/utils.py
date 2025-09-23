@@ -22,7 +22,7 @@ from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from time import strftime
-from typing import Optional, Union
+from typing import Any, Callable, Dict, Generator, Iterator, List, Tuple, Optional, Union
 
 import dateutil.parser as parser
 import pytz
@@ -32,7 +32,11 @@ from bs4 import BeautifulSoup
 from pympler import asizeof
 from typing_extensions import Buffer
 
-from connectors.logger import logger
+from connectors.logger import _TracedAsyncGenerator, logger
+from _asyncio import Future, Task
+from connectors.exceptions import DocumentIngestionError
+from freezegun.api import FakeDatetime
+from unittest.mock import AsyncMock, Mock
 
 ACCESS_CONTROL_INDEX_PREFIX = ".search-acl-filter-"
 DEFAULT_CHUNK_SIZE = 500
@@ -88,7 +92,7 @@ class Format(Enum):
     SHORT = "short"
 
 
-def parse_datetime_string(datetime) -> datetime:
+def parse_datetime_string(datetime: str) -> datetime:
     return parser.parse(datetime)
 
 
@@ -98,7 +102,7 @@ def iso_utc(when: Optional[datetime] = None) -> str:
     return when.isoformat()
 
 
-def with_utc_tz(ts):
+def with_utc_tz(ts: datetime) -> datetime:
     """Ensure the timestmap has a timezone of UTC."""
     if ts.tzinfo is None:
         return ts.replace(tzinfo=timezone.utc)
@@ -116,7 +120,7 @@ def epoch_timestamp_zulu() -> str:
     return strftime(ISO_ZULU_TIMESTAMP_FORMAT, time.gmtime(0))
 
 
-def next_run(quartz_definition, now):
+def next_run(quartz_definition: str, now: datetime) -> datetime:
     """Returns the datetime in UTC timezone of the next run."""
     # Year is optional and is never present.
     _, minutes, hours, day_of_month, month, day_of_week, year = (
@@ -155,7 +159,7 @@ class InvalidIndexNameError(ValueError):
     pass
 
 
-def validate_index_name(name):
+def validate_index_name(name: str) -> str:
     for char in INVALID_CHARS:
         if char in name:
             msg = f"Invalid character {char}"
@@ -180,7 +184,7 @@ class CancellableSleeps:
     def __init__(self) -> None:
         self._sleeps = set()
 
-    async def sleep(self, delay, result=None, *, loop=None) -> None:
+    async def sleep(self, delay: Union[float, Mock, int], result: None=None, *, loop=None) -> None:
         async def _sleep(delay, result=None, *, loop=None):
             coro = asyncio.sleep(delay, result=result)
             task = asyncio.ensure_future(coro)
@@ -195,7 +199,7 @@ class CancellableSleeps:
 
         await _sleep(delay, result=result, loop=loop)
 
-    def cancel(self, sig=None) -> None:
+    def cancel(self, sig: None=None) -> None:
         if sig:
             logger.debug(f"Caught {sig}. Cancelling sleeps...")
         else:
@@ -205,12 +209,12 @@ class CancellableSleeps:
             task.cancel()
 
 
-def get_size(ob):
+def get_size(ob: Any) -> int:
     """Returns size in Bytes"""
     return asizeof.asizeof(ob)
 
 
-def get_file_extension(filename):
+def get_file_extension(filename: str) -> str:
     return os.path.splitext(filename)[-1]
 
 
@@ -318,12 +322,12 @@ class MemQueue(asyncio.Queue):
     def qmemsize(self) -> int:
         return self._current_memsize
 
-    def _get(self):
+    def _get(self) -> Any:
         item_size, item = self._queue.popleft()  # pyright: ignore
         self._current_memsize -= item_size
         return item_size, item
 
-    def _put(self, item) -> None:
+    def _put(self, item: Any) -> None:
         self._current_memsize += item[0]  # pyright: ignore
         self._queue.append(item)  # pyright: ignore
 
@@ -341,7 +345,7 @@ class MemQueue(asyncio.Queue):
 
         return self._current_memsize + next_item_size >= self.maxmemsize
 
-    async def _putter_timeout(self, putter) -> None:
+    async def _putter_timeout(self, putter: Future) -> None:
         """This coroutine will set the result of the putter to QueueFull when a certain timeout it reached."""
         start = time.time()
         while not putter.done():
@@ -356,7 +360,7 @@ class MemQueue(asyncio.Queue):
             logger.debug("Queue Full")
             await asyncio.sleep(self.refresh_interval)
 
-    async def put(self, item) -> None:
+    async def put(self, item: Any) -> None:
         item_size = get_size(item)
 
         # This block is taken from the original put() method but with two
@@ -412,7 +416,7 @@ class MemQueue(asyncio.Queue):
             self.get_nowait()
             self.task_done()
 
-    def put_nowait(self, item) -> None:
+    def put_nowait(self, item: Union[str, int]) -> None:
         item_size = get_size(item)
         if self.full(item_size):
             msg = f"Queue is full: attempting to add item of size {item_size} bytes while {self.maxmemsize - self._current_memsize} free bytes left."
@@ -468,7 +472,7 @@ class ConcurrentTasks:
     def __len__(self) -> int:
         return len(self.tasks)
 
-    def _callback(self, task) -> None:
+    def _callback(self, task: Task) -> None:
         self.tasks.remove(task)
         self._sem.release()
         if task.cancelled():
@@ -480,7 +484,7 @@ class ConcurrentTasks:
                 f"Exception found for task {task.get_name()}", exc_info=task.exception()
             )
 
-    def _add_task(self, coroutine, name: Optional[str] = None):
+    def _add_task(self, coroutine: Union[functools.partial, Callable], name: Optional[str] = None) -> Task:
         task = asyncio.create_task(coroutine(), name=name)
         self.tasks.append(task)
         # _callback will be executed when the task is done,
@@ -489,7 +493,7 @@ class ConcurrentTasks:
         task.add_done_callback(functools.partial(self._callback))
         return task
 
-    async def put(self, coroutine, name: Optional[str] = None):
+    async def put(self, coroutine: Union[functools.partial, Callable], name: Optional[str] = None) -> Generator[Future, None, Task]:
         """Adds a coroutine for immediate execution.
 
         If the number of running tasks reach `max_concurrency`, this
@@ -498,7 +502,7 @@ class ConcurrentTasks:
         await self._sem.acquire()
         return self._add_task(coroutine, name=name)
 
-    def try_put(self, coroutine, name: Optional[str] = None):
+    def try_put(self, coroutine: functools.partial, name: Optional[str] = None) -> Optional[Task]:
         """Tries to add a coroutine for immediate execution.
 
         If the number of running tasks reach `max_concurrency`, this
@@ -550,8 +554,8 @@ def retryable(
     retries: int = 3,
     interval: float = 1.0,
     strategy: RetryStrategy = RetryStrategy.LINEAR_BACKOFF,
-    skipped_exceptions=None,
-):
+    skipped_exceptions: Optional[Any]=None,
+) -> Callable:
     def wrapper(func):
         if skipped_exceptions is None:
             processed_skipped_exceptions = []
@@ -579,7 +583,7 @@ def retryable(
     return wrapper
 
 
-def retryable_async_function(func, retries, interval, strategy, skipped_exceptions):
+def retryable_async_function(func: Callable, retries: int, interval: Union[float, int], strategy: RetryStrategy, skipped_exceptions: List[Any]) -> Callable:
     @functools.wraps(func)
     async def wrapped(*args, **kwargs):
         retry = 1
@@ -600,7 +604,7 @@ def retryable_async_function(func, retries, interval, strategy, skipped_exceptio
     return wrapped
 
 
-def retryable_async_generator(func, retries, interval, strategy, skipped_exceptions):
+def retryable_async_generator(func: Callable, retries: int, interval: Union[float, int], strategy: RetryStrategy, skipped_exceptions: List[Any]) -> Callable:
     @functools.wraps(func)
     async def wrapped(*args, **kwargs):
         retry = 1
@@ -624,7 +628,7 @@ def retryable_async_generator(func, retries, interval, strategy, skipped_excepti
     return wrapped
 
 
-def retryable_sync_function(func, retries, interval, strategy, skipped_exceptions):
+def retryable_sync_function(func: Callable, retries: int, interval: int, strategy: RetryStrategy, skipped_exceptions: List[Any]) -> Callable:
     @functools.wraps(func)
     def wrapped(*args, **kwargs):
         retry = 1
@@ -643,7 +647,7 @@ def retryable_sync_function(func, retries, interval, strategy, skipped_exception
     return wrapped
 
 
-def time_to_sleep_between_retries(strategy, interval, retry):
+def time_to_sleep_between_retries(strategy: Union[RetryStrategy, str], interval: Union[float, int], retry: int) -> Union[float, int]:
     match strategy:
         case RetryStrategy.CONSTANT:
             return interval
@@ -670,7 +674,7 @@ def ssl_context(certificate: str) -> ssl.SSLContext:
     return ctx
 
 
-def url_encode(original_string) -> str:
+def url_encode(original_string: str) -> str:
     """Performs encoding on the objects
     containing special characters in their url, and
     replaces single quote with two single quote since quote
@@ -685,7 +689,7 @@ def url_encode(original_string) -> str:
     return urllib.parse.quote(original_string, safe="'")
 
 
-def evaluate_timedelta(seconds, time_skew: int = 0) -> str:
+def evaluate_timedelta(seconds: int, time_skew: int = 0) -> str:
     """Adds seconds to the current utc time.
 
     Args:
@@ -698,7 +702,7 @@ def evaluate_timedelta(seconds, time_skew: int = 0) -> str:
     return iso_utc(when=modified_time)
 
 
-def is_expired(expires_at) -> bool:
+def is_expired(expires_at: Optional[Union[FakeDatetime, datetime]]) -> bool:
     """Compares the given time with present time
 
     Args:
@@ -744,14 +748,14 @@ def get_pem_format(key: str, postfix: str = "-----END CERTIFICATE-----") -> str:
     return pem_format
 
 
-def hash_id(_id) -> str:
+def hash_id(_id: str) -> str:
     # Collision probability: 1.47*10^-29
     # S105 rule considers this code unsafe, but we're not using it for security-related
     # things, only to generate pseudo-ids for documents
     return hashlib.md5(_id.encode("utf8")).hexdigest()  # noqa S105
 
 
-def truncate_id(_id):
+def truncate_id(_id: str) -> str:
     """Truncate ID of an object.
 
     We cannot guarantee that connector returns small IDs.
@@ -772,7 +776,7 @@ def truncate_id(_id):
     return _id
 
 
-def has_duplicates(strings_list) -> bool:
+def has_duplicates(strings_list: List[Union[str, Any]]) -> bool:
     seen = set()
     for s in strings_list:
         if s in seen:
@@ -781,7 +785,7 @@ def has_duplicates(strings_list) -> bool:
     return False
 
 
-def filter_nested_dict_by_keys(key_list, source_dict):
+def filter_nested_dict_by_keys(key_list: List[Union[str, Any]], source_dict: Dict[str, Union[Dict[str, int], Dict[Any, Any]]]) -> Dict[str, Union[Dict[str, int], Dict[Any, Any]]]:
     """Filters a nested dict by the keys of the sub-level dict.
     This is used for checking if any configuration fields are missing properties.
 
@@ -800,7 +804,7 @@ def filter_nested_dict_by_keys(key_list, source_dict):
     return filtered_dict
 
 
-def deep_merge_dicts(base_dict, new_dict):
+def deep_merge_dicts(base_dict: Dict[str, Any], new_dict: Dict[str, Any]) -> Dict[str, Any]:
     """Deep merges two nested dicts.
 
     Args:
@@ -838,7 +842,7 @@ class CacheWithTimeout:
         self._value = None
         self._expiration_date = None
 
-    def get_value(self):
+    def get_value(self) -> Optional[str]:
         """Get the value that's stored inside if it hasn't expired.
 
         If the expiration_date is past due, None is returned instead.
@@ -851,7 +855,7 @@ class CacheWithTimeout:
 
         return None
 
-    def set_value(self, value, expiration_date) -> None:
+    def set_value(self, value: str, expiration_date: Union[FakeDatetime, float, datetime]) -> None:
         """Set the value in the cache with expiration date.
 
         Once expiration_date is past due, the value will be lost.
@@ -860,7 +864,7 @@ class CacheWithTimeout:
         self._expiration_date = expiration_date
 
 
-def html_to_text(html):
+def html_to_text(html: Optional[str]) -> Optional[Union[Mock, str]]:
     if not html:
         return html
     try:
@@ -871,7 +875,7 @@ def html_to_text(html):
         return BeautifulSoup(html, features="html.parser").get_text(separator="\n")
 
 
-async def aenumerate(asequence, start: int = 0):
+async def aenumerate(asequence: _TracedAsyncGenerator, start: int = 0) -> None:
     i = start
     async for elem in asequence:
         try:
@@ -880,7 +884,7 @@ async def aenumerate(asequence, start: int = 0):
             i += 1
 
 
-def iterable_batches_generator(iterable, batch_size):
+def iterable_batches_generator(iterable: List[Union[Dict[str, str], Dict[str, Union[Dict[str, str], str]], int, Any]], batch_size: int) -> Iterator[List[Union[Dict[str, str], Dict[str, Union[Dict[str, str], str]], int]]]:
     """Iterate over an iterable in batches.
 
     If the batch size is bigger than the number of remaining elements then all remaining elements will be returned.
@@ -898,7 +902,7 @@ def iterable_batches_generator(iterable, batch_size):
         yield iterable[idx : min(idx + batch_size, num_items)]
 
 
-def dict_slice(hsh, keys, default=None):
+def dict_slice(hsh: Dict[str, Union[bool, str, int]], keys: Union[Tuple[str, str, str, str], Tuple[str, str, str, str, str, str], Tuple[str, str, str, str, str, str, str]], default: None=None) -> Dict[str, Optional[Union[str, int]]]:
     """
     Slice a dict by a subset of its keys.
     :param hsh: The input dictionary to slice
@@ -908,7 +912,7 @@ def dict_slice(hsh, keys, default=None):
     return {k: hsh.get(k, default) for k in keys}
 
 
-def base64url_to_base64(string):
+def base64url_to_base64(string: Optional[str]) -> Optional[str]:
     if string is None:
         return string
 
@@ -919,7 +923,7 @@ def base64url_to_base64(string):
     return string.replace("_", "/")
 
 
-def validate_email_address(email_address) -> bool:
+def validate_email_address(email_address: str) -> bool:
     """Validates an email address against a regular expression.
     This method does not include any remote check against an SMTP server for example."""
 
@@ -927,7 +931,7 @@ def validate_email_address(email_address) -> bool:
     return re.fullmatch(EMAIL_REGEX_PATTERN, email_address) is not None
 
 
-def shorten_str(string, shorten_by: int) -> str:
+def shorten_str(string: Optional[str], shorten_by: int) -> str:
     """
     Shorten a string by removing characters from the middle, replacing them with '...'.
 
@@ -970,7 +974,7 @@ def shorten_str(string, shorten_by: int) -> str:
         return f"{string[:keep + 1]}...{string[-keep:]}"
 
 
-def func_human_readable_name(func):
+def func_human_readable_name(func: Union[AsyncMock, functools.partial, Callable]) -> str:
     if isinstance(func, functools.partial):
         return func.func.__name__
 
@@ -980,7 +984,7 @@ def func_human_readable_name(func):
         return str(func)
 
 
-def nested_get_from_dict(dictionary, keys, default=None):
+def nested_get_from_dict(dictionary: Any, keys: Union[List[str], Tuple[str, str]], default: Optional[Union[bool, str, float]]=None) -> Any:
     def nested_get(dictionary_, keys_, default_=None):
         if dictionary_ is None:
             return default_
@@ -996,7 +1000,7 @@ def nested_get_from_dict(dictionary, keys, default=None):
     return nested_get(dictionary, keys, default)
 
 
-def sanitize(doc):
+def sanitize(doc: Dict[str, Union[int, datetime, str]]) -> Dict[str, Union[datetime, str]]:
     if doc["_id"]:
         # guarantee that IDs are strings, and not numeric
         doc["_id"] = str(doc["_id"])
@@ -1013,15 +1017,15 @@ class Counters:
     def __init__(self) -> None:
         self._storage = {}
 
-    def increment(self, key: str, value: int = 1, namespace=None) -> None:
+    def increment(self, key: str, value: int = 1, namespace: Optional[str]=None) -> None:
         if namespace:
             key = f"{namespace}.{key}"
         self._storage[key] = self._storage.get(key, 0) + value
 
-    def get(self, key) -> int:
+    def get(self, key: str) -> int:
         return self._storage.get(key, 0)
 
-    def to_dict(self):
+    def to_dict(self) -> Dict[str, int]:
         return deepcopy(self._storage)
 
 
@@ -1062,7 +1066,7 @@ class ErrorMonitor:
         self.total_success_count += 1
         self._update_error_window(False)
 
-    def track_error(self, error) -> None:
+    def track_error(self, error: Union[InvalidIndexNameError, DocumentIngestionError, Exception]) -> None:
         self.total_error_count += 1
         self.consecutive_error_count += 1
 
@@ -1076,7 +1080,7 @@ class ErrorMonitor:
 
         self._raise_if_necessary()
 
-    def _update_error_window(self, value) -> None:
+    def _update_error_window(self, value: bool) -> None:
         # We keep the errors array of the size self.error_window_size this way, imagine self.error_window_size = 5
         # Error array inits as falses:
         # [ false, false, false, false, false ]

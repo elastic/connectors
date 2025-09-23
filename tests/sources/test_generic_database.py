@@ -6,7 +6,7 @@
 """Tests the Generic Database source class methods"""
 
 from functools import partial
-from typing import List, Optional, Sized
+from typing import Tuple, Union, List, Optional, Sized
 
 import pytest
 from pyre_extensions import PyreReadOnly
@@ -18,6 +18,7 @@ from connectors.sources.generic_database import (
     map_column_names,
 )
 from connectors.sources.mssql import MSSQLQueries
+from connectors.sources.oracle import OracleQueries
 
 SCHEMA = "dbo"
 TABLE = "emp_table"
@@ -28,7 +29,7 @@ CUSTOMER_TABLE = "customer"
 class ConnectionSync:
     """This Class create dummy connection with database and return dummy cursor"""
 
-    def __init__(self, query_object) -> None:
+    def __init__(self, query_object: Union[OracleQueries, MSSQLQueries]) -> None:
         """Setup dummy connection"""
         self.query_object = query_object
 
@@ -69,7 +70,7 @@ class CursorSync:
         """
         return ["ids", "names"]
 
-    def fetchmany(self, size):
+    def fetchmany(self, size: int) -> List[Union[Tuple[str], Tuple[int, str], Tuple[int]]]:
         """This method returns response of fetchmany
 
         Args:

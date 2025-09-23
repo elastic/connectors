@@ -14,13 +14,18 @@ import pytest
 
 from connectors.config import load_config
 from connectors.services.base import BaseService, MultiService, get_services
+from connectors.services.access_control_sync_job_execution import AccessControlSyncJobExecutionService
+from connectors.services.content_sync_job_execution import ContentSyncJobExecutionService
+from connectors.services.job_cleanup import JobCleanUpService
+from connectors.services.job_scheduling import JobSchedulingService
+from typing import Dict, List, Optional, Type, Union
 
 HERE: str = os.path.dirname(__file__)
 FIXTURES_DIR: str = os.path.abspath(os.path.join(HERE, "..", "fixtures"))
 CONFIG_FILE: str = os.path.join(FIXTURES_DIR, "config.yml")
 
 
-def create_service(service_klass, config=None, config_file=None, idling=None):
+def create_service(service_klass: Union[Type[JobCleanUpService], Type[JobSchedulingService], Type[ContentSyncJobExecutionService], Type[AccessControlSyncJobExecutionService]], config: Optional[Dict[str, Union[Dict[str, str], Dict[str, int], List[str]]]]=None, config_file: Optional[str]=None, idling: None=None) -> Union[JobSchedulingService, ContentSyncJobExecutionService, AccessControlSyncJobExecutionService, JobCleanUpService]:
     if config is None:
         config = load_config(config_file) if config_file else {}
     service = service_klass(config)
@@ -29,7 +34,7 @@ def create_service(service_klass, config=None, config_file=None, idling=None):
     return service
 
 
-async def run_service_with_stop_after(service, stop_after: int = 0) -> None:
+async def run_service_with_stop_after(service: Union[JobSchedulingService, ContentSyncJobExecutionService, AccessControlSyncJobExecutionService, JobCleanUpService], stop_after: int = 0) -> None:
     def _stop_running_service_without_cancelling():
         service.running = False
 
@@ -50,7 +55,7 @@ async def run_service_with_stop_after(service, stop_after: int = 0) -> None:
 
 
 async def create_and_run_service(
-    service_klass, config=None, config_file: str = CONFIG_FILE, stop_after: int = 0
+    service_klass: Union[Type[ContentSyncJobExecutionService], Type[JobSchedulingService], Type[JobCleanUpService], Type[AccessControlSyncJobExecutionService]], config: Optional[Dict[str, Union[Dict[str, str], Dict[str, int], List[str]]]]=None, config_file: str = CONFIG_FILE, stop_after: int = 0
 ) -> None:
     service = create_service(service_klass, config=config, config_file=config_file)
     await run_service_with_stop_after(service, stop_after)

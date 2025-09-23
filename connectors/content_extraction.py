@@ -11,6 +11,9 @@ import aiohttp
 from aiohttp.client_exceptions import ClientConnectionError, ServerTimeoutError
 
 from connectors.logger import logger
+from aiohttp.client import ClientSession
+from aiohttp.client_reqrep import ClientResponse
+from typing import Dict, Optional
 
 __EXTRACTION_CONFIG = {}  # setup by cli.py on startup
 
@@ -24,11 +27,11 @@ class ContentExtraction:
     """
 
     @classmethod
-    def get_extraction_config(cls):
+    def get_extraction_config(cls) -> Dict[str, Dict[str, str]]:
         return __EXTRACTION_CONFIG
 
     @classmethod
-    def set_extraction_config(cls, extraction_config) -> None:
+    def set_extraction_config(cls, extraction_config: Optional[Dict[str, Dict[str, str]]]) -> None:
         global __EXTRACTION_CONFIG
         __EXTRACTION_CONFIG = extraction_config
 
@@ -66,7 +69,7 @@ class ContentExtraction:
 
         return False
 
-    def _begin_session(self):
+    def _begin_session(self) -> Optional[ClientSession]:
         if self.session is not None:
             return self.session
 
@@ -82,13 +85,13 @@ class ContentExtraction:
 
         await self.session.close()
 
-    def get_volume_dir(self):
+    def get_volume_dir(self) -> Optional[str]:
         if self.host is None:
             return None
 
         return self.volume_dir
 
-    async def extract_text(self, filepath, original_filename):
+    async def extract_text(self, filepath: str, original_filename: str) -> str:
         """Sends a text extraction request to tika-server using the supplied filename.
         Args:
             filepath: local path to the tempfile for extraction
@@ -131,27 +134,27 @@ class ContentExtraction:
 
         return content
 
-    async def send_filepointer(self, filepath, filename):
+    async def send_filepointer(self, filepath: str, filename: str) -> str:
         async with self._begin_session().put(
             f"{self.host}/extract_text/?local_file_path={filepath}",
         ) as response:
             return await self.parse_extraction_resp(filename, response)
 
-    async def send_file(self, filepath, filename):
+    async def send_file(self, filepath: str, filename: str) -> str:
         async with self._begin_session().put(
             f"{self.host}/extract_text/",
             data=self.file_sender(filepath),
         ) as response:
             return await self.parse_extraction_resp(filename, response)
 
-    async def file_sender(self, filepath):
+    async def file_sender(self, filepath: str):
         async with aiofiles.open(filepath, "rb") as f:
             chunk = await f.read(self.chunk_size)
             while chunk:
                 yield chunk
                 chunk = await f.read(self.chunk_size)
 
-    async def parse_extraction_resp(self, filename, response):
+    async def parse_extraction_resp(self, filename: str, response: ClientResponse) -> str:
         """Parses the response from the tika-server and logs any extraction failures.
 
         Returns `extracted_text` from the response.

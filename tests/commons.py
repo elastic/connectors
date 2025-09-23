@@ -6,7 +6,7 @@
 import math
 from functools import cached_property
 from random import choices
-from typing import List, Optional, Sized, Union
+from typing import Any, List, Optional, Sized, Union
 
 from faker.proxy import Faker
 from pyre_extensions import PyreReadOnly
@@ -17,7 +17,7 @@ class AsyncIterator:
     Async documents generator fake class, which records the args and kwargs it was called with.
     """
 
-    def __init__(self, items, reusable: bool = False) -> None:
+    def __init__(self, items: List[Any], reusable: bool = False) -> None:
         """
         AsyncIterator is a test-only abstraction to mock async iterables.
         By default it's usable only once: once iterated over, he iterator will not
@@ -35,7 +35,7 @@ class AsyncIterator:
     def __aiter__(self) -> "AsyncIterator":
         return self
 
-    async def __anext__(self):
+    async def __anext__(self) -> Any:
         if self.i >= len(self.items):
             if self.reusable:
                 self.i = 0

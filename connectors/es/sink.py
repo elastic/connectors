@@ -30,6 +30,7 @@ from connectors.config import (
     DEFAULT_ELASTICSEARCH_RETRY_INTERVAL,
 )
 from connectors.es import TIMESTAMP_FIELD
+from connectors.exceptions import DocumentIngestionError
 from connectors.es.client import License
 from connectors.es.management_client import ESManagementClient
 from connectors.filtering.basic_rule import BasicRuleEngine, parse
@@ -114,10 +115,6 @@ class ElasticsearchOverloadedError(Exception):
         msg = "Connector was unable to ingest data into overloaded Elasticsearch. Make sure Elasticsearch instance is healthy, has enough resources and content index is healthy."
         super().__init__(msg)
         self.__cause__ = cause
-
-
-class DocumentIngestionError(Exception):
-    pass
 
 
 class Sink:
