@@ -1,7 +1,0 @@
-service.idling: 1
-
-connectors:
-  -
-    connector_id: 'sharepoint_online'
-    service_type: 'sharepoint_online'
-

@@ -1,6 +1,0 @@
-service.idling: 1
-
-connectors:
-  -
-    connector_id: 'dropbox'
-    service_type: 'dropbox'
