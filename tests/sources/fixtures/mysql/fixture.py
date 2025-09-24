@@ -67,21 +67,23 @@ def create_table_with_composite_key(cursor):
     cursor.execute(composite_table_query)
 
     rows = []
-    for i in range(RECORD_COUNT):
-        rows.append((
-            fake_provider.fake.random_int(min=1, max=5000), # customer_id
-            fake_provider.fake.random_int(min=1, max=5000), # order_id
-            fake_provider.fake.name(),                      # product_name
-            fake_provider.fake.random_int(min=1, max=10),   # quantity
-            fake_provider.fake.date()                       # order_date
-        ))
+    for _ in range(RECORD_COUNT):
+        rows.append(
+            (
+                fake_provider.fake.random_int(min=1, max=5000),  # customer_id
+                fake_provider.fake.random_int(min=1, max=5000),  # order_id
+                fake_provider.fake.name(),  # product_name
+                fake_provider.fake.random_int(min=1, max=10),  # quantity
+                fake_provider.fake.date(),  # order_date
+            )
+        )
 
     composite_query = "INSERT INTO orders (customer_id, order_id, product_name, quantity, order_date) VALUES (%s, %s, %s, %s, %s)"
 
     batch_count = max(int(RECORD_COUNT / BATCH_SIZE), 1)
     print(f"Inserting {RECORD_COUNT} lines in {batch_count} batches")
     for batch in range(batch_count):
-        batch_of_rows = rows[batch * BATCH_SIZE:(batch + 1) * BATCH_SIZE]
+        batch_of_rows = rows[batch * BATCH_SIZE : (batch + 1) * BATCH_SIZE]
         cursor.executemany(composite_query, batch_of_rows)
         print(f"Inserting batch #{batch} of {len(batch_of_rows)} documents.")
 
