@@ -9,7 +9,7 @@ sudo DEBIAN_FRONTEND=noninteractive apt-get install ca-certificates curl gnupg l
 BASEDIR=$(realpath $(dirname $0))
 ROOT=$(realpath $BASEDIR/../)
 
-cd $ROOT
+cd $ROOT/app
 
 # docker snapshot publication
 echo "Building the image"

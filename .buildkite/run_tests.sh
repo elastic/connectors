@@ -5,6 +5,8 @@ set -euo pipefail
 
 source .buildkite/shared.sh
 
+cd /app
+
 init_python
 
 make test

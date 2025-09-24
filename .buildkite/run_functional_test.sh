@@ -18,7 +18,7 @@ BASEDIR=$(realpath $(dirname $0))
 ROOT=$(realpath $BASEDIR/../)
 VENV_ROOT=$ROOT/.venv
 
-cd $ROOT
+cd $ROOT/app
 
 make install
 
