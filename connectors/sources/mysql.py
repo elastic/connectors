@@ -250,6 +250,60 @@ class MySQLClient:
                     break
             offset += self.fetch_size
 
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    )
+    async def yield_rows_for_table_cursor_based(self, table, primary_keys):
+        last_primary_key_values = None
+
+        while True:
+            # Build WHERE clause for cursor-based pagination
+            where_clause = ""
+            params = []
+
+            if last_primary_key_values:
+                # For composite keys, we need a more sophisticated WHERE clause
+                # to handle cases like (a,b) > (last_a, last_b)
+                if len(primary_keys) == 1:
+                    # Simple case: single primary key
+                    where_clause = f"WHERE `{primary_keys[0]}` > %s"
+                    params = [last_primary_key_values[0]]
+                else:
+                    # Complex case: composite primary key using tuple comparison
+                    pk_tuple = f"({', '.join(f'`{pk}`' for pk in primary_keys)})"
+                    param_tuple = f"({', '.join(['%s'] * len(primary_keys))})"
+                    # (a,b) > (last_a, last_b)
+                    where_clause = f"WHERE {pk_tuple} > {param_tuple}"
+                    params = last_primary_key_values
+
+            query = f"""
+                SELECT * FROM `{self.database}`.`{table}` 
+                {where_clause} 
+                ORDER BY {', '.join(f'`{pk}`' for pk in primary_keys)} 
+                LIMIT {self.fetch_size}
+            """
+
+            batch_count = 0
+            async with self.connection.cursor(aiomysql.cursors.SSCursor) as cursor:
+                if params:
+                    await cursor.execute(query, params)
+                else:
+                    await cursor.execute(query)
+
+                async for row in cursor:
+                    yield row
+                    # Update the cursor to this row's primary key values
+                    # Since we SELECT * and order by primary keys first,
+                    # we need to find the primary key values by column position
+                    last_primary_key_values = [row[i] for i in range(len(primary_keys))]
+                    batch_count += 1
+
+            # If we got fewer rows than fetch_size, we've reached the end
+            if batch_count < self.fetch_size:
+                break
+
     async def _get_table_row_count_for_query(self, query):
         table_row_count_query = re.sub(
             r"SELECT\s.*?\sFROM",
@@ -569,14 +623,8 @@ class MySqlDataSource(BaseDataSource):
             last_update_time = await client.get_last_update_time(table)
             column_names = await client.get_column_names_for_table(table)
 
-            async with client.connection.cursor(aiomysql.cursors.SSCursor) as cursor:
-                await cursor.execute(
-                    f"SELECT COUNT(*) FROM `{self.database}`.`{table}`"
-                )
-                table_row_count = await cursor.fetchone()
-
-            async for row in client.yield_rows_for_table(
-                table, primary_key_columns, int(table_row_count[0])
+            async for row in client.yield_rows_for_table_cursor_based(
+                table, primary_key_columns
             ):
                 yield row2doc(
                     row=row,
