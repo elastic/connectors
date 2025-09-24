@@ -5,6 +5,8 @@
 #
 """
 Sandfly Security source module to fetch documents from a Sandfly Security Server.
+
+Note: this connector is a community contribution, and is supported only under "best effort" from the community.
 """
 
 import json
