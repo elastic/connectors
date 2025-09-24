@@ -72,44 +72,30 @@ class GoogleCalendarClient(GoogleServiceAccountClient):
             resource="calendars", method="get", calendarId=calendar_id
         )
 
-    async def list_events(self, calendar_id):
-        """Fetch all events from a specific calendar.
+    async def list_events(self, calendar_id, time_min=None, time_max=None):
+        """Fetch all events from a specific calendar within the specified time range.
 
         Args:
             calendar_id (str): The calendar ID.
+            time_min (str): Start time in ISO format. Optional.
+            time_max (str): End time in ISO format. Optional.
 
         Yields:
             dict: Events page.
         """
+        params = {
+            "calendarId": calendar_id,
+            "maxResults": 100,
+        }
+        if time_min:
+            params["timeMin"] = time_min
+        if time_max:
+            params["timeMax"] = time_max
+
         async for page in self.api_call_paged(
-            resource="events",
-            method="list",
-            calendarId=calendar_id,
-            maxResults=100,
+            resource="events", method="list", **params
         ):
             yield page
-
-    async def get_free_busy(self, calendar_ids, time_min, time_max):
-        """Get free/busy information for a list of calendars.
-
-        Args:
-            calendar_ids (list): List of calendar IDs.
-            time_min (str): Start time in ISO format.
-            time_max (str): End time in ISO format.
-
-        Returns:
-            dict: Free/busy information.
-        """
-        items = [{"id": calendar_id} for calendar_id in calendar_ids]
-        request_body = {
-            "timeMin": time_min,
-            "timeMax": time_max,
-            "items": items,
-        }
-
-        return await self.api_call(
-            resource="freebusy", method="query", body=request_body
-        )
 
 
 class GoogleCalendarDataSource(BaseDataSource):
@@ -119,7 +105,6 @@ class GoogleCalendarDataSource(BaseDataSource):
       - CalendarList entries (the user's list of calendars)
       - Each underlying Calendar resource
       - Events belonging to each Calendar
-      - Free/Busy data for each Calendar
 
     Reference:
         https://developers.google.com/calendar/api/v3/reference
@@ -136,7 +121,6 @@ class GoogleCalendarDataSource(BaseDataSource):
         """
         super().__init__(configuration=configuration)
         self._calendar_client = None
-        self.include_freebusy = self.configuration.get("include_freebusy", False)
 
     @classmethod
     def get_default_configuration(cls):
@@ -157,12 +141,19 @@ class GoogleCalendarDataSource(BaseDataSource):
                 "required": True,
                 "type": "str",
             },
-            "include_freebusy": {
-                "display": "toggle",
-                "label": "Include Free/Busy Data",
+            "days_back": {
+                "display": "numeric",
+                "label": "Days back to fetch events",
                 "order": 3,
-                "type": "bool",
-                "value": False,
+                "type": "int",
+                "value": 30,
+            },
+            "days_forward": {
+                "display": "numeric",
+                "label": "Days forward to fetch events",
+                "order": 4,
+                "type": "int",
+                "value": 30,
             },
         }
 
@@ -244,15 +235,6 @@ class GoogleCalendarDataSource(BaseDataSource):
             async for event_doc in self._generate_event_docs(client, cal_list_doc):
                 yield event_doc, None
 
-        # 4) (Optionally) yield free/busy data for each calendar
-        if self.include_freebusy:
-            calendar_ids = [cal["calendar_id"] for cal in calendar_list_entries]
-            if calendar_ids:
-                async for freebusy_doc in self._generate_freebusy_docs(
-                    client, calendar_ids
-                ):
-                    yield freebusy_doc, None
-
     async def _generate_calendar_list_docs(self, client):
         """Yield documents for each calendar in the user's CalendarList.
 
@@ -319,6 +301,14 @@ class GoogleCalendarDataSource(BaseDataSource):
         """
         calendar_id = cal_list_doc["calendar_id"]
 
+        # Calculate time range based on configuration
+        now = datetime.utcnow()
+        days_back = self.configuration.get("days_back", 30)
+        days_forward = self.configuration.get("days_forward", 30)
+
+        time_min = (now - timedelta(days=days_back)).isoformat() + "Z"
+        time_max = (now + timedelta(days=days_forward)).isoformat() + "Z"
+
         # Create calendar reference for events
         calendar_ref = {
             "id": calendar_id,
@@ -329,7 +319,7 @@ class GoogleCalendarDataSource(BaseDataSource):
         }
 
         try:
-            async for page in client.list_events(calendar_id):
+            async for page in client.list_events(calendar_id, time_min, time_max):
                 for event in page.get("items", []):
                     event_id = event["id"]
                     # Extract date/time fields
@@ -339,20 +329,45 @@ class GoogleCalendarDataSource(BaseDataSource):
                     start_date = start_info.get("date")
                     end_datetime = end_info.get("dateTime")
                     end_date = end_info.get("date")
-                    created_at_str = event.get("created")
-                    updated_at_str = event.get("updated")
 
-                    # Convert created/updated to datetime if present
-                    created_at = (
-                        datetime.fromisoformat(created_at_str.replace("Z", "+00:00"))
-                        if created_at_str
-                        else None
-                    )
-                    updated_at = (
-                        datetime.fromisoformat(updated_at_str.replace("Z", "+00:00"))
-                        if updated_at_str
-                        else None
-                    )
+                    # Extract attendee names and emails
+                    attendees_info = []
+                    if event.get("attendees"):
+                        for attendee in event.get("attendees", []):
+                            attendee_info = {}
+                            if attendee.get("displayName"):
+                                attendee_info["name"] = attendee.get("displayName")
+                            if attendee.get("email"):
+                                attendee_info["email"] = attendee.get("email")
+                            if attendee_info:
+                                attendees_info.append(attendee_info)
+
+                    # Extract meeting/zoom links from conferenceData or location
+                    meeting_link = None
+                    if event.get("conferenceData"):
+                        entry_points = event.get("conferenceData", {}).get(
+                            "entryPoints", []
+                        )
+                        for entry_point in entry_points:
+                            if entry_point.get("uri"):
+                                meeting_link = entry_point.get("uri")
+                                break
+
+                    # Extract attachments
+                    attachments_info = []
+                    if event.get("attachments"):
+                        for attachment in event.get("attachments", []):
+                            attachment_info = {}
+                            if attachment.get("title"):
+                                attachment_info["title"] = attachment.get("title")
+                            if attachment.get("fileUrl"):
+                                attachment_info["url"] = attachment.get("fileUrl")
+                            if attachment.get("mimeType"):
+                                attachment_info["mime_type"] = attachment.get(
+                                    "mimeType"
+                                )
+                            if attachment_info:
+                                attachments_info.append(attachment_info)
 
                     doc = {
                         "_id": event_id,
@@ -360,67 +375,22 @@ class GoogleCalendarDataSource(BaseDataSource):
                         "event_id": event_id,
                         "calendar_id": calendar_id,
                         "calendar": calendar_ref,
-                        "status": event.get("status"),
-                        "html_link": event.get("htmlLink"),
-                        "created_at": created_at.isoformat() if created_at else None,
-                        "updated_at": updated_at.isoformat() if updated_at else None,
                         "summary": event.get("summary"),
                         "description": event.get("description"),
                         "location": event.get("location"),
-                        "color_id": event.get("colorId"),
+                        "meeting_link": meeting_link,
                         "start_datetime": start_datetime,
                         "start_date": start_date,
                         "end_datetime": end_datetime,
                         "end_date": end_date,
-                        "recurrence": event.get("recurrence"),
-                        "recurring_event_id": event.get("recurringEventId"),
-                        "organizer": event.get("organizer"),
-                        "creator": event.get("creator"),
-                        "attendees": event.get("attendees"),
-                        "transparency": event.get("transparency"),
-                        "visibility": event.get("visibility"),
-                        "conference_data": event.get("conferenceData"),
-                        "event_type": event.get("eventType"),
+                        "attendees": attendees_info,
+                        "attachments": attachments_info,
                     }
                     yield doc
         except Exception as e:
             self._logger.warning(
                 f"Error fetching events for calendar {calendar_id}: {str(e)}"
             )
-
-    async def _generate_freebusy_docs(self, client, calendar_ids):
-        """Yield documents for free/busy data for the next 7 days for each calendar.
-
-        Args:
-            client (GoogleCalendarClient): The Google Calendar client.
-            calendar_ids (list): List of calendar IDs.
-
-        Yields:
-            dict: Free/busy document.
-        """
-        now = datetime.utcnow()
-        in_7_days = now + timedelta(days=7)
-        time_min = now.isoformat() + "Z"
-        time_max = in_7_days.isoformat() + "Z"
-
-        try:
-            data = await client.get_free_busy(calendar_ids, time_min, time_max)
-            calendars = data.get("calendars", {})
-
-            for calendar_id, busy_info in calendars.items():
-                busy_ranges = busy_info.get("busy", [])
-
-                doc = {
-                    "_id": f"{calendar_id}_freebusy",
-                    "type": "freebusy",
-                    "calendar_id": calendar_id,
-                    "busy": busy_ranges,
-                    "time_min": time_min,
-                    "time_max": time_max,
-                }
-                yield doc
-        except Exception as e:
-            self._logger.warning(f"Error fetching free/busy data: {str(e)}")
 
     async def close(self):
         """Close any resources."""

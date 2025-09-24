@@ -78,9 +78,13 @@ async def test_get_default_configuration():
     assert "subject" in config
     assert config["subject"]["type"] == "str"
 
-    assert "include_freebusy" in config
-    assert config["include_freebusy"]["type"] == "bool"
-    assert config["include_freebusy"]["value"] is False
+    assert "days_back" in config
+    assert config["days_back"]["type"] == "int"
+    assert config["days_back"]["value"] == 30
+
+    assert "days_forward" in config
+    assert config["days_forward"]["type"] == "int"
+    assert config["days_forward"]["value"] == 30
 
 
 @pytest.mark.asyncio
@@ -118,8 +122,8 @@ async def test_ping_for_failed_connection():
 async def test_get_docs():
     """Tests the module responsible to fetch and yield documents from Google Calendar."""
 
-    async with create_gcal_source(include_freebusy=True) as source:
-        # Mock responses for calendar list, calendar details, events, and free/busy data
+    async with create_gcal_source() as source:
+        # Mock responses for calendar list, calendar details, and events
         calendar_list_response = {
             "kind": "calendar#calendarList",
             "items": [
@@ -160,19 +164,11 @@ async def test_get_docs():
                     "status": "confirmed",
                     "organizer": {"email": "organizer@example.com"},
                     "creator": {"email": "creator@example.com"},
-                    "attendees": [{"email": "attendee@example.com"}],
+                    "attendees": [
+                        {"displayName": "John Doe", "email": "attendee@example.com"}
+                    ],
                 }
             ],
-        }
-
-        freebusy_response = {
-            "calendars": {
-                "calendar1": {
-                    "busy": [
-                        {"start": "2025-07-23T10:00:00Z", "end": "2025-07-23T11:00:00Z"}
-                    ]
-                }
-            }
         }
 
         # Mock the client methods
@@ -180,7 +176,6 @@ async def test_get_docs():
         mock_client.list_calendar_list = AsyncIterator([calendar_list_response])
         mock_client.get_calendar = mock.AsyncMock(return_value=calendar_response)
         mock_client.list_events = AsyncIterator([events_response])
-        mock_client.get_free_busy = mock.AsyncMock(return_value=freebusy_response)
 
         # Mock the calendar_client method to return our mock client
         with mock.patch.object(source, "calendar_client", return_value=mock_client):
@@ -189,8 +184,8 @@ async def test_get_docs():
             async for doc, _ in source.get_docs():
                 documents.append(doc)
 
-            # We should have 4 documents: 1 calendar list entry, 1 calendar, 1 event, and 1 freebusy
-            assert len(documents) == 4
+            # We should have 3 documents: 1 calendar list entry, 1 calendar, and 1 event
+            assert len(documents) == 3
 
             # Verify the calendar list entry
             calendar_list_doc = next(
@@ -217,22 +212,26 @@ async def test_get_docs():
             assert event_doc["summary"] == "Event 1"
             assert event_doc["description"] == "Event 1 Description"
 
-            # Verify the freebusy document
-            freebusy_doc = next(
-                (doc for doc in documents if doc["type"] == "freebusy"), None
-            )
-            assert freebusy_doc is not None
-            assert freebusy_doc["calendar_id"] == "calendar1"
-            assert len(freebusy_doc["busy"]) == 1
-            assert freebusy_doc["busy"][0]["start"] == "2025-07-23T10:00:00Z"
-            assert freebusy_doc["busy"][0]["end"] == "2025-07-23T11:00:00Z"
+            # Verify the event has the simplified fields
+            assert "attendees" in event_doc
+            assert "attachments" in event_doc
+            assert "meeting_link" in event_doc
+            # Check that attendees structure is simplified
+            assert len(event_doc["attendees"]) == 1
+            assert event_doc["attendees"][0]["name"] == "John Doe"
+            assert event_doc["attendees"][0]["email"] == "attendee@example.com"
+            # Check that unnecessary fields are removed
+            assert "color_id" not in event_doc
+            assert "transparency" not in event_doc
+            assert "visibility" not in event_doc
+            assert "conference_data" not in event_doc
 
 
 @pytest.mark.asyncio
-async def test_get_docs_without_freebusy():
-    """Tests the get_docs method without free/busy data."""
+async def test_get_docs_with_time_range():
+    """Tests the get_docs method with time range configuration."""
 
-    async with create_gcal_source(include_freebusy=False) as source:
+    async with create_gcal_source(days_back=7, days_forward=14) as source:
         # Mock responses for calendar list, calendar details, and events
         calendar_list_response = {
             "kind": "calendar#calendarList",
@@ -275,11 +274,14 @@ async def test_get_docs_without_freebusy():
             assert calendar_doc["calendar_id"] == "calendar1"
             assert calendar_doc["summary"] == "Calendar 1"
 
-            # Verify there's no freebusy document
-            freebusy_doc = next(
-                (doc for doc in documents if doc["type"] == "freebusy"), None
-            )
-            assert freebusy_doc is None
+            # Verify that list_events was called with time parameters
+            mock_client.list_events.assert_called_once()
+            call_args = mock_client.list_events.call_args
+            assert len(call_args[0]) == 3  # calendar_id, time_min, time_max
+            assert call_args[0][0] == "calendar1"
+            # Verify time_min and time_max are provided (exact values depend on when test runs)
+            assert call_args[0][1] is not None  # time_min
+            assert call_args[0][2] is not None  # time_max
 
 
 @pytest.mark.asyncio
@@ -326,30 +328,22 @@ async def test_client_methods():
             # Reset mock
             client.api_call_paged.reset_mock()
 
-            # Test list_events
-            async for page in client.list_events("calendar1"):
+            # Test list_events with time range
+            async for page in client.list_events(
+                "calendar1", "2025-07-23T00:00:00Z", "2025-07-30T23:59:59Z"
+            ):
                 assert page == {"items": []}
             client.api_call_paged.assert_called_once_with(
-                resource="events", method="list", calendarId="calendar1", maxResults=100
+                resource="events",
+                method="list",
+                calendarId="calendar1",
+                maxResults=100,
+                timeMin="2025-07-23T00:00:00Z",
+                timeMax="2025-07-30T23:59:59Z",
             )
 
             # Reset mock
             client.api_call.reset_mock()
-
-            # Test get_free_busy
-            result = await client.get_free_busy(
-                ["calendar1"], "2025-07-23T10:00:00Z", "2025-07-23T11:00:00Z"
-            )
-            assert result == {"id": "calendar1"}
-            client.api_call.assert_called_once_with(
-                resource="freebusy",
-                method="query",
-                body={
-                    "timeMin": "2025-07-23T10:00:00Z",
-                    "timeMax": "2025-07-23T11:00:00Z",
-                    "items": [{"id": "calendar1"}],
-                },
-            )
 
 
 @pytest.mark.asyncio
