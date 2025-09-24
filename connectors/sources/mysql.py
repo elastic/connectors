@@ -229,33 +229,7 @@ class MySQLClient:
         interval=RETRY_INTERVAL,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
-    async def yield_rows_for_table(self, table, primary_keys, table_row_count):
-        offset = 0
-        while offset < table_row_count:
-            primary_keys_str = ", ".join(f"`{pk}`" for pk in primary_keys)
-            pk_query = f"SELECT {primary_keys_str} FROM `{self.database}`.`{table}` ORDER BY {primary_keys_str} LIMIT {self.fetch_size} OFFSET {offset}"
-
-            # join back to get full rows
-            full_query = f"""
-                SELECT t.* 
-                FROM `{self.database}`.`{table}` t
-                JOIN ({pk_query}) pk_subset ON {' AND '.join(f"t.`{pk}` = pk_subset.`{pk}`" for pk in primary_keys)}
-                ORDER BY {", ".join(f"t.`{pk}`" for pk in primary_keys)}
-            """
-
-            async for row in self._fetchmany_in_batches(full_query):
-                if row:
-                    yield row
-                else:
-                    break
-            offset += self.fetch_size
-
-    @retryable(
-        retries=RETRIES,
-        interval=RETRY_INTERVAL,
-        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
-    )
-    async def yield_rows_for_table_cursor_based(self, table, primary_keys):
+    async def yield_rows_for_table(self, table, primary_keys):
         last_primary_key_values = None
 
         while True:
@@ -623,9 +597,7 @@ class MySqlDataSource(BaseDataSource):
             last_update_time = await client.get_last_update_time(table)
             column_names = await client.get_column_names_for_table(table)
 
-            async for row in client.yield_rows_for_table_cursor_based(
-                table, primary_key_columns
-            ):
+            async for row in client.yield_rows_for_table(table, primary_key_columns):
                 yield row2doc(
                     row=row,
                     column_names=column_names,

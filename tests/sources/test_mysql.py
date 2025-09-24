@@ -113,8 +113,7 @@ def mocked_mysql_client(
         client.yield_rows_for_query = AsyncIterator(documents)
     else:
         client.get_column_names_for_table = AsyncMock(return_value=table_cols)
-        # Updated to use cursor-based method since that's what the actual code calls
-        client.yield_rows_for_table_cursor_based = AsyncIterator(documents)
+        client.yield_rows_for_table = AsyncIterator(documents)
 
     return client
 
@@ -404,26 +403,6 @@ async def test_client_get_last_update_time(patch_connection_pool):
 
 @pytest.mark.asyncio
 async def test_client_yield_rows_for_table(patch_connection_pool):
-    rows = [DOC_ONE, DOC_TWO, DOC_THREE]
-    mock_cursor = mock_cursor_fetchall()
-    patch_connection_pool.acquire.return_value = await mock_connection(mock_cursor)
-
-    client = await setup_mysql_client()
-    client.fetch_size = 3
-
-    async with client:
-        yielded_docs = []
-
-        async for doc in client.yield_rows_for_table(
-            "table", primary_keys=["id"], table_row_count=3
-        ):
-            yielded_docs.append(doc)
-
-        assert len(yielded_docs) == len(rows)
-
-
-@pytest.mark.asyncio
-async def test_client_yield_rows_for_table_cursor_based(patch_connection_pool):
     expected_rows = [
         (1, "some text 1"),  # Expected row data as tuples
         (2, "some text 2"),
@@ -437,9 +416,7 @@ async def test_client_yield_rows_for_table_cursor_based(patch_connection_pool):
     async with client:
         yielded_docs = []
 
-        async for doc in client.yield_rows_for_table_cursor_based(
-            "table", primary_keys=["id"]
-        ):
+        async for doc in client.yield_rows_for_table("table", primary_keys=["id"]):
             yielded_docs.append(doc)
 
         assert len(yielded_docs) == len(expected_rows)
