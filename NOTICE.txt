@@ -1602,7 +1602,7 @@ Apache License
 
 
 anyio
-4.10.0
+4.11.0
 UNKNOWN
 The MIT License (MIT)
 
