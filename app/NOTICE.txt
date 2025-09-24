@@ -3545,7 +3545,7 @@ Apache Software License
 
 
 
-elasticsearch-connectors-service
+elasticsearch-connectors
 9.2.0
 Apache Software License
 UNKNOWN

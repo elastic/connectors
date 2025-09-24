@@ -56,21 +56,25 @@ install-agent: .venv/bin/elastic-ingest
 	.venv/bin/pip install -e ".[tests,ftest]"
 
 clean:
-	rm -rf bin lib .venv include elasticsearch_connector.egg-info .coverage site-packages pyvenv.cfg include.site.python*.greenlet dist
+	rm -rf bin lib .venv include elasticsearch_connectors.egg-info .coverage site-packages pyvenv.cfg include.site.python*.greenlet dist
 
 lint: .venv/bin/python .venv/bin/ruff .venv/bin/elastic-ingest
-	.venv/bin/ruff check cli
-	.venv/bin/ruff format cli --check
-	.venv/bin/ruff check entry
-	.venv/bin/ruff format entry --check
-	.venv/bin/pyright cli
-	.venv/bin/pyright entry
+	.venv/bin/ruff check connectors
+	.venv/bin/ruff format connectors --check
+	.venv/bin/ruff check tests
+	.venv/bin/ruff format tests --check
+# 	.venv/bin/ruff check scripts
+# 	.venv/bin/ruff format scripts --check
+# 	.venv/bin/pyright connectors
+# 	.venv/bin/pyright tests
 
 autoformat: .venv/bin/python .venv/bin/ruff .venv/bin/elastic-ingest
-	.venv/bin/ruff check cli --fix
-	.venv/bin/ruff format cli
-	.venv/bin/ruff check entry --fix
-	.venv/bin/ruff format entry
+	.venv/bin/ruff check connectors --fix
+	.venv/bin/ruff format connectors
+	.venv/bin/ruff check tests --fix
+	.venv/bin/ruff format tests
+# 	.venv/bin/ruff check scripts --fix
+# 	.venv/bin/ruff format scripts
 
 test: .venv/bin/pytest
 	.venv/bin/pytest --cov-report term-missing --cov-fail-under 92 --cov-report html --cov=connectors --fail-slow=$(SLOW_TEST_THRESHOLD) -sv tests
