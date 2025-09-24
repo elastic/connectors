@@ -743,6 +743,11 @@ class PostgreSQLDataSource(BaseDataSource):
         # Clean the query by removing the semicolons at the end
         cleaned_query = query.rstrip(';').strip()
         
+        # Extract the main table name using regex
+        import re
+        from_match = re.search(r'FROM\s+(\w+)', cleaned_query, re.IGNORECASE)
+        main_table = from_match.group(1) if from_match else 'table'
+
         # Get the configured interval
         interval_seconds = self._incremental_sync_interval_seconds
         
@@ -750,10 +755,10 @@ class PostgreSQLDataSource(BaseDataSource):
         query_upper = cleaned_query.upper()
         if "WHERE" in query_upper:
             # Add the condition with AND
-            return f"{cleaned_query} AND updated_at >= NOW() - INTERVAL '{interval_seconds} seconds'"
+            return f'{cleaned_query} AND "{main_table}".updated_at >= NOW() - INTERVAL \'{interval_seconds} seconds\''
         else:
             # Add a new WHERE clause
-            return f"{cleaned_query} WHERE updated_at >= NOW() - INTERVAL '{interval_seconds} seconds'"
+            return f'{cleaned_query} WHERE "{main_table}".updated_at >= NOW() - INTERVAL \'{interval_seconds} seconds\''
 
     async def get_docs_incrementally(self, sync_cursor, filtering=None):
         """Executes the logic to fetch databases, tables and rows incrementally in async manner.
@@ -860,7 +865,7 @@ class PostgreSQLDataSource(BaseDataSource):
         
         # Build the query with the incremental condition
         order_by_clause = ",".join([f'"{column}"' for column in order_by_columns])
-        incremental_query = f'SELECT * FROM "{self.schema}"."{tables[0]}" WHERE updated_at >= NOW() - INTERVAL \'{interval_seconds} seconds\' ORDER BY {order_by_clause} LIMIT {FETCH_LIMIT}'
+        incremental_query = f'SELECT * FROM "{self.schema}"."{tables[0]}" WHERE "{self.schema}"."{tables[0]}".updated_at >= NOW() - INTERVAL \'{interval_seconds} seconds\' ORDER BY {order_by_clause} LIMIT {FETCH_LIMIT}'
         
         streamer = self.postgresql_client.data_streamer(query=incremental_query)
         column_names = await anext(streamer)
