@@ -113,7 +113,8 @@ def mocked_mysql_client(
         client.yield_rows_for_query = AsyncIterator(documents)
     else:
         client.get_column_names_for_table = AsyncMock(return_value=table_cols)
-        client.yield_rows_for_table = AsyncIterator(documents)
+        # Updated to use cursor-based method since that's what the actual code calls
+        client.yield_rows_for_table_cursor_based = AsyncIterator(documents)
 
     return client
 
@@ -269,6 +270,35 @@ def mock_cursor_fetchall():
     return mock_cursor
 
 
+def mock_cursor_async_iter():
+    """Mock cursor that supports async iteration for cursor-based pagination"""
+    mock_cursor = MagicMock(spec=aiomysql.Cursor)
+    # Convert frozenset docs to tuples that mimic MySQL row format
+    # Each doc should be a tuple where the first element is the id (primary key)
+    rows = [
+        (1, "some text 1"),  # DOC_ONE equivalent as tuple
+        (2, "some text 2"),  # DOC_TWO equivalent as tuple
+    ]
+
+    call_count = 0
+
+    # Mock async iteration that returns rows on first call, then empty on subsequent calls
+    async def async_iter():
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            for row in rows:
+                yield row
+        # On subsequent calls, don't yield anything (empty result set)
+
+    # Set up the mock cursor to be its own async iterator
+    mock_cursor.__aiter__ = lambda self: async_iter()
+    mock_cursor.__aenter__.return_value = mock_cursor
+    mock_cursor.execute = AsyncMock()
+
+    return mock_cursor
+
+
 @pytest.mark.asyncio
 async def test_client_when_aexit_called_then_cancel_sleeps(patch_connection_pool):
     client = await setup_mysql_client()
@@ -390,6 +420,29 @@ async def test_client_yield_rows_for_table(patch_connection_pool):
             yielded_docs.append(doc)
 
         assert len(yielded_docs) == len(rows)
+
+
+@pytest.mark.asyncio
+async def test_client_yield_rows_for_table_cursor_based(patch_connection_pool):
+    expected_rows = [
+        (1, "some text 1"),  # Expected row data as tuples
+        (2, "some text 2"),
+    ]
+    mock_cursor = mock_cursor_async_iter()
+    patch_connection_pool.acquire.return_value = await mock_connection(mock_cursor)
+
+    client = await setup_mysql_client()
+    client.fetch_size = 3
+
+    async with client:
+        yielded_docs = []
+
+        async for doc in client.yield_rows_for_table_cursor_based(
+            "table", primary_keys=["id"]
+        ):
+            yielded_docs.append(doc)
+
+        assert len(yielded_docs) == len(expected_rows)
 
 
 @pytest.mark.asyncio
