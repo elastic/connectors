@@ -1,6 +1,4 @@
-pwd
-ls -la
-cd /app
+cd app/
 
 init_python() {
   source ~/.bash_profile
