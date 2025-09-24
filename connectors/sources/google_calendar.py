@@ -147,6 +147,7 @@ class GoogleCalendarDataSource(BaseDataSource):
                 "order": 3,
                 "type": "int",
                 "value": 30,
+                "validations": [{"type": "greater_than", "constraint": -1}],
             },
             "days_forward": {
                 "display": "numeric",
@@ -154,6 +155,7 @@ class GoogleCalendarDataSource(BaseDataSource):
                 "order": 4,
                 "type": "int",
                 "value": 30,
+                "validations": [{"type": "greater_than", "constraint": -1}],
             },
         }
 

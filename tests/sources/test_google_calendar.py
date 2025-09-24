@@ -81,10 +81,16 @@ async def test_get_default_configuration():
     assert "days_back" in config
     assert config["days_back"]["type"] == "int"
     assert config["days_back"]["value"] == 30
+    assert config["days_back"]["validations"] == [
+        {"type": "greater_than", "constraint": -1}
+    ]
 
     assert "days_forward" in config
     assert config["days_forward"]["type"] == "int"
     assert config["days_forward"]["value"] == 30
+    assert config["days_forward"]["validations"] == [
+        {"type": "greater_than", "constraint": -1}
+    ]
 
 
 @pytest.mark.asyncio
