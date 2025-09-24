@@ -4,7 +4,8 @@
 set -euo pipefail
 
 source .buildkite/shared.sh
-
+pwd
+ls -la
 cd /app
 
 init_python
