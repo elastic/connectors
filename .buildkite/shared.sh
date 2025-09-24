@@ -1,3 +1,5 @@
+pwd
+ls -la
 cd /app
 
 init_python() {
