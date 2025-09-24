@@ -51,6 +51,41 @@ def inject_lines(table, cursor, lines):
         print(f"Inserting batch #{batch} of {batch_size} documents.")
 
 
+def create_table_with_composite_key(cursor):
+    """Create a table with composite primary key"""
+    print("Adding table with composite primary key...")
+    composite_table_query = """
+    CREATE TABLE IF NOT EXISTS orders (
+        customer_id INT,
+        order_id INT,
+        product_name VARCHAR(255),
+        quantity INT,
+        order_date DATE,
+        PRIMARY KEY (customer_id, order_id)
+    )
+    """
+    cursor.execute(composite_table_query)
+
+    rows = []
+    for i in range(RECORD_COUNT):
+        rows.append((
+            fake_provider.fake.random_int(min=1, max=5000), # customer_id
+            fake_provider.fake.random_int(min=1, max=5000), # order_id
+            fake_provider.fake.name(),                      # product_name
+            fake_provider.fake.random_int(min=1, max=10),   # quantity
+            fake_provider.fake.date()                       # order_date
+        ))
+
+    composite_query = "INSERT INTO orders (customer_id, order_id, product_name, quantity, order_date) VALUES (%s, %s, %s, %s, %s)"
+
+    batch_count = max(int(RECORD_COUNT / BATCH_SIZE), 1)
+    print(f"Inserting {RECORD_COUNT} lines in {batch_count} batches")
+    for batch in range(batch_count):
+        batch_of_rows = rows[batch * BATCH_SIZE:(batch + 1) * BATCH_SIZE]
+        cursor.executemany(composite_query, batch_of_rows)
+        print(f"Inserting batch #{batch} of {len(batch_of_rows)} documents.")
+
+
 async def load():
     """N tables of 10001 rows each. each row is ~ 1024*20 bytes"""
     database = connect(host="127.0.0.1", port=3306, user="root", password="changeme")
@@ -64,6 +99,7 @@ async def load():
         cursor.execute(sql_query)
         inject_lines(table, cursor, RECORD_COUNT)
 
+    create_table_with_composite_key(cursor)
     database.commit()
 
 
