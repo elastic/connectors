@@ -1,0 +1,6 @@
+service.idling: 1
+
+connectors:
+  -
+    connector_id: 's3'
+    service_type: 's3'

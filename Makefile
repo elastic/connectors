@@ -4,7 +4,7 @@ install:
 	cd $(app_dir); make install
 
 test:
-	cd $(app_dir); ls tests/fixtures/; make test
+	cd $(app_dir); make test
 
 ftest:
 	cd $(app_dir); make ftest

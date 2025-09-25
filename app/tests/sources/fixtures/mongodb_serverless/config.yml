@@ -1,0 +1,6 @@
+service.idling: 1
+
+connectors:
+  -
+    connector_id: 'mongo_serverless'
+    service_type: 'mongodb'

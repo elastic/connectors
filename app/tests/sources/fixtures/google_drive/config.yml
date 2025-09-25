@@ -1,0 +1,6 @@
+service.idling: 1
+
+connectors:
+  -
+    connector_id: 'google_drive'
+    service_type: 'google_drive'
