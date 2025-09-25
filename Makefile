@@ -7,7 +7,7 @@ test:
 	cd $(app_dir); make test
 
 ftest:
-	cd $(app_dir);make ftest
+	cd $(app_dir); make ftest
 
 ftrace:
 	cd $(app_dir); make ftrace
