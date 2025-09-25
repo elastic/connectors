@@ -381,7 +381,8 @@ class JiraClient:
                 yield issue
         except Exception as exception:
             self._logger.warning(
-                f"Skipping data for type: {ISSUE_DATA}. Error: {exception}"
+                f"Skipping data for type: {ISSUE_DATA}. Error: {exception}",
+                exc_info=True,
             )
 
     async def get_projects(self):
@@ -953,7 +954,7 @@ class JiraDataSource(BaseDataSource):
             issue (dict): Issue key to fetch an issue
         """
         async for issue_metadata in self.jira_client.get_issues_for_issue_key(
-            key=issue.get("key")
+            key=issue.get("id")
         ):
             response_custom_fields = {}
             response_fields = copy(issue_metadata.get("fields"))
@@ -1015,7 +1016,7 @@ class JiraDataSource(BaseDataSource):
             Dictionary: Jira issue to get indexed
             issue (dict): Issue response to fetch the attachments
         """
-        wildcard_query = ""
+        wildcard_query = "project%20IS%20NOT%20EMPTY"
         comma_seperated_projects = '"' + '","'.join(self.jira_client.projects) + '"'
         projects_query = f"project in ({comma_seperated_projects})"
 
@@ -1099,6 +1100,7 @@ class JiraDataSource(BaseDataSource):
                 self.tasks += 1
 
         else:
+            self._logger.info("Fetching jira content without advanced sync rules")
             await self.jira_client.verify_projects()
 
             await self.fetchers.put(self._get_projects)
