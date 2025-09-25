@@ -64,7 +64,7 @@ def calendar_list():
     """Mock calendar list endpoint."""
     calendars = []
     for i in range(CALENDARS_COUNT):
-        calendar_id = f"calendar_{i}@example.com"
+        calendar_id = f"cal_{i}@example.com"  # Simple calendar ID
         calendars.append({
             "kind": "calendar#calendarListEntry",
             "etag": f"\"etag_{i}\"",
@@ -93,12 +93,14 @@ def calendar_list():
 @app.route("/calendar/v3/calendars/<path:calendar_id>", methods=["GET"])
 def get_calendar(calendar_id):
     """Mock get calendar endpoint."""
-    # Extract index from calendar_id (e.g., "calendar_0@example.com" -> 0)
+    # Extract index from calendar_id (e.g., "cal_0@example.com" -> 0)
     try:
-        index = int(calendar_id.split("_")[1].split("@")[0])
+        index = int(calendar_id.split("_")[-1].split("@")[0])
     except (IndexError, ValueError):
         index = 0
 
+    # Return the same calendar ID as the calendar list entry
+    # The _id collision will be handled by document type differentiation
     return {
         "kind": "calendar#calendar",
         "etag": f"\"calendar_etag_{index}\"",
@@ -113,9 +115,9 @@ def get_calendar(calendar_id):
 @app.route("/calendar/v3/calendars/<path:calendar_id>/events", methods=["GET"])
 def list_events(calendar_id):
     """Mock events list endpoint."""
-    # Extract index from calendar_id
+    # Extract index from calendar_id (e.g., "cal_0@example.com" -> 0)
     try:
-        calendar_index = int(calendar_id.split("_")[1].split("@")[0])
+        calendar_index = int(calendar_id.split("_")[-1].split("@")[0])
     except (IndexError, ValueError):
         calendar_index = 0
 
@@ -128,11 +130,29 @@ def list_events(calendar_id):
     events = []
     now = datetime.utcnow()
 
+    # Parse time range if provided by connector
+    if time_min and time_max:
+        try:
+            start_time = datetime.fromisoformat(time_min.replace('Z', '+00:00'))
+            end_time = datetime.fromisoformat(time_max.replace('Z', '+00:00'))
+            time_range_days = (end_time - start_time).days
+        except:
+            start_time = now - timedelta(days=30)
+            end_time = now + timedelta(days=30)
+            time_range_days = 60
+    else:
+        start_time = now - timedelta(days=30)
+        end_time = now + timedelta(days=30)
+        time_range_days = 60
+
     for i in range(min(EVENTS_PER_CALENDAR, max_results)):
         event_id = f"event_{calendar_index}_{i}"
-        # Spread events across the time range
-        days_offset = (i - EVENTS_PER_CALENDAR // 2) * 2  # Events spread over time range
-        event_start = now + timedelta(days=days_offset, hours=i % 24)
+        # Spread events evenly across the requested time range
+        if EVENTS_PER_CALENDAR > 1:
+            days_offset = (i / (EVENTS_PER_CALENDAR - 1)) * time_range_days
+            event_start = start_time + timedelta(days=days_offset, hours=i % 24)
+        else:
+            event_start = start_time + timedelta(hours=i % 24)
         event_end = event_start + timedelta(hours=1)
 
         # Create some variety in event types
