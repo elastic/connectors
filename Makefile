@@ -29,6 +29,3 @@ docker-build:
 
 docker-push:
 	cd $(app_dir); make docker-push
-
-huh:
-	cd app/; ls
