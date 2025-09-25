@@ -5,7 +5,6 @@ set -euo pipefail
 
 source .buildkite/shared.sh
 
-
 init_python
 
 if is_pr && ! is_fork; then
