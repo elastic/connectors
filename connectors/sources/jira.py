@@ -66,7 +66,7 @@ URLS = {
     PING: "rest/api/2/myself",
     PROJECT: "rest/api/2/project?expand=description,lead,url",
     PROJECT_BY_KEY: "rest/api/2/project/{key}",
-    ISSUES: "rest/api/3/search/jql?jql={jql}&maxResults={max_results}&nextPageToken={next_page_token}",
+    ISSUES: "rest/api/3/search/jql?jql={jql}&maxResults={max_results}",
     ISSUE_DATA: "rest/api/2/issue/{id}",
     ATTACHMENT_CLOUD: "rest/api/2/attachment/content/{attachment_id}",
     ATTACHMENT_SERVER: "secure/attachment/{attachment_id}/{attachment_name}",
@@ -260,6 +260,85 @@ class JiraClient:
             except ClientResponseError as exception:
                 await self._handle_client_errors(url=url, exception=exception)
 
+    async def _paginated_api_call_cursor_based(self, url_name, jql=None, **kwargs):
+        if not jql and url_name == ISSUES:
+            jql = "project%20IS%20NOT%20EMPTY"  # project IS NOT EMPTY for all issues
+
+        url = parse.urljoin(
+            self.host_url,
+            URLS[url_name].format(
+                jql=jql,
+                max_results=FETCH_SIZE,
+            ),
+        )
+
+        self._logger.info(
+            f"Started pagination for the API endpoint: {URLS[url_name]} to host: {self.host_url} with the parameters -> "
+            f"maxResults: {FETCH_SIZE} and jql query: {jql}"
+        )
+
+        while True:
+            try:
+                async for response in self.api_call(url=url):
+                    response_json = await response.json()
+                    yield response_json
+
+                    next_page = response_json.get("nextPageToken")
+                    if not next_page:
+                        return
+                    next_page_token = next_page
+                    url_template = URLS[url_name] + "&nextPageToken={next_page_token}"
+                    url = parse.urljoin(
+                        self.host_url,
+                        url_template.format(
+                            jql=jql,
+                            max_results=FETCH_SIZE,
+                            next_page_token=next_page_token,
+                        ),
+                    )
+
+            except Exception as exception:
+                self._logger.warning(
+                    f"Skipping data for type: {url_name}, query params: jql={jql}, nextPageToken={next_page_token}, maxResults={FETCH_SIZE}. Error: {exception}."
+                )
+                break
+
+    async def _paginated_api_call_offset_based(self, url_name, jql=None, **kwargs):
+        start_at = 0
+        self._logger.info(
+            f"Started pagination for the API endpoint: {URLS[url_name]} to host: {self.host_url} with the parameters -> startAt: 0, maxResults: {FETCH_SIZE} and jql query: {jql}"
+        )
+        while True:
+            try:
+                url = None
+                if kwargs.get("level_id"):
+                    url = parse.urljoin(
+                        self.host_url,
+                        URLS[url_name].format(
+                            max_results=FETCH_SIZE,
+                            start_at=start_at,
+                            level_id=kwargs.get("level_id"),
+                        ),  # pyright: ignore
+                    )
+                async for response in self.api_call(
+                        url_name=url_name,
+                        start_at=start_at,
+                        max_results=FETCH_SIZE,
+                        jql=jql,
+                        url=url,
+                ):
+                    response_json = await response.json()
+                    total = response_json["total"]
+                    yield response_json
+                    if start_at + FETCH_SIZE > total or total <= FETCH_SIZE:
+                        return
+                    start_at += FETCH_SIZE
+            except Exception as exception:
+                self._logger.warning(
+                    f"Skipping data for type: {url_name}, query params: jql={jql}, startAt={start_at}, maxResults={FETCH_SIZE}. Error: {exception}."
+                )
+                break
+
     async def paginated_api_call(self, url_name, jql=None, **kwargs):
         """Make a paginated API call for Jira objects using the passed url_name with retry for the failed API calls.
         Most Jira API endpoints use offset-based pagination. However, some endpoints use cursor-based pagination.
@@ -273,61 +352,12 @@ class JiraClient:
             response: Return api response.
         """
         is_cursor_based_pagination = url_name == ISSUES
-        pagination_arg = (
-            {"next_page_token": "null"}
-            if is_cursor_based_pagination
-            else {"start_at": 0}
-        )
-
-        pagination_arg_str = ", ".join(f"{k}: {v}" for k, v in pagination_arg.items())
-        self._logger.info(
-            f"Started pagination for the API endpoint: {URLS[url_name]} to host: {self.host_url} with the parameters -> "
-            f"{pagination_arg_str}, maxResults: {FETCH_SIZE} and jql query: {jql}"
-        )
-        while True:
-            try:
-                url = None
-                if kwargs.get("level_id"):
-                    url = parse.urljoin(
-                        self.host_url,
-                        URLS[url_name].format(
-                            max_results=FETCH_SIZE,
-                            level_id=kwargs.get("level_id"),
-                            **pagination_arg,
-                        ),  # pyright: ignore
-                    )
-                async for response in self.api_call(
-                    url_name=url_name,
-                    max_results=FETCH_SIZE,
-                    jql=jql,
-                    url=url,
-                    **pagination_arg,
-                ):
-                    response_json = await response.json()
-                    yield response_json
-
-                    # is there another page? if not, we're done, otherwise update cursor/offset.
-                    if is_cursor_based_pagination:
-                        next_page_token = response_json.get("nextPageToken")
-                        if not next_page_token:
-                            return
-                        pagination_arg["next_page_token"] = next_page_token
-                    else:  # offset-based pagination
-                        total = response_json["total"]
-                        start_at = pagination_arg["start_at"]
-                        if start_at + FETCH_SIZE > total or total <= FETCH_SIZE:
-                            return
-                        start_at += FETCH_SIZE
-                        pagination_arg["start_at"] = start_at
-
-            except Exception as exception:
-                pagination_str = ", ".join(
-                    f"{k}={v}" for k, v in pagination_arg.items()
-                )
-                self._logger.warning(
-                    f"Skipping data for type: {url_name}, query params: jql={jql}, {pagination_str}, maxResults={FETCH_SIZE}. Error: {exception}."
-                )
-                break
+        if is_cursor_based_pagination:
+            async for response in self._paginated_api_call_cursor_based(url_name=url_name, jql=jql, **kwargs):
+                yield response
+        else:
+            async for response in self._paginated_api_call_offset_based(url_name=url_name, jql=jql, **kwargs):
+                yield response
 
     async def get_issues_for_jql(self, jql):
         info_msg = (
