@@ -321,11 +321,11 @@ class JiraClient:
                         ),  # pyright: ignore
                     )
                 async for response in self.api_call(
-                        url_name=url_name,
-                        start_at=start_at,
-                        max_results=FETCH_SIZE,
-                        jql=jql,
-                        url=url,
+                    url_name=url_name,
+                    start_at=start_at,
+                    max_results=FETCH_SIZE,
+                    jql=jql,
+                    url=url,
                 ):
                     response_json = await response.json()
                     total = response_json["total"]
@@ -353,10 +353,14 @@ class JiraClient:
         """
         is_cursor_based_pagination = url_name == ISSUES
         if is_cursor_based_pagination:
-            async for response in self._paginated_api_call_cursor_based(url_name=url_name, jql=jql, **kwargs):
+            async for response in self._paginated_api_call_cursor_based(
+                url_name=url_name, jql=jql, **kwargs
+            ):
                 yield response
         else:
-            async for response in self._paginated_api_call_offset_based(url_name=url_name, jql=jql, **kwargs):
+            async for response in self._paginated_api_call_offset_based(
+                url_name=url_name, jql=jql, **kwargs
+            ):
                 yield response
 
     async def get_issues_for_jql(self, jql):
