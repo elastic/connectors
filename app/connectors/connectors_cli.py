@@ -11,10 +11,9 @@ a Python package, an `elastic-ingest` executable is added in the PATH and
 executes the `main` function of this module, which starts the service.
 """
 
-import os
-
 import asyncio
 import json
+import os
 
 import click
 import yaml

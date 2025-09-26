@@ -1,0 +1,32 @@
+target-version = "py310"
+
+[lint]
+select = ["A", "ASYNC", "I", "E", "F", "B", "C4", "T10", "T20", "EM", "ISC", "S", "CPY001"]
+ignore = ["E501", "ISC001"]
+preview = true
+
+# Allow autofix for all enabled rules (when `--fix`) is provided.
+fixable = ["A", "B", "C", "C4", "D", "E", "F", "G", "I", "N", "Q", "S", "T", "W", "ANN", "ARG", "BLE", "COM", "DJ", "DTZ", "EM", "ERA", "EXE", "FBT", "ICN", "INP", "ISC", "NPY", "PD", "PGH", "PIE", "PL", "PT", "PTH", "PYI", "RET", "RSE", "RUF", "SIM", "SLF", "TCH", "TID", "TRY", "UP", "YTT", "T10", "T20"]
+unfixable = []
+
+exclude = [
+    ".git",
+    "__pycache__",
+    "lib",
+    "bin",
+    "include"
+]
+dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+
+[lint.per-file-ignores]
+"connectors/*" = ["S608"]
+"scripts/verify.py" = [ "EM" ]
+"setup.py" = [ "EM" ]
+"tests/*" = ["B017", "S101", "S", "ASYNC110"]
+"tests/conftest.py" = [ "EM" ]
+
+[lint.isort]
+known-first-party=["connectors", "tests"]
+
+[lint.flake8-copyright]
+notice-rgx = "#\n# Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one\n# or more contributor license agreements. Licensed under the Elastic License 2.0;\n# you may not use this file except in compliance with the Elastic License 2.0.\n#"
