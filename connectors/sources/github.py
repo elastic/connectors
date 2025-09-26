@@ -773,12 +773,13 @@ class GitHubClient:
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
         skipped_exceptions=UnauthorizedException,
     )
-    async def graphql(self, query, variables=None):
+    async def graphql(self, query, variables=None, ignore_errors=None):
         """Invoke GraphQL request to fetch repositories, pull requests, and issues.
 
         Args:
             query: Dictionary comprising of query for the GraphQL request.
             variables: Dictionary comprising of query for the GraphQL request.
+            ignore_errors: List of error types to ignore and return null for instead of raising exceptions.
 
         Raises:
             UnauthorizedException: Unauthorized exception
@@ -812,12 +813,32 @@ class GitHubClient:
             else:
                 raise
         except QueryError as exception:
-            for error in exception.response.get("errors"):
+            # Log the entire response for debugging
+            self._logger.error(f"GraphQL QueryError full response: {exception.response}")
+
+            errors = exception.response.get("errors", [])
+            for error in errors:
                 if (
                     error.get("type").lower() == "rate_limited"
                     and "api rate limit exceeded" in error.get("message").lower()
                 ):
                     await self._put_to_sleep(resource_type="graphql")
+
+            # Handle ignored errors gracefully by returning null for those fields
+            if ignore_errors:
+                ignored_errors = [error for error in errors if error.get("type") in ignore_errors]
+                if ignored_errors:
+                    # Check if we have any non-ignored errors that should still raise exceptions
+                    other_errors = [error for error in errors if error.get("type") not in ignore_errors]
+
+                    if other_errors:
+                        # If there are other types of errors, still raise an exception
+                        msg = f"Error while executing query. Exception: {exception.response.get('errors')}"
+                        raise Exception(msg) from exception
+
+                    # All errors are ignored, return just the data part without errors
+                    return exception.response.get("data", {})
+
             msg = f"Error while executing query. Exception: {exception.response.get('errors')}"
             raise Exception(msg) from exception
         except Exception as e:
@@ -1028,7 +1049,11 @@ class GitHubClient:
         return results
 
     async def _fetch_repos_batch(self, repo_names):
-        """Fetch a batch of repositories in a single GraphQL query using aliases."""
+        """Fetch a batch of repositories in a single GraphQL query using aliases.
+
+        Note: This method will NOT raise exceptions for non-existent repositories.
+        Invalid/non-existent repositories will be returned as None values in the result.
+        """
         if not repo_names:
             return {}
 
@@ -1083,7 +1108,7 @@ class GitHubClient:
         }}
         """
 
-        data = await self.graphql(query=query, variables=variables)
+        data = await self.graphql(query=query, variables=variables, ignore_errors=["NOT_FOUND"])
 
         # Map results back to repo names
         results = {}
