@@ -2348,3 +2348,70 @@ async def test_get_github_item_when_error_occurs(exceptions, raises):
         source.github_client._get_client.getitem = Mock(side_effect=exceptions)
         with pytest.raises(raises):
             await source.github_client.get_github_item("/core")
+
+
+@pytest.mark.asyncio
+async def test_get_repos_by_fully_qualified_name_batch():
+    async with create_github_source() as source:
+        # Mock the GraphQL response for batch query
+        mock_response = {
+            "repo0": {
+                "id": "repo1_id",
+                "nameWithOwner": "owner1/repo1",
+                "name": "repo1",
+                "url": "https://github.com/owner1/repo1"
+            },
+            "repo1": {
+                "id": "repo2_id",
+                "nameWithOwner": "owner2/repo2",
+                "name": "repo2",
+                "url": "https://github.com/owner2/repo2"
+            },
+            "repo2": None  # Invalid repo
+        }
+
+        source.github_client.graphql = AsyncMock(return_value=mock_response)
+
+        repo_names = ["owner1/repo1", "owner2/repo2", "owner3/invalid"]
+        results = await source.github_client.get_repos_by_fully_qualified_name_batch(repo_names)
+
+        assert len(results) == 3
+        assert results["owner1/repo1"]["nameWithOwner"] == "owner1/repo1"
+        assert results["owner2/repo2"]["nameWithOwner"] == "owner2/repo2"
+        assert results["owner3/invalid"] is None
+
+
+@pytest.mark.asyncio
+async def test_get_repos_by_fully_qualified_name_batch_empty_list():
+    async with create_github_source() as source:
+        results = await source.github_client.get_repos_by_fully_qualified_name_batch([])
+        assert results == {}
+
+
+@pytest.mark.asyncio
+async def test_get_repos_by_fully_qualified_name_batch_with_custom_batch_size():
+    async with create_github_source() as source:
+        # Test with batch size of 1 to force multiple GraphQL calls
+        repo_names = ["owner1/repo1", "owner2/repo2"]
+
+        # Mock responses for each batch
+        responses = [
+            {"repo0": {"nameWithOwner": "owner1/repo1"}},
+            {"repo0": {"nameWithOwner": "owner2/repo2"}}
+        ]
+        source.github_client.graphql = AsyncMock(side_effect=responses)
+
+        results = await source.github_client.get_repos_by_fully_qualified_name_batch(repo_names, batch_size=1)
+
+        assert len(results) == 2
+        assert results["owner1/repo1"]["nameWithOwner"] == "owner1/repo1"
+        assert results["owner2/repo2"]["nameWithOwner"] == "owner2/repo2"
+        # Verify graphql was called twice (once per batch)
+        assert source.github_client.graphql.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_fetch_repos_batch_empty_list():
+    async with create_github_source() as source:
+        results = await source.github_client._fetch_repos_batch([])
+        assert results == {}
