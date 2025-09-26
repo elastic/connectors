@@ -1,6 +1,0 @@
-service.idling: 1
-
-connectors:
-  -
-    connector_id: 'jira'
-    service_type: 'jira'

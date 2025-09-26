@@ -1,4 +1,4 @@
-app_dir := app/
+app_dir := app/connectors_service
 
 install:
 	cd $(app_dir); make install

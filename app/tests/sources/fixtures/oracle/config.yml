@@ -1,7 +1,0 @@
-service.idling: 1
-
-connectors:
-  -
-    connector_id: 'oracle'
-    service_type: 'oracle'
-
