@@ -66,7 +66,7 @@ URLS = {
     PING: "rest/api/2/myself",
     PROJECT: "rest/api/2/project?expand=description,lead,url",
     PROJECT_BY_KEY: "rest/api/2/project/{key}",
-    ISSUES: "rest/api/3/search/jql?jql={jql}&maxResults={max_results}",
+    ISSUES: "rest/api/3/search/jql?jql={jql}&fields=*all&maxResults={max_results}",
     ISSUE_DATA: "rest/api/2/issue/{id}",
     ATTACHMENT_CLOUD: "rest/api/2/attachment/content/{attachment_id}",
     ATTACHMENT_SERVER: "secure/attachment/{attachment_id}/{attachment_name}",
@@ -277,6 +277,7 @@ class JiraClient:
             f"maxResults: {FETCH_SIZE} and jql query: {jql}"
         )
 
+        next_page_token = None
         while True:
             try:
                 async for response in self.api_call(url=url):
@@ -296,7 +297,6 @@ class JiraClient:
                             next_page_token=next_page_token,
                         ),
                     )
-
             except Exception as exception:
                 self._logger.warning(
                     f"Skipping data for type: {url_name}, query params: jql={jql}, nextPageToken={next_page_token}, maxResults={FETCH_SIZE}. Error: {exception}."
@@ -954,7 +954,7 @@ class JiraDataSource(BaseDataSource):
             issue (dict): Issue key to fetch an issue
         """
         async for issue_metadata in self.jira_client.get_issues_for_issue_key(
-            key=issue.get("id")
+            key=issue.get("key")
         ):
             response_custom_fields = {}
             response_fields = copy(issue_metadata.get("fields"))
@@ -1017,8 +1017,8 @@ class JiraDataSource(BaseDataSource):
             issue (dict): Issue response to fetch the attachments
         """
         wildcard_query = "key%20IS%20NOT%20EMPTY"
-        comma_seperated_projects = '"' + '","'.join(self.jira_client.projects) + '"'
-        projects_query = f"project in ({comma_seperated_projects})"
+        comma_separated_projects = '"' + '","'.join(self.jira_client.projects) + '"'
+        projects_query = f"project in ({comma_separated_projects})"
 
         jql = custom_query or (
             wildcard_query

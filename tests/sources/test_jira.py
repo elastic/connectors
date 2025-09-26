@@ -392,7 +392,7 @@ def side_effect_function(url, ssl):
     """
     if (
         url
-        == f"{HOST_URL}/rest/api/3/search/jql?jql=key%20IS%20NOT%20EMPTY&maxResults=100"
+        == f"{HOST_URL}/rest/api/3/search/jql?jql=key%20IS%20NOT%20EMPTY&fields=*all&maxResults=100"
     ):
         mocked_issue_response = {"issues": [MOCK_ISSUE], "nextPageToken": "token_123"}
         return get_json_mock(mock_response=mocked_issue_response)
@@ -402,7 +402,7 @@ def side_effect_function(url, ssl):
         return get_json_mock(mock_response=MOCK_ISSUE)
     elif (
         url
-        == f"{HOST_URL}/rest/api/3/search/jql?jql=key%20IS%20NOT%20EMPTY&maxResults=100&nextPageToken=token_123"
+        == f"{HOST_URL}/rest/api/3/search/jql?jql=key%20IS%20NOT%20EMPTY&fields=*all&maxResults=100&nextPageToken=token_123"
     ):
         mocked_issue_data = {"issues": [MOCK_ISSUE_TYPE_BUG]}
         return get_json_mock(mock_response=mocked_issue_data)
@@ -412,14 +412,20 @@ def side_effect_function(url, ssl):
         return get_json_mock(mock_response=MOCK_MYSELF)
     elif url == f"{HOST_URL}/rest/api/2/project?expand=description,lead,url":
         return get_json_mock(mock_response=MOCK_PROJECT)
-    elif url == f"{HOST_URL}/rest/api/3/search/jql?jql=type=bug&maxResults=100":
+    elif (
+        url
+        == f"{HOST_URL}/rest/api/3/search/jql?jql=type=bug&fields=*all&maxResults=100"
+    ):
         mocked_issue_data_bug = {
             "issues": [MOCK_ISSUE_TYPE_BUG],
         }
         return get_json_mock(mock_response=mocked_issue_data_bug)
     elif url == f"{HOST_URL}/rest/api/2/issue/TP-2":
         return get_json_mock(mock_response=MOCK_ISSUE_TYPE_BUG)
-    elif url == f"{HOST_URL}/rest/api/3/search/jql?jql=type=task&maxResults=100":
+    elif (
+        url
+        == f"{HOST_URL}/rest/api/3/search/jql?jql=type=task&fields=*all&maxResults=100"
+    ):
         mocked_issue_data_task = {"issues": [MOCK_ISSUE]}
         return get_json_mock(mock_response=mocked_issue_data_task)
     elif (

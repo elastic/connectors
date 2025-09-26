@@ -69,7 +69,8 @@ def get_all_issues():
     """
     args = request.args
     max_results = int(args.get("maxResults", 100))
-    next_page_token = args.get("nextPageToken", "null")
+    next_page_token = args.get("nextPageToken")
+    selected_fields = args.get("fields")
 
     all_issues = {"maxResults": max_results, "issues": []}
 
@@ -93,16 +94,36 @@ def get_all_issues():
         "reporter": {"emailAddress": "test.user@gmail.com", "displayName": "Test User"},
     }
 
-    if next_page_token == "null" or next_page_token is None:
+    if next_page_token == "null":
+        error_msg = "next_page_token should not be 'null' string"
+        raise Exception(error_msg)
+
+    if next_page_token is None:
         for i in range(1, max_results + 1):
-            all_issues["issues"].append(
-                {"id": f"issue-{i}", "key": f"DP-{i}", "fields": fields}
-            )
+            all_issues["issues"].append(_compose_issue(i, selected_fields, fields))
         all_issues["nextPageToken"] = "second_page_token"
     elif next_page_token == "second_page_token":
         all_issues["issues"] = [{"id": "issue-101", "key": "DP-101", "fields": fields}]
 
     return all_issues
+
+
+def _compose_issue(issue_id, selected_fields, fields):
+    if selected_fields == "*all":
+        return {
+            "id": f"issue-{issue_id}",
+            "key": f"DP-{issue_id}",
+            "fields": fields,
+        }
+    elif selected_fields:
+        return {
+            "id": f"issue-{issue_id}",
+            "key": f"DP-{issue_id}",
+            "fields": {
+                k: v for k, v in fields.items() if k in selected_fields.split(",")
+            },
+        }
+    return {"id": f"issue-{issue_id}"}
 
 
 @app.route("/rest/api/2/issue/<string:issue_id>", methods=["GET"])
