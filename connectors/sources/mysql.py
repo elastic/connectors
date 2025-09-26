@@ -259,10 +259,12 @@ class MySQLClient:
                 ORDER BY {primary_keys_str} 
                 LIMIT {self.fetch_size}
             """
+            self._logger.debug(f"Running query: {query}")
 
             batch_count = 0
             async with self.connection.cursor(aiomysql.cursors.SSCursor) as cursor:
                 if params:
+                    self._logger.debug(f"Params: {params}")
                     await cursor.execute(query, params)
                 else:
                     await cursor.execute(query)
@@ -280,6 +282,7 @@ class MySQLClient:
 
             # If we got fewer rows than fetch_size, we've reached the end
             if batch_count < self.fetch_size:
+                self._logger.debug(f"Fetched final batch of {batch_count} rows. Fetch size: {self.fetch_size}.")
                 break
 
     async def _get_table_row_count_for_query(self, query):
