@@ -197,6 +197,11 @@ class GithubQuery(Enum):
     }
     }
     """
+    BATCH_REPO_QUERY_TEMPLATE = """
+    query {batch_queries} {{
+        {query_body}
+    }}
+    """
     PULL_REQUEST_QUERY = f"""
     query ($owner: String!, $name: String!, $cursor: String) {{
     repository(owner: $owner, name: $name) {{
@@ -768,12 +773,13 @@ class GitHubClient:
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
         skipped_exceptions=UnauthorizedException,
     )
-    async def graphql(self, query, variables=None):
+    async def graphql(self, query, variables=None, ignore_errors=None):
         """Invoke GraphQL request to fetch repositories, pull requests, and issues.
 
         Args:
             query: Dictionary comprising of query for the GraphQL request.
             variables: Dictionary comprising of query for the GraphQL request.
+            ignore_errors: List of error types to ignore and return null for instead of raising exceptions.
 
         Raises:
             UnauthorizedException: Unauthorized exception
@@ -807,12 +813,40 @@ class GitHubClient:
             else:
                 raise
         except QueryError as exception:
-            for error in exception.response.get("errors"):
+            # Log the entire response for debugging
+            self._logger.error(
+                f"GraphQL QueryError full response: {exception.response}"
+            )
+
+            errors = exception.response.get("errors", [])
+            for error in errors:
                 if (
                     error.get("type").lower() == "rate_limited"
                     and "api rate limit exceeded" in error.get("message").lower()
                 ):
                     await self._put_to_sleep(resource_type="graphql")
+
+            # Handle ignored errors gracefully by returning null for those fields
+            if ignore_errors:
+                ignored_errors = [
+                    error for error in errors if error.get("type") in ignore_errors
+                ]
+                if ignored_errors:
+                    # Check if we have any non-ignored errors that should still raise exceptions
+                    other_errors = [
+                        error
+                        for error in errors
+                        if error.get("type") not in ignore_errors
+                    ]
+
+                    if other_errors:
+                        # If there are other types of errors, still raise an exception
+                        msg = f"Error while executing query. Exception: {exception.response.get('errors')}"
+                        raise Exception(msg) from exception
+
+                    # All errors are ignored, return just the data part without errors
+                    return exception.response.get("data", {})
+
             msg = f"Error while executing query. Exception: {exception.response.get('errors')}"
             raise Exception(msg) from exception
         except Exception as e:
@@ -1001,6 +1035,98 @@ class GitHubClient:
             query=GithubQuery.REPO_QUERY.value, variables=repo_variables
         )
         return data.get(REPOSITORY_OBJECT)
+
+    async def get_repos_by_fully_qualified_name_batch(self, repo_names, batch_size=15):
+        """Batch validate multiple repositories by fully qualified name in fewer GraphQL requests.
+
+        Args:
+            repo_names (list): List of fully qualified repository names (owner/repo format) to validate
+            batch_size (int): Number of repos to validate per request (default 15)
+
+        Returns:
+            dict: Dictionary mapping repo_name to repository object (or None if invalid)
+        """
+        results = {}
+
+        # Process repositories in batches to avoid hitting GraphQL complexity limits
+        for i in range(0, len(repo_names), batch_size):
+            batch = repo_names[i : i + batch_size]
+            batch_results = await self._fetch_repos_batch(batch)
+            results.update(batch_results)
+
+        return results
+
+    async def _fetch_repos_batch(self, repo_names):
+        """Fetch a batch of repositories in a single GraphQL query using aliases.
+
+        Note: This method will NOT raise exceptions for non-existent repositories.
+        Invalid/non-existent repositories will be returned as None values in the result.
+        """
+        if not repo_names:
+            return {}
+
+        # Build the batch query with aliases
+        query_parts = []
+        variables = {}
+
+        for i, repo_name in enumerate(repo_names):
+            owner, repo = self.get_repo_details(repo_name=repo_name)
+            alias = f"repo{i}"
+
+            # Add variables for this repository
+            variables[f"{alias}_owner"] = owner
+            variables[f"{alias}_name"] = repo
+
+            # Add the aliased query part
+            query_part = f"""
+            {alias}: repository(owner: ${alias}_owner, name: ${alias}_name) {{
+                id
+                updatedAt
+                name
+                nameWithOwner
+                url
+                description
+                visibility
+                primaryLanguage {{
+                    name
+                }}
+                defaultBranchRef {{
+                    name
+                }}
+                isFork
+                stargazerCount
+                watchers {{
+                    totalCount
+                }}
+                forkCount
+                createdAt
+                isArchived
+            }}"""
+            query_parts.append(query_part)
+
+        # Build variable declarations for the query
+        variable_declarations = []
+        for var_name in variables.keys():
+            variable_declarations.append(f"${var_name}: String!")
+
+        # Construct the full query
+        query = f"""
+        query ({', '.join(variable_declarations)}) {{
+            {' '.join(query_parts)}
+        }}
+        """
+
+        data = await self.graphql(
+            query=query, variables=variables, ignore_errors=["NOT_FOUND"]
+        )
+
+        # Map results back to repo names
+        results = {}
+        for i, repo_name in enumerate(repo_names):
+            alias = f"repo{i}"
+            results[repo_name] = data.get(alias)
+
+        return results
 
     async def _fetch_all_members(self, org_name):
         org_variables = {
@@ -1327,18 +1453,64 @@ class GitHubDataSource(BaseDataSource):
                 self.configured_repos,
             )
         )
-        for full_repo_name in self.configured_repos:
-            if full_repo_name in invalid_repos:
-                continue
+
+        # Group valid repos by owner for batch validation
+        valid_repos = [
+            repo for repo in self.configured_repos if repo not in invalid_repos
+        ]
+        repos_by_owner = {}
+
+        await self._fetch_installations()
+
+        for full_repo_name in valid_repos:
             owner, repo_name = self.github_client.get_repo_details(
                 repo_name=full_repo_name
             )
-            if await self._get_repo_object_for_github_app(owner, repo_name) is None:
+
+            # Check if GitHub App is installed on this owner
+            if owner not in self._installations:
+                self._logger.debug(
+                    f"Invalid repo {full_repo_name} as the github app is not installed on {owner}"
+                )
                 invalid_repos.add(full_repo_name)
+                continue
+
+            if owner not in repos_by_owner:
+                repos_by_owner[owner] = []
+            repos_by_owner[owner].append(full_repo_name)
+
+        # Batch validate repos for each owner
+        for owner, owner_repos in repos_by_owner.items():
+            await self.github_client.update_installation_id(self._installations[owner])
+
+            # Use batch validation instead of fetching all repos for the owner
+            batch_results = (
+                await self.github_client.get_repos_by_fully_qualified_name_batch(
+                    owner_repos
+                )
+            )
+
+            for repo_name, repo_data in batch_results.items():
+                if repo_data:
+                    # Store valid repos in appropriate cache for potential later use
+                    if self.configuration["repo_type"] == "organization":
+                        if owner not in self.org_repos:
+                            self.org_repos[owner] = {}
+                        self.org_repos[owner][repo_name] = repo_data
+                    else:
+                        if owner not in self.user_repos:
+                            self.user_repos[owner] = {}
+                        self.user_repos[owner][repo_name] = repo_data
+                else:
+                    self._logger.debug(f"Detected invalid repository: {repo_name}.")
+                    invalid_repos.add(repo_name)
 
         return list(invalid_repos)
 
     async def _get_repo_object_for_github_app(self, owner, repo_name):
+        # Note: this method fetches potentially all user or org repos and caches them,
+        # so it should be used sparingly as it could consume a lot of API rate limit
+        # due to possibly multiple pages of repos
         await self._fetch_installations()
         full_repo_name = f"{owner}/{repo_name}"
         if owner not in self._installations:
@@ -1379,42 +1551,44 @@ class GitHubDataSource(BaseDataSource):
                     repos=self.configured_repos,
                     owner=logged_in_user,
                 )
-                if logged_in_user not in self.user_repos:
-                    self.user_repos[logged_in_user] = {}
-                async for repo in self.github_client.get_user_repos(logged_in_user):
-                    self.user_repos[logged_in_user][repo["nameWithOwner"]] = repo
-                invalid_repos = list(
-                    set(configured_repos) - set(self.user_repos[logged_in_user].keys())
-                )
-
-                for repo_name in foreign_repos:
-                    try:
-                        self.foreign_repos[
-                            repo_name
-                        ] = await self.github_client.get_foreign_repo(
-                            repo_name=repo_name
-                        )
-                    except Exception:
-                        self._logger.debug(f"Detected invalid repository: {repo_name}.")
-                        invalid_repos.append(repo_name)
+                # Combine all repos for unified batch validation
+                all_repos = configured_repos + foreign_repos
             else:
                 foreign_repos, configured_repos = self.github_client.bifurcate_repos(
                     repos=self.configured_repos,
                     owner=self.configuration["org_name"],
                 )
-                configured_repos.extend(foreign_repos)
-                if self.configuration["org_name"] not in self.org_repos:
-                    self.org_repos[self.configuration["org_name"]] = {}
-                async for repo in self.github_client.get_org_repos(
-                    self.configuration["org_name"]
-                ):
-                    self.org_repos[self.configuration["org_name"]][
-                        repo["nameWithOwner"]
-                    ] = repo
-                invalid_repos = list(
-                    set(configured_repos)
-                    - set(self.org_repos[self.configuration["org_name"]].keys())
+                # Combine all repos for unified batch validation
+                all_repos = configured_repos + foreign_repos
+
+            # Batch validate all repositories instead of fetching entire user/org repo lists
+            invalid_repos = []
+            if all_repos:
+                batch_results = (
+                    await self.github_client.get_repos_by_fully_qualified_name_batch(
+                        all_repos
+                    )
                 )
+                for repo_name, repo_data in batch_results.items():
+                    if repo_data:
+                        # Store valid repos for potential later use
+                        if repo_name in foreign_repos:
+                            self.foreign_repos[repo_name] = repo_data
+                        else:
+                            # Store configured repos in the appropriate cache
+                            if self.configuration["repo_type"] == "other":
+                                logged_in_user = await self._logged_in_user()
+                                if logged_in_user not in self.user_repos:
+                                    self.user_repos[logged_in_user] = {}
+                                self.user_repos[logged_in_user][repo_name] = repo_data
+                            else:
+                                org_name = self.configuration["org_name"]
+                                if org_name not in self.org_repos:
+                                    self.org_repos[org_name] = {}
+                                self.org_repos[org_name][repo_name] = repo_data
+                    else:
+                        self._logger.debug(f"Detected invalid repository: {repo_name}.")
+                        invalid_repos.append(repo_name)
             return invalid_repos
         except Exception as exception:
             self._logger.exception(
@@ -1586,6 +1760,9 @@ class GitHubDataSource(BaseDataSource):
         return self._installations
 
     async def _get_personal_repos(self, user):
+        # Note: this method fetches potentially all user repos and caches them,
+        # so it should be used sparingly as it could consume a lot of API rate limit
+        # due to possibly multiple pages of repos
         self._logger.info(f"Fetching personal repos {user}")
         if user in self.user_repos:
             for repo_object in self.user_repos[user]:
@@ -1597,6 +1774,9 @@ class GitHubDataSource(BaseDataSource):
                 yield repo_object
 
     async def _get_org_repos(self, org_name):
+        # Note: this method fetches potentially all org repos and caches them,
+        # so it should be used sparingly as it could consume a lot of API rate limit
+        # due to possibly multiple pages of repos
         self._logger.info(f"Fetching org repos for {org_name}")
         if org_name in self.org_repos:
             for repo_object in self.org_repos[org_name]:
@@ -1608,6 +1788,8 @@ class GitHubDataSource(BaseDataSource):
                 yield repo_object
 
     async def _get_configured_repos(self, configured_repos):
+        # Note: this method calls _get_repo_object_for_github_app - see comments there
+        # for potential performance implications
         self._logger.info(f"Fetching configured repos: '{configured_repos}'")
         for repo_name in configured_repos:
             self._logger.info(f"Fetching repo: '{repo_name}'")
@@ -1647,6 +1829,10 @@ class GitHubDataSource(BaseDataSource):
             yield self._convert_repo_object_to_doc(repo_object)
 
     async def _fetch_repos(self):
+        # Note: this method calls _get_configured_repos
+        # which in turn calls _get_repo_object_for_github_app
+        # or _get_personal_repos/_get_org_repos, see comments there
+        # for potential performance/rate limit implications
         self._logger.info("Fetching repos")
         try:
             if (
