@@ -1423,6 +1423,7 @@ class GitHubDataSource(BaseDataSource):
         valid_repos = [repo for repo in self.configured_repos if repo not in invalid_repos]
         repos_by_owner = {}
 
+        await self._fetch_installations()
 
         for full_repo_name in valid_repos:
             owner, repo_name = self.github_client.get_repo_details(repo_name=full_repo_name)
@@ -1438,8 +1439,6 @@ class GitHubDataSource(BaseDataSource):
             if owner not in repos_by_owner:
                 repos_by_owner[owner] = []
             repos_by_owner[owner].append(full_repo_name)
-
-        await self._fetch_installations()
 
         # Batch validate repos for each owner
         for owner, owner_repos in repos_by_owner.items():
