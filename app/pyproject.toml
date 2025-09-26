@@ -115,7 +115,7 @@ elastic-agent-connectors = "connectors.agent.cli:main"
 test-connectors = "scripts.testing.cli:main"
 
 [tool.setuptools]
-packages = ["connectors", "scripts"]
+packages = ["connectors"]
 
 [tool.setuptools.dynamic]
 version = {file = "connectors/VERSION"}
