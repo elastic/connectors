@@ -814,7 +814,9 @@ class GitHubClient:
                 raise
         except QueryError as exception:
             # Log the entire response for debugging
-            self._logger.error(f"GraphQL QueryError full response: {exception.response}")
+            self._logger.error(
+                f"GraphQL QueryError full response: {exception.response}"
+            )
 
             errors = exception.response.get("errors", [])
             for error in errors:
@@ -826,10 +828,16 @@ class GitHubClient:
 
             # Handle ignored errors gracefully by returning null for those fields
             if ignore_errors:
-                ignored_errors = [error for error in errors if error.get("type") in ignore_errors]
+                ignored_errors = [
+                    error for error in errors if error.get("type") in ignore_errors
+                ]
                 if ignored_errors:
                     # Check if we have any non-ignored errors that should still raise exceptions
-                    other_errors = [error for error in errors if error.get("type") not in ignore_errors]
+                    other_errors = [
+                        error
+                        for error in errors
+                        if error.get("type") not in ignore_errors
+                    ]
 
                     if other_errors:
                         # If there are other types of errors, still raise an exception
@@ -1108,7 +1116,9 @@ class GitHubClient:
         }}
         """
 
-        data = await self.graphql(query=query, variables=variables, ignore_errors=["NOT_FOUND"])
+        data = await self.graphql(
+            query=query, variables=variables, ignore_errors=["NOT_FOUND"]
+        )
 
         # Map results back to repo names
         results = {}
