@@ -252,10 +252,14 @@ class MySQLClient:
                     where_clause = f"WHERE {pk_tuple} > {param_tuple}"
                     params = last_primary_key_values
 
+            primary_keys_str = ", ".join(f"`{pk}`" for pk in primary_keys)
+            primary_keys_str_for_col_order = ", ".join(
+                f"`{pk}` AS `pk_{pk}`" for pk in primary_keys
+            )
             query = f"""
-                SELECT * FROM `{self.database}`.`{table}` 
+                SELECT {primary_keys_str_for_col_order}, * FROM `{self.database}`.`{table}` 
                 {where_clause} 
-                ORDER BY {', '.join(f'`{pk}`' for pk in primary_keys)} 
+                ORDER BY {primary_keys_str} 
                 LIMIT {self.fetch_size}
             """
 
@@ -269,7 +273,7 @@ class MySQLClient:
                 async for row in cursor:
                     yield row
                     # Update the cursor to this row's primary key values
-                    # Since we SELECT * and order by primary keys first,
+                    # Since we SELECT * and order by primary keys first (both row and column-wise),
                     # we need to find the primary key values by column position
                     last_primary_key_values = [row[i] for i in range(len(primary_keys))]
                     batch_count += 1

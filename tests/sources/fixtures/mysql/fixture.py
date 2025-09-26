@@ -57,10 +57,10 @@ def create_table_with_composite_key(cursor):
     composite_table_query = """
     CREATE TABLE IF NOT EXISTS orders (
         customer_id INT,
-        order_id INT,
         product_name VARCHAR(255),
         quantity INT,
         order_date DATE,
+        order_id INT,
         PRIMARY KEY (customer_id, order_id)
     )
     """
@@ -71,14 +71,14 @@ def create_table_with_composite_key(cursor):
         rows.append(
             (
                 fake_provider.fake.random_int(min=1, max=5000),  # customer_id
-                fake_provider.fake.random_int(min=1, max=5000),  # order_id
                 fake_provider.fake.name(),  # product_name
                 fake_provider.fake.random_int(min=1, max=10),  # quantity
                 fake_provider.fake.date(),  # order_date
+                fake_provider.fake.random_int(min=1, max=5000),  # order_id
             )
         )
 
-    composite_query = "INSERT INTO orders (customer_id, order_id, product_name, quantity, order_date) VALUES (%s, %s, %s, %s, %s)"
+    composite_query = "INSERT INTO orders (customer_id, product_name, quantity, order_date, order_id) VALUES (%s, %s, %s, %s, %s)"
 
     batch_count = max(int(RECORD_COUNT / BATCH_SIZE), 1)
     print(f"Inserting {RECORD_COUNT} lines in {batch_count} batches")
