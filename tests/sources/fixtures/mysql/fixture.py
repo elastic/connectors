@@ -32,7 +32,8 @@ DATABASE_NAME = "customerinfo"
 
 
 def get_num_docs():
-    print(NUM_TABLES * (RECORD_COUNT - RECORDS_TO_DELETE))
+    # +1 for the composite key table
+    print((NUM_TABLES+1) * (RECORD_COUNT - RECORDS_TO_DELETE))
 
 
 def inject_lines(table, cursor, lines):
