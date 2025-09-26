@@ -1021,7 +1021,7 @@ class GitHubClient:
 
         # Process repositories in batches to avoid hitting GraphQL complexity limits
         for i in range(0, len(repo_names), batch_size):
-            batch = repo_names[i:i + batch_size]
+            batch = repo_names[i : i + batch_size]
             batch_results = await self._fetch_repos_batch(batch)
             results.update(batch_results)
 
@@ -1420,13 +1420,17 @@ class GitHubDataSource(BaseDataSource):
         )
 
         # Group valid repos by owner for batch validation
-        valid_repos = [repo for repo in self.configured_repos if repo not in invalid_repos]
+        valid_repos = [
+            repo for repo in self.configured_repos if repo not in invalid_repos
+        ]
         repos_by_owner = {}
 
         await self._fetch_installations()
 
         for full_repo_name in valid_repos:
-            owner, repo_name = self.github_client.get_repo_details(repo_name=full_repo_name)
+            owner, repo_name = self.github_client.get_repo_details(
+                repo_name=full_repo_name
+            )
 
             # Check if GitHub App is installed on this owner
             if owner not in self._installations:
@@ -1445,7 +1449,11 @@ class GitHubDataSource(BaseDataSource):
             await self.github_client.update_installation_id(self._installations[owner])
 
             # Use batch validation instead of fetching all repos for the owner
-            batch_results = await self.github_client.get_repos_by_fully_qualified_name_batch(owner_repos)
+            batch_results = (
+                await self.github_client.get_repos_by_fully_qualified_name_batch(
+                    owner_repos
+                )
+            )
 
             for repo_name, repo_data in batch_results.items():
                 if repo_data:
@@ -1521,7 +1529,11 @@ class GitHubDataSource(BaseDataSource):
             # Batch validate all repositories instead of fetching entire user/org repo lists
             invalid_repos = []
             if all_repos:
-                batch_results = await self.github_client.get_repos_by_fully_qualified_name_batch(all_repos)
+                batch_results = (
+                    await self.github_client.get_repos_by_fully_qualified_name_batch(
+                        all_repos
+                    )
+                )
                 for repo_name, repo_data in batch_results.items():
                     if repo_data:
                         # Store valid repos for potential later use

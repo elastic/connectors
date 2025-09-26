@@ -384,6 +384,7 @@ class DataSourceConfiguration:
 
         return True
 
+
 class BaseDataSource:
     """Base class, defines a loose contract."""
 

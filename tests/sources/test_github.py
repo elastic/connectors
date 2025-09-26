@@ -1222,6 +1222,7 @@ async def test_get_invalid_repos_organization_for_github_app(
         source.github_client._installation_access_token = "changeme"
         source.github_client._update_installation_access_token = AsyncMock()
         # Mock the new batch validation method
+
         def mock_batch_validation(repo_names):
             # Simulate which repos exist and are accessible based on test data
             # The GitHub App has installations on: org_1, org_2, user_1, user_2
