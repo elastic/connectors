@@ -29,3 +29,6 @@ docker-build:
 
 docker-push:
 	cd $(app_dir); make docker-push
+
+run:
+	cd $(app_dir); make run
