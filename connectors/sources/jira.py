@@ -262,13 +262,15 @@ class JiraClient:
 
     async def _paginated_api_call_cursor_based(self, url_name, jql=None, **kwargs):
         if not jql and url_name == ISSUES:
-            jql = "key%20IS%20NOT%20EMPTY"  # project IS NOT EMPTY for all issues
+            # only bound jql allowed, so using "key IS NOT EMPTY" as a catch-all for "all issues"
+            jql = "key%20IS%20NOT%20EMPTY"
 
         url = parse.urljoin(
             self.host_url,
             URLS[url_name].format(
                 jql=jql,
                 max_results=FETCH_SIZE,
+                **kwargs,
             ),
         )
 
@@ -295,6 +297,7 @@ class JiraClient:
                             jql=jql,
                             max_results=FETCH_SIZE,
                             next_page_token=next_page_token,
+                            **kwargs,
                         ),
                     )
             except Exception as exception:
@@ -381,8 +384,7 @@ class JiraClient:
                 yield issue
         except Exception as exception:
             self._logger.warning(
-                f"Skipping data for type: {ISSUE_DATA}. Error: {exception}",
-                exc_info=True,
+                f"Skipping data for type: {ISSUE_DATA}. Error: {exception}"
             )
 
     async def get_projects(self):
@@ -951,7 +953,7 @@ class JiraDataSource(BaseDataSource):
         """Put a specific issue as per the given issue_key in a queue
 
         Args:
-            issue (dict): Issue key to fetch an issue
+            issue (dict): Issue representation containing the key to enqueue
         """
         async for issue_metadata in self.jira_client.get_issues_for_issue_key(
             key=issue.get("key")
