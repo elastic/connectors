@@ -392,7 +392,7 @@ def side_effect_function(url, ssl):
     """
     if (
         url
-        == f"{HOST_URL}/rest/api/3/search/jql?jql=project%20IS%20NOT%20EMPTY&maxResults=100"
+        == f"{HOST_URL}/rest/api/3/search/jql?jql=key%20IS%20NOT%20EMPTY&maxResults=100"
     ):
         mocked_issue_response = {"issues": [MOCK_ISSUE], "nextPageToken": "token_123"}
         return get_json_mock(mock_response=mocked_issue_response)
@@ -402,7 +402,7 @@ def side_effect_function(url, ssl):
         return get_json_mock(mock_response=MOCK_ISSUE)
     elif (
         url
-        == f"{HOST_URL}/rest/api/3/search/jql?jql=project%20IS%20NOT%20EMPTY&maxResults=100&nextPageToken=token_123"
+        == f"{HOST_URL}/rest/api/3/search/jql?jql=key%20IS%20NOT%20EMPTY&maxResults=100&nextPageToken=token_123"
     ):
         mocked_issue_data = {"issues": [MOCK_ISSUE_TYPE_BUG]}
         return get_json_mock(mock_response=mocked_issue_data)

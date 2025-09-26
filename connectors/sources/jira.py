@@ -262,7 +262,7 @@ class JiraClient:
 
     async def _paginated_api_call_cursor_based(self, url_name, jql=None, **kwargs):
         if not jql and url_name == ISSUES:
-            jql = "project%20IS%20NOT%20EMPTY"  # project IS NOT EMPTY for all issues
+            jql = "key%20IS%20NOT%20EMPTY"  # project IS NOT EMPTY for all issues
 
         url = parse.urljoin(
             self.host_url,
@@ -1016,7 +1016,7 @@ class JiraDataSource(BaseDataSource):
             Dictionary: Jira issue to get indexed
             issue (dict): Issue response to fetch the attachments
         """
-        wildcard_query = "project%20IS%20NOT%20EMPTY"
+        wildcard_query = "key%20IS%20NOT%20EMPTY"
         comma_seperated_projects = '"' + '","'.join(self.jira_client.projects) + '"'
         projects_query = f"project in ({comma_seperated_projects})"
 
