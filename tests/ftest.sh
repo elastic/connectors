@@ -121,12 +121,35 @@ function download_docker_tarball {
   local tar_file=$2
 
   echo "Downloading Docker image tarball from $tar_url..."
-  curl --http1.1 --retry $CURL_MAX_RETRIES --retry-delay $CURL_RETRY_DELAY --retry-connrefused -O "$tar_url"
 
-  if [ ! -f "$tar_file" ]; then
-    echo "Error: Download failed. File $tar_file not found." >&2
+  # Capture curl output and exit code
+  local curl_output
+  curl_output=$(curl -v --http1.1 --retry $CURL_MAX_RETRIES --retry-delay $CURL_RETRY_DELAY --retry-connrefused -O "$tar_url" 2>&1)
+  local curl_exit_code=$?
+
+  # Check curl exit code first
+  if [ $curl_exit_code -ne 0 ]; then
+    echo "Error: curl failed with exit code $curl_exit_code" >&2
+    echo "Curl output: $curl_output" >&2
+
+    # Check if it's a 404 (file not found) - these are expected and should allow fallback
+    if echo "$curl_output" | grep -q "404\|Not Found"; then
+      echo "File not found (404) - this version may not be available yet" >&2
+      return 2  # Special return code for 404s to allow fallback
+    fi
+
+    # For other errors (like SSL EOF, connection issues), fail fast
+    echo "Network or download error - failing fast" >&2
     return 1
   fi
+
+  # Secondary check: ensure file was actually created
+  if [ ! -f "$tar_file" ]; then
+    echo "Error: Download completed but file $tar_file not found." >&2
+    return 1
+  fi
+
+  echo "Successfully downloaded $tar_file"
 }
 
 # Function to load the Docker image directly from the tarball
@@ -199,18 +222,30 @@ function fetch_elasticsearch_image {
     fi
 
     # Download and load the image
-    if download_docker_tarball "$tarball_url" "$tarball_name" && \
-       load_docker_image "$tarball_name" "$version" "$ARCH"; then
+    download_docker_tarball "$tarball_url" "$tarball_name"
+    local download_result=$?
 
-      export ELASTICSEARCH_DRA_DOCKER_IMAGE="elasticsearch:${version}-${ARCH}"
-      echo "Successfully loaded Elasticsearch $version. Image name: $ELASTICSEARCH_DRA_DOCKER_IMAGE"
+    if [ $download_result -eq 0 ]; then
+      # Download succeeded, try to load the image
+      if load_docker_image "$tarball_name" "$version" "$ARCH"; then
+        export ELASTICSEARCH_DRA_DOCKER_IMAGE="elasticsearch:${version}-${ARCH}"
+        echo "Successfully loaded Elasticsearch $version. Image name: $ELASTICSEARCH_DRA_DOCKER_IMAGE"
 
-      # Clean up
-      rm -f "$tarball_name"
-      return 0
+        # Clean up
+        rm -f "$tarball_name"
+        return 0
+      else
+        echo "Failed to load image for version $version, trying next..." >&2
+        rm -f "$tarball_name"  # Clean up failed download
+      fi
+    elif [ $download_result -eq 1 ]; then
+      # Network/SSL error - fail fast, don't try other versions
+      echo "Critical download error encountered. Failing fast." >&2
+      return 1
+    elif [ $download_result -eq 2 ]; then
+      # 404 error - version not available, try fallback
+      echo "Version $version not available (404), trying fallback..." >&2
     fi
-
-    echo "Failed to download/load version $version, trying next..." >&2
   done
 
   echo "Error: Failed to fetch any compatible Elasticsearch version" >&2
