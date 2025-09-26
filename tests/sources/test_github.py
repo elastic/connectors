@@ -2359,21 +2359,23 @@ async def test_get_repos_by_fully_qualified_name_batch():
                 "id": "repo1_id",
                 "nameWithOwner": "owner1/repo1",
                 "name": "repo1",
-                "url": "https://github.com/owner1/repo1"
+                "url": "https://github.com/owner1/repo1",
             },
             "repo1": {
                 "id": "repo2_id",
                 "nameWithOwner": "owner2/repo2",
                 "name": "repo2",
-                "url": "https://github.com/owner2/repo2"
+                "url": "https://github.com/owner2/repo2",
             },
-            "repo2": None  # Invalid repo
+            "repo2": None,  # Invalid repo
         }
 
         source.github_client.graphql = AsyncMock(return_value=mock_response)
 
         repo_names = ["owner1/repo1", "owner2/repo2", "owner3/invalid"]
-        results = await source.github_client.get_repos_by_fully_qualified_name_batch(repo_names)
+        results = await source.github_client.get_repos_by_fully_qualified_name_batch(
+            repo_names
+        )
 
         assert len(results) == 3
         assert results["owner1/repo1"]["nameWithOwner"] == "owner1/repo1"
@@ -2397,11 +2399,13 @@ async def test_get_repos_by_fully_qualified_name_batch_with_custom_batch_size():
         # Mock responses for each batch
         responses = [
             {"repo0": {"nameWithOwner": "owner1/repo1"}},
-            {"repo0": {"nameWithOwner": "owner2/repo2"}}
+            {"repo0": {"nameWithOwner": "owner2/repo2"}},
         ]
         source.github_client.graphql = AsyncMock(side_effect=responses)
 
-        results = await source.github_client.get_repos_by_fully_qualified_name_batch(repo_names, batch_size=1)
+        results = await source.github_client.get_repos_by_fully_qualified_name_batch(
+            repo_names, batch_size=1
+        )
 
         assert len(results) == 2
         assert results["owner1/repo1"]["nameWithOwner"] == "owner1/repo1"
