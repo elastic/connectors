@@ -35,7 +35,6 @@ from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.utils import (
     CancellableSleeps,
     RetryStrategy,
-    ValidationCache,
     decode_base64_value,
     nested_get_from_dict,
     retryable,
@@ -58,9 +57,6 @@ FORBIDDEN = 403
 UNAUTHORIZED = 401
 NODE_SIZE = 100
 REVIEWS_COUNT = 45
-
-# Validation cache with 300 second expiry for remote validations
-_validation_cache = ValidationCache(expiry_seconds=300)
 
 SUPPORTED_EXTENSION = [".markdown", ".md", ".rst"]
 
@@ -1589,11 +1585,7 @@ class GitHubDataSource(BaseDataSource):
         Also validate, if user configured repositories are accessible or not and scope of the token
         """
         await super().validate_config()
-
-        # Run remote validation with caching to avoid excessive API calls
-        await _validation_cache.run_validation(
-            configuration=self.configuration, validation_func=self._remote_validation
-        )
+        await self._remote_validation()
 
     async def close(self):
         await self.github_client.close()
