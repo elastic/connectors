@@ -66,7 +66,7 @@ URLS = {
     PING: "rest/api/2/myself",
     PROJECT: "rest/api/2/project?expand=description,lead,url",
     PROJECT_BY_KEY: "rest/api/2/project/{key}",
-    ISSUES: "rest/api/2/search?jql={jql}&maxResults={max_results}&startAt={start_at}",
+    ISSUES: "rest/api/3/search/jql?jql={jql}&fields=*all&maxResults={max_results}",
     ISSUE_DATA: "rest/api/2/issue/{id}",
     ATTACHMENT_CLOUD: "rest/api/2/attachment/content/{attachment_id}",
     ATTACHMENT_SERVER: "secure/attachment/{attachment_id}/{attachment_name}",
@@ -260,18 +260,54 @@ class JiraClient:
             except ClientResponseError as exception:
                 await self._handle_client_errors(url=url, exception=exception)
 
-    async def paginated_api_call(self, url_name, jql=None, **kwargs):
-        """Make a paginated API call for Jira objects using the passed url_name with retry for the failed API calls.
+    async def _paginated_api_call_cursor_based(self, url_name, jql=None, **kwargs):
+        if not jql and url_name == ISSUES:
+            # only bound jql allowed, so using "key IS NOT EMPTY" as a catch-all for "all issues"
+            jql = "key%20IS%20NOT%20EMPTY"
 
-        Args:
-            url_name (str): URL Name to identify the API endpoint to hit
-            jql (str, None): Jira Query Language to filter the issues.
+        url = parse.urljoin(
+            self.host_url,
+            URLS[url_name].format(
+                jql=jql,
+                max_results=FETCH_SIZE,
+                **kwargs,
+            ),
+        )
 
-        Yields:
-            response: Return api response.
-        """
+        self._logger.info(
+            f"Started pagination for the API endpoint: {URLS[url_name]} to host: {self.host_url} with the parameters -> "
+            f"maxResults: {FETCH_SIZE} and jql query: {jql}"
+        )
+
+        next_page_token = None
+        while True:
+            try:
+                async for response in self.api_call(url=url):
+                    response_json = await response.json()
+                    yield response_json
+
+                    next_page = response_json.get("nextPageToken")
+                    if not next_page:
+                        return
+                    next_page_token = next_page
+                    url_template = URLS[url_name] + "&nextPageToken={next_page_token}"
+                    url = parse.urljoin(
+                        self.host_url,
+                        url_template.format(
+                            jql=jql,
+                            max_results=FETCH_SIZE,
+                            next_page_token=next_page_token,
+                            **kwargs,
+                        ),
+                    )
+            except Exception as exception:
+                self._logger.warning(
+                    f"Skipping data for type: {url_name}, query params: jql={jql}, nextPageToken={next_page_token}, maxResults={FETCH_SIZE}. Error: {exception}."
+                )
+                break
+
+    async def _paginated_api_call_offset_based(self, url_name, jql=None, **kwargs):
         start_at = 0
-
         self._logger.info(
             f"Started pagination for the API endpoint: {URLS[url_name]} to host: {self.host_url} with the parameters -> startAt: 0, maxResults: {FETCH_SIZE} and jql query: {jql}"
         )
@@ -305,6 +341,30 @@ class JiraClient:
                     f"Skipping data for type: {url_name}, query params: jql={jql}, startAt={start_at}, maxResults={FETCH_SIZE}. Error: {exception}."
                 )
                 break
+
+    async def paginated_api_call(self, url_name, jql=None, **kwargs):
+        """Make a paginated API call for Jira objects using the passed url_name with retry for the failed API calls.
+        Most Jira API endpoints use offset-based pagination. However, some endpoints use cursor-based pagination.
+        This method handles both.
+
+        Args:
+            url_name (str): URL Name to identify the API endpoint to hit
+            jql (str, None): Jira Query Language to filter the issues.
+
+        Yields:
+            response: Return api response.
+        """
+        is_cursor_based_pagination = url_name == ISSUES
+        if is_cursor_based_pagination:
+            async for response in self._paginated_api_call_cursor_based(
+                url_name=url_name, jql=jql, **kwargs
+            ):
+                yield response
+        else:
+            async for response in self._paginated_api_call_offset_based(
+                url_name=url_name, jql=jql, **kwargs
+            ):
+                yield response
 
     async def get_issues_for_jql(self, jql):
         info_msg = (
@@ -890,10 +950,10 @@ class JiraDataSource(BaseDataSource):
             )
 
     async def _put_issue(self, issue):
-        """Put specific issue as per the given issue_key in a queue
+        """Put a specific issue as per the given issue_key in a queue
 
         Args:
-            issue (str): Issue key to fetch an issue
+            issue (dict): Issue representation containing the key to enqueue
         """
         async for issue_metadata in self.jira_client.get_issues_for_issue_key(
             key=issue.get("key")
@@ -958,9 +1018,9 @@ class JiraDataSource(BaseDataSource):
             Dictionary: Jira issue to get indexed
             issue (dict): Issue response to fetch the attachments
         """
-        wildcard_query = ""
-        comma_seperated_projects = '"' + '","'.join(self.jira_client.projects) + '"'
-        projects_query = f"project in ({comma_seperated_projects})"
+        wildcard_query = "key%20IS%20NOT%20EMPTY"
+        comma_separated_projects = '"' + '","'.join(self.jira_client.projects) + '"'
+        projects_query = f"project in ({comma_separated_projects})"
 
         jql = custom_query or (
             wildcard_query
@@ -1042,6 +1102,7 @@ class JiraDataSource(BaseDataSource):
                 self.tasks += 1
 
         else:
+            self._logger.info("Fetching jira content without advanced sync rules")
             await self.jira_client.verify_projects()
 
             await self.fetchers.put(self._get_projects)
