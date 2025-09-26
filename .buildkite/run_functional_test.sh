@@ -16,7 +16,7 @@ init_python
 
 BASEDIR=$(realpath $(dirname $0))
 ROOT=$(realpath $BASEDIR/../)
-VENV_ROOT=$ROOT/app/.venv
+VENV_ROOT=$ROOT/app/connectors_service/.venv
 
 cd $ROOT
 
