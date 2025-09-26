@@ -61,14 +61,19 @@ def get_projects():
     return projects
 
 
-@app.route("/rest/api/2/search", methods=["GET"])
+@app.route("/rest/api/3/search/jql", methods=["GET"])
 def get_all_issues():
     """Function to get all issues with pagination
     Returns:
         all_issues (dict): Dictionary of all issues
     """
     args = request.args
-    all_issues = {"startAt": 0, "maxResults": 100, "total": 2000, "issues": []}
+    max_results = int(args.get("maxResults", 100))
+    next_page_token = args.get("nextPageToken")
+    selected_fields = args.get("fields")
+
+    all_issues = {"maxResults": max_results, "issues": []}
+
     fields = {
         "issuetype": {"name": "Task"},
         "project": {"key": "DP", "name": "Demo Project"},
@@ -89,16 +94,36 @@ def get_all_issues():
         "reporter": {"emailAddress": "test.user@gmail.com", "displayName": "Test User"},
     }
 
-    if args["maxResults"] == "100" and args["startAt"] != "":
-        start_at = int(args["startAt"])
-        all_issues["startAt"] = start_at
-        if start_at + int(args["maxResults"]) > all_issues["total"]:
-            return all_issues
-        for i in range(start_at + 1, start_at + 101):
-            all_issues["issues"].append(
-                {"id": f"issue-{i}", "key": f"DP-{i}", "fields": fields}
-            )
+    if next_page_token == "null":
+        error_msg = "next_page_token should not be 'null' string"
+        raise Exception(error_msg)
+
+    if next_page_token is None:
+        for i in range(1, max_results + 1):
+            all_issues["issues"].append(_compose_issue(i, selected_fields, fields))
+        all_issues["nextPageToken"] = "second_page_token"
+    elif next_page_token == "second_page_token":
+        all_issues["issues"] = [{"id": "issue-101", "key": "DP-101", "fields": fields}]
+
     return all_issues
+
+
+def _compose_issue(issue_id, selected_fields, fields):
+    if selected_fields == "*all":
+        return {
+            "id": f"issue-{issue_id}",
+            "key": f"DP-{issue_id}",
+            "fields": fields,
+        }
+    elif selected_fields:
+        return {
+            "id": f"issue-{issue_id}",
+            "key": f"DP-{issue_id}",
+            "fields": {
+                k: v for k, v in fields.items() if k in selected_fields.split(",")
+            },
+        }
+    return {"id": f"issue-{issue_id}"}
 
 
 @app.route("/rest/api/2/issue/<string:issue_id>", methods=["GET"])
