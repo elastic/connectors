@@ -71,11 +71,11 @@ def create_table_with_composite_key(cursor):
     for _ in range(RECORD_COUNT):
         rows.append(
             (
-                fake_provider.fake.random_int(min=1, max=5000),  # customer_id
+                fake_provider.fake.random_int(min=1, max=7000),  # customer_id
                 fake_provider.fake.name(),  # product_name
                 fake_provider.fake.random_int(min=1, max=10),  # quantity
                 fake_provider.fake.date(),  # order_date
-                fake_provider.fake.random_int(min=1, max=5000),  # order_id
+                fake_provider.fake.random_int(min=8000, max=15000),  # order_id
             )
         )
 

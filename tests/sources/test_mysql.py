@@ -272,6 +272,12 @@ def mock_cursor_fetchall():
 def mock_cursor_async_iter():
     """Mock cursor that supports async iteration for cursor-based pagination"""
     mock_cursor = MagicMock(spec=aiomysql.Cursor)
+
+    mock_cursor.description = [
+        ("id",),
+        ("text",),
+    ]
+
     # Convert frozenset docs to tuples that mimic MySQL row format
     # Each doc should be a tuple where the first element is the id (primary key)
     rows = [

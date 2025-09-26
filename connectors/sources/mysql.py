@@ -231,6 +231,7 @@ class MySQLClient:
     )
     async def yield_rows_for_table(self, table, primary_keys):
         last_primary_key_values = None
+        primary_keys_str = ", ".join(f"`{pk}`" for pk in primary_keys)
 
         while True:
             # Build WHERE clause for cursor-based pagination
@@ -246,18 +247,14 @@ class MySQLClient:
                     params = [last_primary_key_values[0]]
                 else:
                     # Complex case: composite primary key using tuple comparison
-                    pk_tuple = f"({', '.join(f'`{pk}`' for pk in primary_keys)})"
+                    pk_tuple = f"({primary_keys_str})"
                     param_tuple = f"({', '.join(['%s'] * len(primary_keys))})"
                     # (a,b) > (last_a, last_b)
                     where_clause = f"WHERE {pk_tuple} > {param_tuple}"
                     params = last_primary_key_values
 
-            primary_keys_str = ", ".join(f"`{pk}`" for pk in primary_keys)
-            primary_keys_str_for_col_order = ", ".join(
-                f"`{pk}` AS `pk_{pk}`" for pk in primary_keys
-            )
             query = f"""
-                SELECT {primary_keys_str_for_col_order}, * FROM `{self.database}`.`{table}` 
+                SELECT * FROM `{self.database}`.`{table}` 
                 {where_clause} 
                 ORDER BY {primary_keys_str} 
                 LIMIT {self.fetch_size}
@@ -270,12 +267,15 @@ class MySQLClient:
                 else:
                     await cursor.execute(query)
 
+                column_names = [desc[0] for desc in cursor.description]
+                pk_positions = [column_names.index(pk) for pk in primary_keys]
+
                 async for row in cursor:
                     yield row
                     # Update the cursor to this row's primary key values
-                    # Since we SELECT * and order by primary keys first (both row and column-wise),
+                    # Since we SELECT * and order by primary keys first,
                     # we need to find the primary key values by column position
-                    last_primary_key_values = [row[i] for i in range(len(primary_keys))]
+                    last_primary_key_values = [row[pos] for pos in pk_positions]
                     batch_count += 1
 
             # If we got fewer rows than fetch_size, we've reached the end
