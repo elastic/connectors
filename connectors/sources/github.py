@@ -1416,18 +1416,57 @@ class GitHubDataSource(BaseDataSource):
                 self.configured_repos,
             )
         )
-        for full_repo_name in self.configured_repos:
-            if full_repo_name in invalid_repos:
-                continue
-            owner, repo_name = self.github_client.get_repo_details(
-                repo_name=full_repo_name
-            )
-            if await self._get_repo_object_for_github_app(owner, repo_name) is None:
+
+        # Group valid repos by owner for batch validation
+        valid_repos = [repo for repo in self.configured_repos if repo not in invalid_repos]
+        repos_by_owner = {}
+
+
+        for full_repo_name in valid_repos:
+            owner, repo_name = self.github_client.get_repo_details(repo_name=full_repo_name)
+
+            # Check if GitHub App is installed on this owner
+            if owner not in self._installations:
+                self._logger.debug(
+                    f"Invalid repo {full_repo_name} as the github app is not installed on {owner}"
+                )
                 invalid_repos.add(full_repo_name)
+                continue
+
+            if owner not in repos_by_owner:
+                repos_by_owner[owner] = []
+            repos_by_owner[owner].append(full_repo_name)
+
+        await self._fetch_installations()
+
+        # Batch validate repos for each owner
+        for owner, owner_repos in repos_by_owner.items():
+            await self.github_client.update_installation_id(self._installations[owner])
+
+            # Use batch validation instead of fetching all repos for the owner
+            batch_results = await self.github_client.get_repos_by_fully_qualified_name_batch(owner_repos)
+
+            for repo_name, repo_data in batch_results.items():
+                if repo_data:
+                    # Store valid repos in appropriate cache for potential later use
+                    if self.configuration["repo_type"] == "organization":
+                        if owner not in self.org_repos:
+                            self.org_repos[owner] = {}
+                        self.org_repos[owner][repo_name] = repo_data
+                    else:
+                        if owner not in self.user_repos:
+                            self.user_repos[owner] = {}
+                        self.user_repos[owner][repo_name] = repo_data
+                else:
+                    self._logger.debug(f"Detected invalid repository: {repo_name}.")
+                    invalid_repos.add(repo_name)
 
         return list(invalid_repos)
 
     async def _get_repo_object_for_github_app(self, owner, repo_name):
+        # Note: this method fetches potentially all user or org repos and caches them,
+        # so it should be used sparingly as it could consume a lot of API rate limit
+        # due to possibly multiple pages of repos
         await self._fetch_installations()
         full_repo_name = f"{owner}/{repo_name}"
         if owner not in self._installations:
@@ -1487,6 +1526,18 @@ class GitHubDataSource(BaseDataSource):
                         # Store valid repos for potential later use
                         if repo_name in foreign_repos:
                             self.foreign_repos[repo_name] = repo_data
+                        else:
+                            # Store configured repos in the appropriate cache
+                            if self.configuration["repo_type"] == "other":
+                                logged_in_user = await self._logged_in_user()
+                                if logged_in_user not in self.user_repos:
+                                    self.user_repos[logged_in_user] = {}
+                                self.user_repos[logged_in_user][repo_name] = repo_data
+                            else:
+                                org_name = self.configuration["org_name"]
+                                if org_name not in self.org_repos:
+                                    self.org_repos[org_name] = {}
+                                self.org_repos[org_name][repo_name] = repo_data
                     else:
                         self._logger.debug(f"Detected invalid repository: {repo_name}.")
                         invalid_repos.append(repo_name)
@@ -1661,6 +1712,9 @@ class GitHubDataSource(BaseDataSource):
         return self._installations
 
     async def _get_personal_repos(self, user):
+        # Note: this method fetches potentially all user repos and caches them,
+        # so it should be used sparingly as it could consume a lot of API rate limit
+        # due to possibly multiple pages of repos
         self._logger.info(f"Fetching personal repos {user}")
         if user in self.user_repos:
             for repo_object in self.user_repos[user]:
@@ -1672,6 +1726,9 @@ class GitHubDataSource(BaseDataSource):
                 yield repo_object
 
     async def _get_org_repos(self, org_name):
+        # Note: this method fetches potentially all org repos and caches them,
+        # so it should be used sparingly as it could consume a lot of API rate limit
+        # due to possibly multiple pages of repos
         self._logger.info(f"Fetching org repos for {org_name}")
         if org_name in self.org_repos:
             for repo_object in self.org_repos[org_name]:
@@ -1683,6 +1740,8 @@ class GitHubDataSource(BaseDataSource):
                 yield repo_object
 
     async def _get_configured_repos(self, configured_repos):
+        # Note: this method calls _get_repo_object_for_github_app - see comments there
+        # for potential performance implications
         self._logger.info(f"Fetching configured repos: '{configured_repos}'")
         for repo_name in configured_repos:
             self._logger.info(f"Fetching repo: '{repo_name}'")
@@ -1722,6 +1781,10 @@ class GitHubDataSource(BaseDataSource):
             yield self._convert_repo_object_to_doc(repo_object)
 
     async def _fetch_repos(self):
+        # Note: this method calls _get_configured_repos
+        # which in turn calls _get_repo_object_for_github_app
+        # or _get_personal_repos/_get_org_repos, see comments there
+        # for potential performance/rate limit implications
         self._logger.info("Fetching repos")
         try:
             if (
