@@ -282,7 +282,9 @@ class MySQLClient:
 
             # If we got fewer rows than fetch_size, we've reached the end
             if batch_count < self.fetch_size:
-                self._logger.debug(f"Fetched final batch of {batch_count} rows. Fetch size: {self.fetch_size}.")
+                self._logger.debug(
+                    f"Fetched final batch of {batch_count} rows. Fetch size: {self.fetch_size}."
+                )
                 break
 
     async def _get_table_row_count_for_query(self, query):
