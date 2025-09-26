@@ -119,6 +119,7 @@ def _default_config():
             "dropbox": "connectors.sources.dropbox:DropboxDataSource",
             "github": "connectors.sources.github:GitHubDataSource",
             "gmail": "connectors.sources.gmail:GMailDataSource",
+            "google_calendar": "connectors.sources.google_calendar:GoogleCalendarDataSource",
             "google_cloud_storage": "connectors.sources.google_cloud_storage:GoogleCloudStorageDataSource",
             "google_drive": "connectors.sources.google_drive:GoogleDriveDataSource",
             "graphql": "connectors.sources.graphql:GraphQLDataSource",

@@ -349,3 +349,15 @@ steps:
     matrix:
       - "3.10"
       - "3.11"
+  - label: "🔨 [Python {{ matrix }}] Google Calendar"
+    <<: *retries
+    command: ".buildkite/run_functional_test.sh"
+    env:
+      PYTHON_VERSION: "{{ matrix }}"
+      CONNECTOR: "google_calendar"
+      DATA_SIZE: "small"
+    artifact_paths:
+      - "perf8-report-*/**/*"
+    matrix:
+      - "3.10"
+      - "3.11"

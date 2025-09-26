@@ -599,6 +599,26 @@ steps:
               artifact_paths:
                 - "perf8-report-*/**/*"
 
+          - path:
+            - "connectors/sources/google_calendar.py"
+            - "connectors/sources/google.py"
+            - "tests/sources/fixtures/google_calendar/**"
+            - "tests/sources/fixtures/fixture.py"
+            - "${DOCKERFILE_FTEST_PATH}"
+            - "requirements/**"
+            config:
+              label: "🔨 Google Calendar"
+              <<: *test-agents
+              <<: *retries
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=google_calendar
+              command:
+                - ".buildkite/run_functional_test.sh"
+              artifact_paths:
+                - "perf8-report-*/**/*"
+
   # ----
   # DRA publishing
   # ----
