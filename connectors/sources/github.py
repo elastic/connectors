@@ -1531,23 +1531,21 @@ class GitHubDataSource(BaseDataSource):
 
     async def _get_invalid_repos_for_personal_access_token(self):
         try:
+            # Combine all repos for unified batch validation
             if self.configuration["repo_type"] == "other":
                 logged_in_user = await self._logged_in_user()
                 foreign_repos, configured_repos = self.github_client.bifurcate_repos(
                     repos=self.configured_repos,
                     owner=logged_in_user,
                 )
-                # Combine all repos for unified batch validation
                 all_repos = configured_repos + foreign_repos
             else:
                 foreign_repos, configured_repos = self.github_client.bifurcate_repos(
                     repos=self.configured_repos,
                     owner=self.configuration["org_name"],
                 )
-                # Combine all repos for unified batch validation
                 all_repos = configured_repos + foreign_repos
 
-            # Batch validate all repositories instead of fetching entire user/org repo lists
             invalid_repos = []
             if all_repos:
                 batch_results = (
