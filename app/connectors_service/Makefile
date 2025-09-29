@@ -23,10 +23,6 @@ SLOW_TEST_THRESHOLD=1 # seconds
 VERSION=$(shell cat connectors/VERSION)
 PACKAGE_NAME_VERSION="elasticsearch_connectors-$(VERSION)"
 
-DOCKER_IMAGE_NAME?=docker.elastic.co/integrations/elastic-connectors
-DOCKERFILE_PATH?=Dockerfile
-DOCKERFILE_FTEST_PATH?=tests/Dockerfile.ftest
-
 config.yml:
 	- cp -n config.yml.example config.yml
 
@@ -80,10 +76,8 @@ autoformat: .venv/bin/python .venv/bin/ruff .venv/bin/elastic-ingest
 test: .venv/bin/python .venv/bin/elastic-ingest .venv/bin/pytest
 	.venv/bin/pytest --cov-report term-missing --cov-fail-under 90 --cov-report html --cov=connectors --fail-slow=$(SLOW_TEST_THRESHOLD) -sv tests
 
-build-connectors-base-image:
-	docker build . -f ${DOCKERFILE_PATH} -t connectors-base
 
-ftest: .venv/bin/pytest $(DOCKERFILE_FTEST_PATH) build-connectors-base-image
+ftest: .venv/bin/pytest
 	tests/ftest.sh $(NAME) $(PERF8)
 
 ftrace: .venv/bin/pytest $(DOCKERFILE_FTEST_PATH)
@@ -94,15 +88,6 @@ run: install
 
 default-config: install
 	.venv/bin/elastic-ingest --action config --service-type $(SERVICE_TYPE)
-
-docker-build: $(DOCKERFILE_PATH)
-	docker build --no-cache -f $(DOCKERFILE_PATH) -t $(DOCKER_IMAGE_NAME):$(VERSION)-SNAPSHOT .
-
-docker-run:
-	docker run -v $(PWD):/config $(DOCKER_IMAGE_NAME):$(VERSION)-SNAPSHOT /app/.venv/bin/elastic-ingest -c /config/config.yml --log-level=DEBUG
-
-docker-push:
-	docker push $(DOCKER_IMAGE_NAME):$(VERSION)-SNAPSHOT
 
 ## Agent Docker Zone
 # Only use it for local testing, that's it
