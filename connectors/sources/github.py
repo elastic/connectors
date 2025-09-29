@@ -5,9 +5,9 @@
 #
 """GitHub source module responsible to fetch documents from GitHub Cloud and Server."""
 
-from collections import defaultdict
 import json
 import time
+from collections import defaultdict
 from enum import Enum
 from functools import cached_property, partial
 
@@ -774,7 +774,9 @@ class GitHubClient:
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
         skipped_exceptions=UnauthorizedException,
     )
-    async def graphql(self, query, variables = None, ignore_errors: list[str] | None = None):
+    async def graphql(
+        self, query, variables=None, ignore_errors: list[str] | None = None
+    ):
         """Invoke GraphQL request to fetch repositories, pull requests, and issues.
 
         Args:
@@ -825,13 +827,10 @@ class GitHubClient:
                 ):
                     await self._put_to_sleep(resource_type="graphql")
 
-            if all(
-                error.get("type") in ignore_errors for error in errors
-            ):
+            if all(error.get("type") in ignore_errors for error in errors):
                 # All errors are ignored, return just the data part without errors
                 return exception.response.get("data", {})
 
-           
             # report only non-ignored errors
             non_ignored_errors = [
                 error for error in errors if error.get("type") not in ignore_errors
@@ -1026,7 +1025,9 @@ class GitHubClient:
         )
         return data.get(REPOSITORY_OBJECT)
 
-    async def get_repos_by_fully_qualified_name_batch(self, repo_names: list[str], batch_size: int =15):
+    async def get_repos_by_fully_qualified_name_batch(
+        self, repo_names: list[str], batch_size: int = 15
+    ):
         """Batch validate multiple repositories by fully qualified name in fewer GraphQL requests.
 
         Args:
@@ -1091,11 +1092,13 @@ class GitHubClient:
             }}"""
             query_parts.append(query_part)
 
-        variable_declarations = [f"${var_name}: String!" for var_name in variables.keys()]
+        variable_declarations = [
+            f"${var_name}: String!" for var_name in variables.keys()
+        ]
 
         query = GithubQuery.BATCH_REPO_QUERY_TEMPLATE.value.format(
-            batch_queries=', '.join(variable_declarations),
-            query_body=' '.join(query_parts)
+            batch_queries=", ".join(variable_declarations),
+            query_body=" ".join(query_parts),
         )
 
         data = await self.graphql(
@@ -1104,8 +1107,7 @@ class GitHubClient:
 
         # Map results back to repo names
         results = {
-            repo_name: data.get(f"repo{i}")
-            for i, repo_name in enumerate(repo_names)
+            repo_name: data.get(f"repo{i}") for i, repo_name in enumerate(repo_names)
         }
 
         return results
