@@ -5,6 +5,7 @@
 #
 """GitHub source module responsible to fetch documents from GitHub Cloud and Server."""
 
+from collections import defaultdict
 import json
 import time
 from enum import Enum
@@ -1025,7 +1026,7 @@ class GitHubClient:
         )
         return data.get(REPOSITORY_OBJECT)
 
-    async def get_repos_by_fully_qualified_name_batch(self, repo_names, batch_size=15):
+    async def get_repos_by_fully_qualified_name_batch(self, repo_names: list[str], batch_size: int =15):
         """Batch validate multiple repositories by fully qualified name in fewer GraphQL requests.
 
         Args:
@@ -1045,7 +1046,7 @@ class GitHubClient:
 
         return results
 
-    async def _fetch_repos_batch(self, repo_names):
+    async def _fetch_repos_batch(self, repo_names: list[str]) -> dict[str, dict | None]:
         """Fetch a batch of repositories in a single GraphQL query using aliases.
 
         Note: This method will NOT raise exceptions for non-existent repositories.
@@ -1439,7 +1440,7 @@ class GitHubDataSource(BaseDataSource):
         valid_repos = [
             repo for repo in self.configured_repos if repo not in invalid_repos
         ]
-        repos_by_owner = {}
+        repos_by_owner = defaultdict(list)
 
         await self._fetch_installations()
 
@@ -1456,8 +1457,6 @@ class GitHubDataSource(BaseDataSource):
                 invalid_repos.add(full_repo_name)
                 continue
 
-            if owner not in repos_by_owner:
-                repos_by_owner[owner] = []
             repos_by_owner[owner].append(full_repo_name)
 
         # Batch validate repos for each owner
