@@ -1,3 +1,4 @@
 FROM connectors-base
 
-RUN app/connectors_service/.venv/bin/pip install "app/connectors_service[ftest]"
+WORKDIR app/connectors_service
+RUN .venv/bin/pip install ".[ftest]"
