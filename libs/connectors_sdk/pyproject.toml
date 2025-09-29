@@ -24,7 +24,6 @@ dependencies = [
     "base64io==1.0.3",
     "fastjsonschema==2.16.2",
     "ecs-logging==2.0.0",
-    "elasticsearch"
 ]
 
 [project.optional-dependencies]

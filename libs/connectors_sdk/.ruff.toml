@@ -25,7 +25,7 @@ dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
 "tests/conftest.py" = [ "EM" ]
 
 [lint.isort]
-known-first-party=["connectors", "tests"]
+known-first-party=["connectors_sdk", "tests"]
 
 [lint.flake8-copyright]
 notice-rgx = "#\n# Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one\n# or more contributor license agreements. Licensed under the Elastic License 2.0;\n# you may not use this file except in compliance with the Elastic License 2.0.\n#"
