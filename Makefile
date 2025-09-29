@@ -17,7 +17,6 @@ test:
 
 ftest:
 	cd $(app_dir); make ftest
-	cd $(connectors_sdk_dir); make ftest
 
 ftrace:
 	cd $(app_dir); make ftrace
