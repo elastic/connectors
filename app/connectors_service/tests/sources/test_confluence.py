@@ -15,11 +15,11 @@ import aiohttp
 import pytest
 from aiohttp import StreamReader
 from aiohttp.client_exceptions import ClientResponseError
+from connectors_sdk.filtering.validation import Filter
+from connectors_sdk.source import ConfigurableFieldValueError
 from freezegun import freeze_time
 
 from connectors.access_control import DLS_QUERY
-from connectors.protocol import Filter
-from connectors.source import ConfigurableFieldValueError
 from connectors.sources.confluence import (
     CONFLUENCE_CLOUD,
     CONFLUENCE_DATA_CENTER,
@@ -1123,17 +1123,17 @@ async def test_download_attachment_when_unsupported_filetype_used_then_fail_down
 
 @pytest.mark.asyncio
 @patch(
-    "connectors.content_extraction.ContentExtraction._check_configured",
+    "connectors_sdk.content_extraction.ContentExtraction._check_configured",
     lambda *_: True,
 )
 async def test_download_attachment_with_text_extraction_enabled_adds_body():
     with (
         patch(
-            "connectors.content_extraction.ContentExtraction.extract_text",
+            "connectors_sdk.content_extraction.ContentExtraction.extract_text",
             return_value=RESPONSE_CONTENT,
         ),
         patch(
-            "connectors.content_extraction.ContentExtraction.get_extraction_config",
+            "connectors_sdk.content_extraction.ContentExtraction.get_extraction_config",
             return_value={"host": "http://localhost:8090"},
         ),
     ):

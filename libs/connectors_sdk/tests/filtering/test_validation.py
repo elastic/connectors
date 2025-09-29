@@ -8,21 +8,21 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from connectors.filtering.basic_rule import BasicRule
-from connectors.filtering.validation import (
+from connectors_sdk.filtering.basic_rule import BasicRule
+from connectors_sdk.filtering.validation import (
     AdvancedRulesValidator,
     BasicRuleAgainstSchemaValidator,
     BasicRuleNoMatchAllRegexValidator,
     BasicRulesSetSemanticValidator,
     BasicRulesSetValidator,
     BasicRuleValidator,
+    Filter,
     FilteringValidationResult,
     FilteringValidationState,
     FilteringValidator,
     FilterValidationError,
     SyncRuleValidationResult,
 )
-from connectors.protocol import Filter
 
 RULE_ONE_ID = 1
 RULE_ONE_VALIDATION_MESSAGE = "rule 1 is valid"

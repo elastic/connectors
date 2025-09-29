@@ -18,19 +18,19 @@ from pydoc import locate
 import aiofiles
 from aiofiles.os import remove
 from aiofiles.tempfile import NamedTemporaryFile
-from bson import Decimal128
 
-from connectors.config import DataSourceFrameworkConfig
-from connectors.content_extraction import ContentExtraction
-from connectors.filtering.validation import (
+from connectors_sdk.content_extraction import (
+    TIKA_SUPPORTED_FILETYPES,
+    ContentExtraction,
+)
+from connectors_sdk.filtering.validation import (
     BasicRuleAgainstSchemaValidator,
     BasicRuleNoMatchAllRegexValidator,
     BasicRulesSetSemanticValidator,
     FilteringValidator,
 )
-from connectors.logger import logger
-from connectors.utils import (
-    TIKA_SUPPORTED_FILETYPES,
+from connectors_sdk.logger import logger
+from connectors_sdk.utils import (
     convert_to_b64,
     epoch_timestamp_zulu,
     get_file_extension,
@@ -417,7 +417,7 @@ class BaseDataSource:
             self.download_dir = None
 
         # this will be overwritten by set_framework_config()
-        self.framework_config = DataSourceFrameworkConfig.Builder().build()
+        self.framework_config = None
 
     def __str__(self):
         return f"Datasource `{self.__class__.name}`"
@@ -681,8 +681,6 @@ class BaseDataSource:
                     value[key] = _serialize(svalue)
             elif isinstance(value, (datetime, date, time)):
                 value = value.isoformat()
-            elif isinstance(value, Decimal128):
-                value = value.to_decimal()
             elif isinstance(value, (bytes, bytearray)):
                 value = value.decode(errors="ignore")
             elif isinstance(value, Decimal):

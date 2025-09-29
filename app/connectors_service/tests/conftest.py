@@ -85,7 +85,7 @@ def patch_logger(silent=True):
         def info(self, msg, *args, prefix=None, extra=None, exc_info=None):
             super(PatchedLogger, self).info(msg, *args)
 
-    from connectors.logger import logger
+    from connectors_sdk.logger import logger
 
     new_logger = PatchedLogger(silent)
 

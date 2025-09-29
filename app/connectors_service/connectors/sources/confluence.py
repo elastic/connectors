@@ -13,10 +13,14 @@ from urllib.parse import urljoin
 
 import aiohttp
 from aiohttp.client_exceptions import ClientResponseError, ServerDisconnectedError
+from connectors_sdk.logger import logger
+from connectors_sdk.source import BaseDataSource, ConfigurableFieldValueError
+from connectors_sdk.utils import (
+    iso_utc,
+    nested_get_from_dict,
+)
 
 from connectors.access_control import ACCESS_CONTROL
-from connectors.logger import logger
-from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.sources.atlassian import (
     AtlassianAccessControl,
     AtlassianAdvancedRulesValidator,
@@ -33,8 +37,6 @@ from connectors.utils import (
     MemQueue,
     RetryStrategy,
     html_to_text,
-    iso_utc,
-    nested_get_from_dict,
     retryable,
     ssl_context,
 )

@@ -12,10 +12,9 @@ import aioboto3
 import aiofiles
 import pytest
 from botocore.exceptions import ClientError
+from connectors_sdk.filtering.validation import Filter, SyncRuleValidationResult
+from connectors_sdk.source import ConfigurableFieldValueError
 
-from connectors.filtering.validation import SyncRuleValidationResult
-from connectors.protocol import Filter
-from connectors.source import ConfigurableFieldValueError
 from connectors.sources.s3 import S3AdvancedRulesValidator, S3DataSource
 from tests.sources.support import create_source
 
@@ -225,7 +224,7 @@ async def test_get_content(s3_client):
         async_response.__aenter__ = AsyncMock(return_value=ReadAsyncMock)
 
         with patch("aiofiles.os.remove"):
-            with patch("connectors.utils.convert_to_b64"):
+            with patch("connectors_sdk.utils.convert_to_b64"):
                 with patch.object(aiofiles, "open", return_value=async_response):
                     result = await source.get_content(
                         document, s3_client, timestamp=None, doit=True
@@ -244,11 +243,11 @@ async def test_get_content_with_text_extraction_enabled_adds_body(s3_client):
     """Test get_content method of S3Client"""
     with (
         patch(
-            "connectors.content_extraction.ContentExtraction.extract_text",
+            "connectors_sdk.content_extraction.ContentExtraction.extract_text",
             return_value="test content",
         ),
         patch(
-            "connectors.content_extraction.ContentExtraction.get_extraction_config",
+            "connectors_sdk.content_extraction.ContentExtraction.get_extraction_config",
             return_value={"host": "http://localhost:8090"},
         ),
     ):
@@ -295,7 +294,7 @@ async def test_get_content_with_upper_extension(s3_client):
         async_response.__aenter__ = AsyncMock(return_value=ReadAsyncMock)
 
         with patch("aiofiles.os.remove"):
-            with patch("connectors.utils.convert_to_b64"):
+            with patch("connectors_sdk.utils.convert_to_b64"):
                 with patch.object(aiofiles, "open", return_value=async_response):
                     result = await source.get_content(
                         document, s3_client, timestamp=None, doit=True

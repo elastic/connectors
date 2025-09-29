@@ -9,11 +9,10 @@ import os
 from unittest.mock import ANY, AsyncMock, Mock, patch
 
 import pytest
+from connectors_sdk.filtering.validation import Filter, SyncRuleValidationResult
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import ProgrammingError
 
-from connectors.filtering.validation import SyncRuleValidationResult
-from connectors.protocol import Filter
 from connectors.sources.mssql import (
     MSSQLAdvancedRulesValidator,
     MSSQLDataSource,

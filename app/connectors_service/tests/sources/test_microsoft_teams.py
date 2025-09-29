@@ -10,9 +10,9 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 import pytest
 import pytest_asyncio
 from aiohttp.client_exceptions import ClientOSError, ClientResponseError
+from connectors_sdk.logger import logger
+from connectors_sdk.source import ConfigurableFieldValueError, DataSourceConfiguration
 
-from connectors.logger import logger
-from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
 from connectors.sources.microsoft_teams import (
     GraphAPIToken,
     InternalServerError,

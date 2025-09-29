@@ -11,10 +11,9 @@ from unittest.mock import ANY, AsyncMock, MagicMock, Mock, patch
 import pytest
 from aiohttp import StreamReader
 from aiohttp.client_exceptions import ClientPayloadError, ClientResponseError
+from connectors_sdk.filtering.validation import Filter, SyncRuleValidationResult
+from connectors_sdk.source import ConfigurableFieldValueError, DataSourceConfiguration
 
-from connectors.filtering.validation import SyncRuleValidationResult
-from connectors.protocol import Filter
-from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
 from connectors.sources.onedrive import (
     AccessToken,
     InternalServerError,
@@ -934,11 +933,11 @@ async def test_get_content_when_is_downloadable_is_true(
 async def test_get_content_with_extraction_service():
     with (
         patch(
-            "connectors.content_extraction.ContentExtraction.extract_text",
+            "connectors_sdk.content_extraction.ContentExtraction.extract_text",
             return_value=RESPONSE_CONTENT,
         ),
         patch(
-            "connectors.content_extraction.ContentExtraction.get_extraction_config",
+            "connectors_sdk.content_extraction.ContentExtraction.get_extraction_config",
             return_value={"host": "http://localhost:8090"},
         ),
     ):

@@ -13,6 +13,8 @@ from unittest.mock import ANY, MagicMock
 
 import pytest
 import smbclient
+from connectors_sdk.filtering.validation import Filter, SyncRuleValidationResult
+from connectors_sdk.source import ConfigurableFieldValueError
 from smbprotocol.exceptions import (
     SMBConnectionClosed,
     SMBOSError,
@@ -21,9 +23,6 @@ from smbprotocol.exceptions import (
 )
 
 from connectors.access_control import ACCESS_CONTROL
-from connectors.filtering.validation import SyncRuleValidationResult
-from connectors.protocol import Filter
-from connectors.source import ConfigurableFieldValueError
 from connectors.sources.network_drive import (
     ClientPermissionException,
     InvalidLogonHoursException,

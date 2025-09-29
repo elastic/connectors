@@ -9,13 +9,16 @@ import re
 
 import aiomysql
 import fastjsonschema
-from fastjsonschema import JsonSchemaValueException
-
-from connectors.filtering.validation import (
+from connectors_sdk.filtering.validation import (
     AdvancedRulesValidator,
     SyncRuleValidationResult,
 )
-from connectors.source import BaseDataSource, ConfigurableFieldValueError
+from connectors_sdk.source import BaseDataSource, ConfigurableFieldValueError
+from connectors_sdk.utils import (
+    iso_utc,
+)
+from fastjsonschema import JsonSchemaValueException
+
 from connectors.sources.generic_database import (
     configured_tables,
     is_wildcard,
@@ -23,7 +26,6 @@ from connectors.sources.generic_database import (
 from connectors.utils import (
     CancellableSleeps,
     RetryStrategy,
-    iso_utc,
     retryable,
     ssl_context,
 )

@@ -11,14 +11,18 @@ from tempfile import NamedTemporaryFile
 
 import fastjsonschema
 import redis.asyncio as redis
-
-from connectors.filtering.validation import (
+from connectors_sdk.filtering.validation import (
     AdvancedRulesValidator,
     SyncRuleValidationResult,
 )
-from connectors.logger import logger
-from connectors.source import BaseDataSource, ConfigurableFieldValueError
-from connectors.utils import get_pem_format, hash_id, iso_utc
+from connectors_sdk.logger import logger
+from connectors_sdk.source import BaseDataSource, ConfigurableFieldValueError
+from connectors_sdk.utils import (
+    hash_id,
+    iso_utc,
+)
+
+from connectors.utils import get_pem_format
 
 PAGE_SIZE = 1000
 

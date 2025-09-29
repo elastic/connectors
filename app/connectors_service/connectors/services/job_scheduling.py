@@ -14,6 +14,8 @@ Event loop
 import functools
 from datetime import datetime, timezone
 
+from connectors_sdk.source import get_source_klass
+
 from connectors.es.client import License, with_concurrency_control
 from connectors.es.index import DocumentNotFoundError
 from connectors.protocol import (
@@ -27,7 +29,6 @@ from connectors.protocol import (
     SyncJobIndex,
 )
 from connectors.services.base import BaseService
-from connectors.source import get_source_klass
 from connectors.utils import ConcurrentTasks
 
 

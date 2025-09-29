@@ -11,9 +11,9 @@ from datetime import datetime
 
 import aiohttp
 from aiohttp.client_exceptions import ClientResponseError
+from connectors_sdk.logger import logger
+from connectors_sdk.source import BaseDataSource
 
-from connectors.logger import logger
-from connectors.source import BaseDataSource
 from connectors.utils import CancellableSleeps, dict_slice, retryable
 
 BASE_URL = "https://slack.com/api"

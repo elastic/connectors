@@ -14,8 +14,8 @@ import pytest
 from aiogoogle import Aiogoogle, HTTPError
 from aiogoogle.auth.managers import ServiceAccountManager
 from aiogoogle.models import Request, Response
+from connectors_sdk.source import ConfigurableFieldValueError, DataSourceConfiguration
 
-from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
 from connectors.sources.google_cloud_storage import GoogleCloudStorageDataSource
 from tests.sources.support import create_source
 
@@ -478,7 +478,7 @@ async def test_get_content(blob_document, expected_blob_document):
 
 @pytest.mark.asyncio
 @patch(
-    "connectors.content_extraction.ContentExtraction._check_configured",
+    "connectors_sdk.content_extraction.ContentExtraction._check_configured",
     lambda *_: True,
 )
 async def test_get_content_with_text_extraction_enabled_adds_body():
@@ -486,11 +486,11 @@ async def test_get_content_with_text_extraction_enabled_adds_body():
 
     with (
         patch(
-            "connectors.content_extraction.ContentExtraction.extract_text",
+            "connectors_sdk.content_extraction.ContentExtraction.extract_text",
             return_value="file content",
         ),
         patch(
-            "connectors.content_extraction.ContentExtraction.get_extraction_config",
+            "connectors_sdk.content_extraction.ContentExtraction.get_extraction_config",
             return_value={"host": "http://localhost:8090"},
         ),
     ):

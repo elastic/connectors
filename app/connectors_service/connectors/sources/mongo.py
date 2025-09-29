@@ -13,15 +13,15 @@ from tempfile import NamedTemporaryFile
 import fastjsonschema
 from bson import OLD_UUID_SUBTYPE, Binary, DBRef, Decimal128, ObjectId
 from bson.binary import UUID_SUBTYPE
+from connectors_sdk.filtering.validation import (
+    AdvancedRulesValidator,
+    SyncRuleValidationResult,
+)
+from connectors_sdk.source import BaseDataSource, ConfigurableFieldValueError
 from fastjsonschema import JsonSchemaValueException
 from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo.errors import OperationFailure
 
-from connectors.filtering.validation import (
-    AdvancedRulesValidator,
-    SyncRuleValidationResult,
-)
-from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.utils import get_pem_format
 
 

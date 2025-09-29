@@ -17,14 +17,14 @@ from urllib.parse import unquote
 import aiohttp
 import fastjsonschema
 from aiohttp.client_exceptions import ClientResponseError
-from notion_client import APIResponseError, AsyncClient
-
-from connectors.filtering.validation import (
+from connectors_sdk.filtering.validation import (
     AdvancedRulesValidator,
     SyncRuleValidationResult,
 )
-from connectors.logger import logger
-from connectors.source import BaseDataSource, ConfigurableFieldValueError
+from connectors_sdk.logger import logger
+from connectors_sdk.source import BaseDataSource, ConfigurableFieldValueError
+from notion_client import APIResponseError, AsyncClient
+
 from connectors.utils import CancellableSleeps, RetryStrategy, retryable
 
 RETRIES = 3

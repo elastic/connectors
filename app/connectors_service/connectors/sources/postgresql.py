@@ -11,16 +11,19 @@ from urllib.parse import quote
 
 import fastjsonschema
 from asyncpg.exceptions._base import InternalClientError
+from connectors_sdk.filtering.validation import (
+    AdvancedRulesValidator,
+    SyncRuleValidationResult,
+)
+from connectors_sdk.source import BaseDataSource
+from connectors_sdk.utils import (
+    iso_utc,
+)
 from fastjsonschema import JsonSchemaValueException
 from sqlalchemy import text
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from connectors.filtering.validation import (
-    AdvancedRulesValidator,
-    SyncRuleValidationResult,
-)
-from connectors.source import BaseDataSource
 from connectors.sources.generic_database import (
     DEFAULT_FETCH_SIZE,
     DEFAULT_RETRY_COUNT,
@@ -35,7 +38,6 @@ from connectors.sources.generic_database import (
 from connectors.utils import (
     RetryStrategy,
     get_pem_format,
-    iso_utc,
     retryable,
 )
 

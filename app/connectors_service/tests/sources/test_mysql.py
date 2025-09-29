@@ -9,12 +9,11 @@ from unittest.mock import ANY, AsyncMock, MagicMock, Mock, patch
 
 import aiomysql
 import pytest
+from connectors_sdk.filtering.validation import Filter, SyncRuleValidationResult
+from connectors_sdk.logger import logger
+from connectors_sdk.source import ConfigurableFieldValueError
 from freezegun import freeze_time
 
-from connectors.filtering.validation import SyncRuleValidationResult
-from connectors.logger import logger
-from connectors.protocol import Filter
-from connectors.source import ConfigurableFieldValueError
 from connectors.sources.mysql import (
     MySQLAdvancedRulesValidator,
     MySQLClient,

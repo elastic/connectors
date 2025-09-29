@@ -16,6 +16,12 @@ import aiohttp
 import exchangelib
 import requests.adapters
 from aiofiles.os import remove
+from connectors_sdk.logger import logger
+from connectors_sdk.source import BaseDataSource
+from connectors_sdk.utils import (
+    hash_id,
+    iso_utc,
+)
 from exchangelib import (
     IMPERSONATION,
     OAUTH2,
@@ -34,15 +40,11 @@ from connectors.access_control import (
     es_access_control_query,
     prefix_identity,
 )
-from connectors.logger import logger
-from connectors.source import BaseDataSource
 from connectors.utils import (
     CancellableSleeps,
     RetryStrategy,
     get_pem_format,
-    hash_id,
     html_to_text,
-    iso_utc,
     retryable,
     url_encode,
 )

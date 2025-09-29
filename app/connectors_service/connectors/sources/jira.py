@@ -14,10 +14,13 @@ from urllib import parse
 import aiohttp
 import pytz
 from aiohttp.client_exceptions import ClientResponseError, ServerConnectionError
+from connectors_sdk.logger import logger
+from connectors_sdk.source import BaseDataSource
+from connectors_sdk.utils import (
+    iso_utc,
+)
 
 from connectors.access_control import ACCESS_CONTROL
-from connectors.logger import logger
-from connectors.source import BaseDataSource
 from connectors.sources.atlassian import (
     AtlassianAccessControl,
     AtlassianAdvancedRulesValidator,
@@ -30,7 +33,6 @@ from connectors.utils import (
     ConcurrentTasks,
     MemQueue,
     RetryStrategy,
-    iso_utc,
     retryable,
     ssl_context,
 )

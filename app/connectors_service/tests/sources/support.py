@@ -5,7 +5,8 @@
 #
 from contextlib import asynccontextmanager
 
-from connectors.source import DEFAULT_CONFIGURATION, DataSourceConfiguration
+from connectors_sdk.config import DataSourceFrameworkConfig
+from connectors_sdk.source import DEFAULT_CONFIGURATION, DataSourceConfiguration
 
 
 @asynccontextmanager
@@ -18,6 +19,9 @@ async def create_source(klass, **extras):
             config[k] = DEFAULT_CONFIGURATION.copy() | {"value": v}
 
     source = klass(configuration=DataSourceConfiguration(config))
+    data_source_config = DataSourceFrameworkConfig(5 * 1024 * 1024)
+
+    source.set_framework_config(data_source_config)
     try:
         yield source
     finally:

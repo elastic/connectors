@@ -10,7 +10,41 @@ import aiofiles
 import aiohttp
 from aiohttp.client_exceptions import ClientConnectionError, ServerTimeoutError
 
-from connectors.logger import logger
+from connectors_sdk.logger import logger
+
+TIKA_SUPPORTED_FILETYPES = [
+    ".txt",
+    ".py",
+    ".rst",
+    ".html",
+    ".markdown",
+    ".json",
+    ".xml",
+    ".csv",
+    ".md",
+    ".ppt",
+    ".rtf",
+    ".docx",
+    ".odt",
+    ".xls",
+    ".xlsx",
+    ".rb",
+    ".paper",
+    ".sh",
+    ".pptx",
+    ".pdf",
+    ".doc",
+    ".aspx",
+    ".xlsb",
+    ".xlsm",
+    ".tsv",
+    ".svg",
+    ".msg",
+    ".potx",
+    ".vsd",
+    ".vsdx",
+    ".vsdm",
+]
 
 
 class ContentExtraction:

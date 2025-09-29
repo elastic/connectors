@@ -7,8 +7,8 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 import pytest_asyncio
+from connectors_sdk.source import ConfigurableFieldValueError
 
-from connectors.source import ConfigurableFieldValueError
 from connectors.sources.google import (
     GMailClient,
     GoogleDirectoryClient,

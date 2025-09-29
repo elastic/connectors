@@ -11,6 +11,19 @@ from functools import partial
 from urllib.parse import quote
 
 import httpx
+from connectors_sdk.content_extraction import (
+    TIKA_SUPPORTED_FILETYPES,
+)
+from connectors_sdk.logger import logger
+from connectors_sdk.source import (
+    CHUNK_SIZE,
+    BaseDataSource,
+    ConfigurableFieldValueError,
+)
+from connectors_sdk.utils import (
+    hash_id,
+    iso_utc,
+)
 from httpx_ntlm import HttpNtlmAuth
 
 from connectors.access_control import (
@@ -18,13 +31,8 @@ from connectors.access_control import (
     es_access_control_query,
     prefix_identity,
 )
-from connectors.logger import logger
-from connectors.source import CHUNK_SIZE, BaseDataSource, ConfigurableFieldValueError
 from connectors.utils import (
-    TIKA_SUPPORTED_FILETYPES,
     CancellableSleeps,
-    hash_id,
-    iso_utc,
     ssl_context,
 )
 

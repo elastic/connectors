@@ -14,23 +14,27 @@ from itertools import groupby
 import aiohttp
 import fastjsonschema
 from aiohttp.client_exceptions import ClientResponseError
+from connectors_sdk.content_extraction import (
+    TIKA_SUPPORTED_FILETYPES,
+)
+from connectors_sdk.filtering.validation import (
+    AdvancedRulesValidator,
+    SyncRuleValidationResult,
+)
+from connectors_sdk.logger import logger
+from connectors_sdk.source import BaseDataSource, ConfigurableFieldValueError
+from connectors_sdk.utils import (
+    iso_utc,
+)
 
 from connectors.access_control import (
     ACCESS_CONTROL,
     es_access_control_query,
     prefix_identity,
 )
-from connectors.filtering.validation import (
-    AdvancedRulesValidator,
-    SyncRuleValidationResult,
-)
-from connectors.logger import logger
-from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.utils import (
-    TIKA_SUPPORTED_FILETYPES,
     CancellableSleeps,
     RetryStrategy,
-    iso_utc,
     retryable,
 )
 

@@ -11,10 +11,13 @@ from functools import cached_property, partial
 from urllib.parse import quote
 
 from asyncpg.exceptions._base import InternalClientError
+from connectors_sdk.source import BaseDataSource
+from connectors_sdk.utils import (
+    iso_utc,
+)
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import ProgrammingError
 
-from connectors.source import BaseDataSource
 from connectors.sources.generic_database import (
     DEFAULT_FETCH_SIZE,
     DEFAULT_RETRY_COUNT,
@@ -24,7 +27,6 @@ from connectors.sources.generic_database import (
     is_wildcard,
     map_column_names,
 )
-from connectors.utils import iso_utc
 
 DEFAULT_PROTOCOL = "TCP"
 DEFAULT_ORACLE_HOME = ""

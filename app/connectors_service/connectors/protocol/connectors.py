@@ -15,10 +15,21 @@ Main classes are :
 
 import socket
 from collections import UserDict
-from copy import deepcopy
 from datetime import datetime, timezone
 from enum import Enum
 
+from connectors_sdk.filtering.validation import (
+    Filter,
+    FilteringValidationState,
+    InvalidFilteringError,
+)
+from connectors_sdk.logger import logger
+from connectors_sdk.source import (
+    DEFAULT_CONFIGURATION,
+    DataSourceConfiguration,
+    get_source_klass,
+)
+from connectors_sdk.utils import Features, iso_utc, with_utc_tz
 from elasticsearch import (
     ApiError,
 )
@@ -28,25 +39,12 @@ from elasticsearch import (
 
 from connectors.es import ESDocument, ESIndex
 from connectors.es.client import with_concurrency_control
-from connectors.filtering.validation import (
-    FilteringValidationState,
-    InvalidFilteringError,
-)
-from connectors.logger import logger
-from connectors.source import (
-    DEFAULT_CONFIGURATION,
-    DataSourceConfiguration,
-    get_source_klass,
-)
 from connectors.utils import (
     ACCESS_CONTROL_INDEX_PREFIX,
     deep_merge_dicts,
     filter_nested_dict_by_keys,
-    iso_utc,
-    nested_get_from_dict,
     next_run,
     parse_datetime_string,
-    with_utc_tz,
 )
 
 __all__ = [
@@ -55,7 +53,6 @@ __all__ = [
     "CONCRETE_CONNECTORS_INDEX",
     "CONCRETE_JOBS_INDEX",
     "ConnectorIndex",
-    "Filter",
     "SyncJobIndex",
     "DataSourceError",
     "JobStatus",
@@ -68,7 +65,6 @@ __all__ = [
     "IDLE_JOBS_THRESHOLD",
     "JOB_NOT_FOUND_ERROR",
     "Connector",
-    "Features",
     "Filtering",
     "Sort",
     "SyncJob",
@@ -527,41 +523,6 @@ class Filtering:
         return list(self.filtering)
 
 
-class Filter(dict):
-    def __init__(self, filter_=None):
-        if filter_ is None:
-            filter_ = {}
-
-        super().__init__(filter_)
-
-        self.advanced_rules = filter_.get("advanced_snippet", {})
-        self.basic_rules = filter_.get("rules", [])
-        self.validation = filter_.get(
-            "validation", {"state": FilteringValidationState.VALID.value, "errors": []}
-        )
-
-    def get_advanced_rules(self):
-        return self.advanced_rules.get("value", {})
-
-    def has_advanced_rules(self):
-        advanced_rules = self.get_advanced_rules()
-        return advanced_rules is not None and len(advanced_rules) > 0
-
-    def has_validation_state(self, validation_state):
-        return FilteringValidationState(self.validation["state"]) == validation_state
-
-    def transform_filtering(self):
-        """
-        Transform the filtering in .elastic-connectors to filtering ready-to-use in .elastic-connectors-sync-jobs
-        """
-        # deepcopy to not change the reference resulting in changing .elastic-connectors filtering
-        filtering = (
-            {"advanced_snippet": {}, "rules": []} if len(self) == 0 else deepcopy(self)
-        )
-
-        return filtering
-
-
 PIPELINE_DEFAULT = {
     "name": "search-default-ingestion",
     "extract_binary_content": True,
@@ -577,67 +538,6 @@ class Pipeline(UserDict):
         default = PIPELINE_DEFAULT.copy()
         default.update(data)
         super().__init__(default)
-
-
-class Features:
-    DOCUMENT_LEVEL_SECURITY = "document_level_security"
-
-    BASIC_RULES_NEW = "basic_rules_new"
-    ADVANCED_RULES_NEW = "advanced_rules_new"
-
-    # keep backwards compatibility
-    BASIC_RULES_OLD = "basic_rules_old"
-    ADVANCED_RULES_OLD = "advanced_rules_old"
-
-    NATIVE_CONNECTOR_API_KEYS = "native_connector_api_keys"
-
-    def __init__(self, features=None):
-        if features is None:
-            features = {}
-
-        self.features = features
-
-    def incremental_sync_enabled(self):
-        return nested_get_from_dict(
-            self.features, ["incremental_sync", "enabled"], default=False
-        )
-
-    def document_level_security_enabled(self):
-        return nested_get_from_dict(
-            self.features, ["document_level_security", "enabled"], default=False
-        )
-
-    def native_connector_api_keys_enabled(self):
-        return nested_get_from_dict(
-            self.features, ["native_connector_api_keys", "enabled"], default=True
-        )
-
-    def sync_rules_enabled(self):
-        return any(
-            [
-                self.feature_enabled(Features.BASIC_RULES_NEW),
-                self.feature_enabled(Features.BASIC_RULES_OLD),
-                self.feature_enabled(Features.ADVANCED_RULES_NEW),
-                self.feature_enabled(Features.ADVANCED_RULES_OLD),
-            ]
-        )
-
-    def feature_enabled(self, feature):
-        match feature:
-            case Features.BASIC_RULES_NEW:
-                return nested_get_from_dict(
-                    self.features, ["sync_rules", "basic", "enabled"], default=False
-                )
-            case Features.ADVANCED_RULES_NEW:
-                return nested_get_from_dict(
-                    self.features, ["sync_rules", "advanced", "enabled"], default=False
-                )
-            case Features.BASIC_RULES_OLD:
-                return self.features.get("filtering_rules", False)
-            case Features.ADVANCED_RULES_OLD:
-                return self.features.get("filtering_advanced_config", False)
-            case _:
-                return False
 
 
 class Connector(ESDocument):

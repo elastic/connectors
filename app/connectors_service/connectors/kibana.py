@@ -10,12 +10,13 @@ import os
 import sys
 from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser
 
+from connectors_sdk.logger import set_extra_logger
+from connectors_sdk.source import get_source_klass
+
 from connectors.config import load_config
 from connectors.es import DEFAULT_LANGUAGE
 from connectors.es.management_client import ESManagementClient
-from connectors.logger import set_extra_logger
 from connectors.protocol import ConnectorIndex
-from connectors.source import get_source_klass
 from connectors.utils import validate_index_name
 
 CONNECTORS_INDEX = ".elastic-connectors-v1"

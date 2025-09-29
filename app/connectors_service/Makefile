@@ -47,6 +47,7 @@ install-agent: .venv/bin/elastic-ingest
 
 
 .venv/bin/elastic-ingest: .venv/bin/python
+	.venv/bin/pip install -e ../../libs/connectors_sdk
 	.venv/bin/pip install -e .
 
 .venv/bin/ruff: .venv/bin/python
@@ -76,8 +77,8 @@ autoformat: .venv/bin/python .venv/bin/ruff .venv/bin/elastic-ingest
 	.venv/bin/ruff check scripts --fix
 	.venv/bin/ruff format scripts
 
-test: .venv/bin/pytest
-	.venv/bin/pytest --cov-report term-missing --cov-fail-under 92 --cov-report html --cov=connectors --fail-slow=$(SLOW_TEST_THRESHOLD) -sv tests
+test: .venv/bin/python .venv/bin/elastic-ingest .venv/bin/pytest
+	.venv/bin/pytest --cov-report term-missing --cov-fail-under 90 --cov-report html --cov=connectors --fail-slow=$(SLOW_TEST_THRESHOLD) -sv tests
 
 build-connectors-base-image:
 	docker build . -f ${DOCKERFILE_PATH} -t connectors-base

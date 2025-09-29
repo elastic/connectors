@@ -11,8 +11,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from aiohttp import StreamReader
+from connectors_sdk.source import ConfigurableFieldValueError
 
-from connectors.source import ConfigurableFieldValueError
 from connectors.sources.outlook import (
     OUTLOOK_CLOUD,
     OUTLOOK_SERVER,
@@ -672,11 +672,11 @@ async def test_get_content(attachment, expected_content):
 async def test_get_content_with_extraction_service():
     with (
         patch(
-            "connectors.content_extraction.ContentExtraction.extract_text",
+            "connectors_sdk.content_extraction.ContentExtraction.extract_text",
             return_value=str(RESPONSE_CONTENT),
         ),
         patch(
-            "connectors.content_extraction.ContentExtraction.get_extraction_config",
+            "connectors_sdk.content_extraction.ContentExtraction.get_extraction_config",
             return_value={"host": "http://localhost:8090"},
         ),
     ):

@@ -7,16 +7,16 @@ import asyncio
 from unittest.mock import ANY, AsyncMock, Mock, patch
 
 import pytest
+from connectors_sdk.filtering.validation import Filter, InvalidFilteringError
+from connectors_sdk.source import BaseDataSource
 from elasticsearch import (
     ConflictError,
 )
 
 from connectors.es.client import License
 from connectors.es.index import DocumentNotFoundError
-from connectors.filtering.validation import InvalidFilteringError
-from connectors.protocol import Filter, JobStatus, JobType, Pipeline
+from connectors.protocol import JobStatus, JobType, Pipeline
 from connectors.protocol.connectors import ProtocolError
-from connectors.source import BaseDataSource
 from connectors.sync_job_runner import (
     SyncJobRunner,
     SyncJobStartError,

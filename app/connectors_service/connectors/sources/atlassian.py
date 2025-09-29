@@ -5,14 +5,15 @@
 #
 
 import fastjsonschema
-from fastjsonschema import JsonSchemaValueException
-
-from connectors.access_control import es_access_control_query, prefix_identity
-from connectors.filtering.validation import (
+from connectors_sdk.filtering.validation import (
     AdvancedRulesValidator,
     SyncRuleValidationResult,
 )
-from connectors.utils import RetryStrategy, iso_utc, retryable
+from connectors_sdk.utils import iso_utc
+from fastjsonschema import JsonSchemaValueException
+
+from connectors.access_control import es_access_control_query, prefix_identity
+from connectors.utils import RetryStrategy, retryable
 
 RETRIES = 3
 RETRY_INTERVAL = 2

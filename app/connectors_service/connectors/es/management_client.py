@@ -6,6 +6,7 @@
 
 from functools import partial
 
+from connectors_sdk.logger import logger
 from elasticsearch import ApiError
 from elasticsearch import (
     NotFoundError as ElasticNotFoundError,
@@ -14,7 +15,6 @@ from elasticsearch.helpers import async_scan
 
 from connectors.es import TIMESTAMP_FIELD
 from connectors.es.client import ESClient
-from connectors.logger import logger
 
 
 class ESManagementClient(ESClient):

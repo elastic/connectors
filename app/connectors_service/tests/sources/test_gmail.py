@@ -10,10 +10,11 @@ from unittest.mock import ANY, AsyncMock, MagicMock, patch
 import pytest
 import pytest_asyncio
 from aiogoogle import AuthError
+from connectors_sdk.filtering.validation import Filter
+from connectors_sdk.source import ConfigurableFieldValueError
+from connectors_sdk.utils import Features, iso_utc
 from freezegun import freeze_time
 
-from connectors.protocol import Features, Filter
-from connectors.source import ConfigurableFieldValueError
 from connectors.sources.gmail import (
     ACCESS_CONTROL,
     GMailAdvancedRulesValidator,
@@ -21,7 +22,6 @@ from connectors.sources.gmail import (
     _message_doc,
 )
 from connectors.sources.google import MessageFields, UserFields
-from connectors.utils import iso_utc
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
 

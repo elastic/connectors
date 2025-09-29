@@ -13,10 +13,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from aioresponses import CallbackResult
+from connectors_sdk.filtering.validation import Filter
+from connectors_sdk.source import ConfigurableFieldValueError, DataSourceConfiguration
 
 from connectors.access_control import DLS_QUERY
-from connectors.protocol import Filter
-from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
 from connectors.sources.salesforce import (
     API_VERSION,
     RELEVANT_SOBJECT_FIELDS,
@@ -1583,11 +1583,11 @@ async def test_get_all_with_content_docs_when_success(
 async def test_get_all_with_content_docs_and_extraction_service(mock_responses):
     with (
         patch(
-            "connectors.content_extraction.ContentExtraction.extract_text",
+            "connectors_sdk.content_extraction.ContentExtraction.extract_text",
             return_value="chunk1",
         ),
         patch(
-            "connectors.content_extraction.ContentExtraction.get_extraction_config",
+            "connectors_sdk.content_extraction.ContentExtraction.get_extraction_config",
             return_value={"host": "http://localhost:8090"},
         ),
     ):

@@ -10,11 +10,10 @@ from unittest.mock import ANY, AsyncMock, Mock
 
 import pytest
 import redis
+from connectors_sdk.filtering.validation import Filter, SyncRuleValidationResult
+from connectors_sdk.source import ConfigurableFieldValueError
 from freezegun import freeze_time
 
-from connectors.filtering.validation import SyncRuleValidationResult
-from connectors.protocol import Filter
-from connectors.source import ConfigurableFieldValueError
 from connectors.sources.redis import (
     RedisAdvancedRulesValidator,
     RedisDataSource,

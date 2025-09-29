@@ -32,8 +32,8 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
 MarkupSafe
-3.0.2
-BSD License
+3.0.3
+UNKNOWN
 Copyright 2010 Pallets
 
 Redistribution and use in source and binary forms, with or without
@@ -3546,6 +3546,11 @@ Apache Software License
 
 
 elasticsearch-connectors
+9.2.0
+Apache Software License
+UNKNOWN
+
+elasticsearch-connectors-sdk
 9.2.0
 Apache Software License
 UNKNOWN

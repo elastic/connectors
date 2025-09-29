@@ -8,8 +8,7 @@
 from functools import partial
 
 from azure.storage.blob.aio import BlobServiceClient, ContainerClient
-
-from connectors.source import BaseDataSource
+from connectors_sdk.source import BaseDataSource
 
 BLOB_SCHEMA = {
     "title": "name",

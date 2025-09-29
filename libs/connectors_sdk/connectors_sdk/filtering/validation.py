@@ -8,9 +8,9 @@ from enum import Enum
 
 import fastjsonschema
 
-from connectors.filtering.basic_rule import BasicRule, Policy, Rule
-from connectors.logger import logger
-from connectors.utils import Format
+from connectors_sdk.filtering.basic_rule import BasicRule, Policy, Rule
+from connectors_sdk.logger import logger
+from connectors_sdk.utils import Format
 
 
 class InvalidFilteringError(Exception):
@@ -133,6 +133,41 @@ class FilteringValidationResult:
             "state": FilteringValidationState.to_s(self.state),
             "errors": [vars(error) for error in self.errors],
         }
+
+
+class Filter(dict):
+    def __init__(self, filter_=None):
+        if filter_ is None:
+            filter_ = {}
+
+        super().__init__(filter_)
+
+        self.advanced_rules = filter_.get("advanced_snippet", {})
+        self.basic_rules = filter_.get("rules", [])
+        self.validation = filter_.get(
+            "validation", {"state": FilteringValidationState.VALID.value, "errors": []}
+        )
+
+    def get_advanced_rules(self):
+        return self.advanced_rules.get("value", {})
+
+    def has_advanced_rules(self):
+        advanced_rules = self.get_advanced_rules()
+        return advanced_rules is not None and len(advanced_rules) > 0
+
+    def has_validation_state(self, validation_state):
+        return FilteringValidationState(self.validation["state"]) == validation_state
+
+    def transform_filtering(self):
+        """
+        Transform the filtering in .elastic-connectors to filtering ready-to-use in .elastic-connectors-sync-jobs
+        """
+        # deepcopy to not change the reference resulting in changing .elastic-connectors filtering
+        filtering = (
+            {"advanced_snippet": {}, "rules": []} if len(self) == 0 else deepcopy(self)
+        )
+
+        return filtering
 
 
 class FilteringValidator:

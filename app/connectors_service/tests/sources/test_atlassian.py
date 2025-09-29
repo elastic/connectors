@@ -8,11 +8,11 @@ from unittest.mock import ANY
 from urllib import parse
 
 import pytest
-
-from connectors.filtering.validation import (
+from connectors_sdk.filtering.validation import (
     AdvancedRulesValidator,
     SyncRuleValidationResult,
 )
+
 from connectors.sources.atlassian import (
     AtlassianAccessControl,
     AtlassianAdvancedRulesValidator,

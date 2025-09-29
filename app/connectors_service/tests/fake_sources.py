@@ -10,11 +10,11 @@ Collection of fake source classes for tests
 from functools import partial
 from unittest.mock import Mock
 
-from connectors.filtering.validation import (
+from connectors_sdk.filtering.validation import (
     FilteringValidationResult,
     FilteringValidationState,
 )
-from connectors.source import BaseDataSource
+from connectors_sdk.source import BaseDataSource
 
 
 class FakeSource(BaseDataSource):

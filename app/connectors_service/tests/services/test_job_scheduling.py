@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
+from connectors_sdk.source import ConfigurableFieldValueError, DataSourceConfiguration
 from elasticsearch import ConflictError
 
 from connectors.es.client import License
@@ -21,7 +22,6 @@ from connectors.protocol import (
     Status,
 )
 from connectors.services.job_scheduling import JobSchedulingService
-from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
 from tests.commons import AsyncIterator
 from tests.services.test_base import create_and_run_service
 

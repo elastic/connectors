@@ -6,6 +6,9 @@
 import asyncio
 from collections import OrderedDict
 
+from connectors_sdk.source import get_source_klass
+from connectors_sdk.utils import iso_utc
+
 from connectors.es import DEFAULT_LANGUAGE
 from connectors.es.cli_client import CLIClient
 from connectors.protocol import (
@@ -14,8 +17,6 @@ from connectors.protocol import (
     CONNECTORS_ACCESS_CONTROL_INDEX_PREFIX,
     ConnectorIndex,
 )
-from connectors.source import get_source_klass
-from connectors.utils import iso_utc
 
 EVERYDAY_AT_MIDNIGHT = "0 0 0 * * ?"
 

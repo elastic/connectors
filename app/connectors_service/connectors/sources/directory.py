@@ -13,9 +13,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import aiofiles
+from connectors_sdk.content_extraction import (
+    TIKA_SUPPORTED_FILETYPES,
+)
+from connectors_sdk.source import BaseDataSource
+from connectors_sdk.utils import (
+    hash_id,
+)
 
-from connectors.source import BaseDataSource
-from connectors.utils import TIKA_SUPPORTED_FILETYPES, get_base64_value, hash_id
+from connectors.utils import get_base64_value
 
 DEFAULT_DIR = os.environ.get("SYSTEM_DIR", os.path.dirname(__file__))
 

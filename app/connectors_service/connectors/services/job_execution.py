@@ -5,6 +5,8 @@
 #
 from functools import cached_property
 
+from connectors_sdk.source import get_source_klass
+
 from connectors.es.client import License
 from connectors.es.index import DocumentNotFoundError
 from connectors.es.license import requires_platinum_license
@@ -14,7 +16,6 @@ from connectors.protocol import (
     SyncJobIndex,
 )
 from connectors.services.base import BaseService
-from connectors.source import get_source_klass
 from connectors.sync_job_runner import SyncJobRunner
 from connectors.utils import ConcurrentTasks
 

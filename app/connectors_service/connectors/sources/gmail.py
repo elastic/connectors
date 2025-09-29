@@ -7,14 +7,17 @@ from functools import cached_property
 
 import fastjsonschema
 from aiogoogle import AuthError
-from fastjsonschema import JsonSchemaValueException
-
-from connectors.access_control import ACCESS_CONTROL, es_access_control_query
-from connectors.filtering.validation import (
+from connectors_sdk.filtering.validation import (
     AdvancedRulesValidator,
     SyncRuleValidationResult,
 )
-from connectors.source import BaseDataSource, ConfigurableFieldValueError
+from connectors_sdk.source import BaseDataSource, ConfigurableFieldValueError
+from connectors_sdk.utils import (
+    iso_utc,
+)
+from fastjsonschema import JsonSchemaValueException
+
+from connectors.access_control import ACCESS_CONTROL, es_access_control_query
 from connectors.sources.google import (
     GMailClient,
     GoogleDirectoryClient,
@@ -26,7 +29,6 @@ from connectors.sources.google import (
 from connectors.utils import (
     EMAIL_REGEX_PATTERN,
     base64url_to_base64,
-    iso_utc,
     validate_email_address,
 )
 
