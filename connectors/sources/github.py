@@ -826,9 +826,11 @@ class GitHubClient:
                 ):
                     await self._put_to_sleep(resource_type="graphql")
 
-            errors_to_report = exception.response.get('errors')
+            errors_to_report = exception.response.get("errors")
 
-            if ignore_errors and all(error.get("type") in ignore_errors for error in errors):
+            if ignore_errors and all(
+                error.get("type") in ignore_errors for error in errors
+            ):
                 # All errors are ignored, return just the data part without errors
                 return exception.response.get("data", {})
 
