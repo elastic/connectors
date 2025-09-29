@@ -826,28 +826,21 @@ class GitHubClient:
                 ):
                     await self._put_to_sleep(resource_type="graphql")
 
-            # Handle ignored errors gracefully by returning null for those fields
+            errors_to_report = exception.response.get('errors')
+
+            if ignore_errors and all(error.get("type") in ignore_errors for error in errors):
+                # All errors are ignored, return just the data part without errors
+                return exception.response.get("data", {})
+
             if ignore_errors:
-                ignored_errors = [
-                    error for error in errors if error.get("type") in ignore_errors
+                # Some errors are not ignored, report only non-ignored errors
+                non_ignored_errors = [
+                    error for error in errors if error.get("type") not in ignore_errors
                 ]
-                if ignored_errors:
-                    # Check if we have any non-ignored errors that should still raise exceptions
-                    other_errors = [
-                        error
-                        for error in errors
-                        if error.get("type") not in ignore_errors
-                    ]
+                if non_ignored_errors:
+                    errors_to_report = non_ignored_errors
 
-                    if other_errors:
-                        # If there are other types of errors, still raise an exception
-                        msg = f"Error while executing query. Exception: {exception.response.get('errors')}"
-                        raise Exception(msg) from exception
-
-                    # All errors are ignored, return just the data part without errors
-                    return exception.response.get("data", {})
-
-            msg = f"Error while executing query. Exception: {exception.response.get('errors')}"
+            msg = f"Error while executing query. Exception: {errors_to_report}"
             raise Exception(msg) from exception
         except Exception as e:
             self._logger.debug(
@@ -1065,7 +1058,6 @@ class GitHubClient:
         if not repo_names:
             return {}
 
-        # Build the batch query with aliases
         query_parts = []
         variables = {}
 
@@ -1073,11 +1065,9 @@ class GitHubClient:
             owner, repo = self.get_repo_details(repo_name=repo_name)
             alias = f"repo{i}"
 
-            # Add variables for this repository
             variables[f"{alias}_owner"] = owner
             variables[f"{alias}_name"] = repo
 
-            # Add the aliased query part
             query_part = f"""
             {alias}: repository(owner: ${alias}_owner, name: ${alias}_name) {{
                 id
@@ -1104,12 +1094,10 @@ class GitHubClient:
             }}"""
             query_parts.append(query_part)
 
-        # Build variable declarations for the query
         variable_declarations = []
         for var_name in variables.keys():
             variable_declarations.append(f"${var_name}: String!")
 
-        # Construct the full query
         query = f"""
         query ({', '.join(variable_declarations)}) {{
             {' '.join(query_parts)}
@@ -1483,7 +1471,6 @@ class GitHubDataSource(BaseDataSource):
         for owner, owner_repos in repos_by_owner.items():
             await self.github_client.update_installation_id(self._installations[owner])
 
-            # Use batch validation instead of fetching all repos for the owner
             batch_results = (
                 await self.github_client.get_repos_by_fully_qualified_name_batch(
                     owner_repos
@@ -1492,7 +1479,6 @@ class GitHubDataSource(BaseDataSource):
 
             for repo_name, repo_data in batch_results.items():
                 if repo_data:
-                    # Store valid repos in appropriate cache for potential later use
                     if self.configuration["repo_type"] == "organization":
                         if owner not in self.org_repos:
                             self.org_repos[owner] = {}
