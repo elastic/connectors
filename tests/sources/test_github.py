@@ -1169,6 +1169,7 @@ async def test_get_invalid_repos_organization():
     async with create_github_source(
         repos="repo1, owner1/repo2, repo3", repo_type="organization", org_name="org1"
     ) as source:
+
         def mock_batch_validation(repo_names):
             # Simulate repos that exist - only org1/repo1 exists
             valid_repos = {
