@@ -32,8 +32,8 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
 MarkupSafe
-3.0.2
-BSD License
+3.0.3
+UNKNOWN
 Copyright 2010 Pallets
 
 Redistribution and use in source and binary forms, with or without
