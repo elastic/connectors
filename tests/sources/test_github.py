@@ -1145,7 +1145,6 @@ async def test_get_invalid_repos():
             return_value={"viewer": {"login": "owner1"}}
         )
 
-        # Mock the new batch validation method
         def mock_batch_validation(repo_names):
             # Simulate repos that exist - only owner1/repo1 exists
             valid_repos = {
@@ -1170,7 +1169,6 @@ async def test_get_invalid_repos_organization():
     async with create_github_source(
         repos="repo1, owner1/repo2, repo3", repo_type="organization", org_name="org1"
     ) as source:
-        # Mock the new batch validation method
         def mock_batch_validation(repo_names):
             # Simulate repos that exist - only org1/repo1 exists
             valid_repos = {
@@ -1221,7 +1219,6 @@ async def test_get_invalid_repos_organization_for_github_app(
         )
         source.github_client._installation_access_token = "changeme"
         source.github_client._update_installation_access_token = AsyncMock()
-        # Mock the new batch validation method
 
         def mock_batch_validation(repo_names):
             # Simulate which repos exist and are accessible based on test data
