@@ -773,7 +773,7 @@ class GitHubClient:
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
         skipped_exceptions=UnauthorizedException,
     )
-    async def graphql(self, query, variables=None, ignore_errors=None):
+    async def graphql(self, query, variables = None, ignore_errors: list[str] | None = None):
         """Invoke GraphQL request to fetch repositories, pull requests, and issues.
 
         Args:
@@ -788,6 +788,9 @@ class GitHubClient:
         Yields:
             dictionary: Client response
         """
+
+        ignore_errors = ignore_errors or []
+
         url = f"{self.base_url}/graphql"
         self._logger.debug(
             f"Sending POST to {url} with query: '{json.dumps(query)}' and variables: '{json.dumps(variables)}'"
@@ -813,11 +816,6 @@ class GitHubClient:
             else:
                 raise
         except QueryError as exception:
-            # Log the entire response for debugging
-            self._logger.error(
-                f"GraphQL QueryError full response: {exception.response}"
-            )
-
             errors = exception.response.get("errors", [])
             for error in errors:
                 if (
@@ -826,23 +824,19 @@ class GitHubClient:
                 ):
                     await self._put_to_sleep(resource_type="graphql")
 
-            errors_to_report = exception.response.get("errors")
-
-            if ignore_errors and all(
+            if all(
                 error.get("type") in ignore_errors for error in errors
             ):
                 # All errors are ignored, return just the data part without errors
                 return exception.response.get("data", {})
 
-            if ignore_errors:
-                # Some errors are not ignored, report only non-ignored errors
-                non_ignored_errors = [
-                    error for error in errors if error.get("type") not in ignore_errors
-                ]
-                if non_ignored_errors:
-                    errors_to_report = non_ignored_errors
+           
+            # report only non-ignored errors
+            non_ignored_errors = [
+                error for error in errors if error.get("type") not in ignore_errors
+            ]
 
-            msg = f"Error while executing query. Exception: {errors_to_report}"
+            msg = f"Error while executing query. Exception: {non_ignored_errors}"
             raise Exception(msg) from exception
         except Exception as e:
             self._logger.debug(
@@ -1096,25 +1090,22 @@ class GitHubClient:
             }}"""
             query_parts.append(query_part)
 
-        variable_declarations = []
-        for var_name in variables.keys():
-            variable_declarations.append(f"${var_name}: String!")
+        variable_declarations = [f"${var_name}: String!" for var_name in variables.keys()]
 
-        query = f"""
-        query ({', '.join(variable_declarations)}) {{
-            {' '.join(query_parts)}
-        }}
-        """
+        query = GithubQuery.BATCH_REPO_QUERY_TEMPLATE.value.format(
+            batch_queries=', '.join(variable_declarations),
+            query_body=' '.join(query_parts)
+        )
 
         data = await self.graphql(
             query=query, variables=variables, ignore_errors=["NOT_FOUND"]
         )
 
         # Map results back to repo names
-        results = {}
-        for i, repo_name in enumerate(repo_names):
-            alias = f"repo{i}"
-            results[repo_name] = data.get(alias)
+        results = {
+            repo_name: data.get(f"repo{i}")
+            for i, repo_name in enumerate(repo_names)
+        }
 
         return results
 
