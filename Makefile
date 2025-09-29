@@ -29,7 +29,7 @@ lint: install
 	cd $(connectors_sdk_dir); make lint
 	cd $(app_dir); make lint
 
-autoformat:
+autoformat: install
 	cd $(connectors_sdk_dir); make autoformat
 	cd $(app_dir); make autoformat
 
