@@ -17,11 +17,11 @@ import sys
 import time
 from argparse import ArgumentParser
 
+from connectors_sdk.logger import set_extra_logger
 from elastic_transport import ConnectionTimeout
 from elasticsearch import ApiError
 
 from connectors.es.management_client import ESManagementClient
-from connectors_sdk.logger import set_extra_logger
 from connectors.utils import (
     RetryStrategy,
     time_to_sleep_between_retries,

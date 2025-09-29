@@ -15,17 +15,17 @@ test: install
 	cd $(connectors_sdk_dir); make test
 	cd $(app_dir); make test
 
-ftest: install $(DOCKERFILE_FTEST_PATH)
+ftest: install $(DOCKERFILE_FTEST_PATH) build-connectors-base-image
 	cd $(app_dir); make ftest
 
 ftrace:
 	cd $(app_dir); make ftrace
 
-notice:
+notice: install
 	cd $(connectors_sdk_dir); make notice
 	cd $(app_dir); make notice
 
-lint:
+lint: install
 	cd $(connectors_sdk_dir); make lint
 	cd $(app_dir); make lint
 
