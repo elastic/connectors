@@ -142,3 +142,14 @@ filterwarnings = [
     # this error comes from 8.16 Elasticsearch client: we use some non-GA features in our CI code
     "ignore::elasticsearch.exceptions.GeneralAvailabilityWarning",
 ]
+
+[tool.pyright]
+pythonVersion = "3.10"
+include = ["connectors_service"]
+reportMissingImports = false
+reportMissingModuleSource = false
+reportOptionalMemberAccess = false
+exclude = ["**/tests", "**/__pycache__"]
+executionEnvironments = [
+    { root = "./", venv = "./" }
+]
