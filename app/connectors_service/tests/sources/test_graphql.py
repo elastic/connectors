@@ -15,7 +15,7 @@ from connectors_sdk.source import ConfigurableFieldValueError
 from freezegun import freeze_time
 from graphql import parse
 
-from connectors.sources.graphql import GraphQLDataSource, UnauthorizedException
+from connectors_service.sources.graphql import GraphQLDataSource, UnauthorizedException
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
 

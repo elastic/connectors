@@ -26,12 +26,12 @@ from connectors_sdk.utils import (
 )
 from httpx_ntlm import HttpNtlmAuth
 
-from connectors.access_control import (
+from connectors_service.access_control import (
     ACCESS_CONTROL,
     es_access_control_query,
     prefix_identity,
 )
-from connectors.utils import (
+from connectors_service.utils import (
     CancellableSleeps,
     ssl_context,
 )

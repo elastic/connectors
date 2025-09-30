@@ -6,7 +6,7 @@
 
 import pytest
 
-from connectors.access_control import (
+from connectors_service.access_control import (
     es_access_control_query,
     prefix_identity,
 )

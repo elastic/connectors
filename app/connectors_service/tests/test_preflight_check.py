@@ -8,8 +8,8 @@ from unittest.mock import patch
 
 import pytest
 
-from connectors.preflight_check import PreflightCheck
-from connectors.protocol import CONCRETE_CONNECTORS_INDEX, CONCRETE_JOBS_INDEX
+from connectors_service.preflight_check import PreflightCheck
+from connectors_service.protocol import CONCRETE_CONNECTORS_INDEX, CONCRETE_JOBS_INDEX
 
 connectors_version = "1.2.3.4"
 headers = {"X-Elastic-Product": "Elasticsearch"}

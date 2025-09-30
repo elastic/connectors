@@ -25,7 +25,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.engine import URL
 from sqlalchemy.exc import ProgrammingError
 
-from connectors.sources.generic_database import (
+from connectors_service.sources.generic_database import (
     DEFAULT_FETCH_SIZE,
     DEFAULT_RETRY_COUNT,
     DEFAULT_WAIT_MULTIPLIER,
@@ -36,7 +36,7 @@ from connectors.sources.generic_database import (
     is_wildcard,
     map_column_names,
 )
-from connectors.utils import (
+from connectors_service.utils import (
     RetryStrategy,
     get_pem_format,
     retryable,

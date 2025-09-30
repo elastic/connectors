@@ -12,8 +12,8 @@ from connectors_sdk.filtering.validation import (
 from connectors_sdk.utils import iso_utc
 from fastjsonschema import JsonSchemaValueException
 
-from connectors.access_control import es_access_control_query, prefix_identity
-from connectors.utils import RetryStrategy, retryable
+from connectors_service.access_control import es_access_control_query, prefix_identity
+from connectors_service.utils import RetryStrategy, retryable
 
 RETRIES = 3
 RETRY_INTERVAL = 2
@@ -109,7 +109,7 @@ class AtlassianAccessControl:
         return es_access_control_query(access_control)
 
     async def fetch_all_users(self, url):
-        from connectors.sources.jira import JIRA_CLOUD
+        from connectors_service.sources.jira import JIRA_CLOUD
 
         start_at = 0
         while True:
@@ -129,7 +129,7 @@ class AtlassianAccessControl:
                     start_at += CLOUD_USER_BATCH
 
     async def fetch_all_users_for_confluence(self, url):
-        from connectors.sources.confluence import CONFLUENCE_CLOUD
+        from connectors_service.sources.confluence import CONFLUENCE_CLOUD
 
         start_at = 0
         while True:
@@ -218,8 +218,8 @@ class AtlassianAccessControl:
         return user_document | self.access_control_query(access_control=access_control)
 
     def is_active_atlassian_user(self, user_info):
-        from connectors.sources.confluence import CONFLUENCE_CLOUD
-        from connectors.sources.jira import JIRA_CLOUD
+        from connectors_service.sources.confluence import CONFLUENCE_CLOUD
+        from connectors_service.sources.jira import JIRA_CLOUD
 
         user_url = user_info.get("self")
         user_name = user_info.get("displayName", "user")

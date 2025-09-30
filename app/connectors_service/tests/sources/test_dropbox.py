@@ -22,7 +22,7 @@ from connectors_sdk.filtering.validation import Filter, SyncRuleValidationResult
 from connectors_sdk.source import ConfigurableFieldValueError
 from freezegun import freeze_time
 
-from connectors.sources.dropbox import (
+from connectors_service.sources.dropbox import (
     AUTHENTICATED_ADMIN_URL,
     DropBoxAdvancedRulesValidator,
     DropboxClient,

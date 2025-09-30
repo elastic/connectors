@@ -15,7 +15,7 @@ from botocore.exceptions import ClientError
 from connectors_sdk.filtering.validation import Filter, SyncRuleValidationResult
 from connectors_sdk.source import ConfigurableFieldValueError
 
-from connectors.sources.s3 import S3AdvancedRulesValidator, S3DataSource
+from connectors_service.sources.s3 import S3AdvancedRulesValidator, S3DataSource
 from tests.sources.support import create_source
 
 ADVANCED_SNIPPET = "advanced_snippet"

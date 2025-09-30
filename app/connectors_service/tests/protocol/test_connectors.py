@@ -21,8 +21,8 @@ from connectors_sdk.source import BaseDataSource
 from connectors_sdk.utils import Features
 from elasticsearch import ApiError, ConflictError, NotFoundError
 
-from connectors.config import load_config
-from connectors.protocol import (
+from connectors_service.config import load_config
+from connectors_service.protocol import (
     IDLE_JOBS_THRESHOLD,
     JOB_NOT_FOUND_ERROR,
     Connector,
@@ -40,8 +40,8 @@ from connectors.protocol import (
     SyncJob,
     SyncJobIndex,
 )
-from connectors.protocol.connectors import ProtocolError
-from connectors.utils import ACCESS_CONTROL_INDEX_PREFIX, iso_utc
+from connectors_service.protocol.connectors import ProtocolError
+from connectors_service.utils import ACCESS_CONTROL_INDEX_PREFIX, iso_utc
 from tests.commons import AsyncIterator
 
 HERE = os.path.dirname(__file__)

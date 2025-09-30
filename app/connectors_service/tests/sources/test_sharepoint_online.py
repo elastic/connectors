@@ -21,7 +21,7 @@ from connectors_sdk.source import ConfigurableFieldValueError
 from connectors_sdk.utils import Features, iso_utc
 from freezegun import freeze_time
 
-from connectors.sources.sharepoint_online import (
+from connectors_service.sources.sharepoint_online import (
     ACCESS_CONTROL,
     DEFAULT_BACKOFF_MULTIPLIER,
     DEFAULT_RETRY_SECONDS,

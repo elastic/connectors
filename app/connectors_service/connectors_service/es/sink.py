@@ -31,19 +31,19 @@ from connectors_sdk.utils import (
     iso_utc,
 )
 
-from connectors.config import (
+from connectors_service.config import (
     DEFAULT_ELASTICSEARCH_MAX_RETRIES,
     DEFAULT_ELASTICSEARCH_RETRY_INTERVAL,
 )
-from connectors.es import TIMESTAMP_FIELD
-from connectors.es.management_client import ESManagementClient
-from connectors.protocol import JobType
-from connectors.protocol.connectors import (
+from connectors_service.es import TIMESTAMP_FIELD
+from connectors_service.es.management_client import ESManagementClient
+from connectors_service.protocol import JobType
+from connectors_service.protocol.connectors import (
     DELETED_DOCUMENT_COUNT,
     INDEXED_DOCUMENT_COUNT,
     INDEXED_DOCUMENT_VOLUME,
 )
-from connectors.utils import (
+from connectors_service.utils import (
     DEFAULT_CHUNK_MEM_SIZE,
     DEFAULT_CHUNK_SIZE,
     DEFAULT_CONCURRENT_DOWNLOADS,

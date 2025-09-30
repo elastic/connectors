@@ -36,9 +36,9 @@ from elasticsearch import (
     NotFoundError as ElasticNotFoundError,
 )
 
-from connectors.es import ESDocument, ESIndex
-from connectors.es.client import with_concurrency_control
-from connectors.utils import (
+from connectors_service.es import ESDocument, ESIndex
+from connectors_service.es.client import with_concurrency_control
+from connectors_service.utils import (
     ACCESS_CONTROL_INDEX_PREFIX,
     deep_merge_dicts,
     filter_nested_dict_by_keys,

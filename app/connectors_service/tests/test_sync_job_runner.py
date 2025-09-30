@@ -13,11 +13,11 @@ from elasticsearch import (
     ConflictError,
 )
 
-from connectors.es.client import License
-from connectors.es.index import DocumentNotFoundError
-from connectors.protocol import JobStatus, JobType, Pipeline
-from connectors.protocol.connectors import ProtocolError
-from connectors.sync_job_runner import (
+from connectors_service.es.client import License
+from connectors_service.es.index import DocumentNotFoundError
+from connectors_service.protocol import JobStatus, JobType, Pipeline
+from connectors_service.protocol.connectors import ProtocolError
+from connectors_service.sync_job_runner import (
     SyncJobRunner,
     SyncJobStartError,
 )

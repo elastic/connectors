@@ -13,7 +13,7 @@ from aiogoogle.sessions.aiohttp_session import AiohttpSession
 from connectors_sdk.logger import logger
 from connectors_sdk.source import ConfigurableFieldValueError
 
-from connectors.utils import RetryStrategy, retryable
+from connectors_service.utils import RetryStrategy, retryable
 
 # Google Service Account JSON includes "universe_domain" key. That argument is not
 # supported in aiogoogle library in version 5.3.0. The "universe_domain" key is allowed in

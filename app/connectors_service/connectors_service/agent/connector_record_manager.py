@@ -4,9 +4,9 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 
-from connectors.agent.logger import get_logger
-from connectors.protocol import ConnectorIndex
-from connectors.utils import generate_random_id
+from connectors_service.agent.logger import get_logger
+from connectors_service.protocol import ConnectorIndex
+from connectors_service.utils import generate_random_id
 
 logger = get_logger("agent_connector_record_manager")
 

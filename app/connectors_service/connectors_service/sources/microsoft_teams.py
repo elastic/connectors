@@ -27,7 +27,7 @@ from connectors_sdk.utils import (
 )
 from msal import ConfidentialClientApplication
 
-from connectors.utils import (
+from connectors_service.utils import (
     CacheWithTimeout,
     CancellableSleeps,
     ConcurrentTasks,

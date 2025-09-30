@@ -7,8 +7,8 @@ import base64
 
 from connectors_sdk.utils import nested_get_from_dict
 
-from connectors.agent.logger import get_logger
-from connectors.config import add_defaults
+from connectors_service.agent.logger import get_logger
+from connectors_service.config import add_defaults
 
 logger = get_logger("config")
 

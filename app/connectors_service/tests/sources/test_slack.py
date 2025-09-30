@@ -12,7 +12,7 @@ import pytest_asyncio
 from aiohttp.client_exceptions import ClientError
 from connectors_sdk.logger import logger
 
-from connectors.sources.slack import SlackClient, SlackDataSource
+from connectors_service.sources.slack import SlackClient, SlackDataSource
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
 

@@ -8,15 +8,15 @@ from collections import OrderedDict
 
 from connectors_sdk.utils import iso_utc
 
-from connectors.es import DEFAULT_LANGUAGE
-from connectors.es.cli_client import CLIClient
-from connectors.protocol import (
+from connectors_service.es import DEFAULT_LANGUAGE
+from connectors_service.es.cli_client import CLIClient
+from connectors_service.protocol import (
     CONCRETE_CONNECTORS_INDEX,
     CONCRETE_JOBS_INDEX,
     CONNECTORS_ACCESS_CONTROL_INDEX_PREFIX,
     ConnectorIndex,
 )
-from connectors.utils import get_source_klass
+from connectors_service.utils import get_source_klass
 
 EVERYDAY_AT_MIDNIGHT = "0 0 0 * * ?"
 

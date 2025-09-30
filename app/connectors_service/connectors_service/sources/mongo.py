@@ -22,7 +22,7 @@ from fastjsonschema import JsonSchemaValueException
 from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo.errors import OperationFailure
 
-from connectors.utils import get_pem_format
+from connectors_service.utils import get_pem_format
 
 
 class MongoAdvancedRulesValidator(AdvancedRulesValidator):

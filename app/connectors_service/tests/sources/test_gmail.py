@@ -15,13 +15,13 @@ from connectors_sdk.source import ConfigurableFieldValueError
 from connectors_sdk.utils import Features, iso_utc
 from freezegun import freeze_time
 
-from connectors.sources.gmail import (
+from connectors_service.sources.gmail import (
     ACCESS_CONTROL,
     GMailAdvancedRulesValidator,
     GMailDataSource,
     _message_doc,
 )
-from connectors.sources.google import MessageFields, UserFields
+from connectors_service.sources.google import MessageFields, UserFields
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
 

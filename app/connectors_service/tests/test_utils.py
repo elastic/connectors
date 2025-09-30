@@ -17,7 +17,7 @@ from dateutil.tz import tzutc
 from freezegun import freeze_time
 from pympler import asizeof
 
-from connectors.utils import (
+from connectors_service.utils import (
     ConcurrentTasks,
     ErrorMonitor,
     InvalidIndexNameError,
@@ -179,7 +179,7 @@ def test_mem_queue_speed():
     def mem_queue():
         import asyncio
 
-        from connectors.utils import MemQueue
+        from connectors_service.utils import MemQueue
 
         queue = MemQueue(
             maxmemsize=1024 * 1024, refresh_interval=0.1, refresh_timeout=2

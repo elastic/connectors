@@ -21,13 +21,13 @@ from colorama import Fore, Style
 from simple_term_menu import TerminalMenu
 from tabulate import tabulate
 
-from connectors import __version__  # NOQA
-from connectors.cli.auth import CONFIG_FILE_PATH, Auth
-from connectors.cli.connector import Connector
-from connectors.cli.index import Index
-from connectors.cli.job import Job
-from connectors.config import _default_config
-from connectors.es import DEFAULT_LANGUAGE
+from connectors_service import __version__  # NOQA
+from connectors_service.cli.auth import CONFIG_FILE_PATH, Auth
+from connectors_service.cli.connector import Connector
+from connectors_service.cli.index import Index
+from connectors_service.cli.job import Job
+from connectors_service.config import _default_config
+from connectors_service.es import DEFAULT_LANGUAGE
 
 __all__ = ["main"]
 

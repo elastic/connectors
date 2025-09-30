@@ -12,12 +12,12 @@ import yaml
 from click.testing import CliRunner
 from elasticsearch import ApiError
 
-from connectors import __version__  # NOQA
-from connectors.cli.auth import CONFIG_FILE_PATH
-from connectors.connectors_cli import cli, login
-from connectors.protocol.connectors import Connector as ConnectorObject
-from connectors.protocol.connectors import JobStatus
-from connectors.protocol.connectors import SyncJob as SyncJobObject
+from connectors_service import __version__  # NOQA
+from connectors_service.cli.auth import CONFIG_FILE_PATH
+from connectors_service.connectors_cli import cli, login
+from connectors_service.protocol.connectors import Connector as ConnectorObject
+from connectors_service.protocol.connectors import JobStatus
+from connectors_service.protocol.connectors import SyncJob as SyncJobObject
 from tests.commons import AsyncIterator
 
 

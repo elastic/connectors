@@ -14,7 +14,7 @@ from connectors_sdk.source import (
     CURSOR_SYNC_TIMESTAMP,
 )
 
-from connectors.sources.sandfly import (
+from connectors_service.sources.sandfly import (
     CURSOR_SEQUENCE_ID_KEY,
     FetchTokenError,
     ResourceNotFound,

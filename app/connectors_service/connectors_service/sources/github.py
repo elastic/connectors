@@ -30,12 +30,12 @@ from gidgethub.abc import (
 from gidgethub.aiohttp import GitHubAPI
 from gidgethub.apps import get_installation_access_token, get_jwt
 
-from connectors.access_control import (
+from connectors_service.access_control import (
     ACCESS_CONTROL,
     es_access_control_query,
     prefix_identity,
 )
-from connectors.utils import (
+from connectors_service.utils import (
     CancellableSleeps,
     RetryStrategy,
     decode_base64_value,

@@ -14,10 +14,10 @@ from elasticsearch import (
     AuthorizationException as ElasticAuthorizationException,
 )
 
-from connectors.es.client import License, with_concurrency_control
-from connectors.es.index import DocumentNotFoundError
-from connectors.es.license import requires_platinum_license
-from connectors.es.sink import (
+from connectors_service.es.client import License, with_concurrency_control
+from connectors_service.es.index import DocumentNotFoundError
+from connectors_service.es.license import requires_platinum_license
+from connectors_service.es.sink import (
     CREATES_QUEUED,
     DELETES_QUEUED,
     OP_INDEX,
@@ -25,13 +25,13 @@ from connectors.es.sink import (
     SyncOrchestrator,
     UnsupportedJobType,
 )
-from connectors.protocol import JobStatus, JobType
-from connectors.protocol.connectors import (
+from connectors_service.protocol import JobStatus, JobType
+from connectors_service.protocol.connectors import (
     DELETED_DOCUMENT_COUNT,
     INDEXED_DOCUMENT_COUNT,
     INDEXED_DOCUMENT_VOLUME,
 )
-from connectors.utils import truncate_id
+from connectors_service.utils import truncate_id
 
 UTF_8 = "utf-8"
 

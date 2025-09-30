@@ -16,12 +16,12 @@ from elasticsearch import (
     ConnectionError as ElasticConnectionError,
 )
 
-from connectors import __version__
-from connectors.config import (
+from connectors_service import __version__
+from connectors_service.config import (
     DEFAULT_ELASTICSEARCH_MAX_RETRIES,
     DEFAULT_ELASTICSEARCH_RETRY_INTERVAL,
 )
-from connectors.utils import (
+from connectors_service.utils import (
     CancellableSleeps,
     RetryStrategy,
     func_human_readable_name,

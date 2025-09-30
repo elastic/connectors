@@ -25,7 +25,7 @@ from connectors_sdk.logger import logger
 from connectors_sdk.source import BaseDataSource, ConfigurableFieldValueError
 from notion_client import APIResponseError, AsyncClient
 
-from connectors.utils import CancellableSleeps, RetryStrategy, retryable
+from connectors_service.utils import CancellableSleeps, RetryStrategy, retryable
 
 RETRIES = 3
 RETRY_INTERVAL = 2

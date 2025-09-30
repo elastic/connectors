@@ -8,8 +8,8 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from connectors.agent.service_manager import ConnectorServiceManager
-from connectors.services.base import ServiceAlreadyRunningError
+from connectors_service.agent.service_manager import ConnectorServiceManager
+from connectors_service.services.base import ServiceAlreadyRunningError
 
 
 @pytest.fixture(autouse=True)

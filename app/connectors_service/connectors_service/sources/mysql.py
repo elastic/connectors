@@ -19,11 +19,11 @@ from connectors_sdk.utils import (
 )
 from fastjsonschema import JsonSchemaValueException
 
-from connectors.sources.generic_database import (
+from connectors_service.sources.generic_database import (
     configured_tables,
     is_wildcard,
 )
-from connectors.utils import (
+from connectors_service.utils import (
     CancellableSleeps,
     RetryStrategy,
     retryable,

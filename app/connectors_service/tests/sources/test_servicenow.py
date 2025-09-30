@@ -14,8 +14,8 @@ from aiohttp.client_exceptions import ServerDisconnectedError
 from connectors_sdk.filtering.validation import Filter, SyncRuleValidationResult
 from connectors_sdk.source import ConfigurableFieldValueError
 
-from connectors.access_control import DLS_QUERY
-from connectors.sources.servicenow import (
+from connectors_service.access_control import DLS_QUERY
+from connectors_service.sources.servicenow import (
     InvalidResponse,
     ServiceNowAdvancedRulesValidator,
     ServiceNowClient,

@@ -16,8 +16,8 @@ from aioresponses import CallbackResult
 from connectors_sdk.filtering.validation import Filter
 from connectors_sdk.source import ConfigurableFieldValueError, DataSourceConfiguration
 
-from connectors.access_control import DLS_QUERY
-from connectors.sources.salesforce import (
+from connectors_service.access_control import DLS_QUERY
+from connectors_service.sources.salesforce import (
     API_VERSION,
     RELEVANT_SOBJECT_FIELDS,
     ConnectorRequestError,
@@ -2184,7 +2184,7 @@ async def test_queryable_sobject_fields_performance_optimization(mock_responses)
     - Performance improvement: ~85% reduction in API calls
     """
     async with create_salesforce_source(mock_queryables=False) as source:
-        from connectors.sources.salesforce import RELEVANT_SOBJECTS
+        from connectors_service.sources.salesforce import RELEVANT_SOBJECTS
 
         # Mock responses for all RELEVANT_SOBJECTS
         mock_fields = [{"name": "Id"}, {"name": "Name"}, {"name": "Description"}]

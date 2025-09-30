@@ -6,8 +6,8 @@
 
 from functools import cached_property
 
-from connectors.protocol import JobStatus, JobType
-from connectors.services.job_execution import JobExecutionService
+from connectors_service.protocol import JobStatus, JobType
+from connectors_service.services.job_execution import JobExecutionService
 
 
 class ContentSyncJobExecutionService(JobExecutionService):

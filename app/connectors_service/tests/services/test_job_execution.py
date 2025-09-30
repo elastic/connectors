@@ -8,13 +8,13 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
-from connectors.es.client import License
-from connectors.es.index import DocumentNotFoundError
-from connectors.protocol import JobStatus, JobType
-from connectors.services.access_control_sync_job_execution import (
+from connectors_service.es.client import License
+from connectors_service.es.index import DocumentNotFoundError
+from connectors_service.protocol import JobStatus, JobType
+from connectors_service.services.access_control_sync_job_execution import (
     AccessControlSyncJobExecutionService,
 )
-from connectors.services.content_sync_job_execution import (
+from connectors_service.services.content_sync_job_execution import (
     ContentSyncJobExecutionService,
 )
 from tests.commons import AsyncIterator

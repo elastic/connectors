@@ -7,10 +7,10 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from connectors.agent.connector_record_manager import (
+from connectors_service.agent.connector_record_manager import (
     ConnectorRecordManager,
 )
-from connectors.protocol import ConnectorIndex
+from connectors_service.protocol import ConnectorIndex
 
 
 @pytest.fixture

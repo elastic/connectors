@@ -7,8 +7,8 @@ import asyncio
 
 from elasticsearch import ApiError
 
-from connectors.es.cli_client import CLIClient
-from connectors.protocol import (
+from connectors_service.es.cli_client import CLIClient
+from connectors_service.protocol import (
     CONCRETE_CONNECTORS_INDEX,
     CONCRETE_JOBS_INDEX,
     ConnectorIndex,

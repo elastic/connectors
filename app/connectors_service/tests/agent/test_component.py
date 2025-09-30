@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from connectors.agent.component import ConnectorsAgentComponent
+from connectors_service.agent.component import ConnectorsAgentComponent
 
 
 class StubMultiService:

@@ -35,12 +35,12 @@ from exchangelib import (
 from exchangelib.protocol import BaseProtocol, NoVerifyHTTPAdapter
 from ldap3 import SAFE_SYNC, Connection, Server
 
-from connectors.access_control import (
+from connectors_service.access_control import (
     ACCESS_CONTROL,
     es_access_control_query,
     prefix_identity,
 )
-from connectors.utils import (
+from connectors_service.utils import (
     CancellableSleeps,
     RetryStrategy,
     get_pem_format,

@@ -35,13 +35,13 @@ from connectors_sdk.utils import (
 )
 from fastjsonschema import JsonSchemaValueException
 
-from connectors.access_control import (
+from connectors_service.access_control import (
     ACCESS_CONTROL,
     es_access_control_query,
     prefix_identity,
 )
-from connectors.es.sink import OP_DELETE, OP_INDEX
-from connectors.utils import (
+from connectors_service.es.sink import OP_DELETE, OP_INDEX
+from connectors_service.utils import (
     CacheWithTimeout,
     CancellableSleeps,
     html_to_text,

@@ -13,8 +13,8 @@ from elasticsearch import (
 )
 from elasticsearch.helpers import async_scan
 
-from connectors.es import TIMESTAMP_FIELD
-from connectors.es.client import ESClient
+from connectors_service.es import TIMESTAMP_FIELD
+from connectors_service.es.client import ESClient
 
 
 class ESManagementClient(ESClient):

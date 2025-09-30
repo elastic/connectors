@@ -9,13 +9,13 @@ from functools import partial
 
 import pytest
 
-from connectors.sources.generic_database import (
+from connectors_service.sources.generic_database import (
     configured_tables,
     fetch,
     is_wildcard,
     map_column_names,
 )
-from connectors.sources.mssql import MSSQLQueries
+from connectors_service.sources.mssql import MSSQLQueries
 
 SCHEMA = "dbo"
 TABLE = "emp_table"

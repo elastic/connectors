@@ -12,8 +12,8 @@ from unittest.mock import Mock
 
 import pytest
 
-from connectors.config import load_config
-from connectors.services.base import BaseService, MultiService, get_services
+from connectors_service.config import load_config
+from connectors_service.services.base import BaseService, MultiService, get_services
 
 HERE = os.path.dirname(__file__)
 FIXTURES_DIR = os.path.abspath(os.path.join(HERE, "..", "fixtures"))

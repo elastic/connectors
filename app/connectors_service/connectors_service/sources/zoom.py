@@ -18,7 +18,7 @@ from connectors_sdk.utils import (
     iso_utc,
 )
 
-from connectors.utils import (
+from connectors_service.utils import (
     CacheWithTimeout,
     CancellableSleeps,
     RetryStrategy,

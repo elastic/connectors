@@ -13,7 +13,7 @@ from aiohttp import StreamReader
 from aiohttp.client_exceptions import ClientResponseError
 from connectors_sdk.source import ConfigurableFieldValueError
 
-from connectors.sources.box import FINISHED, BoxDataSource, NotFound, TokenError
+from connectors_service.sources.box import FINISHED, BoxDataSource, NotFound, TokenError
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
 

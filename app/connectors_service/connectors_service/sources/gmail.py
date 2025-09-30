@@ -17,8 +17,8 @@ from connectors_sdk.utils import (
 )
 from fastjsonschema import JsonSchemaValueException
 
-from connectors.access_control import ACCESS_CONTROL, es_access_control_query
-from connectors.sources.google import (
+from connectors_service.access_control import ACCESS_CONTROL, es_access_control_query
+from connectors_service.sources.google import (
     GMailClient,
     GoogleDirectoryClient,
     MessageFields,
@@ -26,7 +26,7 @@ from connectors.sources.google import (
     load_service_account_json,
     validate_service_account_json,
 )
-from connectors.utils import (
+from connectors_service.utils import (
     EMAIL_REGEX_PATTERN,
     base64url_to_base64,
     validate_email_address,

@@ -25,7 +25,7 @@ from connectors_sdk.utils import (
     convert_to_b64,
 )
 
-from connectors.utils import (
+from connectors_service.utils import (
     CacheWithTimeout,
     CancellableSleeps,
     ConcurrentTasks,

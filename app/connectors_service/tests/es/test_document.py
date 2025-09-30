@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from connectors.es import ESDocument, InvalidDocumentSourceError
+from connectors_service.es import ESDocument, InvalidDocumentSourceError
 
 
 @pytest.mark.parametrize(

@@ -11,8 +11,8 @@ from elastic_agent_client.util.async_tools import (
     sleeps_for_retryable,
 )
 
-from connectors.agent.component import ConnectorsAgentComponent
-from connectors.agent.logger import get_logger
+from connectors_service.agent.component import ConnectorsAgentComponent
+from connectors_service.agent.logger import get_logger
 
 logger = get_logger("cli")
 

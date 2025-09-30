@@ -19,8 +19,8 @@ from connectors_sdk.filtering.validation import Filter
 from connectors_sdk.source import ConfigurableFieldValueError
 from freezegun import freeze_time
 
-from connectors.access_control import DLS_QUERY
-from connectors.sources.jira import (
+from connectors_service.access_control import DLS_QUERY
+from connectors_service.sources.jira import (
     JIRA_CLOUD,
     JIRA_DATA_CENTER,
     JIRA_SERVER,
@@ -31,7 +31,7 @@ from connectors.sources.jira import (
     JiraDataSource,
     NotFound,
 )
-from connectors.utils import ssl_context
+from connectors_service.utils import ssl_context
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
 

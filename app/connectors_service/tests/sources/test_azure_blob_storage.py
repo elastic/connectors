@@ -14,7 +14,7 @@ import pytest
 from azure.storage.blob.aio import BlobServiceClient, ContainerClient
 from connectors_sdk.source import ConfigurableFieldValueError
 
-from connectors.sources.azure_blob_storage import AzureBlobStorageDataSource
+from connectors_service.sources.azure_blob_storage import AzureBlobStorageDataSource
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
 

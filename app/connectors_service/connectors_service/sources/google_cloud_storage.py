@@ -14,11 +14,11 @@ from aiogoogle.auth.creds import ServiceAccountCreds
 from connectors_sdk.logger import logger
 from connectors_sdk.source import BaseDataSource
 
-from connectors.sources.google import (
+from connectors_service.sources.google import (
     load_service_account_json,
     validate_service_account_json,
 )
-from connectors.utils import RetryStrategy, get_pem_format, retryable
+from connectors_service.utils import RetryStrategy, get_pem_format, retryable
 
 CLOUD_STORAGE_READ_ONLY_SCOPE = "https://www.googleapis.com/auth/devstorage.read_only"
 CLOUD_STORAGE_BASE_URL = "https://console.cloud.google.com/storage/browser/_details/"

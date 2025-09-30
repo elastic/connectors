@@ -21,7 +21,7 @@ from connectors_sdk.utils import (
     hash_id,
 )
 
-from connectors.utils import get_base64_value
+from connectors_service.utils import get_base64_value
 
 DEFAULT_DIR = os.environ.get("SYSTEM_DIR", os.path.dirname(__file__))
 

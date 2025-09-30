@@ -14,7 +14,7 @@ from aiohttp.client_exceptions import ClientPayloadError, ClientResponseError
 from connectors_sdk.filtering.validation import Filter, SyncRuleValidationResult
 from connectors_sdk.source import ConfigurableFieldValueError, DataSourceConfiguration
 
-from connectors.sources.onedrive import (
+from connectors_service.sources.onedrive import (
     AccessToken,
     InternalServerError,
     NotFound,

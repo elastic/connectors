@@ -13,11 +13,11 @@ from connectors_sdk.filtering.validation import (
     SyncRuleValidationResult,
 )
 
-from connectors.sources.atlassian import (
+from connectors_service.sources.atlassian import (
     AtlassianAccessControl,
     AtlassianAdvancedRulesValidator,
 )
-from connectors.sources.jira import JiraClient, JiraDataSource
+from connectors_service.sources.jira import JiraClient, JiraDataSource
 from tests.sources.support import create_source
 
 

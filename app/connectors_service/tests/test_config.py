@@ -9,7 +9,7 @@ from unittest import mock
 
 import pytest
 
-from connectors.config import _nest_configs, load_config
+from connectors_service.config import _nest_configs, load_config
 
 HERE = os.path.dirname(__file__)
 FIXTURES_DIR = os.path.abspath(os.path.join(HERE, "fixtures"))

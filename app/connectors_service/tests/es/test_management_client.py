@@ -13,7 +13,7 @@ from elasticsearch import (
     NotFoundError as ElasticNotFoundError,
 )
 
-from connectors.es.management_client import ESManagementClient
+from connectors_service.es.management_client import ESManagementClient
 from tests.commons import AsyncIterator
 
 

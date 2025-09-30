@@ -13,7 +13,7 @@ from aiohttp.client_exceptions import ClientOSError, ClientResponseError
 from connectors_sdk.logger import logger
 from connectors_sdk.source import ConfigurableFieldValueError, DataSourceConfiguration
 
-from connectors.sources.microsoft_teams import (
+from connectors_service.sources.microsoft_teams import (
     GraphAPIToken,
     InternalServerError,
     MicrosoftTeamsClient,

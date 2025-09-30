@@ -3,8 +3,8 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-from connectors import __version__
-from connectors.es.cli_client import CLIClient
+from connectors_service import __version__
+from connectors_service.es.cli_client import CLIClient
 
 
 def test_overrides_user_agent_header():

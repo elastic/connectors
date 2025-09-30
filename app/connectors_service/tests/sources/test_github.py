@@ -17,8 +17,8 @@ from connectors_sdk.source import ConfigurableFieldValueError
 from connectors_sdk.utils import Features
 from gidgethub.abc import BadGraphQLRequest, GraphQLAuthorizationFailure, QueryError
 
-from connectors.access_control import DLS_QUERY
-from connectors.sources.github import (
+from connectors_service.access_control import DLS_QUERY
+from connectors_service.sources.github import (
     GITHUB_APP,
     PERSONAL_ACCESS_TOKEN,
     REPOSITORY_OBJECT,

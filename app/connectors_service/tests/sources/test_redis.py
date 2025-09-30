@@ -14,7 +14,7 @@ from connectors_sdk.filtering.validation import Filter, SyncRuleValidationResult
 from connectors_sdk.source import ConfigurableFieldValueError
 from freezegun import freeze_time
 
-from connectors.sources.redis import (
+from connectors_service.sources.redis import (
     RedisAdvancedRulesValidator,
     RedisDataSource,
 )

@@ -5,7 +5,7 @@
 #
 from unittest.mock import MagicMock, Mock
 
-from connectors.agent.config import ConnectorsAgentConfigurationWrapper
+from connectors_service.agent.config import ConnectorsAgentConfigurationWrapper
 
 CONNECTOR_ID = "test-connector"
 SERVICE_TYPE = "test-service-type"

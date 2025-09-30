@@ -11,9 +11,9 @@ import pytest
 from connectors_sdk.source import ConfigurableFieldValueError, DataSourceConfiguration
 from elasticsearch import ConflictError
 
-from connectors.es.client import License
-from connectors.es.index import DocumentNotFoundError
-from connectors.protocol import (
+from connectors_service.es.client import License
+from connectors_service.es.index import DocumentNotFoundError
+from connectors_service.protocol import (
     DataSourceError,
     JobTriggerMethod,
     JobType,
@@ -21,7 +21,7 @@ from connectors.protocol import (
     ServiceTypeNotSupportedError,
     Status,
 )
-from connectors.services.job_scheduling import JobSchedulingService
+from connectors_service.services.job_scheduling import JobSchedulingService
 from tests.commons import AsyncIterator
 from tests.services.test_base import create_and_run_service
 

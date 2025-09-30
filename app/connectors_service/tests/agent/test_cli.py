@@ -8,7 +8,7 @@ import os
 import signal
 from unittest.mock import AsyncMock, patch
 
-from connectors.agent.cli import main
+from connectors_service.agent.cli import main
 
 
 @patch("connectors_service.agent.cli.ConnectorsAgentComponent", return_value=AsyncMock())

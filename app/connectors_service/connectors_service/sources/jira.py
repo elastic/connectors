@@ -20,15 +20,15 @@ from connectors_sdk.utils import (
     iso_utc,
 )
 
-from connectors.access_control import ACCESS_CONTROL
-from connectors.sources.atlassian import (
+from connectors_service.access_control import ACCESS_CONTROL
+from connectors_service.sources.atlassian import (
     AtlassianAccessControl,
     AtlassianAdvancedRulesValidator,
     prefix_account_id,
     prefix_account_name,
     prefix_group_id,
 )
-from connectors.utils import (
+from connectors_service.utils import (
     CancellableSleeps,
     ConcurrentTasks,
     MemQueue,

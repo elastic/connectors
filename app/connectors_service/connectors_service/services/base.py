@@ -17,7 +17,7 @@ from copy import deepcopy
 
 from connectors_sdk.logger import DocumentLogger, logger
 
-from connectors.utils import CancellableSleeps
+from connectors_service.utils import CancellableSleeps
 
 __all__ = [
     "MultiService",

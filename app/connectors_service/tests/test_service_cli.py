@@ -13,8 +13,8 @@ import pytest
 from click import ClickException, UsageError
 from click.testing import CliRunner
 
-from connectors import __version__
-from connectors.service_cli import _start_service, get_event_loop, main
+from connectors_service import __version__
+from connectors_service.service_cli import _start_service, get_event_loop, main
 
 SUCCESS_EXIT_CODE = 0
 CLICK_EXCEPTION_EXIT_CODE = ClickException.exit_code

@@ -20,8 +20,8 @@ from connectors_sdk.utils import (
     nested_get_from_dict,
 )
 
-from connectors.access_control import ACCESS_CONTROL
-from connectors.sources.atlassian import (
+from connectors_service.access_control import ACCESS_CONTROL
+from connectors_service.sources.atlassian import (
     AtlassianAccessControl,
     AtlassianAdvancedRulesValidator,
     prefix_account_email,
@@ -31,7 +31,7 @@ from connectors.sources.atlassian import (
     prefix_group_id,
     prefix_user,
 )
-from connectors.utils import (
+from connectors_service.utils import (
     CancellableSleeps,
     ConcurrentTasks,
     MemQueue,

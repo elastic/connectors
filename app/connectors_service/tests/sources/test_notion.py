@@ -12,7 +12,7 @@ from connectors_sdk.source import ConfigurableFieldValueError, DataSourceConfigu
 from httpx import Response
 from notion_client import APIResponseError
 
-from connectors.sources.notion import (
+from connectors_service.sources.notion import (
     NotFound,
     NotionAdvancedRulesValidator,
     NotionClient,

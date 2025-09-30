@@ -13,7 +13,7 @@ import pytest
 from aiohttp import StreamReader
 from connectors_sdk.source import ConfigurableFieldValueError
 
-from connectors.sources.outlook import (
+from connectors_service.sources.outlook import (
     OUTLOOK_CLOUD,
     OUTLOOK_SERVER,
     Forbidden,

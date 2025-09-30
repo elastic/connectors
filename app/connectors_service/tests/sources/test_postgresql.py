@@ -16,7 +16,7 @@ from freezegun import freeze_time
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.ext.asyncio.engine import AsyncEngine
 
-from connectors.sources.postgresql import (
+from connectors_service.sources.postgresql import (
     PostgreSQLAdvancedRulesValidator,
     PostgreSQLClient,
     PostgreSQLDataSource,

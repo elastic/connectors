@@ -14,8 +14,8 @@ from unittest.mock import ANY, AsyncMock, Mock, call, patch
 import pytest
 from elasticsearch import ApiError, BadRequestError
 
-from connectors.es.management_client import ESManagementClient
-from connectors.es.sink import (
+from connectors_service.es.management_client import ESManagementClient
+from connectors_service.es.sink import (
     BIN_DOCS_DOWNLOADED,
     BULK_OPERATIONS,
     BULK_RESPONSES,
@@ -34,13 +34,13 @@ from connectors.es.sink import (
     Sink,
     SyncOrchestrator,
 )
-from connectors.protocol import JobType, Pipeline
-from connectors.protocol.connectors import (
+from connectors_service.protocol import JobType, Pipeline
+from connectors_service.protocol.connectors import (
     DELETED_DOCUMENT_COUNT,
     INDEXED_DOCUMENT_COUNT,
     INDEXED_DOCUMENT_VOLUME,
 )
-from connectors.utils import ErrorMonitor, TooManyErrors
+from connectors_service.utils import ErrorMonitor, TooManyErrors
 from tests.commons import AsyncIterator
 
 INDEX = "some-index"

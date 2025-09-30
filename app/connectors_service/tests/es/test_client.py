@@ -11,8 +11,8 @@ from unittest.mock import AsyncMock, Mock
 import elasticsearch
 import pytest
 
-from connectors import __version__
-from connectors.es.client import (
+from connectors_service import __version__
+from connectors_service.es.client import (
     ESClient,
     License,
     RetryInterruptedError,

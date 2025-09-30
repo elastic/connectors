@@ -12,11 +12,11 @@ from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser
 
 from connectors_sdk.logger import set_extra_logger
 
-from connectors.config import load_config
-from connectors.es import DEFAULT_LANGUAGE
-from connectors.es.management_client import ESManagementClient
-from connectors.protocol import ConnectorIndex
-from connectors.utils import get_source_klass, validate_index_name
+from connectors_service.config import load_config
+from connectors_service.es import DEFAULT_LANGUAGE
+from connectors_service.es.management_client import ESManagementClient
+from connectors_service.protocol import ConnectorIndex
+from connectors_service.utils import get_source_klass, validate_index_name
 
 CONNECTORS_INDEX = ".elastic-connectors_service-v1"
 JOBS_INDEX = ".elastic-connectors_service-sync-jobs-v1"

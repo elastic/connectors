@@ -3,8 +3,8 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-from connectors.es.client import USER_AGENT_BASE
-from connectors.es.management_client import ESManagementClient
+from connectors_service.es.client import USER_AGENT_BASE
+from connectors_service.es.management_client import ESManagementClient
 
 
 class CLIClient(ESManagementClient):

@@ -25,8 +25,8 @@ from connectors_sdk.utils import (
     iso_utc,
 )
 
-from connectors.es.sink import OP_INDEX
-from connectors.utils import (
+from connectors_service.es.sink import OP_INDEX
+from connectors_service.utils import (
     CacheWithTimeout,
     CancellableSleeps,
     RetryStrategy,

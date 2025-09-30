@@ -21,7 +21,7 @@ from graphql import parse, visit
 from graphql.language.ast import VariableNode
 from graphql.language.visitor import Visitor
 
-from connectors.utils import (
+from connectors_service.utils import (
     CancellableSleeps,
     RetryStrategy,
     retryable,

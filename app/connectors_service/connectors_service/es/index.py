@@ -8,7 +8,7 @@ from functools import partial
 from connectors_sdk.logger import logger
 from elasticsearch import ApiError
 
-from connectors.es import ESClient
+from connectors_service.es import ESClient
 
 DEFAULT_PAGE_SIZE = 100
 

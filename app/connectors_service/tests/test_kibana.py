@@ -8,8 +8,8 @@ from unittest import mock
 
 import pytest
 
-from connectors.es.management_client import ESManagementClient
-from connectors.kibana import main, upsert_index
+from connectors_service.es.management_client import ESManagementClient
+from connectors_service.kibana import main, upsert_index
 
 HERE = os.path.dirname(__file__)
 FIXTURES_DIR = os.path.abspath(os.path.join(HERE, "fixtures"))

@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 from elasticsearch import ApiError, ConflictError
 
-from connectors.es.index import DocumentNotFoundError, ESApi, ESIndex
+from connectors_service.es.index import DocumentNotFoundError, ESApi, ESIndex
 
 headers = {"X-Elastic-Product": "Elasticsearch"}
 config = {

@@ -7,8 +7,8 @@ from unittest.mock import Mock
 
 import pytest
 
-from connectors.es.license import requires_platinum_license
-from connectors.protocol import JobType
+from connectors_service.es.license import requires_platinum_license
+from connectors_service.protocol import JobType
 
 
 def mock_source_klass(is_premium):

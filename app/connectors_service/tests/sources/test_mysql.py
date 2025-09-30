@@ -14,14 +14,14 @@ from connectors_sdk.logger import logger
 from connectors_sdk.source import ConfigurableFieldValueError
 from freezegun import freeze_time
 
-from connectors.sources.mysql import (
+from connectors_service.sources.mysql import (
     MySQLAdvancedRulesValidator,
     MySQLClient,
     MySqlDataSource,
     generate_id,
     row2doc,
 )
-from connectors.utils import iso_utc
+from connectors_service.utils import iso_utc
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
 

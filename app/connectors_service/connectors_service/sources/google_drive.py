@@ -16,20 +16,20 @@ from connectors_sdk.utils import (
     iso_zulu,
 )
 
-from connectors.access_control import (
+from connectors_service.access_control import (
     ACCESS_CONTROL,
     es_access_control_query,
     prefix_identity,
 )
-from connectors.es.sink import OP_DELETE, OP_INDEX
-from connectors.sources.google import (
+from connectors_service.es.sink import OP_DELETE, OP_INDEX
+from connectors_service.sources.google import (
     GoogleServiceAccountClient,
     UserFields,
     load_service_account_json,
     remove_universe_domain,
     validate_service_account_json,
 )
-from connectors.utils import (
+from connectors_service.utils import (
     EMAIL_REGEX_PATTERN,
     validate_email_address,
 )

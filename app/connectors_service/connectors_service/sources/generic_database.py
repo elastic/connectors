@@ -9,7 +9,7 @@ from abc import ABC, abstractmethod
 from asyncpg.exceptions._base import InternalClientError
 from sqlalchemy.exc import ProgrammingError
 
-from connectors.utils import RetryStrategy, retryable
+from connectors_service.utils import RetryStrategy, retryable
 
 WILDCARD = "*"
 

@@ -22,7 +22,7 @@ from connectors_sdk.utils import (
     iso_utc,
 )
 
-from connectors.utils import get_pem_format
+from connectors_service.utils import get_pem_format
 
 PAGE_SIZE = 1000
 

@@ -7,13 +7,13 @@ import logging
 
 import connectors_sdk.logger
 
-import connectors.agent.logger
-from connectors.agent.logger import get_logger
-from connectors.services.base import (
+import connectors_service.agent.logger
+from connectors_service.agent.logger import get_logger
+from connectors_service.services.base import (
     ServiceAlreadyRunningError,
     get_services,
 )
-from connectors.utils import CancellableSleeps
+from connectors_service.utils import CancellableSleeps
 
 logger = get_logger("service_manager")
 

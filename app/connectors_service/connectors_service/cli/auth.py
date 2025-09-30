@@ -9,7 +9,7 @@ import os
 import yaml
 from elasticsearch import ApiError
 
-from connectors.es.cli_client import CLIClient
+from connectors_service.es.cli_client import CLIClient
 
 CONFIG_FILE_PATH = ".cli/config.yml"
 

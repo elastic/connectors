@@ -19,8 +19,8 @@ from connectors_sdk.filtering.validation import Filter
 from connectors_sdk.source import ConfigurableFieldValueError
 from freezegun import freeze_time
 
-from connectors.access_control import DLS_QUERY
-from connectors.sources.confluence import (
+from connectors_service.access_control import DLS_QUERY
+from connectors_service.sources.confluence import (
     CONFLUENCE_CLOUD,
     CONFLUENCE_DATA_CENTER,
     CONFLUENCE_SERVER,
@@ -33,7 +33,7 @@ from connectors.sources.confluence import (
     NotFound,
     Unauthorized,
 )
-from connectors.utils import ssl_context
+from connectors_service.utils import ssl_context
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
 
