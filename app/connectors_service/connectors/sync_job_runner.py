@@ -7,11 +7,13 @@ import asyncio
 import time
 
 import elasticsearch
+from connectors_sdk.config import DataSourceFrameworkConfig
+from connectors_sdk.logger import logger
+from connectors_sdk.source import BaseDataSource
 from elasticsearch import (
     AuthorizationException as ElasticAuthorizationException,
 )
 
-from connectors.config import DataSourceFrameworkConfig
 from connectors.es.client import License, with_concurrency_control
 from connectors.es.index import DocumentNotFoundError
 from connectors.es.license import requires_platinum_license
@@ -23,14 +25,12 @@ from connectors.es.sink import (
     SyncOrchestrator,
     UnsupportedJobType,
 )
-from connectors.logger import logger
 from connectors.protocol import JobStatus, JobType
 from connectors.protocol.connectors import (
     DELETED_DOCUMENT_COUNT,
     INDEXED_DOCUMENT_COUNT,
     INDEXED_DOCUMENT_VOLUME,
 )
-from connectors.source import BaseDataSource
 from connectors.utils import truncate_id
 
 UTF_8 = "utf-8"
@@ -218,10 +218,9 @@ class SyncJobRunner:
                 await self.data_provider.close()
 
     def _data_source_framework_config(self):
-        builder = DataSourceFrameworkConfig.Builder().with_max_file_size(
+        return DataSourceFrameworkConfig(
             self.service_config.get("max_file_download_size")
         )
-        return builder.build()
 
     async def _execute_access_control_sync_job(self, job_type, bulk_options):
         if requires_platinum_license(self.sync_job, self.connector, self.source_klass):

@@ -11,9 +11,9 @@ from functools import cached_property, partial
 
 from aiogoogle import Aiogoogle, HTTPError
 from aiogoogle.auth.creds import ServiceAccountCreds
+from connectors_sdk.logger import logger
+from connectors_sdk.source import BaseDataSource
 
-from connectors.logger import logger
-from connectors.source import BaseDataSource
 from connectors.sources.google import (
     load_service_account_json,
     validate_service_account_json,

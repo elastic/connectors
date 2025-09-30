@@ -8,7 +8,7 @@ from unittest.mock import mock_open, patch
 import pytest
 from aiohttp.client_exceptions import ClientConnectionError, ServerTimeoutError
 
-from connectors.content_extraction import ContentExtraction
+from connectors_sdk.content_extraction import ContentExtraction
 
 
 def test_set_and_get_configuration():
@@ -38,7 +38,7 @@ def test_set_and_get_configuration():
 )
 def test_check_configured(mock_config, expected_result):
     with patch(
-        "connectors.content_extraction.ContentExtraction.get_extraction_config",
+        "connectors_sdk.content_extraction.ContentExtraction.get_extraction_config",
         return_value=mock_config.get("extraction_service", None),
     ):
         extraction_service = ContentExtraction()
@@ -54,7 +54,7 @@ async def test_extract_text(mock_responses, patch_logger):
     with (
         patch("builtins.open", mock_open(read_data=b"data")),
         patch(
-            "connectors.content_extraction.ContentExtraction.get_extraction_config",
+            "connectors_sdk.content_extraction.ContentExtraction.get_extraction_config",
             return_value={"host": "http://localhost:8090"},
         ),
     ):
@@ -81,7 +81,7 @@ async def test_extract_text_with_file_pointer(mock_responses, patch_logger):
     with (
         patch("builtins.open", mock_open(read_data=b"data")),
         patch(
-            "connectors.content_extraction.ContentExtraction.get_extraction_config",
+            "connectors_sdk.content_extraction.ContentExtraction.get_extraction_config",
             return_value={
                 "host": "http://localhost:8090",
                 "use_file_pointers": True,
@@ -110,7 +110,7 @@ async def test_extract_text_when_host_is_none(mock_responses, patch_logger):
     with (
         patch("builtins.open", mock_open(read_data=b"data")),
         patch(
-            "connectors.content_extraction.ContentExtraction.get_extraction_config",
+            "connectors_sdk.content_extraction.ContentExtraction.get_extraction_config",
             return_value={
                 "host": None,
                 "use_file_pointers": True,
@@ -141,7 +141,7 @@ async def test_extract_text_when_response_isnt_200_logs_warning(
     with (
         patch("builtins.open", mock_open(read_data=b"data")),
         patch(
-            "connectors.content_extraction.ContentExtraction.get_extraction_config",
+            "connectors_sdk.content_extraction.ContentExtraction.get_extraction_config",
             return_value={"host": "http://localhost:8090"},
         ),
     ):
@@ -173,11 +173,11 @@ async def test_extract_text_when_response_is_error(mock_responses, patch_logger)
     with (
         patch("builtins.open", mock_open(read_data=b"data")),
         patch(
-            "connectors.content_extraction.ContentExtraction.get_extraction_config",
+            "connectors_sdk.content_extraction.ContentExtraction.get_extraction_config",
             return_value={"host": "http://localhost:8090"},
         ),
         patch(
-            "connectors.content_extraction.ContentExtraction.send_file",
+            "connectors_sdk.content_extraction.ContentExtraction.send_file",
             side_effect=ClientConnectionError("oops!"),
         ),
     ):
@@ -200,11 +200,11 @@ async def test_extract_text_when_response_is_timeout(mock_responses, patch_logge
     with (
         patch("builtins.open", mock_open(read_data=b"data")),
         patch(
-            "connectors.content_extraction.ContentExtraction.get_extraction_config",
+            "connectors_sdk.content_extraction.ContentExtraction.get_extraction_config",
             return_value={"host": "http://localhost:8090"},
         ),
         patch(
-            "connectors.content_extraction.ContentExtraction.send_file",
+            "connectors_sdk.content_extraction.ContentExtraction.send_file",
             side_effect=ServerTimeoutError("nada"),
         ),
     ):
@@ -230,7 +230,7 @@ async def test_extract_text_when_response_is_200_with_error_logs_warning(
     with (
         patch("builtins.open", mock_open(read_data=b"data")),
         patch(
-            "connectors.content_extraction.ContentExtraction.get_extraction_config",
+            "connectors_sdk.content_extraction.ContentExtraction.get_extraction_config",
             return_value={"host": "http://localhost:8090"},
         ),
     ):

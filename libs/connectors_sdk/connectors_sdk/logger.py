@@ -18,7 +18,7 @@ from typing import AsyncGenerator
 import ecs_logging
 from dateutil.tz import tzlocal
 
-from connectors import __version__
+from connectors_sdk import __version__
 
 logger = None
 

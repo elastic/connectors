@@ -13,6 +13,15 @@ from functools import cached_property, partial
 import aiohttp
 import fastjsonschema
 import gidgethub
+from connectors_sdk.filtering.validation import (
+    AdvancedRulesValidator,
+    SyncRuleValidationResult,
+)
+from connectors_sdk.logger import logger
+from connectors_sdk.source import BaseDataSource, ConfigurableFieldValueError
+from connectors_sdk.utils import (
+    nested_get_from_dict,
+)
 from gidgethub import QueryError, sansio
 from gidgethub.abc import (
     BadGraphQLRequest,
@@ -26,17 +35,10 @@ from connectors.access_control import (
     es_access_control_query,
     prefix_identity,
 )
-from connectors.filtering.validation import (
-    AdvancedRulesValidator,
-    SyncRuleValidationResult,
-)
-from connectors.logger import logger
-from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.utils import (
     CancellableSleeps,
     RetryStrategy,
     decode_base64_value,
-    nested_get_from_dict,
     retryable,
     ssl_context,
 )

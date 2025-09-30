@@ -12,12 +12,12 @@ from unittest.mock import ANY, AsyncMock, Mock, patch
 
 import gidgethub
 import pytest
+from connectors_sdk.filtering.validation import Filter, SyncRuleValidationResult
+from connectors_sdk.source import ConfigurableFieldValueError
+from connectors_sdk.utils import Features
 from gidgethub.abc import BadGraphQLRequest, GraphQLAuthorizationFailure, QueryError
 
 from connectors.access_control import DLS_QUERY
-from connectors.filtering.validation import SyncRuleValidationResult
-from connectors.protocol import Features, Filter
-from connectors.source import ConfigurableFieldValueError
 from connectors.sources.github import (
     GITHUB_APP,
     PERSONAL_ACCESS_TOKEN,
@@ -1238,11 +1238,11 @@ async def test_get_content_with_md_file():
 async def test_get_content_with_md_file_with_extraction_service():
     with (
         patch(
-            "connectors.content_extraction.ContentExtraction.extract_text",
+            "connectors_sdk.content_extraction.ContentExtraction.extract_text",
             return_value="Test File !!! U+1F602",
         ),
         patch(
-            "connectors.content_extraction.ContentExtraction.get_extraction_config",
+            "connectors_sdk.content_extraction.ContentExtraction.get_extraction_config",
             return_value={"host": "http://localhost:8090"},
         ),
     ):

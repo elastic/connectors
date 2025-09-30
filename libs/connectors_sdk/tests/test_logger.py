@@ -12,19 +12,19 @@ from contextlib import contextmanager
 import pytest
 from freezegun import freeze_time
 
-import connectors.logger
-from connectors.logger import ColorFormatter, logger, set_logger, tracer
+import connectors_sdk.logger
+from connectors_sdk.logger import ColorFormatter, logger, set_logger, tracer
 
 
 @contextmanager
 def unset_logger():
-    old = connectors.logger.logger
-    connectors.logger.logger = None
+    old = connectors_sdk.logger.logger
+    connectors_sdk.logger.logger = None
     try:
         yield
     finally:
         if old is not None:
-            connectors.logger.logger = logger
+            connectors_sdk.logger.logger = logger
 
 
 def test_logger():

@@ -16,11 +16,11 @@ import aiohttp
 import pytest
 import pytest_asyncio
 from aiohttp.client_exceptions import ClientPayloadError, ClientResponseError
+from connectors_sdk.logger import logger
+from connectors_sdk.source import ConfigurableFieldValueError
+from connectors_sdk.utils import Features, iso_utc
 from freezegun import freeze_time
 
-from connectors.logger import logger
-from connectors.protocol import Features
-from connectors.source import ConfigurableFieldValueError
 from connectors.sources.sharepoint_online import (
     ACCESS_CONTROL,
     DEFAULT_BACKOFF_MULTIPLIER,
@@ -49,7 +49,6 @@ from connectors.sources.sharepoint_online import (
     _prefix_user,
     _prefix_user_id,
 )
-from connectors.utils import iso_utc
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
 
@@ -3151,7 +3150,7 @@ class TestSharepointOnlineDataSource:
 
     @pytest.mark.asyncio
     @patch(
-        "connectors.content_extraction.ContentExtraction._check_configured",
+        "connectors_sdk.content_extraction.ContentExtraction._check_configured",
         lambda *_: True,
     )
     async def test_get_attachment_with_text_extraction_enabled_adds_body(
@@ -3162,11 +3161,11 @@ class TestSharepointOnlineDataSource:
 
         with (
             patch(
-                "connectors.content_extraction.ContentExtraction.extract_text",
+                "connectors_sdk.content_extraction.ContentExtraction.extract_text",
                 return_value=message,
             ) as extraction_service_mock,
             patch(
-                "connectors.content_extraction.ContentExtraction.get_extraction_config",
+                "connectors_sdk.content_extraction.ContentExtraction.get_extraction_config",
                 return_value={"host": "http://localhost:8090"},
             ),
         ):
@@ -3186,7 +3185,7 @@ class TestSharepointOnlineDataSource:
 
     @pytest.mark.asyncio
     @patch(
-        "connectors.content_extraction.ContentExtraction._check_configured",
+        "connectors_sdk.content_extraction.ContentExtraction._check_configured",
         lambda *_: False,
     )
     async def test_get_attachment_with_text_extraction_enabled_but_not_configured_adds_empty_string(
@@ -3197,11 +3196,11 @@ class TestSharepointOnlineDataSource:
 
         with (
             patch(
-                "connectors.content_extraction.ContentExtraction.extract_text",
+                "connectors_sdk.content_extraction.ContentExtraction.extract_text",
                 return_value=message,
             ) as extraction_service_mock,
             patch(
-                "connectors.content_extraction.ContentExtraction.get_extraction_config",
+                "connectors_sdk.content_extraction.ContentExtraction.get_extraction_config",
                 return_value={"host": "http://localhost:8090"},
             ),
         ):
@@ -3224,7 +3223,7 @@ class TestSharepointOnlineDataSource:
         "filesize, expect_download", [(15, True), (10485761, False)]
     )
     @patch(
-        "connectors.content_extraction.ContentExtraction._check_configured",
+        "connectors_sdk.content_extraction.ContentExtraction._check_configured",
         lambda *_: True,
     )
     async def test_get_drive_item_content(
@@ -3257,7 +3256,7 @@ class TestSharepointOnlineDataSource:
     @pytest.mark.asyncio
     @pytest.mark.parametrize("filesize", [(15), (10485761)])
     @patch(
-        "connectors.content_extraction.ContentExtraction._check_configured",
+        "connectors_sdk.content_extraction.ContentExtraction._check_configured",
         lambda *_: True,
     )
     async def test_get_content_with_text_extraction_enabled_adds_body(
@@ -3274,11 +3273,11 @@ class TestSharepointOnlineDataSource:
 
         with (
             patch(
-                "connectors.content_extraction.ContentExtraction.extract_text",
+                "connectors_sdk.content_extraction.ContentExtraction.extract_text",
                 return_value=message,
             ) as extraction_service_mock,
             patch(
-                "connectors.content_extraction.ContentExtraction.get_extraction_config",
+                "connectors_sdk.content_extraction.ContentExtraction.get_extraction_config",
                 return_value={"host": "http://localhost:8090"},
             ),
         ):
@@ -3299,7 +3298,7 @@ class TestSharepointOnlineDataSource:
     @pytest.mark.asyncio
     @pytest.mark.parametrize("filesize", [(15), (10485761)])
     @patch(
-        "connectors.content_extraction.ContentExtraction._check_configured",
+        "connectors_sdk.content_extraction.ContentExtraction._check_configured",
         lambda *_: False,
     )
     async def test_get_content_with_text_extraction_enabled_but_not_configured_adds_empty_string(
@@ -3316,11 +3315,11 @@ class TestSharepointOnlineDataSource:
 
         with (
             patch(
-                "connectors.content_extraction.ContentExtraction.extract_text",
+                "connectors_sdk.content_extraction.ContentExtraction.extract_text",
                 return_value=message,
             ) as extraction_service_mock,
             patch(
-                "connectors.content_extraction.ContentExtraction.get_extraction_config",
+                "connectors_sdk.content_extraction.ContentExtraction.get_extraction_config",
                 return_value={"host": "http://localhost:8090"},
             ),
         ):

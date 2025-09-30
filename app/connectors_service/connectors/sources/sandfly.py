@@ -18,16 +18,18 @@ import aiohttp
 from aiohttp.client_exceptions import (
     ClientResponseError,
 )
+from connectors_sdk.logger import logger
+from connectors_sdk.source import CURSOR_SYNC_TIMESTAMP, BaseDataSource
+from connectors_sdk.utils import (
+    hash_id,
+    iso_utc,
+)
 
 from connectors.es.sink import OP_INDEX
-from connectors.logger import logger
-from connectors.source import CURSOR_SYNC_TIMESTAMP, BaseDataSource
 from connectors.utils import (
     CacheWithTimeout,
     CancellableSleeps,
     RetryStrategy,
-    hash_id,
-    iso_utc,
     retryable,
 )
 

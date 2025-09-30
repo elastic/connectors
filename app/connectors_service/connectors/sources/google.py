@@ -10,9 +10,9 @@ from enum import Enum
 from aiogoogle import Aiogoogle, AuthError, HTTPError
 from aiogoogle.auth.creds import ServiceAccountCreds
 from aiogoogle.sessions.aiohttp_session import AiohttpSession
+from connectors_sdk.logger import logger
+from connectors_sdk.source import ConfigurableFieldValueError
 
-from connectors.logger import logger
-from connectors.source import ConfigurableFieldValueError
 from connectors.utils import RetryStrategy, retryable
 
 # Google Service Account JSON includes "universe_domain" key. That argument is not

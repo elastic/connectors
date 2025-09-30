@@ -9,11 +9,11 @@ from unittest.mock import Mock, patch
 import pytest
 import pytest_asyncio
 from aiohttp.client_exceptions import ClientResponseError
-
-from connectors.logger import logger
-from connectors.source import (
+from connectors_sdk.logger import logger
+from connectors_sdk.source import (
     CURSOR_SYNC_TIMESTAMP,
 )
+
 from connectors.sources.sandfly import (
     CURSOR_SEQUENCE_ID_KEY,
     FetchTokenError,

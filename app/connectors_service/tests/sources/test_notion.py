@@ -7,12 +7,11 @@ from unittest.mock import ANY, AsyncMock, MagicMock, Mock, patch
 
 import aiohttp
 import pytest
+from connectors_sdk.filtering.validation import Filter, SyncRuleValidationResult
+from connectors_sdk.source import ConfigurableFieldValueError, DataSourceConfiguration
 from httpx import Response
 from notion_client import APIResponseError
 
-from connectors.filtering.validation import SyncRuleValidationResult
-from connectors.protocol import Filter
-from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
 from connectors.sources.notion import (
     NotFound,
     NotionAdvancedRulesValidator,

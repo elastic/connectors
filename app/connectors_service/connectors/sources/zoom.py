@@ -12,15 +12,17 @@ from functools import cached_property, partial
 
 import aiohttp
 from aiohttp.client_exceptions import ClientResponseError
+from connectors_sdk.logger import logger
+from connectors_sdk.source import BaseDataSource
+from connectors_sdk.utils import (
+    iso_utc,
+)
 
-from connectors.logger import logger
-from connectors.source import BaseDataSource
 from connectors.utils import (
     CacheWithTimeout,
     CancellableSleeps,
     RetryStrategy,
     get_base64_value,
-    iso_utc,
     retryable,
 )
 

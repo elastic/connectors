@@ -10,23 +10,24 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import ANY, AsyncMock, Mock, patch
 
 import pytest
-from elasticsearch import ApiError, ConflictError, NotFoundError
-
-from connectors.config import load_config
-from connectors.filtering.validation import (
+from connectors_sdk.filtering.validation import (
+    Filter,
     FilteringValidationResult,
     FilteringValidationState,
     FilterValidationError,
     InvalidFilteringError,
 )
+from connectors_sdk.source import BaseDataSource
+from connectors_sdk.utils import Features
+from elasticsearch import ApiError, ConflictError, NotFoundError
+
+from connectors.config import load_config
 from connectors.protocol import (
     IDLE_JOBS_THRESHOLD,
     JOB_NOT_FOUND_ERROR,
     Connector,
     ConnectorIndex,
     DataSourceError,
-    Features,
-    Filter,
     Filtering,
     JobStatus,
     JobTriggerMethod,
@@ -40,7 +41,6 @@ from connectors.protocol import (
     SyncJobIndex,
 )
 from connectors.protocol.connectors import ProtocolError
-from connectors.source import BaseDataSource
 from connectors.utils import ACCESS_CONTROL_INDEX_PREFIX, iso_utc
 from tests.commons import AsyncIterator
 

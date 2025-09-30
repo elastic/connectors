@@ -12,9 +12,9 @@ from unittest.mock import Mock, patch
 import aiohttp
 import pytest
 from aiohttp.client_exceptions import ClientResponseError
+from connectors_sdk.source import ConfigurableFieldValueError
 from freezegun import freeze_time
 
-from connectors.source import ConfigurableFieldValueError
 from connectors.sources.zoom import TokenError, ZoomDataSource
 from tests.sources.support import create_source
 
@@ -776,11 +776,11 @@ async def test_get_content(attachment, doit, expected_content):
 async def test_get_content_with_extraction_service():
     with (
         patch(
-            "connectors.content_extraction.ContentExtraction.extract_text",
+            "connectors_sdk.content_extraction.ContentExtraction.extract_text",
             return_value=SAMPLE_CONTENT,
         ),
         patch(
-            "connectors.content_extraction.ContentExtraction.get_extraction_config",
+            "connectors_sdk.content_extraction.ContentExtraction.get_extraction_config",
             return_value={"host": "http://localhost:8090"},
         ),
     ):

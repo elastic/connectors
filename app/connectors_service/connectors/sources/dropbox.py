@@ -15,24 +15,26 @@ from urllib import parse
 import aiohttp
 import fastjsonschema
 from aiohttp.client_exceptions import ClientResponseError, ServerDisconnectedError
+from connectors_sdk.filtering.validation import (
+    AdvancedRulesValidator,
+    SyncRuleValidationResult,
+)
+from connectors_sdk.logger import logger
+from connectors_sdk.source import BaseDataSource
+from connectors_sdk.utils import (
+    iso_utc,
+)
 
 from connectors.access_control import (
     ACCESS_CONTROL,
     es_access_control_query,
     prefix_identity,
 )
-from connectors.filtering.validation import (
-    AdvancedRulesValidator,
-    SyncRuleValidationResult,
-)
-from connectors.logger import logger
-from connectors.source import BaseDataSource
 from connectors.utils import (
     CancellableSleeps,
     RetryStrategy,
     evaluate_timedelta,
     is_expired,
-    iso_utc,
     retryable,
 )
 

@@ -12,8 +12,8 @@ from unittest.mock import Mock, patch
 
 import pytest
 from azure.storage.blob.aio import BlobServiceClient, ContainerClient
+from connectors_sdk.source import ConfigurableFieldValueError
 
-from connectors.source import ConfigurableFieldValueError
 from connectors.sources.azure_blob_storage import AzureBlobStorageDataSource
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
@@ -645,7 +645,7 @@ async def test_get_content_when_blob_tier_archive():
 
 @pytest.mark.asyncio
 @patch(
-    "connectors.content_extraction.ContentExtraction._check_configured",
+    "connectors_sdk.content_extraction.ContentExtraction._check_configured",
     lambda *_: True,
 )
 async def test_get_content_with_text_extraction_enabled_adds_body():
@@ -667,11 +667,11 @@ async def test_get_content_with_text_extraction_enabled_adds_body():
 
     with (
         patch(
-            "connectors.content_extraction.ContentExtraction.extract_text",
+            "connectors_sdk.content_extraction.ContentExtraction.extract_text",
             return_value=str(mock_download),
         ) as extraction_service_mock,
         patch(
-            "connectors.content_extraction.ContentExtraction.get_extraction_config",
+            "connectors_sdk.content_extraction.ContentExtraction.get_extraction_config",
             return_value={"host": "http://localhost:8090"},
         ),
     ):

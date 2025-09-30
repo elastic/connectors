@@ -7,6 +7,14 @@ import asyncio
 from functools import cached_property, partial
 
 from aiogoogle import HTTPError
+from connectors_sdk.source import (
+    CURSOR_SYNC_TIMESTAMP,
+    BaseDataSource,
+    ConfigurableFieldValueError,
+)
+from connectors_sdk.utils import (
+    iso_zulu,
+)
 
 from connectors.access_control import (
     ACCESS_CONTROL,
@@ -14,11 +22,6 @@ from connectors.access_control import (
     prefix_identity,
 )
 from connectors.es.sink import OP_DELETE, OP_INDEX
-from connectors.source import (
-    CURSOR_SYNC_TIMESTAMP,
-    BaseDataSource,
-    ConfigurableFieldValueError,
-)
 from connectors.sources.google import (
     GoogleServiceAccountClient,
     UserFields,
@@ -28,7 +31,6 @@ from connectors.sources.google import (
 )
 from connectors.utils import (
     EMAIL_REGEX_PATTERN,
-    iso_zulu,
     validate_email_address,
 )
 

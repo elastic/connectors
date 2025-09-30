@@ -12,15 +12,14 @@ import aioboto3
 import fastjsonschema
 from aiobotocore.config import AioConfig
 from botocore.exceptions import ClientError
-from fastjsonschema import JsonSchemaValueException
-
-from connectors.filtering.validation import (
+from connectors_sdk.filtering.validation import (
     AdvancedRulesValidator,
     SyncRuleValidationResult,
 )
-from connectors.logger import logger
-from connectors.source import BaseDataSource
-from connectors.utils import hash_id
+from connectors_sdk.logger import logger
+from connectors_sdk.source import BaseDataSource
+from connectors_sdk.utils import hash_id
+from fastjsonschema import JsonSchemaValueException
 
 DEFAULT_PAGE_SIZE = 100
 DEFAULT_MAX_RETRY_ATTEMPTS = 5

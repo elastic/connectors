@@ -12,16 +12,18 @@ from functools import cached_property
 
 import aiohttp
 from aiohttp.client_exceptions import ClientResponseError
+from connectors_sdk.logger import logger
+from connectors_sdk.source import BaseDataSource, ConfigurableFieldValueError
+from connectors_sdk.utils import (
+    iso_utc,
+)
 from graphql import parse, visit
 from graphql.language.ast import VariableNode
 from graphql.language.visitor import Visitor
 
-from connectors.logger import logger
-from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.utils import (
     CancellableSleeps,
     RetryStrategy,
-    iso_utc,
     retryable,
 )
 

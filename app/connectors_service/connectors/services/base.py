@@ -15,7 +15,8 @@ import asyncio
 import time
 from copy import deepcopy
 
-from connectors.logger import DocumentLogger, logger
+from connectors_sdk.logger import DocumentLogger, logger
+
 from connectors.utils import CancellableSleeps
 
 __all__ = [

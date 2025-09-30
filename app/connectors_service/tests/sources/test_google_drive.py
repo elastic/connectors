@@ -15,13 +15,13 @@ import pytest
 from aiogoogle import Aiogoogle, HTTPError
 from aiogoogle.auth.managers import ServiceAccountManager
 from aiogoogle.models import Request, Response
-
-from connectors.access_control import DLS_QUERY
-from connectors.source import (
+from connectors_sdk.source import (
     CURSOR_SYNC_TIMESTAMP,
     ConfigurableFieldValueError,
     DataSourceConfiguration,
 )
+
+from connectors.access_control import DLS_QUERY
 from connectors.sources.google import GoogleServiceAccountClient
 from connectors.sources.google_drive import (
     RETRIES,
@@ -934,18 +934,18 @@ async def test_get_google_workspace_content():
 
 @pytest.mark.asyncio
 @patch(
-    "connectors.content_extraction.ContentExtraction._check_configured",
+    "connectors_sdk.content_extraction.ContentExtraction._check_configured",
     lambda *_: True,
 )
 async def test_get_google_workspace_content_with_text_extraction_enabled_adds_body():
     """Test the module responsible for fetching the content of the Google Suite document."""
     with (
         patch(
-            "connectors.content_extraction.ContentExtraction.extract_text",
+            "connectors_sdk.content_extraction.ContentExtraction.extract_text",
             return_value="I love unit tests",
         ),
         patch(
-            "connectors.content_extraction.ContentExtraction.get_extraction_config",
+            "connectors_sdk.content_extraction.ContentExtraction.get_extraction_config",
             return_value={"host": "http://localhost:8090"},
         ),
     ):
@@ -1059,18 +1059,18 @@ async def test_get_generic_file_content():
 
 @pytest.mark.asyncio
 @patch(
-    "connectors.content_extraction.ContentExtraction._check_configured",
+    "connectors_sdk.content_extraction.ContentExtraction._check_configured",
     lambda *_: True,
 )
 async def test_get_generic_file_content_with_text_extraction_enabled_adds_body():
     """Test the module responsible for fetching the content of the file if it is extractable."""
     with (
         patch(
-            "connectors.content_extraction.ContentExtraction.extract_text",
+            "connectors_sdk.content_extraction.ContentExtraction.extract_text",
             return_value="I love unit tests generic file",
         ),
         patch(
-            "connectors.content_extraction.ContentExtraction.get_extraction_config",
+            "connectors_sdk.content_extraction.ContentExtraction.get_extraction_config",
             return_value={"host": "http://localhost:8090"},
         ),
     ):

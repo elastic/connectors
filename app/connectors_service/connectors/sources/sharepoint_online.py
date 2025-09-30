@@ -19,6 +19,20 @@ from aiofiles.tempfile import NamedTemporaryFile
 from aiohttp.client_exceptions import ClientPayloadError, ClientResponseError
 from aiohttp.client_reqrep import RequestInfo
 from azure.identity.aio import CertificateCredential
+from connectors_sdk.content_extraction import (
+    TIKA_SUPPORTED_FILETYPES,
+)
+from connectors_sdk.filtering.validation import (
+    AdvancedRulesValidator,
+    SyncRuleValidationResult,
+)
+from connectors_sdk.logger import logger
+from connectors_sdk.source import CURSOR_SYNC_TIMESTAMP, BaseDataSource
+from connectors_sdk.utils import (
+    convert_to_b64,
+    iso_zulu,
+    nested_get_from_dict,
+)
 from fastjsonschema import JsonSchemaValueException
 
 from connectors.access_control import (
@@ -27,21 +41,11 @@ from connectors.access_control import (
     prefix_identity,
 )
 from connectors.es.sink import OP_DELETE, OP_INDEX
-from connectors.filtering.validation import (
-    AdvancedRulesValidator,
-    SyncRuleValidationResult,
-)
-from connectors.logger import logger
-from connectors.source import CURSOR_SYNC_TIMESTAMP, BaseDataSource
 from connectors.utils import (
-    TIKA_SUPPORTED_FILETYPES,
     CacheWithTimeout,
     CancellableSleeps,
-    convert_to_b64,
     html_to_text,
-    iso_zulu,
     iterable_batches_generator,
-    nested_get_from_dict,
     retryable,
     url_encode,
 )

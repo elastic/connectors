@@ -17,18 +17,22 @@ import aiohttp
 from aiofiles.os import remove
 from aiofiles.tempfile import NamedTemporaryFile
 from aiohttp.client_exceptions import ClientResponseError
+from connectors_sdk.content_extraction import (
+    TIKA_SUPPORTED_FILETYPES,
+)
+from connectors_sdk.logger import logger
+from connectors_sdk.source import BaseDataSource
+from connectors_sdk.utils import (
+    convert_to_b64,
+)
 from msal import ConfidentialClientApplication
 
-from connectors.logger import logger
-from connectors.source import BaseDataSource
 from connectors.utils import (
-    TIKA_SUPPORTED_FILETYPES,
     CacheWithTimeout,
     CancellableSleeps,
     ConcurrentTasks,
     MemQueue,
     RetryStrategy,
-    convert_to_b64,
     html_to_text,
     retryable,
     url_encode,

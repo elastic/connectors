@@ -5,10 +5,10 @@
 #
 from functools import partial
 
+from connectors_sdk.logger import logger
 from elasticsearch import ApiError
 
 from connectors.es import ESClient
-from connectors.logger import logger
 
 DEFAULT_PAGE_SIZE = 100
 

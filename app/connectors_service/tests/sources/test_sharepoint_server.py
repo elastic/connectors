@@ -12,10 +12,10 @@ from unittest.mock import Mock, patch
 
 import httpx
 import pytest
+from connectors_sdk.logger import logger
+from connectors_sdk.source import ConfigurableFieldValueError
 from httpx import ByteStream
 
-from connectors.logger import logger
-from connectors.source import ConfigurableFieldValueError
 from connectors.sources.sharepoint_server import SharepointServerDataSource
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
@@ -742,11 +742,11 @@ async def test_get_content_with_content_extraction():
     response_content = "This is a dummy sharepoint body response"
     with (
         patch(
-            "connectors.content_extraction.ContentExtraction.extract_text",
+            "connectors_sdk.content_extraction.ContentExtraction.extract_text",
             return_value=response_content,
         ),
         patch(
-            "connectors.content_extraction.ContentExtraction.get_extraction_config",
+            "connectors_sdk.content_extraction.ContentExtraction.get_extraction_config",
             return_value={"host": "http://localhost:8090"},
         ),
     ):

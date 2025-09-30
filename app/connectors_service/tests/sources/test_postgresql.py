@@ -10,19 +10,18 @@ from contextlib import asynccontextmanager
 from unittest.mock import ANY, Mock, patch
 
 import pytest
+from connectors_sdk.filtering.validation import Filter, SyncRuleValidationResult
+from connectors_sdk.utils import iso_utc
 from freezegun import freeze_time
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.ext.asyncio.engine import AsyncEngine
 
-from connectors.filtering.validation import SyncRuleValidationResult
-from connectors.protocol import Filter
 from connectors.sources.postgresql import (
     PostgreSQLAdvancedRulesValidator,
     PostgreSQLClient,
     PostgreSQLDataSource,
     PostgreSQLQueries,
 )
-from connectors.utils import iso_utc
 from tests.sources.support import create_source
 
 ADVANCED_SNIPPET = "advanced_snippet"

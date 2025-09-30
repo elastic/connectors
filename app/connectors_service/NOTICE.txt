@@ -32,8 +32,8 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
 MarkupSafe
-3.0.2
-BSD License
+3.0.3
+UNKNOWN
 Copyright 2010 Pallets
 
 Redistribution and use in source and binary forms, with or without
@@ -2631,7 +2631,7 @@ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND 
 
 
 cachetools
-5.5.2
+6.2.0
 MIT License
 The MIT License (MIT)
 
@@ -3550,6 +3550,11 @@ elasticsearch-connectors
 Apache Software License
 UNKNOWN
 
+elasticsearch-connectors-sdk
+9.2.0
+Apache Software License
+UNKNOWN
+
 envyaml
 1.10.211231
 MIT License
@@ -4047,7 +4052,7 @@ Apache Software License
 
 
 google-auth
-2.40.3
+2.41.0
 Apache Software License
                                  Apache License
                            Version 2.0, January 2004

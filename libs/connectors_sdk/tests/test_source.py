@@ -8,15 +8,13 @@ from decimal import Decimal
 from unittest import TestCase, mock
 
 import pytest
-from bson import Decimal128
 
-from connectors.filtering.validation import (
+from connectors_sdk.filtering.validation import (
     BasicRuleAgainstSchemaValidator,
     BasicRuleNoMatchAllRegexValidator,
     BasicRulesSetSemanticValidator,
 )
-from connectors.protocol import Features
-from connectors.source import (
+from connectors_sdk.source import (
     BaseDataSource,
     ConfigurableFieldDependencyError,
     ConfigurableFieldValueError,
@@ -24,9 +22,8 @@ from connectors.source import (
     Field,
     MalformedConfigurationError,
     ValidationTypes,
-    get_source_klass,
-    get_source_klasses,
 )
+from connectors_sdk.utils import Features
 
 CONFIG = {
     "host": {
@@ -182,30 +179,6 @@ def test_value_returns_correct_value(
         ).value
         == expected_value
     )
-
-
-class MyConnector:
-    id = "1"  # noqa A003
-    service_type = "yea"
-
-    def __init__(self, *args):
-        pass
-
-
-def test_get_source_klass():
-    assert get_source_klass("tests.test_source:MyConnector") is MyConnector
-
-
-def test_get_source_klasses():
-    settings = {
-        "sources": {
-            "yea": "tests.test_source:MyConnector",
-            "yea2": "tests.test_source:MyConnector",
-        }
-    }
-
-    sources = list(get_source_klasses(settings))
-    assert sources == [MyConnector, MyConnector]
 
 
 @pytest.mark.asyncio
@@ -702,7 +675,7 @@ class DataSource(BaseDataSource):
 
 
 @pytest.mark.asyncio
-@mock.patch("connectors.filtering.validation.FilteringValidator.validate")
+@mock.patch("connectors_sdk.filtering.validation.FilteringValidator.validate")
 async def test_validate_filter(validator_mock):
     validator_mock.return_value = "valid"
 
@@ -846,14 +819,12 @@ async def test_base_class():
                 "key_1": "value",
                 "key_2": datetime.fromisoformat(DATE_STRING_ISO_FORMAT),
                 "key_3": Decimal(1234),
-                "key_4": Decimal128(Decimal("0.0005")),
                 "key_5": bytes("value", "utf-8"),
             },
             {
                 "key_1": "value",
                 "key_2": DATE_STRING_ISO_FORMAT,
                 "key_3": 1234,
-                "key_4": Decimal("0.0005"),
                 "key_5": "value",
             },
         ),

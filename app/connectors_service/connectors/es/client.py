@@ -8,6 +8,7 @@ import logging
 import time
 from enum import Enum
 
+from connectors_sdk.logger import logger, set_extra_logger
 from elastic_transport import ConnectionTimeout
 from elastic_transport.client_utils import url_to_node_config
 from elasticsearch import ApiError, AsyncElasticsearch, ConflictError
@@ -20,7 +21,6 @@ from connectors.config import (
     DEFAULT_ELASTICSEARCH_MAX_RETRIES,
     DEFAULT_ELASTICSEARCH_RETRY_INTERVAL,
 )
-from connectors.logger import logger, set_extra_logger
 from connectors.utils import (
     CancellableSleeps,
     RetryStrategy,

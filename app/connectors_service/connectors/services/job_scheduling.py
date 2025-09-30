@@ -27,8 +27,7 @@ from connectors.protocol import (
     SyncJobIndex,
 )
 from connectors.services.base import BaseService
-from connectors.source import get_source_klass
-from connectors.utils import ConcurrentTasks
+from connectors.utils import ConcurrentTasks, get_source_klass
 
 
 class JobSchedulingService(BaseService):

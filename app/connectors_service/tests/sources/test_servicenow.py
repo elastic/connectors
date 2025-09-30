@@ -11,11 +11,10 @@ from unittest.mock import Mock, patch
 
 import pytest
 from aiohttp.client_exceptions import ServerDisconnectedError
+from connectors_sdk.filtering.validation import Filter, SyncRuleValidationResult
+from connectors_sdk.source import ConfigurableFieldValueError
 
 from connectors.access_control import DLS_QUERY
-from connectors.filtering.validation import SyncRuleValidationResult
-from connectors.protocol import Filter
-from connectors.source import ConfigurableFieldValueError
 from connectors.sources.servicenow import (
     InvalidResponse,
     ServiceNowAdvancedRulesValidator,
@@ -508,11 +507,11 @@ async def test_fetch_attachment_content_with_doit():
 async def test_fetch_attachment_content_with_extraction_service():
     with (
         patch(
-            "connectors.content_extraction.ContentExtraction.extract_text",
+            "connectors_sdk.content_extraction.ContentExtraction.extract_text",
             return_value="Attachment Content",
         ),
         patch(
-            "connectors.content_extraction.ContentExtraction.get_extraction_config",
+            "connectors_sdk.content_extraction.ContentExtraction.get_extraction_config",
             return_value={"host": "http://localhost:8090"},
         ),
     ):

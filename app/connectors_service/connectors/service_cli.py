@@ -20,15 +20,15 @@ import signal
 
 import click
 from click import ClickException, UsageError
+from connectors_sdk.content_extraction import ContentExtraction
+from connectors_sdk.logger import logger, set_logger
 
 from connectors import __version__
 from connectors.build_info import __build_info__
 from connectors.config import load_config
-from connectors.content_extraction import ContentExtraction
-from connectors.logger import logger, set_logger
 from connectors.preflight_check import PreflightCheck
 from connectors.services import get_services
-from connectors.source import get_source_klass, get_source_klasses
+from connectors.utils import get_source_klass, get_source_klasses
 
 __all__ = ["main"]
 

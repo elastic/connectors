@@ -9,7 +9,7 @@ import uuid
 
 import pytest
 
-from connectors.filtering.basic_rule import (
+from connectors_sdk.filtering.basic_rule import (
     BasicRule,
     BasicRuleEngine,
     Policy,
@@ -17,7 +17,7 @@ from connectors.filtering.basic_rule import (
     RuleMatchStats,
     parse,
 )
-from connectors.utils import Format
+from connectors_sdk.utils import Format
 
 BASIC_RULE_ONE_ID = "1"
 BASIC_RULE_ONE_ORDER = 1
