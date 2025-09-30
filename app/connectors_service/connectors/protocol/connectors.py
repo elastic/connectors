@@ -28,7 +28,6 @@ from connectors_sdk.source import (
     DEFAULT_CONFIGURATION,
     DataSourceConfiguration,
 )
-from connectors.utils import get_source_klass
 from connectors_sdk.utils import Features, iso_utc, with_utc_tz
 from elasticsearch import (
     ApiError,
@@ -43,6 +42,7 @@ from connectors.utils import (
     ACCESS_CONTROL_INDEX_PREFIX,
     deep_merge_dicts,
     filter_nested_dict_by_keys,
+    get_source_klass,
     next_run,
     parse_datetime_string,
 )
