@@ -6,7 +6,7 @@
 import asyncio
 from collections import OrderedDict
 
-from connectors_sdk.source import get_source_klass
+from connectors.utils import get_source_klass
 from connectors_sdk.utils import iso_utc
 
 from connectors.es import DEFAULT_LANGUAGE

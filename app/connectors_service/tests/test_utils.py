@@ -34,6 +34,8 @@ from connectors.utils import (
     get_base64_value,
     get_pem_format,
     get_size,
+    get_source_klass,
+    get_source_klasses,
     has_duplicates,
     html_to_text,
     is_expired,
@@ -1251,3 +1253,27 @@ def test_error_monitor_when_disabled():
 
     for _ in range(9999):
         error_monitor.track_error(Exception("second_part"))
+
+
+class MyConnector:
+    id = "1"  # noqa A003
+    service_type = "yea"
+
+    def __init__(self, *args):
+        pass
+
+
+def test_get_source_klass():
+    assert get_source_klass("tests.test_utils:MyConnector") is MyConnector
+
+
+def test_get_source_klasses():
+    settings = {
+        "sources": {
+            "yea": "tests.test_utils:MyConnector",
+            "yea2": "tests.test_utils:MyConnector",
+        }
+    }
+
+    sources = list(get_source_klasses(settings))
+    assert sources == [MyConnector, MyConnector]

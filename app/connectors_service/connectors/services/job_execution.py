@@ -5,7 +5,7 @@
 #
 from functools import cached_property
 
-from connectors_sdk.source import get_source_klass
+from connectors.utils import get_source_klass
 
 from connectors.es.client import License
 from connectors.es.index import DocumentNotFoundError

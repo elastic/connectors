@@ -22,8 +22,6 @@ from connectors_sdk.source import (
     Field,
     MalformedConfigurationError,
     ValidationTypes,
-    get_source_klass,
-    get_source_klasses,
 )
 from connectors_sdk.utils import Features
 
@@ -181,30 +179,6 @@ def test_value_returns_correct_value(
         ).value
         == expected_value
     )
-
-
-class MyConnector:
-    id = "1"  # noqa A003
-    service_type = "yea"
-
-    def __init__(self, *args):
-        pass
-
-
-def test_get_source_klass():
-    assert get_source_klass("tests.test_source:MyConnector") is MyConnector
-
-
-def test_get_source_klasses():
-    settings = {
-        "sources": {
-            "yea": "tests.test_source:MyConnector",
-            "yea2": "tests.test_source:MyConnector",
-        }
-    }
-
-    sources = list(get_source_klasses(settings))
-    assert sources == [MyConnector, MyConnector]
 
 
 @pytest.mark.asyncio

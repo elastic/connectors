@@ -6,13 +6,11 @@
 """Helpers to build sources + FQN-based Registry"""
 
 import asyncio
-import importlib
 import re
 from contextlib import asynccontextmanager
 from datetime import date, datetime, time
 from decimal import Decimal
 from enum import Enum
-from functools import cache
 from pydoc import locate
 
 import aiofiles
@@ -866,21 +864,6 @@ class BaseDataSource:
         if self._sync_cursor is None:
             self._sync_cursor = {}
         self._sync_cursor[CURSOR_SYNC_TIMESTAMP] = timestamp
-
-
-@cache
-def get_source_klass(fqn):
-    """Converts a Fully Qualified Name into a class instance."""
-    module_name, klass_name = fqn.split(":")
-    logger.debug(f"Importing module {module_name}")
-    module = importlib.import_module(module_name)
-    return getattr(module, klass_name)
-
-
-def get_source_klasses(config):
-    """Returns an iterator of all registered sources."""
-    for fqn in config["sources"].values():
-        yield get_source_klass(fqn)
 
 
 class ConfigurableFieldValueError(Exception):

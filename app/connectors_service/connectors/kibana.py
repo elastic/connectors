@@ -11,7 +11,7 @@ import sys
 from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser
 
 from connectors_sdk.logger import set_extra_logger
-from connectors_sdk.source import get_source_klass
+from connectors.utils import get_source_klass
 
 from connectors.config import load_config
 from connectors.es import DEFAULT_LANGUAGE

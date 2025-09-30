@@ -27,8 +27,8 @@ from connectors_sdk.logger import logger
 from connectors_sdk.source import (
     DEFAULT_CONFIGURATION,
     DataSourceConfiguration,
-    get_source_klass,
 )
+from connectors.utils import get_source_klass
 from connectors_sdk.utils import Features, iso_utc, with_utc_tz
 from elasticsearch import (
     ApiError,
