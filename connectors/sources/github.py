@@ -199,7 +199,7 @@ class GithubQuery(Enum):
     }
     """
     BATCH_REPO_QUERY_TEMPLATE = """
-    query {batch_queries} {{
+    query ({batch_queries}) {{
         {query_body}
     }}
     """
@@ -822,7 +822,7 @@ class GitHubClient:
             errors = exception.response.get("errors", [])
             for error in errors:
                 if (
-                    error.get("type").lower() == "rate_limited"
+                    error.get("type", "").lower() == "rate_limited"
                     and "api rate limit exceeded" in error.get("message").lower()
                 ):
                     await self._put_to_sleep(resource_type="graphql")
