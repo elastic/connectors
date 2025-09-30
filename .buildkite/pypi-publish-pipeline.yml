@@ -1,0 +1,83 @@
+## .buildkite/pypi-publish-pipeline.yml
+# Manually-triggered pipeline to build and publish connectors_service to PyPI
+notify:
+  - if: 'build.branch =~ /^((main)|([0-9]+\.[0-9]+))$/ && (build.state == "failed" || pipeline.started_passing)'
+    slack:
+      channels:
+        - "#search-et-alerts"
+      message: "${BUILDKITE_MESSAGE}"
+
+env:
+  PACKAGE_PATH: "app/connectors_service"
+
+steps:
+  - group: "PyPI Release setup"
+    key: "pypi_release_setup"
+    steps:
+      - label: ":package: Validate package version"
+        key: validate_version
+        agents:
+          provider: "gcp"
+          machineType: "n1-standard-8"
+          useVault: true
+          image: family/enterprise-search-ubuntu-2204-connectors_service-py
+        env:
+          PYTHON_VERSION: "3.10"
+        commands:
+          - "cd ${PACKAGE_PATH}"
+          - "echo 'Package version:'"
+          - "cat connectors_service/VERSION"
+          - "buildkite-agent meta-data set package_version \"$(cat connectors_service/VERSION)\""
+
+  - wait
+
+  - group: ":building_construction: Build Package"
+    key: "build_package"
+    depends_on:
+      - pypi_release_setup
+    steps:
+      - label: ":python: Build Python package"
+        key: build_python_package
+        agents:
+          provider: "gcp"
+          machineType: "n1-standard-8"
+          useVault: true
+          image: family/enterprise-search-ubuntu-2204-connectors_service-py
+        env:
+          PYTHON_VERSION: "3.11"
+        commands:
+          - "cd ${PACKAGE_PATH}"
+          - "python${PYTHON_VERSION} -m pip install --upgrade build twine"
+          - "python${PYTHON_VERSION} -m build"
+          - "ls -lah dist/"
+          - "python${PYTHON_VERSION} -m twine check dist/*"
+        artifact_paths:
+          - "${PACKAGE_PATH}/dist/*"
+
+  - wait
+
+  - block: ":rocket: Publish to PyPI?"
+    prompt: "This will publish connectors_service to PyPI. Are you sure?"
+    key: "confirm_publish"
+
+  - group: ":truck: Publish to PyPI"
+    key: "publish_to_pypi"
+    depends_on:
+      - build_package
+      - confirm_publish
+    steps:
+      - label: ":package: Publish to PyPI"
+        key: publish_pypi
+        agents:
+          provider: "gcp"
+          machineType: "n1-standard-8"
+          useVault: true
+          image: family/enterprise-search-ubuntu-2204-connectors_service-py
+        env:
+          PYTHON_VERSION: "3.10"
+        commands:
+          - "mkdir -p ${PACKAGE_PATH}/dist"
+          - "buildkite-agent artifact download '${PACKAGE_PATH}/dist/*' ."
+          - "cd ${PACKAGE_PATH}"
+          - "python${PYTHON_VERSION} -m pip install --upgrade twine"
+          - "python${PYTHON_VERSION} -m twine upload --repository pypi dist/* --username __token__ --password $PYPI_TOKEN"
