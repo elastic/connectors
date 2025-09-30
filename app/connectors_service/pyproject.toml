@@ -119,3 +119,26 @@ packages = ["connectors", "scripts"]
 
 [tool.setuptools.dynamic]
 version = {file = "connectors/VERSION"}
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+addopts = [
+    "-v"
+]
+filterwarnings = [
+    "error",
+    # botocore has this warning that is reported by them to be irrelevant
+    "ignore:.*urllib3.contrib.pyopenssl.*:DeprecationWarning:botocore.*",
+    # latest main of aioresponses does not have this problem, but current package uses deprecated pkg_resources API
+    "ignore:.*pkg_resources.*:DeprecationWarning",
+    # SQLAlchemy uses deprecated APIs internally
+    "ignore:.*dbapi().*:DeprecationWarning",
+    # aiogoogle inherits on top of AioHttpSession, which is not recommended by aiohttp
+    "ignore:Inheritance class AiohttpSession from ClientSession is discouraged:DeprecationWarning",
+    # aiogoogle inherits on top of RetryableAioHttpSession, which is not recommended by aiohttp
+    "ignore:Inheritance class RetryableAiohttpSession from ClientSession is discouraged:DeprecationWarning",
+    # pytest may generate its own warnings in some situations, such as improper usage or deprecated features.
+    "ignore::pytest.PytestUnraisableExceptionWarning",
+    # this error comes from 8.16 Elasticsearch client: we use some non-GA features in our CI code
+    "ignore::elasticsearch.exceptions.GeneralAvailabilityWarning",
+]
