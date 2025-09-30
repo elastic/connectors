@@ -721,7 +721,7 @@ async def test_remote_validation_when_space_keys_are_unavailable_then_raise_exce
         async_response.json.return_value = RESPONSE_SPACE_KEYS
 
         with mock.patch(
-            "connectors.sources.confluence.ConfluenceClient.api_call",
+            "connectors_service.sources.confluence.ConfluenceClient.api_call",
             return_value=async_response,
         ):
             with pytest.raises(
@@ -812,7 +812,7 @@ async def test_validate_configuration_for_ssl_enabled():
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+@patch("connectors_service.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_get_with_429_status():
     initial_response = ClientResponseError(None, None)
     initial_response.status = 429
@@ -835,7 +835,7 @@ async def test_get_with_429_status():
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+@patch("connectors_service.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_get_with_429_status_without_retry_after_header():
     payload = {"value": "Test rate limit"}
     async_mock_response = AsyncMock()
@@ -854,7 +854,7 @@ async def test_get_with_429_status_without_retry_after_header():
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+@patch("connectors_service.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_get_with_400_status():
     error = ClientResponseError(None, None)
     error.status = 400
@@ -872,7 +872,7 @@ async def test_get_with_400_status():
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+@patch("connectors_service.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_get_with_401_status():
     error = ClientResponseError(None, None)
     error.status = 401
@@ -890,7 +890,7 @@ async def test_get_with_401_status():
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+@patch("connectors_service.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_get_with_403_status():
     error = ClientResponseError(None, None)
     error.status = 403
@@ -925,7 +925,7 @@ async def test_get_with_404_status():
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+@patch("connectors_service.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_get_with_500_status():
     error = ClientResponseError(None, None)
     error.status = 500
@@ -1457,7 +1457,7 @@ async def test_fetch_confluence_server_users():
         async_response = AsyncMock()
         async_response.json.return_value = {"start": 0, "users": []}
         with mock.patch(
-            "connectors.sources.confluence.ConfluenceClient.api_call",
+            "connectors_service.sources.confluence.ConfluenceClient.api_call",
             return_value=async_response,
         ):
             async for user in source.confluence_client.fetch_confluence_server_users():
@@ -1646,7 +1646,7 @@ async def test_fetch_server_space_permission():
         async_response = AsyncMock()
         async_response.json.return_value = payload
         with mock.patch(
-            "connectors.sources.confluence.ConfluenceClient.api_call",
+            "connectors_service.sources.confluence.ConfluenceClient.api_call",
             return_value=async_response,
         ):
             expected_response = await source.fetch_server_space_permission(

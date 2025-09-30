@@ -13,7 +13,7 @@ logger = get_logger("agent_connector_record_manager")
 
 class ConnectorRecordManager:
     """
-    Manages connector records in Elasticsearch, ensuring that connectors tied to agent components
+    Manages connector records in Elasticsearch, ensuring that connectors_service tied to agent components
     exist in the connector index. It creates the connector record if necessary.
     """
 
@@ -22,7 +22,7 @@ class ConnectorRecordManager:
 
     async def ensure_connector_records_exist(self, agent_config, connector_name=None):
         """
-        Ensure that connector records exist for all connectors specified in the agent configuration.
+        Ensure that connector records exist for all connectors_service specified in the agent configuration.
 
         If the connector record with a given ID doesn't exist, create a new one.
         """
@@ -39,7 +39,7 @@ class ConnectorRecordManager:
         if not self.connector_index:
             self.connector_index = ConnectorIndex(agent_config.get("elasticsearch"))
 
-        for connector_config in agent_config.get("connectors"):
+        for connector_config in agent_config.get("connectors_service"):
             connector_id, service_type = (
                 connector_config["connector_id"],
                 connector_config["service_type"],
@@ -79,12 +79,12 @@ class ConnectorRecordManager:
             tuple: (bool, str or None) - True and None if valid, otherwise False and an error message.
         """
 
-        connectors = agent_config.get("connectors")
+        connectors = agent_config.get("connectors_service")
         if connectors is None:
-            return False, "No 'connectors' key found in the service configuration."
+            return False, "No 'connectors_service' key found in the service configuration."
 
         if len(connectors) == 0:
-            return False, "Empty 'connectors' array found in the service configuration."
+            return False, "Empty 'connectors_service' array found in the service configuration."
 
         for connector in connectors:
             if "connector_id" not in connector:

@@ -193,7 +193,7 @@ async def test_ping():
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+@patch("connectors_service.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_ping_negative():
     with pytest.raises(Exception):
         async with create_source(PostgreSQLDataSource, port=5432) as source:

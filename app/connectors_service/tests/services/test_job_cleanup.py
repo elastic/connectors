@@ -47,11 +47,11 @@ def mock_sync_job(
 
 
 @pytest.mark.asyncio
-@patch("connectors.protocol.SyncJobIndex.idle_jobs")
-@patch("connectors.protocol.SyncJobIndex.orphaned_idle_jobs")
-@patch("connectors.protocol.ConnectorIndex.fetch_by_id")
-@patch("connectors.protocol.ConnectorIndex.supported_connectors")
-@patch("connectors.protocol.ConnectorIndex.all_connectors")
+@patch("connectors_service.protocol.SyncJobIndex.idle_jobs")
+@patch("connectors_service.protocol.SyncJobIndex.orphaned_idle_jobs")
+@patch("connectors_service.protocol.ConnectorIndex.fetch_by_id")
+@patch("connectors_service.protocol.ConnectorIndex.supported_connectors")
+@patch("connectors_service.protocol.ConnectorIndex.all_connectors")
 async def test_cleanup_jobs(
     all_connectors,
     supported_connectors,

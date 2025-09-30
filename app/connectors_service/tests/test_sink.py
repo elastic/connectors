@@ -91,7 +91,7 @@ def failed_action_log_message(doc_id, action, result, error=BULK_ACTION_ERROR):
     )
 
 
-@patch("connectors.es.sink.CANCELATION_TIMEOUT", -1)
+@patch("connectors_service.es.sink.CANCELATION_TIMEOUT", -1)
 @pytest.mark.asyncio
 async def test_prepare_content_index_raise_error_when_index_creation_failed(
     mock_responses,
@@ -127,7 +127,7 @@ async def test_prepare_content_index_raise_error_when_index_creation_failed(
     await es.close()
 
 
-@patch("connectors.es.sink.CANCELATION_TIMEOUT", -1)
+@patch("connectors_service.es.sink.CANCELATION_TIMEOUT", -1)
 @pytest.mark.asyncio
 async def test_prepare_content_index_create_index(
     mock_responses,
@@ -179,7 +179,7 @@ async def test_prepare_content_index_create_index(
         create_index_mock.assert_called_with(index_name, language_code)
 
 
-@patch("connectors.es.sink.CANCELATION_TIMEOUT", -1)
+@patch("connectors_service.es.sink.CANCELATION_TIMEOUT", -1)
 @pytest.mark.asyncio
 async def test_prepare_content_index(mock_responses):
     language_code = "en"
@@ -300,7 +300,7 @@ def set_responses(mock_responses, ts=None):
     )
 
 
-@patch("connectors.es.sink.CANCELATION_TIMEOUT", -1)
+@patch("connectors_service.es.sink.CANCELATION_TIMEOUT", -1)
 @pytest.mark.asyncio
 async def test_async_bulk(mock_responses):
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
@@ -734,7 +734,7 @@ async def test_get_docs(
         [(str(doc["_id"]), doc["_timestamp"]) for doc in existing_docs]
     )
 
-    with mock.patch("connectors.utils.ConcurrentTasks", return_value=lazy_downloads):
+    with mock.patch("connectors_service.utils.ConcurrentTasks", return_value=lazy_downloads):
         queue = await queue_mock()
         basic_rule_engine = await basic_rule_engine_mock(doc_should_ingest)
 
@@ -911,7 +911,7 @@ async def test_get_docs_incrementally(
 ):
     lazy_downloads = await lazy_downloads_mock()
 
-    with mock.patch("connectors.utils.ConcurrentTasks", return_value=lazy_downloads):
+    with mock.patch("connectors_service.utils.ConcurrentTasks", return_value=lazy_downloads):
         queue = await queue_mock()
         basic_rule_engine = await basic_rule_engine_mock(doc_should_ingest)
 
@@ -1283,7 +1283,7 @@ async def test_batch_bulk_with_errors(patch_logger):
         patch_logger.assert_present(f"operation index failed for doc 1, {error}")
 
 
-@patch("connectors.es.sink.CANCELATION_TIMEOUT", -1)
+@patch("connectors_service.es.sink.CANCELATION_TIMEOUT", -1)
 @pytest.mark.parametrize(
     "extractor_task, extractor_task_done, sink_task, sink_task_done, expected_result",
     [

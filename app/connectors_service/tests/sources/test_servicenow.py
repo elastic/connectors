@@ -164,7 +164,7 @@ async def test_get_data():
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+@patch("connectors_service.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_get_data_with_retry():
     async with create_service_now_source() as source:
         source.servicenow_client._api_call = mock.AsyncMock(
@@ -191,7 +191,7 @@ async def test_get_table_length():
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+@patch("connectors_service.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_get_table_length_with_retry():
     async with create_service_now_source() as source:
         source.servicenow_client._api_call = mock.AsyncMock(
@@ -203,7 +203,7 @@ async def test_get_table_length_with_retry():
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+@patch("connectors_service.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_get_data_with_empty_response():
     async with create_service_now_source() as source:
         source.servicenow_client._api_call = mock.AsyncMock(
@@ -219,7 +219,7 @@ async def test_get_data_with_empty_response():
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+@patch("connectors_service.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_get_data_with_text_response():
     async with create_service_now_source() as source:
         source.servicenow_client._api_call = mock.AsyncMock(
@@ -312,7 +312,7 @@ async def test_get_docs_with_skipping_table_data():
         )
         response_list = []
         with mock.patch(
-            "connectors.sources.servicenow.DEFAULT_SERVICE_NAMES",
+            "connectors_service.sources.servicenow.DEFAULT_SERVICE_NAMES",
             {"incident": ["sn_incident_read"]},
         ):
             with mock.patch.object(
@@ -374,7 +374,7 @@ async def test_get_docs_with_skipping_attachment_data(dls_enabled, expected_resp
 
         response_list = []
         with mock.patch(
-            "connectors.sources.servicenow.DEFAULT_SERVICE_NAMES",
+            "connectors_service.sources.servicenow.DEFAULT_SERVICE_NAMES",
             {"incident": ["sn_incident_read"]},
         ):
             with mock.patch.object(
@@ -894,7 +894,7 @@ async def test_get_docs_with_advanced_rules_pagination(filtering):
         },
     ]
 
-    with patch("connectors.sources.servicenow.TABLE_FETCH_SIZE", 2):
+    with patch("connectors_service.sources.servicenow.TABLE_FETCH_SIZE", 2):
         async with create_service_now_source() as source:
             source.servicenow_client._api_call = mock.AsyncMock(
                 return_value=MockResponse(

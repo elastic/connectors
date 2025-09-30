@@ -138,7 +138,7 @@ if [[ "${PUBLISH_SNAPSHOT:-}" == "true" ]]; then
   generateDependencyReport $DEPENDENCIES_REPORTS_DIR/$dependencyReportName
 
   echo "-------- Publishing SNAPSHOT DRA Artifacts"
-  cp $RELEASE_DIR/dist/elasticsearch_connectors-${VERSION}.zip $DRA_ARTIFACTS_DIR/connectors-${VERSION}-SNAPSHOT.zip
+  cp $RELEASE_DIR/dist/elasticsearch_connectors-${VERSION}.zip $DRA_ARTIFACTS_DIR/connectors_service-${VERSION}-SNAPSHOT.zip
   cp $DRA_ARTIFACTS_DIR/$PROJECT_NAME-$VERSION-docker-image-linux-amd64.tar.gz $DRA_ARTIFACTS_DIR/$PROJECT_NAME-$VERSION-SNAPSHOT-docker-image-linux-amd64.tar.gz
   cp $DRA_ARTIFACTS_DIR/$PROJECT_NAME-$VERSION-docker-image-linux-arm64.tar.gz $DRA_ARTIFACTS_DIR/$PROJECT_NAME-$VERSION-SNAPSHOT-docker-image-linux-arm64.tar.gz
   setDraVaultCredentials

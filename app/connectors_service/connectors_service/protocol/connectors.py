@@ -4,12 +4,12 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """
-Database for connectors - see docs/CONNECTOR_PROTOCOL.md indices.
+Database for connectors_service - see docs/CONNECTOR_PROTOCOL.md indices.
 
 Main classes are :
 
-- ConnectorIndex: represents a document in `.elastic-connectors`
-- SyncJob: represents a document in `.elastic-connectors-sync-jobs`
+- ConnectorIndex: represents a document in `.elastic-connectors_service`
+- SyncJob: represents a document in `.elastic-connectors_service-sync-jobs`
 
 """
 
@@ -72,8 +72,8 @@ __all__ = [
 ]
 
 
-CONNECTORS_INDEX = ".elastic-connectors"
-JOBS_INDEX = ".elastic-connectors-sync-jobs"
+CONNECTORS_INDEX = ".elastic-connectors_service"
+JOBS_INDEX = ".elastic-connectors_service-sync-jobs"
 CONCRETE_CONNECTORS_INDEX = CONNECTORS_INDEX + "-v1"
 CONCRETE_JOBS_INDEX = JOBS_INDEX + "-v1"
 CONNECTORS_ACCESS_CONTROL_INDEX_PREFIX = ".search-acl-filter-"
@@ -271,7 +271,7 @@ class ConnectorIndex(ESIndex):
             )
         ]
         if len(connectors) > 1:
-            msg = f"Multiple connectors exist for index {index_name}"
+            msg = f"Multiple connectors_service exist for index {index_name}"
             raise InvalidConnectorSetupError(msg)
         elif len(connectors) == 0:
             return None

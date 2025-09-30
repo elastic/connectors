@@ -51,7 +51,7 @@ async def test_ping():
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+@patch("connectors_service.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_ping_negative():
     with pytest.raises(Exception):
         async with create_source(MSSQLDataSource) as source:
@@ -60,7 +60,7 @@ async def test_ping_negative():
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+@patch("connectors_service.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_fetch_documents_from_table_negative():
     async with create_source(MSSQLDataSource) as source:
         with patch.object(
@@ -73,7 +73,7 @@ async def test_fetch_documents_from_table_negative():
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+@patch("connectors_service.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_fetch_documents_from_query_negative():
     async with create_source(MSSQLDataSource) as source:
         with patch.object(

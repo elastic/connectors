@@ -122,7 +122,7 @@ def create_runner(
 @pytest.fixture(autouse=True)
 def sync_orchestrator_mock():
     with patch(
-        "connectors.sync_job_runner.SyncOrchestrator"
+        "connectors_service.sync_job_runner.SyncOrchestrator"
     ) as sync_orchestrator_klass_mock:
         sync_orchestrator_mock = Mock()
         sync_orchestrator_mock.prepare_content_index = AsyncMock()
@@ -568,7 +568,7 @@ async def test_sync_job_runner_suspend(job_type, sync_cursor, sync_orchestrator_
     sync_job_runner.sync_orchestrator.cancel.assert_called_once()
 
 
-@patch("connectors.sync_job_runner.ES_ID_SIZE_LIMIT", 1)
+@patch("connectors_service.sync_job_runner.ES_ID_SIZE_LIMIT", 1)
 @pytest.mark.asyncio
 async def test_prepare_docs_when_original_id_and_hashed_id_too_long_then_skip_doc():
     _id_too_long = "ab"
@@ -583,7 +583,7 @@ async def test_prepare_docs_when_original_id_and_hashed_id_too_long_then_skip_do
     assert len(docs) == 0
 
 
-@patch("connectors.sync_job_runner.ES_ID_SIZE_LIMIT", 10)
+@patch("connectors_service.sync_job_runner.ES_ID_SIZE_LIMIT", 10)
 @pytest.mark.parametrize("_id", ["ab", 1, 1.5])
 @pytest.mark.asyncio
 async def test_prepare_docs_when_original_id_below_limit_then_yield_doc_with_original_id(
@@ -599,7 +599,7 @@ async def test_prepare_docs_when_original_id_below_limit_then_yield_doc_with_ori
     assert docs[0]["_id"] == _id
 
 
-@patch("connectors.sync_job_runner.ES_ID_SIZE_LIMIT", 3)
+@patch("connectors_service.sync_job_runner.ES_ID_SIZE_LIMIT", 3)
 @pytest.mark.asyncio
 async def test_prepare_docs_when_original_id_above_limit_and_hashed_id_below_limit_then_yield_doc_with_hashed_id():
     _id_too_long = "abcd"
@@ -625,8 +625,8 @@ async def test_prepare_docs_when_original_id_above_limit_and_hashed_id_below_lim
     ],
 )
 @pytest.mark.asyncio
-@patch("connectors.sync_job_runner.JOB_REPORTING_INTERVAL", 0)
-@patch("connectors.sync_job_runner.JOB_CHECK_INTERVAL", 0)
+@patch("connectors_service.sync_job_runner.JOB_REPORTING_INTERVAL", 0)
+@patch("connectors_service.sync_job_runner.JOB_CHECK_INTERVAL", 0)
 async def test_sync_job_runner_reporting_metadata(
     job_type, sync_cursor, sync_orchestrator_mock
 ):
@@ -663,8 +663,8 @@ async def test_sync_job_runner_reporting_metadata(
     "job_type", [JobType.FULL, JobType.INCREMENTAL, JobType.ACCESS_CONTROL]
 )
 @pytest.mark.asyncio
-@patch("connectors.sync_job_runner.JOB_REPORTING_INTERVAL", 0)
-@patch("connectors.sync_job_runner.JOB_CHECK_INTERVAL", 0)
+@patch("connectors_service.sync_job_runner.JOB_REPORTING_INTERVAL", 0)
+@patch("connectors_service.sync_job_runner.JOB_CHECK_INTERVAL", 0)
 async def test_sync_job_runner_connector_not_found(job_type, sync_orchestrator_mock):
     ingestion_stats = {
         "indexed_document_count": 15,
@@ -704,8 +704,8 @@ async def test_sync_job_runner_connector_not_found(job_type, sync_orchestrator_m
     ],
 )
 @pytest.mark.asyncio
-@patch("connectors.sync_job_runner.JOB_REPORTING_INTERVAL", 0)
-@patch("connectors.sync_job_runner.JOB_CHECK_INTERVAL", 0)
+@patch("connectors_service.sync_job_runner.JOB_REPORTING_INTERVAL", 0)
+@patch("connectors_service.sync_job_runner.JOB_CHECK_INTERVAL", 0)
 async def test_sync_job_runner_sync_job_not_found(
     job_type, sync_cursor, sync_orchestrator_mock
 ):
@@ -739,8 +739,8 @@ async def test_sync_job_runner_sync_job_not_found(
     ],
 )
 @pytest.mark.asyncio
-@patch("connectors.sync_job_runner.JOB_REPORTING_INTERVAL", 0)
-@patch("connectors.sync_job_runner.JOB_CHECK_INTERVAL", 0)
+@patch("connectors_service.sync_job_runner.JOB_REPORTING_INTERVAL", 0)
+@patch("connectors_service.sync_job_runner.JOB_CHECK_INTERVAL", 0)
 async def test_sync_job_runner_canceled(job_type, sync_cursor, sync_orchestrator_mock):
     ingestion_stats = {
         "indexed_document_count": 15,
@@ -780,8 +780,8 @@ async def test_sync_job_runner_canceled(job_type, sync_cursor, sync_orchestrator
     ],
 )
 @pytest.mark.asyncio
-@patch("connectors.sync_job_runner.JOB_REPORTING_INTERVAL", 0)
-@patch("connectors.sync_job_runner.JOB_CHECK_INTERVAL", 0)
+@patch("connectors_service.sync_job_runner.JOB_REPORTING_INTERVAL", 0)
+@patch("connectors_service.sync_job_runner.JOB_CHECK_INTERVAL", 0)
 async def test_sync_job_runner_not_running(
     job_type, sync_cursor, sync_orchestrator_mock
 ):
@@ -877,7 +877,7 @@ def test_skip_unchanged_documents_enabled_disabled_by_full_sync():
 
 
 @patch(
-    "connectors.sync_job_runner.SyncJobRunner._skip_unchanged_documents_enabled",
+    "connectors_service.sync_job_runner.SyncJobRunner._skip_unchanged_documents_enabled",
     Mock(return_value=True),
 )
 @pytest.mark.asyncio
@@ -898,7 +898,7 @@ async def test_incremental_sync_with_skip_unchanged_documents_generator():
 
 
 @patch(
-    "connectors.sync_job_runner.SyncJobRunner._skip_unchanged_documents_enabled",
+    "connectors_service.sync_job_runner.SyncJobRunner._skip_unchanged_documents_enabled",
     Mock(return_value=False),
 )
 @pytest.mark.asyncio

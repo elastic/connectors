@@ -5,7 +5,7 @@ definitions:
           provider: "gcp"
           machineType: "n1-standard-8"
           useVault: true
-          image: family/enterprise-search-ubuntu-2204-connectors-py
+          image: family/enterprise-search-ubuntu-2204-connectors_service-py
   retries: &retries
     retry:
       automatic:
@@ -75,9 +75,9 @@ steps:
       machineType: "n1-standard-8"
       provider: "gcp"
       useVault: true
-      image: family/enterprise-search-ubuntu-2204-connectors-py
+      image: family/enterprise-search-ubuntu-2204-connectors_service-py
 
-  - label: ":sweating: Checking for changes in connectors"
+  - label: ":sweating: Checking for changes in connectors_service"
     key: "relevant_ftests"
     plugins:
       monorepo-diff#v1.1.0:
@@ -85,7 +85,7 @@ steps:
         wait: false
         watch:
           - path:
-            - "connectors/sources/mysql.py"
+            - "connectors_service/sources/mysql.py"
             - "tests/sources/fixtures/mysql/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
@@ -104,7 +104,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/network_drive.py"
+            - "connectors_service/sources/network_drive.py"
             - "tests/sources/fixtures/network_drive/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
@@ -123,7 +123,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/s3.py"
+            - "connectors_service/sources/s3.py"
             - "tests/sources/fixtures/s3/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
@@ -142,7 +142,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/google_cloud_storage.py"
+            - "connectors_service/sources/google_cloud_storage.py"
             - "tests/sources/fixtures/google_cloud_storage/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
@@ -161,7 +161,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/azure_blob_storage.py"
+            - "connectors_service/sources/azure_blob_storage.py"
             - "tests/sources/fixtures/azure_blob_storage/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
@@ -180,7 +180,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/postgresql.py"
+            - "connectors_service/sources/postgresql.py"
             - "tests/sources/fixtures/postgresql/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
@@ -199,7 +199,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/directory.py"
+            - "connectors_service/sources/directory.py"
             - "tests/sources/fixtures/dir/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
@@ -218,7 +218,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/oracle.py"
+            - "connectors_service/sources/oracle.py"
             - "tests/sources/fixtures/oracle/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
@@ -237,7 +237,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/sharepoint_server.py"
+            - "connectors_service/sources/sharepoint_server.py"
             - "tests/sources/fixtures/sharepoint_server/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
@@ -256,7 +256,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/sharepoint_online.py"
+            - "connectors_service/sources/sharepoint_online.py"
             - "tests/sources/fixtures/sharepoint_online/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
@@ -275,7 +275,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/mssql.py"
+            - "connectors_service/sources/mssql.py"
             - "tests/sources/fixtures/mssql/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
@@ -294,8 +294,8 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/jira.py"
-            - "connectors/sources/atlassian.py"
+            - "connectors_service/sources/jira.py"
+            - "connectors_service/sources/atlassian.py"
             - "tests/sources/fixtures/jira/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
@@ -314,8 +314,8 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/confluence.py"
-            - "connectors/sources/atlassian.py"
+            - "connectors_service/sources/confluence.py"
+            - "connectors_service/sources/atlassian.py"
             - "tests/sources/fixtures/confluence/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
@@ -334,7 +334,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/servicenow.py"
+            - "connectors_service/sources/servicenow.py"
             - "tests/sources/fixtures/servicenow/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
@@ -353,7 +353,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/mongo.py"
+            - "connectors_service/sources/mongo.py"
             - "tests/sources/fixtures/mongodb/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
@@ -372,7 +372,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/github.py"
+            - "connectors_service/sources/github.py"
             - "tests/sources/fixtures/github/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
@@ -391,7 +391,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/google_drive.py"
+            - "connectors_service/sources/google_drive.py"
             - "tests/sources/fixtures/google_drive/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
@@ -410,7 +410,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/dropbox.py"
+            - "connectors_service/sources/dropbox.py"
             - "tests/sources/fixtures/dropbox/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
@@ -429,7 +429,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/onedrive.py"
+            - "connectors_service/sources/onedrive.py"
             - "tests/sources/fixtures/onedrive/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
@@ -448,7 +448,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/salesforce.py"
+            - "connectors_service/sources/salesforce.py"
             - "tests/sources/fixtures/salesforce/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
@@ -467,7 +467,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/zoom.py"
+            - "connectors_service/sources/zoom.py"
             - "tests/sources/fixtures/zoom/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
@@ -486,7 +486,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/box.py"
+            - "connectors_service/sources/box.py"
             - "tests/sources/fixtures/box/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
@@ -505,7 +505,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/microsoft_teams.py"
+            - "connectors_service/sources/microsoft_teams.py"
             - "tests/sources/fixtures/microsoft_teams/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
@@ -524,7 +524,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/notion.py"
+            - "connectors_service/sources/notion.py"
             - "tests/sources/fixtures/notion/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
@@ -543,7 +543,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/redis.py"
+            - "connectors_service/sources/redis.py"
             - "tests/sources/fixtures/redis/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
@@ -562,7 +562,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/graphql.py"
+            - "connectors_service/sources/graphql.py"
             - "tests/sources/fixtures/graphql/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
@@ -665,8 +665,8 @@ steps:
         env:
           ARCHITECTURE: "amd64"
           DOCKERFILE_PATH: "Dockerfile"
-          DOCKER_IMAGE_NAME: "docker.elastic.co/ci-agent-images/elastic-connectors-oss-dockerfile"
-          DOCKER_ARTIFACT_KEY: "elastic-connectors-oss-dockerfile"
+          DOCKER_IMAGE_NAME: "docker.elastic.co/ci-agent-images/elastic-connectors_service-oss-dockerfile"
+          DOCKER_ARTIFACT_KEY: "elastic-connectors_service-oss-dockerfile"
         command: ".buildkite/publish/build-docker.sh"
         key: "build_oss_dockerfile_image_amd64"
         artifact_paths: ".artifacts/*.tar.gz"
@@ -678,8 +678,8 @@ steps:
         env:
           ARCHITECTURE: "amd64"
           DOCKERFILE_PATH: "Dockerfile"
-          DOCKER_IMAGE_NAME: "docker.elastic.co/ci-agent-images/elastic-connectors-oss-dockerfile"
-          DOCKER_ARTIFACT_KEY: "elastic-connectors-oss-dockerfile"
+          DOCKER_IMAGE_NAME: "docker.elastic.co/ci-agent-images/elastic-connectors_service-oss-dockerfile"
+          DOCKER_ARTIFACT_KEY: "elastic-connectors_service-oss-dockerfile"
         depends_on: "build_oss_dockerfile_image_amd64"
         key: "test_oss_dockerfile_image_amd64"
         commands:
@@ -714,8 +714,8 @@ steps:
         env:
           ARCHITECTURE: "arm64"
           DOCKERFILE_PATH: "Dockerfile"
-          DOCKER_IMAGE_NAME: "docker.elastic.co/ci-agent-images/elastic-connectors-oss-dockerfile"
-          DOCKER_ARTIFACT_KEY: "elastic-connectors-oss-dockerfile"
+          DOCKER_IMAGE_NAME: "docker.elastic.co/ci-agent-images/elastic-connectors_service-oss-dockerfile"
+          DOCKER_ARTIFACT_KEY: "elastic-connectors_service-oss-dockerfile"
         command: ".buildkite/publish/build-docker.sh"
         key: "build_oss_dockerfile_image_arm64"
         artifact_paths: ".artifacts/*.tar.gz"
@@ -729,8 +729,8 @@ steps:
         env:
           ARCHITECTURE: "arm64"
           DOCKERFILE_PATH: "Dockerfile"
-          DOCKER_IMAGE_NAME: "docker.elastic.co/ci-agent-images/elastic-connectors-oss-dockerfile"
-          DOCKER_ARTIFACT_KEY: "elastic-connectors-oss-dockerfile"
+          DOCKER_IMAGE_NAME: "docker.elastic.co/ci-agent-images/elastic-connectors_service-oss-dockerfile"
+          DOCKER_ARTIFACT_KEY: "elastic-connectors_service-oss-dockerfile"
         depends_on: "build_oss_dockerfile_image_arm64"
         key: "test_oss_dockerfile_image_arm64"
         commands:

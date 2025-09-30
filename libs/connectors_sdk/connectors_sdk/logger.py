@@ -151,7 +151,7 @@ class ExtraLogger(logging.Logger):
             extra = {}
         extra.update(
             {
-                "service.type": "connectors-python",
+                "service.type": "connectors_service-python",
                 "service.version": __version__,
             }
         )
@@ -167,7 +167,7 @@ def set_logger(log_level=logging.INFO, filebeat=False):
 
     if logger is None:
         logging.setLoggerClass(ExtraLogger)
-        logger = logging.getLogger("connectors")
+        logger = logging.getLogger("connectors_service")
         logger.handlers.clear()
         handler = logging.StreamHandler()
         logger.addHandler(handler)

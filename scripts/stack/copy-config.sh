@@ -32,7 +32,7 @@ if [[ "$is_example_config" == true ]]; then
     if [[ "$MACHINE_OS" == "MacOS" || "$MACHINE_OS" == "FreeBSD" ]]; then
         sed_cmd="sed -i -e"
     fi
-    $sed_cmd '/connectors:/s/^#//g' "$script_config"
+    $sed_cmd '/connectors_service:/s/^#//g' "$script_config"
     $sed_cmd '/elasticsearch.host/s/^#//g' "$script_config"
     $sed_cmd '/elasticsearch.username/s/^#//g' "$script_config"
     $sed_cmd '/elasticsearch.password/s/^#//g' "$script_config"

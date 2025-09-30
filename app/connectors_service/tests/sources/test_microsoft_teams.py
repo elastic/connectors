@@ -1083,7 +1083,7 @@ class JSONAsyncMock(AsyncMock):
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+@patch("connectors_service.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_call_api_with_429(
     microsoft_client,
     mock_responses,
@@ -1097,7 +1097,7 @@ async def test_call_api_with_429(
     payload = {"value": "Test rate limit"}
 
     retried_response.__aenter__ = AsyncMock(return_value=JSONAsyncMock(payload))
-    with patch("connectors.sources.microsoft_teams.RETRY_SECONDS", 0.3):
+    with patch("connectors_service.sources.microsoft_teams.RETRY_SECONDS", 0.3):
         with patch.object(
             GraphAPIToken, "get_with_username_password", return_value="abc"
         ):
@@ -1111,7 +1111,7 @@ async def test_call_api_with_429(
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+@patch("connectors_service.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_call_api_with_429_with_retry_after(
     microsoft_client,
     mock_responses,
@@ -1126,7 +1126,7 @@ async def test_call_api_with_429_with_retry_after(
     payload = {"value": "Test rate limit"}
 
     retried_response.__aenter__ = AsyncMock(return_value=JSONAsyncMock(payload))
-    with patch("connectors.sources.microsoft_teams.RETRY_SECONDS", 0.3):
+    with patch("connectors_service.sources.microsoft_teams.RETRY_SECONDS", 0.3):
         with patch.object(
             GraphAPIToken, "get_with_username_password", return_value="abc"
         ):

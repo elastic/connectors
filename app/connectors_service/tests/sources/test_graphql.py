@@ -108,7 +108,7 @@ async def test_get():
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+@patch("connectors_service.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_get_with_errors():
     async with create_graphql_source() as source:
         source.graphql_client.session.get = Mock(
@@ -136,7 +136,7 @@ async def test_post():
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+@patch("connectors_service.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_post_with_errors():
     async with create_graphql_source() as source:
         source.graphql_client.session.post = Mock(
@@ -152,7 +152,7 @@ async def test_post_with_errors():
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+@patch("connectors_service.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_make_request_with_unauthorized():
     async with create_graphql_source() as source:
         source.graphql_client.session.post = Mock(
@@ -169,7 +169,7 @@ async def test_make_request_with_unauthorized():
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+@patch("connectors_service.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_make_request_with_429_exception():
     async with create_graphql_source() as source:
         source.graphql_client.session.post = Mock(
@@ -231,7 +231,7 @@ async def test_ping():
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+@patch("connectors_service.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_ping_negative():
     async with create_graphql_source() as source:
         source.graphql_client.post = AsyncMock(side_effect=Exception())

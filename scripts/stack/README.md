@@ -54,11 +54,11 @@ ELASTICSEARCH_VERSION=8.11.2 KIBANA_VERSION=8.11.2 CONNECTORS_VERSION=8.11.2.0 .
 
 Once the stack is running, you can monitor the logs from the Connectors instance by running:
 ```bash
-./scripts/stack/view-connectors-logs.sh
+./scripts/stack/view-connectors_service-logs.sh
 ```
 or:
 ```bash
-docker-compose -f ./scripts/stack/docker/docker-compose.yml logs -f elastic-connectors
+docker-compose -f ./scripts/stack/docker/docker-compose.yml logs -f elastic-connectors_service
 ```
 
 ## Prompted Configuration
@@ -149,7 +149,7 @@ Command line options:
 Views the Connectors Docker container logs, optionally continously watching the log output.
 
 ```bash
-./scripts/stack/view-connectors-logs.sh
+./scripts/stack/view-connectors_service-logs.sh
 ```
 
 Command line options:

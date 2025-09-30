@@ -68,8 +68,8 @@ A source class can be any Python class, and is declared into the `config.yml` fi
 
 ```yaml
 sources:
-  mongodb: connectors.sources.mongo:MongoDataSource
-  s3: connectors.sources.s3:S3DataSource
+  mongodb: connectors_service.sources.mongo:MongoDataSource
+  s3: connectors_service.sources.s3:S3DataSource
 ```
 
 The source class is declared with its [Fully Qualified Name(FQN)](https://en.wikipedia.org/wiki/Fully_qualified_name) so the framework knows where the class is located, so it can import it and instantiate it.

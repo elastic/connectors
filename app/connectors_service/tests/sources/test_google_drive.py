@@ -134,7 +134,7 @@ async def test_ping_for_successful_connection():
             await source.ping()
 
 
-@patch("connectors.utils.time_to_sleep_between_retries", mock.Mock(return_value=0))
+@patch("connectors_service.utils.time_to_sleep_between_retries", mock.Mock(return_value=0))
 @pytest.mark.asyncio
 async def test_ping_for_failed_connection():
     """Tests the ping functionality when connection can not be established to Google Drive."""
@@ -1195,7 +1195,7 @@ async def test_get_content_when_type_not_supported():
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.time_to_sleep_between_retries", 0)
+@patch("connectors_service.utils.time_to_sleep_between_retries", 0)
 async def test_api_call_for_attribute_error():
     """Tests the api_call method when resource attribute is not present in the getattr."""
 
@@ -1207,7 +1207,7 @@ async def test_api_call_for_attribute_error():
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.time_to_sleep_between_retries", 0)
+@patch("connectors_service.utils.time_to_sleep_between_retries", 0)
 async def test_api_call_http_error():
     """Test handling retries for HTTPError exception in api_call() method."""
     async with create_gdrive_source() as source:
@@ -1221,7 +1221,7 @@ async def test_api_call_http_error():
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.time_to_sleep_between_retries", 0)
+@patch("connectors_service.utils.time_to_sleep_between_retries", 0)
 async def test_api_call_other_exception():
     """Test handling retries for generic Exception in api_call() method."""
     async with create_gdrive_source() as source:
@@ -1233,7 +1233,7 @@ async def test_api_call_other_exception():
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.time_to_sleep_between_retries")
+@patch("connectors_service.utils.time_to_sleep_between_retries")
 async def test_api_call_ping_retries(
     mock_time_to_sleep_between_retries, mock_responses
 ):

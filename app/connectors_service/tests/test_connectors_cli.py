@@ -23,21 +23,21 @@ from tests.commons import AsyncIterator
 
 @pytest.fixture(autouse=True)
 def mock_cli_config():
-    with patch("connectors.connectors_cli.load_config") as mock:
+    with patch("connectors_service.connectors_cli.load_config") as mock:
         mock.return_value = {"elasticsearch": {"host": "http://localhost:9211/"}}
         yield mock
 
 
 @pytest.fixture(autouse=True)
 def mock_connector_es_client():
-    with patch("connectors.cli.connector.CLIClient") as mock:
+    with patch("connectors_service.cli.connector.CLIClient") as mock:
         mock.return_value = AsyncMock()
         yield mock
 
 
 @pytest.fixture(autouse=True)
 def mock_job_es_client():
-    with patch("connectors.cli.job.CLIClient") as mock:
+    with patch("connectors_service.cli.job.CLIClient") as mock:
         mock.return_value = AsyncMock()
         yield mock
 
@@ -59,7 +59,7 @@ def test_help_page(commands):
     assert "Commands:" in result.output
 
 
-@patch("connectors.cli.auth.Auth._Auth__ping_es_client", AsyncMock(return_value=False))
+@patch("connectors_service.cli.auth.Auth._Auth__ping_es_client", AsyncMock(return_value=False))
 def test_login_unsuccessful(tmp_path):
     runner = CliRunner()
     with runner.isolated_filesystem(temp_dir=tmp_path) as temp_dir:
@@ -71,7 +71,7 @@ def test_login_unsuccessful(tmp_path):
         assert not os.path.isfile(os.path.join(temp_dir, CONFIG_FILE_PATH))
 
 
-@patch("connectors.cli.auth.Auth._Auth__ping_es_client", AsyncMock(return_value=True))
+@patch("connectors_service.cli.auth.Auth._Auth__ping_es_client", AsyncMock(return_value=True))
 def test_login_successful(tmp_path):
     runner = CliRunner()
     with runner.isolated_filesystem(temp_dir=tmp_path) as temp_dir:
@@ -83,7 +83,7 @@ def test_login_successful(tmp_path):
         assert os.path.isfile(os.path.join(temp_dir, CONFIG_FILE_PATH))
 
 
-@patch("connectors.cli.auth.Auth._Auth__ping_es_client", AsyncMock(return_value=True))
+@patch("connectors_service.cli.auth.Auth._Auth__ping_es_client", AsyncMock(return_value=True))
 def test_login_successful_with_apikey_method(tmp_path):
     runner = CliRunner()
     api_key = "testapikey"
@@ -128,12 +128,12 @@ def test_connector_help_page():
     assert "Commands:" in result.output
 
 
-@patch("connectors.cli.connector.Connector.list_connectors", AsyncMock(return_value=[]))
+@patch("connectors_service.cli.connector.Connector.list_connectors", AsyncMock(return_value=[]))
 def test_connector_list_no_connectors():
     runner = CliRunner()
     result = runner.invoke(cli, ["connector", "list"])
     assert result.exit_code == 0
-    assert "No connectors found" in result.output
+    assert "No connectors_service found" in result.output
 
 
 def test_connector_list_one_connector():
@@ -152,7 +152,7 @@ def test_connector_list_one_connector():
     connectors = [ConnectorObject(connector_index, doc)]
 
     with patch(
-        "connectors.protocol.ConnectorIndex.all_connectors", AsyncIterator(connectors)
+        "connectors_service.protocol.ConnectorIndex.all_connectors", AsyncIterator(connectors)
     ):
         result = runner.invoke(cli, ["connector", "list"])
 
@@ -166,7 +166,7 @@ def test_connector_list_one_connector():
 
 @patch("click.confirm")
 @patch(
-    "connectors.cli.index.Index.index_or_connector_exists",
+    "connectors_service.cli.index.Index.index_or_connector_exists",
     MagicMock(return_value=[False, False]),
 )
 def test_connector_create(patch_click_confirm):
@@ -187,7 +187,7 @@ def test_connector_create(patch_click_confirm):
     )
 
     with patch(
-        "connectors.protocol.connectors.ConnectorIndex.index",
+        "connectors_service.protocol.connectors_service.ConnectorIndex.index",
         AsyncMock(return_value={"_id": "new_connector_id"}),
     ) as patched_create:
         result = runner.invoke(
@@ -213,7 +213,7 @@ def test_connector_create(patch_click_confirm):
 )
 @patch("click.confirm")
 @patch(
-    "connectors.cli.index.Index.index_or_connector_exists",
+    "connectors_service.cli.index.Index.index_or_connector_exists",
     MagicMock(return_value=[False, False]),
 )
 def test_connector_create_with_native_flags(
@@ -236,7 +236,7 @@ def test_connector_create_with_native_flags(
     )
 
     with patch(
-        "connectors.protocol.connectors.ConnectorIndex.index",
+        "connectors_service.protocol.connectors_service.ConnectorIndex.index",
         AsyncMock(return_value={"_id": "new_connector_id"}),
     ) as patched_create:
         args = ["connector", "create", "--service-type", "mongodb"]
@@ -254,11 +254,11 @@ def test_connector_create_with_native_flags(
 
 @patch("click.confirm")
 @patch(
-    "connectors.cli.index.Index.index_or_connector_exists",
+    "connectors_service.cli.index.Index.index_or_connector_exists",
     MagicMock(return_value=[True, False]),
 )
 @patch(
-    "connectors.cli.connector.Connector._Connector__create_api_key",
+    "connectors_service.cli.connector.Connector._Connector__create_api_key",
     AsyncMock(return_value={"id": "new_api_key_id", "encoded": "encoded_api_key"}),
 )
 def test_connector_create_from_index(patch_click_confirm):
@@ -279,7 +279,7 @@ def test_connector_create_from_index(patch_click_confirm):
     )
 
     with patch(
-        "connectors.protocol.connectors.ConnectorIndex.index",
+        "connectors_service.protocol.connectors_service.ConnectorIndex.index",
         AsyncMock(return_value={"_id": "new_connector_id"}),
     ) as patched_create:
         result = runner.invoke(
@@ -329,11 +329,11 @@ def test_connector_create_fails_when_index_or_connector_exists(
     )
 
     with patch(
-        "connectors.cli.index.Index.index_or_connector_exists",
+        "connectors_service.cli.index.Index.index_or_connector_exists",
         MagicMock(return_value=[index_exists, connector_exists]),
     ):
         with patch(
-            "connectors.protocol.connectors.ConnectorIndex.index",
+            "connectors_service.protocol.connectors_service.ConnectorIndex.index",
             AsyncMock(return_value={"_id": "new_connector_id"}),
         ) as patched_create:
             args = ["connector", "create", "--service-type", "mongodb"]
@@ -349,11 +349,11 @@ def test_connector_create_fails_when_index_or_connector_exists(
 
 
 @patch(
-    "connectors.cli.connector.Connector._Connector__create_api_key",
+    "connectors_service.cli.connector.Connector._Connector__create_api_key",
     AsyncMock(return_value={"id": "new_api_key_id", "encoded": "encoded_api_key"}),
 )
 @patch(
-    "connectors.cli.index.Index.index_or_connector_exists",
+    "connectors_service.cli.index.Index.index_or_connector_exists",
     MagicMock(return_value=[False, False]),
 )
 def test_connector_create_from_file():
@@ -369,7 +369,7 @@ def test_connector_create_from_file():
     )
 
     with patch(
-        "connectors.protocol.connectors.ConnectorIndex.index",
+        "connectors_service.protocol.connectors_service.ConnectorIndex.index",
         AsyncMock(return_value={"_id": "new_connector_id"}),
     ) as patched_create:
         with runner.isolated_filesystem():
@@ -407,11 +407,11 @@ def test_connector_create_from_file():
 
 
 @patch(
-    "connectors.cli.connector.Connector._Connector__create_api_key",
+    "connectors_service.cli.connector.Connector._Connector__create_api_key",
     AsyncMock(return_value={"id": "new_api_key_id", "encoded": "encoded_api_key"}),
 )
 @patch(
-    "connectors.cli.index.Index.index_or_connector_exists",
+    "connectors_service.cli.index.Index.index_or_connector_exists",
     MagicMock(return_value=[False, False]),
 )
 def test_connector_create_and_update_the_service_config():
@@ -434,7 +434,7 @@ def test_connector_create_and_update_the_service_config():
     )
 
     with patch(
-        "connectors.protocol.connectors.ConnectorIndex.index",
+        "connectors_service.protocol.connectors_service.ConnectorIndex.index",
         AsyncMock(return_value={"_id": connector_id}),
     ) as patched_create:
         with runner.isolated_filesystem():
@@ -454,7 +454,7 @@ def test_connector_create_and_update_the_service_config():
             )
 
             config = yaml.load(open("config.yml"), Loader=yaml.FullLoader)[
-                "connectors"
+                "connectors_service"
             ][0]
 
             patched_create.assert_called_once()
@@ -469,7 +469,7 @@ def test_connector_create_and_update_the_service_config():
 
 @patch("click.confirm")
 @patch(
-    "connectors.cli.index.Index.index_or_connector_exists",
+    "connectors_service.cli.index.Index.index_or_connector_exists",
     MagicMock(return_value=[True, False]),
 )
 def test_connector_create_native_connector(patched_confirm):
@@ -490,15 +490,15 @@ def test_connector_create_native_connector(patched_confirm):
     )
 
     with patch(
-        "connectors.cli.connector.Connector._Connector__create_api_key",
+        "connectors_service.cli.connector.Connector._Connector__create_api_key",
         AsyncMock(return_value={"id": "api-key-123", "encoded": "foo"}),
     ) as patched_create_api_key:
         with patch(
-            "connectors.cli.connector.Connector._Connector__store_api_key",
+            "connectors_service.cli.connector.Connector._Connector__store_api_key",
             AsyncMock(return_value="secret-123"),
         ) as patched_store_api_key:
             with patch(
-                "connectors.protocol.connectors.ConnectorIndex.index",
+                "connectors_service.protocol.connectors_service.ConnectorIndex.index",
                 AsyncMock(return_value={"_id": "new_connector_id"}),
             ) as patched_create:
                 result = runner.invoke(
@@ -537,7 +537,7 @@ def test_index_help_page():
     assert "Commands:" in result.output
 
 
-@patch("connectors.cli.index.Index.list_indices", MagicMock(return_value=[]))
+@patch("connectors_service.cli.index.Index.list_indices", MagicMock(return_value=[]))
 def test_index_list_no_indexes():
     runner = CliRunner()
     result = runner.invoke(cli, ["index", "list"])
@@ -550,7 +550,7 @@ def test_index_list_one_index():
     indices = {"test_index": {"docs_count": 10}}
 
     with patch(
-        "connectors.es.cli_client.CLIClient.list_indices",
+        "connectors_service.es.cli_client.CLIClient.list_indices",
         AsyncMock(return_value=indices),
     ):
         result = runner.invoke(cli, ["index", "list"])
@@ -564,13 +564,13 @@ def test_index_list_one_index_in_serverless():
     indices = {"test_index": {"docs_count": 10}}
 
     with patch(
-        "connectors.es.cli_client.CLIClient.list_indices"
+        "connectors_service.es.cli_client.CLIClient.list_indices"
     ) as mocked_list_indices:
         mocked_list_indices.side_effect = ApiError(
             "api_not_available_exception", meta="meta", body="error"
         )
         with patch(
-            "connectors.es.cli_client.CLIClient.list_indices_serverless",
+            "connectors_service.es.cli_client.CLIClient.list_indices_serverless",
             AsyncMock(return_value=indices),
         ):
             result = runner.invoke(cli, ["index", "list"])
@@ -584,7 +584,7 @@ def test_index_clean():
     runner = CliRunner()
     index_name = "test_index"
     with patch(
-        "connectors.es.cli_client.CLIClient.clean_index",
+        "connectors_service.es.cli_client.CLIClient.clean_index",
         AsyncMock(return_value=True),
     ) as mocked_method:
         result = runner.invoke(cli, ["index", "clean", index_name])
@@ -599,7 +599,7 @@ def test_index_clean_error():
     runner = CliRunner()
     index_name = "test_index"
     with patch(
-        "connectors.es.cli_client.CLIClient.clean_index",
+        "connectors_service.es.cli_client.CLIClient.clean_index",
         side_effect=ApiError(500, meta="meta", body="error"),
     ):
         result = runner.invoke(cli, ["index", "clean", index_name])
@@ -613,7 +613,7 @@ def test_index_delete():
     runner = CliRunner()
     index_name = "test_index"
     with patch(
-        "connectors.es.cli_client.CLIClient.delete_indices",
+        "connectors_service.es.cli_client.CLIClient.delete_indices",
         AsyncMock(return_value=None),
     ) as mocked_method:
         result = runner.invoke(cli, ["index", "delete", index_name])
@@ -628,7 +628,7 @@ def test_delete_index_error():
     runner = CliRunner()
     index_name = "test_index"
     with patch(
-        "connectors.es.cli_client.CLIClient.delete_indices",
+        "connectors_service.es.cli_client.CLIClient.delete_indices",
         side_effect=ApiError(500, meta="meta", body="error"),
     ):
         result = runner.invoke(cli, ["index", "delete", index_name])
@@ -678,7 +678,7 @@ def test_job_cancel():
 
     job = SyncJobObject(job_index, doc)
 
-    with patch("connectors.protocol.SyncJobIndex.get_all_docs", AsyncIterator([job])):
+    with patch("connectors_service.protocol.SyncJobIndex.get_all_docs", AsyncIterator([job])):
         with patch.object(job, "_terminate") as mocked_method:
             result = runner.invoke(cli, ["job", "cancel", job_id])
 
@@ -692,7 +692,7 @@ def test_job_cancel_error():
     runner = CliRunner()
     job_id = "test_job_id"
     with patch(
-        "connectors.protocol.SyncJobIndex.get_all_docs",
+        "connectors_service.protocol.SyncJobIndex.get_all_docs",
         side_effect=ApiError(500, meta="meta", body="error"),
     ):
         result = runner.invoke(cli, ["job", "cancel", job_id])
@@ -706,7 +706,7 @@ def test_job_list_no_jobs():
     connector_id = "test_connector_id"
 
     with patch(
-        "connectors.cli.job.Job._Job__async_list_jobs", AsyncMock(return_value=[])
+        "connectors_service.cli.job.Job._Job__async_list_jobs", AsyncMock(return_value=[])
     ):
         result = runner.invoke(cli, ["job", "list", connector_id])
 
@@ -748,7 +748,7 @@ def test_job_list_one_job():
     job = SyncJobObject(job_index, doc)
 
     with patch(
-        "connectors.protocol.connectors.SyncJobIndex.get_all_docs", AsyncIterator([job])
+        "connectors_service.protocol.connectors_service.SyncJobIndex.get_all_docs", AsyncIterator([job])
     ):
         result = runner.invoke(cli, ["job", "list", connector_id])
 
@@ -763,7 +763,7 @@ def test_job_list_one_job():
 
 
 @patch(
-    "connectors.protocol.connectors.ConnectorIndex.fetch_by_id",
+    "connectors_service.protocol.connectors_service.ConnectorIndex.fetch_by_id",
     AsyncMock(return_value=MagicMock()),
 )
 def test_job_start():
@@ -772,7 +772,7 @@ def test_job_start():
     job_id = "test_job_id"
 
     with patch(
-        "connectors.protocol.connectors.SyncJobIndex.create",
+        "connectors_service.protocol.connectors_service.SyncJobIndex.create",
         AsyncMock(return_value=job_id),
     ) as patched_create:
         result = runner.invoke(cli, ["job", "start", "-i", connector_id, "-t", "full"])
@@ -815,7 +815,7 @@ def test_job_view():
     job = SyncJobObject(job_index, doc)
 
     with patch(
-        "connectors.protocol.connectors.SyncJobIndex.fetch_by_id",
+        "connectors_service.protocol.connectors_service.SyncJobIndex.fetch_by_id",
         AsyncMock(return_value=job),
     ):
         result = runner.invoke(cli, ["job", "view", job_id])

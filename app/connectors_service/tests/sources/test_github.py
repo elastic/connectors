@@ -888,7 +888,7 @@ async def test_get_user_repos():
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+@patch("connectors_service.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_ping_with_unsuccessful_connection():
     async with create_github_source() as source:
         with patch.object(
@@ -930,7 +930,7 @@ async def test_validate_config_with_extra_scopes_token(patch_logger):
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+@patch("connectors_service.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_validate_config_with_inaccessible_repositories_then_raise():
     async with create_github_source(
         repos="repo1m owner1/repo1, repo2, owner2/repo2"
@@ -944,7 +944,7 @@ async def test_validate_config_with_inaccessible_repositories_then_raise():
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+@patch("connectors_service.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_get_invalid_repos_with_max_retries():
     async with create_github_source() as source:
         with pytest.raises(Exception):
@@ -953,7 +953,7 @@ async def test_get_invalid_repos_with_max_retries():
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+@patch("connectors_service.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_get_response_with_rate_limit_exceeded():
     async with create_github_source() as source:
         with patch.object(
@@ -990,7 +990,7 @@ async def test_get_retry_after():
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+@patch("connectors_service.utils.time_to_sleep_between_retries", Mock(return_value=0))
 @pytest.mark.parametrize(
     "exceptions, raises",
     [
@@ -1018,7 +1018,7 @@ async def test_graphql_with_BadGraphQLRequest(exceptions, raises):
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+@patch("connectors_service.utils.time_to_sleep_between_retries", Mock(return_value=0))
 @pytest.mark.parametrize(
     "exceptions, raises, is_raised",
     [
@@ -1068,7 +1068,7 @@ async def test_graphql_with_QueryError(exceptions, raises, is_raised):
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+@patch("connectors_service.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_graphql_with_unauthorized():
     async with create_github_source() as source:
         source.github_client._get_client.graphql = Mock(
@@ -1394,7 +1394,7 @@ async def test_fetch_repos_github_app(repo_type, repos, expected_repos):
         )
         jwt_response = {"token": "changeme"}
         with patch(
-            "connectors.sources.github.get_installation_access_token",
+            "connectors_service.sources.github.get_installation_access_token",
             return_value=jwt_response,
         ):
             actual_repos = [repo async for repo in source._fetch_repos()]
@@ -2021,7 +2021,7 @@ async def test_get_access_control_github_app():
         actual_response = []
         jwt_response = {"token": "changeme"}
         with patch(
-            "connectors.sources.github.get_installation_access_token",
+            "connectors_service.sources.github.get_installation_access_token",
             return_value=jwt_response,
         ):
             async for access_control in source.get_access_control():
@@ -2082,7 +2082,7 @@ async def test_get_personal_access_token_scopes(scopes, expected_scopes):
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+@patch("connectors_service.utils.time_to_sleep_between_retries", Mock(return_value=0))
 @pytest.mark.parametrize(
     "exception, raises",
     [
@@ -2127,7 +2127,7 @@ async def test_github_client_get_installations():
         source.github_client._get_client._make_request = AsyncMock(
             return_value=(mock_response, None)
         )
-        with patch("connectors.sources.github.get_jwt", return_value="changeme"):
+        with patch("connectors_service.sources.github.get_jwt", return_value="changeme"):
             expected_installations = [
                 installation
                 async for installation in source.github_client.get_installations()
@@ -2148,7 +2148,7 @@ async def test_github_app_paginated_get():
         source.github_client._get_client._make_request = AsyncMock(
             side_effect=[([item_1, item_2], "fake_url_2"), ([item_3], None)]
         )
-        with patch("connectors.sources.github.get_jwt", return_value="changeme"):
+        with patch("connectors_service.sources.github.get_jwt", return_value="changeme"):
             expected_results = [
                 item
                 async for item in source.github_client._github_app_paginated_get(
@@ -2166,7 +2166,7 @@ async def test_update_installation_id():
         jwt_response = {"token": "changeme"}
         installation_id = 123
         with patch(
-            "connectors.sources.github.get_installation_access_token",
+            "connectors_service.sources.github.get_installation_access_token",
             return_value=jwt_response,
         ) as get_installation_access_token:
             assert source.github_client._installation_id is None
@@ -2262,7 +2262,7 @@ async def test_get_owners(auth_method, repo_type, expected_owners):
         )
         jwt_response = {"token": "changeme"}
         with patch(
-            "connectors.sources.github.get_installation_access_token",
+            "connectors_service.sources.github.get_installation_access_token",
             return_value=jwt_response,
         ):
             actual_owners = [owner async for owner in source._get_owners()]
@@ -2270,7 +2270,7 @@ async def test_get_owners(auth_method, repo_type, expected_owners):
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+@patch("connectors_service.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_update_installation_access_token_when_error_occurs():
     async with create_github_source() as source:
         source.github_client.get_installation_access_token = AsyncMock(
@@ -2281,7 +2281,7 @@ async def test_update_installation_access_token_when_error_occurs():
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+@patch("connectors_service.utils.time_to_sleep_between_retries", Mock(return_value=0))
 @pytest.mark.parametrize(
     "exceptions, raises",
     [

@@ -156,7 +156,7 @@ class TestESManagementClient:
         ]
 
         with mock.patch(
-            "connectors.es.management_client.async_scan",
+            "connectors_service.es.management_client.async_scan",
             return_value=AsyncIterator(records),
         ):
             ids = []
@@ -180,7 +180,7 @@ class TestESManagementClient:
         ]
 
         with mock.patch(
-            "connectors.es.management_client.async_scan",
+            "connectors_service.es.management_client.async_scan",
             return_value=AsyncIterator(records),
         ):
             ids = []

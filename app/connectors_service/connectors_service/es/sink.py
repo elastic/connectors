@@ -129,7 +129,7 @@ class Sink:
 
     Arguments:
 
-    - `client` -- an instance of `connectors.es.ESManagementClient`
+    - `client` -- an instance of `connectors_service.es.ESManagementClient`
     - `queue` -- an instance of `asyncio.Queue` to pull docs from
     - `chunk_size` -- a maximum number of operations to send per request
     - `pipeline` -- ingest pipeline settings to pass to the bulk API
@@ -430,7 +430,7 @@ class Extractor:
     This class runs a coroutine that puts docs in `queue`, given a document generator.
 
     Arguments:
-    - client: an instance of `connectors.es.ESManagementClient`
+    - client: an instance of `connectors_service.es.ESManagementClient`
     - queue: an `asyncio.Queue` to put docs in
     - index: the target Elasticsearch index
     - filter_: an instance of `Filter` to apply on the fetched document -- default: `None`

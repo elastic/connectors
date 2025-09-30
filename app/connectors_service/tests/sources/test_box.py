@@ -216,7 +216,7 @@ async def test_set_access_token_raise_token_error_on_exception():
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.time_to_sleep_between_retries")
+@patch("connectors_service.utils.time_to_sleep_between_retries")
 @pytest.mark.parametrize(
     "status_code, exception",
     [
@@ -262,7 +262,7 @@ async def test_ping_with_successful_connection():
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.time_to_sleep_between_retries")
+@patch("connectors_service.utils.time_to_sleep_between_retries")
 async def test_ping_raises_on_unsuccessful_connection(
     mock_time_to_sleep_between_retries,
 ):
@@ -370,7 +370,7 @@ async def test_fetch():
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.time_to_sleep_between_retries")
+@patch("connectors_service.utils.time_to_sleep_between_retries")
 async def test_fetch_returns_none_on_client_exception(
     mock_time_to_sleep_between_retries,
 ):

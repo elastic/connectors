@@ -650,7 +650,7 @@ mock_next_run = iso_utc()
         (True, mock_next_run, JobType.INCREMENTAL),
     ],
 )
-@patch("connectors.protocol.connectors.next_run")
+@patch("connectors_service.protocol.connectors_service.next_run")
 async def test_connector_next_sync(
     next_run, scheduling_enabled, expected_next_sync, job_type
 ):
@@ -2036,7 +2036,7 @@ def test_incremental_sync_enabled(features_json, incremental_sync_enabled):
         JobTriggerMethod.SCHEDULED,
     ],
 )
-@patch("connectors.protocol.SyncJobIndex.index")
+@patch("connectors_service.protocol.SyncJobIndex.index")
 async def test_create_job(index_method, trigger_method, set_env):
     connector = Mock()
     connector.id = "id"
@@ -2106,9 +2106,9 @@ async def test_create_job_with_connector_api(trigger_method, job_type, set_env):
         (JobType.ACCESS_CONTROL, f"{ACCESS_CONTROL_INDEX_PREFIX}{INDEX_NAME}"),
     ],
 )
-@patch("connectors.protocol.SyncJobIndex.index")
+@patch("connectors_service.protocol.SyncJobIndex.index")
 @patch(
-    "connectors.utils.ACCESS_CONTROL_INDEX_PREFIX",
+    "connectors_service.utils.ACCESS_CONTROL_INDEX_PREFIX",
     ACCESS_CONTROL_INDEX_PREFIX,
 )
 async def test_create_jobs_with_correct_target_index(
@@ -2163,7 +2163,7 @@ async def test_create_jobs_with_correct_target_index(
         ),
     ],
 )
-@patch("connectors.protocol.SyncJobIndex.get_all_docs")
+@patch("connectors_service.protocol.SyncJobIndex.get_all_docs")
 async def test_pending_jobs(
     get_all_docs, job_types, job_type_query, remote_call, set_env
 ):
@@ -2207,7 +2207,7 @@ async def test_pending_jobs(
 
 
 @pytest.mark.asyncio
-@patch("connectors.protocol.SyncJobIndex.get_all_docs")
+@patch("connectors_service.protocol.SyncJobIndex.get_all_docs")
 async def test_orphaned_idle_jobs(get_all_docs, set_env):
     job = Mock()
     get_all_docs.return_value = AsyncIterator([job])
@@ -2241,7 +2241,7 @@ async def test_orphaned_idle_jobs(get_all_docs, set_env):
 
 
 @pytest.mark.asyncio
-@patch("connectors.protocol.SyncJobIndex.get_all_docs")
+@patch("connectors_service.protocol.SyncJobIndex.get_all_docs")
 async def test_idle_jobs(get_all_docs, set_env):
     job = Mock()
     get_all_docs.return_value = AsyncIterator([job])

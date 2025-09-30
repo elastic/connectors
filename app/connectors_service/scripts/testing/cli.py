@@ -23,21 +23,21 @@ VM_STARTUP_SCRIPT_PATH = f"startup-script={BASE_DIR}/startup_scipt.sh"
 VM_INIT_ATTEMPTS = 30
 SLEEP_TIMEOUT = 6
 DOCKER_COMPOSE_FILE = f"{BASE_DIR}/docker-compose.yml"
-PULL_CONNECTORS_SCRIPT = f"{BASE_DIR}/pull-connectors.sh"
+PULL_CONNECTORS_SCRIPT = f"{BASE_DIR}/pull-connectors_service.sh"
 CLI_CONFIG_FILE = "cli-config.yml"
 CONNECTOR_SERVICE_CONFIG_FILE = "/var/app/config.yml"
 VAULT_SECRETS_PREFIX = "secret/ent-search-team/"
 ES_DEFAULT_HOST = "http://localhost:9200"
 ES_DEFAULT_USERNAME = "elastic"
 ES_DEFAULT_PASSWORD = "changeme"  # noqa: S105
-SOURCE_MACHINE_IMAGE = "elastic-connectors-testing-base-image"
+SOURCE_MACHINE_IMAGE = "elastic-connectors_service-testing-base-image"
 IMAGE_FAMILY = "ubuntu-2204-lts"
 
 # VMs metadata
 DIVISION = "engineering"
 ORG = "search"
 TEAM = "ingestion"
-PROJECT = "connectors-testing"
+PROJECT = "connectors_service-testing"
 
 
 @click.group()
@@ -48,7 +48,7 @@ def cli(ctx):
 
 @click.command(
     name="run-test",
-    help="Spin up a VM, Elasticsearch and connectors services and run the tests",
+    help="Spin up a VM, Elasticsearch and connectors_service services and run the tests",
 )
 @click.argument("name")
 @click.option(
@@ -62,9 +62,9 @@ def cli(ctx):
     help="Virtual machine zone. See more in https://cloud.google.com/compute/docs/regions-zones",
 )
 @click.option(
-    "--connectors-ref",
+    "--connectors_service-ref",
     default="main",
-    help="A commit hash or a branch name of connectors repository",
+    help="A commit hash or a branch name of connectors_service repository",
 )
 @click.option(
     "--es-version",
@@ -163,7 +163,7 @@ def print_help(name, vm_zone):
             "--zone",
             vm_zone,
             "--command",
-            f'"/var/app/bin/connectors -c ~/{CLI_CONFIG_FILE} connector list"',
+            f'"/var/app/bin/connectors_service -c ~/{CLI_CONFIG_FILE} connector list"',
         ]
     )
     sync_jobs_cmd = " ".join(
@@ -175,13 +175,13 @@ def print_help(name, vm_zone):
             "--zone",
             vm_zone,
             "--command",
-            f'"/var/app/bin/connectors -c ~/{CLI_CONFIG_FILE} job list CONNECTOR_ID"',
+            f'"/var/app/bin/connectors_service -c ~/{CLI_CONFIG_FILE} job list CONNECTOR_ID"',
         ]
     )
 
     click.echo("You can use the following commands to interact with the setup:")
     click.echo("Access logs: " + click.style(logs_cmd, fg="green"))
-    click.echo("List of connectors: " + click.style(connectors_cmd, fg="green"))
+    click.echo("List of connectors_service: " + click.style(connectors_cmd, fg="green"))
     click.echo("List of sync jobs: " + click.style(sync_jobs_cmd, fg="green"))
 
 
@@ -289,7 +289,7 @@ def render_connector_configuration(file_path):
 
 def setup_stack(name, vm_zone, es_version, connectors_ref, es_host):
     with click.progressbar(label="Setting up the stack...", length=100) as steps:
-        # Upload pull-connectors file
+        # Upload pull-connectors_service file
         cmd = [
             "gcloud",
             "compute",
@@ -302,7 +302,7 @@ def setup_stack(name, vm_zone, es_version, connectors_ref, es_host):
         run_gcloud_cmd(cmd)
         steps.update(1)
 
-        # pull connectors repo
+        # pull connectors_service repo
         cmd = [
             "gcloud",
             "compute",
@@ -438,7 +438,7 @@ def run_scenarios(name, es_host, es_username, es_password, vm_zone, test_case):
         "--zone",
         vm_zone,
         "--command",
-        f"sudo /var/app/bin/connectors -c {CLI_CONFIG_FILE} connector list",
+        f"sudo /var/app/bin/connectors_service -c {CLI_CONFIG_FILE} connector list",
     ]
     run_gcloud_cmd(cmd)
 
@@ -510,7 +510,7 @@ def run_scenarios(name, es_host, es_username, es_password, vm_zone, test_case):
             "--zone",
             vm_zone,
             "--command",
-            f"sudo /var/app/bin/connectors -c {CLI_CONFIG_FILE} {' '.join(connector_command)}",
+            f"sudo /var/app/bin/connectors_service -c {CLI_CONFIG_FILE} {' '.join(connector_command)}",
         ]
 
         result = run_gcloud_cmd(cmd)
@@ -539,7 +539,7 @@ def run_scenarios(name, es_host, es_username, es_password, vm_zone, test_case):
                 "--zone",
                 vm_zone,
                 "--command",
-                f"sudo /var/app/bin/connectors -c {CLI_CONFIG_FILE} job start -i {connector_id} -t {test['job_type']} --format json",
+                f"sudo /var/app/bin/connectors_service -c {CLI_CONFIG_FILE} job start -i {connector_id} -t {test['job_type']} --format json",
             ]
             result = run_gcloud_cmd(cmd)
 
@@ -556,7 +556,7 @@ def run_scenarios(name, es_host, es_username, es_password, vm_zone, test_case):
                     "--zone",
                     vm_zone,
                     "--command",
-                    f"sudo /var/app/bin/connectors -c {CLI_CONFIG_FILE} job view {job_id} --format json",
+                    f"sudo /var/app/bin/connectors_service -c {CLI_CONFIG_FILE} job view {job_id} --format json",
                 ]
                 result = run_gcloud_cmd(cmd)
                 job = json.loads(result.stdout.decode("utf-8"))

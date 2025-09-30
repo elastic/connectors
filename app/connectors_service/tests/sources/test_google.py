@@ -104,14 +104,14 @@ class TestGoogleServiceAccountClient:
     @pytest_asyncio.fixture(autouse=True)
     async def patch_service_account_creds(self):
         with patch(
-            "connectors.sources.google.ServiceAccountCreds", return_value=Mock()
+            "connectors_service.sources.google.ServiceAccountCreds", return_value=Mock()
         ) as class_mock:
             yield class_mock
 
     @pytest_asyncio.fixture
     async def patch_aiogoogle(self):
         with patch(
-            "connectors.sources.google.Aiogoogle", return_value=MagicMock()
+            "connectors_service.sources.google.Aiogoogle", return_value=MagicMock()
         ) as mock:
             aiogoogle_client = AsyncMock()
             mock.return_value.__aenter__.return_value = aiogoogle_client
@@ -199,7 +199,7 @@ class TestGoogleDirectoryClient:
     @pytest_asyncio.fixture
     async def patch_google_service_account_client(self):
         with patch(
-            "connectors.sources.google.GoogleServiceAccountClient",
+            "connectors_service.sources.google.GoogleServiceAccountClient",
             return_value=AsyncMock(),
         ) as mock:
             client = mock.return_value
@@ -262,7 +262,7 @@ class TestGMailClient:
     @pytest_asyncio.fixture
     async def patch_google_service_account_client(self):
         with patch(
-            "connectors.sources.google.GoogleServiceAccountClient",
+            "connectors_service.sources.google.GoogleServiceAccountClient",
             return_value=AsyncMock(),
         ) as mock:
             client = mock.return_value

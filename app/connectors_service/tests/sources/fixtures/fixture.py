@@ -27,7 +27,7 @@ from connectors.utils import (
     time_to_sleep_between_retries,
 )
 
-CONNECTORS_INDEX = ".elastic-connectors"
+CONNECTORS_INDEX = ".elastic-connectors_service"
 
 logger = logging.getLogger("ftest")
 set_extra_logger(logger, log_level=logging.DEBUG, prefix="FTEST")
@@ -119,10 +119,10 @@ async def _fetch_connector_metadata(es_client):
     response = await es_client.client.search(index=CONNECTORS_INDEX, size=1)
     total_connectors = response["hits"]["total"]["value"]
     if total_connectors == 0:
-        msg = "No connectors found in the deployment"
+        msg = "No connectors_service found in the deployment"
         raise Exception(msg)
     elif total_connectors > 1:
-        msg = f"Found {total_connectors} connectors in the deployment, expected only 1"
+        msg = f"Found {total_connectors} connectors_service in the deployment, expected only 1"
         raise Exception(msg)
 
     connector = response["hits"]["hits"][0]

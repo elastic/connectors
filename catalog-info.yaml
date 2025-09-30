@@ -1,19 +1,19 @@
 ################################################################################
-###################### catalog-info for connectors ######################
-# Declare a Backstage Component for connectors
+###################### catalog-info for connectors_service ######################
+# Declare a Backstage Component for connectors_service
 # When doing changes validate them using https://backstage.elastic.dev/entity-validation
 ---
 # yaml-language-server: $schema=https://json.schemastore.org/catalog-info.json
 apiVersion: "backstage.io/v1alpha1"
 kind: "Component"
 metadata:
-  name: "elastic-connectors"
-  description: "Ingestion service hosting connectors that can be used to ingest data into Elasticsearch"
+  name: "elastic-connectors_service"
+  description: "Ingestion service hosting connectors_service that can be used to ingest data into Elasticsearch"
   annotations:
-    backstage.io/source-location: "url:https://github.com/elastic/connectors/"
-    github.com/project-slug: "elastic/connectors"
+    backstage.io/source-location: "url:https://github.com/elastic/connectors_service/"
+    github.com/project-slug: "elastic/connectors_service"
     github.com/team-slug: "elastic/search-extract-and-transform"
-    buildkite.com/project-slug: "elastic/connectors"
+    buildkite.com/project-slug: "elastic/connectors_service"
     pagerduty.com/service-id: "PN2MP2P"
   tags:
     - "python"
@@ -30,10 +30,10 @@ spec:
 apiVersion: "backstage.io/v1alpha1"
 kind: "Resource"
 metadata:
-  name: "connectors"
+  name: "connectors_service"
   description: "Lints and tests Elastic connector framework and connector implementations"
   links:
-    - title: "connectors Main Pipeline"
+    - title: "connectors_service Main Pipeline"
       url: "https://buildkite.com/elastic/connectors"
 spec:
   type: "buildkite-pipeline"
@@ -43,12 +43,12 @@ spec:
     apiVersion: "buildkite.elastic.dev/v1"
     kind: "Pipeline"
     metadata:
-      name: "connectors"
+      name: "connectors_service"
       description: "Your Connector Service to ingest data into Elasticsearch"
     spec:
       branch_configuration: "main"
       pipeline_file: ".buildkite/pipeline.yml"
-      repository: "elastic/connectors"
+      repository: "elastic/connectors_service"
       schedules:
         Daily main:
           branch: main
@@ -90,10 +90,10 @@ spec:
 apiVersion: "backstage.io/v1alpha1"
 kind: "Resource"
 metadata:
-  name: "connectors-nightly"
+  name: "connectors_service-nightly"
   description: "Nightly Connector Service Tests"
   links:
-    - title: "connectors Nightly Buildkite Jobs"
+    - title: "connectors_service Nightly Buildkite Jobs"
       url: "https://buildkite.com/elastic/connectors"
 spec:
   type: "buildkite-pipeline"
@@ -103,7 +103,7 @@ spec:
     apiVersion: "buildkite.elastic.dev/v1"
     kind: "Pipeline"
     metadata:
-      name: "connectors-nightly"
+      name: "connectors_service-nightly"
       description: "Connectors Service Nightly Tests"
       links:
         - title: "Connector Service Nightly Pipeline"
@@ -112,7 +112,7 @@ spec:
       pipeline_file: ".buildkite/nightly.py"
       provider_settings:
         trigger_mode: "none"
-      repository: "elastic/connectors"
+      repository: "elastic/connectors_service"
       schedules:
         Daily 8_18:
           branch: '8.18'
@@ -148,10 +148,10 @@ spec:
 apiVersion: "backstage.io/v1alpha1"
 kind: "Resource"
 metadata:
-  name: "connectors-nightly-aarch64"
+  name: "connectors_service-nightly-aarch64"
   description: "Nightly Connector Service Tests on aarch64"
   links:
-    - title: "connectors Nightly Buildkite Jobs"
+    - title: "connectors_service Nightly Buildkite Jobs"
       url: "https://buildkite.com/elastic/connectors"
 spec:
   type: "buildkite-pipeline"
@@ -161,7 +161,7 @@ spec:
     apiVersion: "buildkite.elastic.dev/v1"
     kind: "Pipeline"
     metadata:
-      name: "connectors-nightly-aarch64"
+      name: "connectors_service-nightly-aarch64"
       description: "Connectors Service Nightly Tests on aarch64"
       links:
         - title: "Connector Service Nightly Pipeline"
@@ -170,7 +170,7 @@ spec:
       pipeline_file: ".buildkite/nightly_aarch64.py"
       provider_settings:
         trigger_mode: "none"
-      repository: "elastic/connectors"
+      repository: "elastic/connectors_service"
       schedules:
         Daily 8_18:
           branch: '8.18'
@@ -209,8 +209,8 @@ spec:
 apiVersion: "backstage.io/v1alpha1"
 kind: "Resource"
 metadata:
-  name: "connectors-docker-build-publish"
-  description: "Docker image build and publish for Elastic connectors"
+  name: "connectors_service-docker-build-publish"
+  description: "Docker image build and publish for Elastic connectors_service"
   links:
     - title: "Connectors Docker Build and Publish"
       url: "https://buildkite.com/elastic/connectors-docker-build-publish"
@@ -222,9 +222,9 @@ spec:
     apiVersion: "buildkite.elastic.dev/v1"
     kind: "Pipeline"
     metadata:
-      name: "connectors-docker-build-publish"
+      name: "connectors_service-docker-build-publish"
     spec:
-      repository: "elastic/connectors"
+      repository: "elastic/connectors_service"
       pipeline_file: ".buildkite/release-pipeline.yml"
       provider_settings:
         trigger_mode: "none"

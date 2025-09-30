@@ -48,7 +48,7 @@ services:
       - elasticsearch
       - kibana
     volumes:
-      - ${CURDIR}/connectors-config:/config
+      - ${CURDIR}/connectors_service-config:/config
     command: /app/bin/elastic-ingest -c /config/config.yml
     network_mode: "elastic"
 

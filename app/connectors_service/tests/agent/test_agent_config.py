@@ -26,7 +26,7 @@ def prepare_unit_mock(fields, log_level):
 
 
 def prepare_config_wrapper():
-    # populate with connectors list, so that we can test for changes in other config properties
+    # populate with connectors_service list, so that we can test for changes in other config properties
     config_wrapper = ConnectorsAgentConfigurationWrapper()
     initial_config_unit = prepare_unit_mock({}, None)
     config_wrapper.try_update(
@@ -154,7 +154,7 @@ def test_config_changed_when_new_variables_are_passed():
     api_key = "lemme_in_lalala"
 
     new_config = {
-        "connectors": [{"connector_id": CONNECTOR_ID, "service_type": SERVICE_TYPE}],
+        "connectors_service": [{"connector_id": CONNECTOR_ID, "service_type": SERVICE_TYPE}],
         "elasticsearch": {"hosts": hosts, "api_key": api_key},
     }
 
@@ -175,7 +175,7 @@ def test_config_changed_when_elasticsearch_config_changed():
         }
     }
     new_config = {
-        "connectors": [{"connector_id": CONNECTOR_ID, "service_type": SERVICE_TYPE}],
+        "connectors_service": [{"connector_id": CONNECTOR_ID, "service_type": SERVICE_TYPE}],
         "elasticsearch": {"hosts": hosts, "api_key": api_key},
     }
 
@@ -194,7 +194,7 @@ def test_config_changed_when_elasticsearch_config_did_not_change():
     api_key = "lemme_in_lalala"
 
     new_config = {
-        "connectors": [{"connector_id": CONNECTOR_ID, "service_type": SERVICE_TYPE}],
+        "connectors_service": [{"connector_id": CONNECTOR_ID, "service_type": SERVICE_TYPE}],
         "elasticsearch": {"hosts": hosts, "api_key": api_key},
     }
 
@@ -217,7 +217,7 @@ def test_config_changed_when_log_level_config_changed():
     )
 
     new_config = {
-        "connectors": [{"connector_id": CONNECTOR_ID, "service_type": SERVICE_TYPE}],
+        "connectors_service": [{"connector_id": CONNECTOR_ID, "service_type": SERVICE_TYPE}],
         "service": {"log_level": "DEBUG"},
     }
 
@@ -233,7 +233,7 @@ def test_config_changed_when_log_level_config_did_not_change():
     )
 
     new_config = {
-        "connectors": [{"connector_id": CONNECTOR_ID, "service_type": SERVICE_TYPE}],
+        "connectors_service": [{"connector_id": CONNECTOR_ID, "service_type": SERVICE_TYPE}],
         "service": {"log_level": "INFO"},
     }
 
@@ -250,7 +250,7 @@ def test_config_changed_when_connectors_changed():
     )
 
     new_config = {
-        "connectors": [
+        "connectors_service": [
             {"connector_id": "test-connector-2", "service_type": "test-service-type-2"}
         ],
     }
@@ -268,7 +268,7 @@ def test_config_changed_when_connectors_list_is_cleared():
     )
 
     new_config = {
-        "connectors": [],
+        "connectors_service": [],
     }
 
     assert config_wrapper.config_changed(new_config) is True
@@ -284,7 +284,7 @@ def test_config_changed_when_connectors_list_is_extended():
     )
 
     new_config = {
-        "connectors": [
+        "connectors_service": [
             {"connector_id": CONNECTOR_ID, "service_type": SERVICE_TYPE},
             {"connector_id": "test-connector-2", "service_type": "test-service-type-2"},
         ],
@@ -303,7 +303,7 @@ def test_config_changed_when_connectors_did_not_change():
     )
 
     new_config = {
-        "connectors": [{"connector_id": CONNECTOR_ID, "service_type": SERVICE_TYPE}],
+        "connectors_service": [{"connector_id": CONNECTOR_ID, "service_type": SERVICE_TYPE}],
     }
 
     assert config_wrapper.config_changed(new_config) is False

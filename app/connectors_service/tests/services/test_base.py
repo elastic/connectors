@@ -193,7 +193,7 @@ def test_parse_connectors_with_no_connectors():
 
 def test_parse_connectors():
     local_config = deepcopy(config)
-    local_config["connectors"] = [
+    local_config["connectors_service"] = [
         {"connector_id": "foo", "service_type": "bar"},
         {"connector_id": "baz", "service_type": "qux"},
     ]
@@ -207,7 +207,7 @@ def test_parse_connectors():
 
 def test_parse_connectors_with_duplicate_connectors():
     local_config = deepcopy(config)
-    local_config["connectors"] = [
+    local_config["connectors_service"] = [
         {"connector_id": "foo", "service_type": "bar"},
         {"connector_id": "foo", "service_type": "baz"},
     ]
@@ -220,7 +220,7 @@ def test_parse_connectors_with_duplicate_connectors():
 
 def test_parse_connectors_with_incomplete_connector():
     local_config = deepcopy(config)
-    local_config["connectors"] = [
+    local_config["connectors_service"] = [
         {"connector_id": "foo", "service_type": "bar"},
         {"service_type": "qux"},
     ]
@@ -233,7 +233,7 @@ def test_parse_connectors_with_incomplete_connector():
 
 def test_parse_connectors_with_deprecated_config_and_new_config():
     local_config = deepcopy(config)
-    local_config["connectors"] = [{"connector_id": "foo", "service_type": "bar"}]
+    local_config["connectors_service"] = [{"connector_id": "foo", "service_type": "bar"}]
     local_config["connector_id"] = "deprecated"
     local_config["service_type"] = "deprecated"
 
@@ -265,7 +265,7 @@ def test_override_es_config():
         },
         "service": {"idling": 30},
         "sources": [],
-        "connectors": [
+        "connectors_service": [
             {
                 "connector_id": "foo",
                 "service_type": "bar",

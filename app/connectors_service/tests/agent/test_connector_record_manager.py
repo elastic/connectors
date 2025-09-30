@@ -22,7 +22,7 @@ def mock_connector_index():
 def mock_agent_config():
     return {
         "elasticsearch": {"host": "http://localhost:9200", "api_key": "dummy_key"},
-        "connectors": [{"connector_id": "1", "service_type": "service1"}],
+        "connectors_service": [{"connector_id": "1", "service_type": "service1"}],
     }
 
 
@@ -40,7 +40,7 @@ async def test_ensure_connector_records_exist_creates_connectors_if_not_exist(
     random_connector_name_id = "1234"
 
     with patch(
-        "connectors.agent.connector_record_manager.generate_random_id",
+        "connectors_service.agent.connector_record_manager.generate_random_id",
         return_value=random_connector_name_id,
     ):
         connector_record_manager.connector_index.connector_exists = AsyncMock(
@@ -88,7 +88,7 @@ async def test_ensure_connector_records_raises_on_non_404_error(
 async def test_ensure_connector_records_exist_agent_config_not_ready(
     connector_record_manager,
 ):
-    invalid_config = {"connectors": []}
+    invalid_config = {"connectors_service": []}
     await connector_record_manager.ensure_connector_records_exist(invalid_config)
     assert connector_record_manager.connector_index.connector_put.call_count == 0
 
@@ -127,6 +127,6 @@ def test_agent_config_ready_with_invalid_config_missing_connectors(
 def test_agent_config_ready_with_invalid_config_missing_elasticsearch(
     connector_record_manager,
 ):
-    invalid_config = {"connectors": [{"connector_id": "1", "service_type": "service1"}]}
+    invalid_config = {"connectors_service": [{"connector_id": "1", "service_type": "service1"}]}
     ready, _ = connector_record_manager._check_agent_config_ready(invalid_config)
     assert ready is False

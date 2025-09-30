@@ -25,7 +25,7 @@ class ConnectorsAgentConfigurationWrapper:
     def __init__(self):
         """Inits the class.
 
-        There's default config that allows us to run connectors service. When final
+        There's default config that allows us to run connectors_service service. When final
         configuration is reported these defaults will be merged with defaults from
         Connectors Service config and specific config coming from Agent.
         """
@@ -33,7 +33,7 @@ class ConnectorsAgentConfigurationWrapper:
             "service": {
                 "log_level": "INFO",
             },
-            "connectors": [],
+            "connectors_service": [],
         }
 
         self.specific_config = {}
@@ -58,7 +58,7 @@ class ConnectorsAgentConfigurationWrapper:
         assumed_configuration = {}
 
         # Connector-related
-        assumed_configuration["connectors"] = [
+        assumed_configuration["connectors_service"] = [
             {
                 "connector_id": connector_id,
                 "service_type": service_type,
@@ -92,7 +92,7 @@ class ConnectorsAgentConfigurationWrapper:
             assumed_configuration["elasticsearch"] = es_creds
 
         if self.config_changed(assumed_configuration):
-            logger.debug("Changes detected for connectors-relevant configurations")
+            logger.debug("Changes detected for connectors_service-relevant configurations")
             # This is a partial update.
             # Agent can send different data in updates.
             # For example, updating only log_level will not send credentials.
@@ -101,7 +101,7 @@ class ConnectorsAgentConfigurationWrapper:
             self.specific_config.update(assumed_configuration)
             return True
 
-        logger.debug("No changes detected for connectors-relevant configurations")
+        logger.debug("No changes detected for connectors_service-relevant configurations")
         return False
 
     def config_changed(self, new_config):
@@ -137,8 +137,8 @@ class ConnectorsAgentConfigurationWrapper:
             )
 
         def _connectors_config_changes():
-            current_connectors = current_config.get("connectors", [])
-            new_connectors = new_config.get("connectors", [])
+            current_connectors = current_config.get("connectors_service", [])
+            new_connectors = new_config.get("connectors_service", [])
 
             if len(current_connectors) != len(new_connectors):
                 return True
@@ -171,7 +171,7 @@ class ConnectorsAgentConfigurationWrapper:
             return True
 
         if _connectors_config_changes():
-            logger.debug("connectors changed")
+            logger.debug("connectors_service changed")
             return True
 
         return False
@@ -190,7 +190,7 @@ class ConnectorsAgentConfigurationWrapper:
         config = self._default_config.copy()
         # Then merge with what we get from Agent
         config = dict(add_defaults(self.specific_config, default_config=config))
-        # Then merge with default connectors config
+        # Then merge with default connectors_service config
         configuration = dict(add_defaults(config))
 
         return configuration

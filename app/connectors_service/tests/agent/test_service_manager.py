@@ -42,7 +42,7 @@ class StubMultiService:
 
 
 @pytest.mark.asyncio
-@patch("connectors.agent.service_manager.get_services", return_value=StubMultiService())
+@patch("connectors_service.agent.service_manager.get_services", return_value=StubMultiService())
 async def test_run_and_stop_work_as_intended(patch_get_services, config_mock):
     service_manager = ConnectorServiceManager(config_mock)
 
@@ -57,7 +57,7 @@ async def test_run_and_stop_work_as_intended(patch_get_services, config_mock):
 
 
 @pytest.mark.asyncio
-@patch("connectors.agent.service_manager.get_services", return_value=StubMultiService())
+@patch("connectors_service.agent.service_manager.get_services", return_value=StubMultiService())
 async def test_restart_starts_another_multiservice(patch_get_services, config_mock):
     service_manager = ConnectorServiceManager(config_mock)
 
@@ -74,7 +74,7 @@ async def test_restart_starts_another_multiservice(patch_get_services, config_mo
 
 
 @pytest.mark.asyncio
-@patch("connectors.agent.service_manager.get_services", return_value=StubMultiService())
+@patch("connectors_service.agent.service_manager.get_services", return_value=StubMultiService())
 async def test_cannot_run_same_service_manager_twice(patch_get_services, config_mock):
     service_manager = ConnectorServiceManager(config_mock)
 

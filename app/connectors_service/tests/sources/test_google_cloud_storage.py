@@ -82,7 +82,7 @@ async def test_ping_for_successful_connection(catch_stdout):
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+@patch("connectors_service.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_ping_for_failed_connection(catch_stdout):
     """Tests the ping functionality when connection can not be established to Google Cloud Storage."""
 
@@ -245,7 +245,7 @@ async def test_fetch_blobs():
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+@patch("connectors_service.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_fetch_blobs_negative():
     """Tests the method responsible to yield blobs(negative) from Google Cloud Storage bucket."""
 
@@ -667,7 +667,7 @@ async def test_get_content_when_file_size_is_large(catch_stdout):
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+@patch("connectors_service.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_api_call_for_attribute_error(catch_stdout):
     """Tests the api_call method when resource attribute is not present in the getattr."""
 

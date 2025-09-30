@@ -121,7 +121,7 @@ class BaseService(metaclass=_Registry):
 
     def _parse_connectors(self):
         connectors = {}
-        configured_connectors = deepcopy(self.config.get("connectors"))
+        configured_connectors = deepcopy(self.config.get("connectors_service"))
         if configured_connectors is not None:
             for connector in configured_connectors:
                 connector_id = connector.get("connector_id")

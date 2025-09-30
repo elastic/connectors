@@ -125,13 +125,13 @@ def patch_ping():
 
 @pytest.fixture
 def patch_row2doc():
-    with patch("connectors.sources.mysql.row2doc", return_value=MagicMock()) as row2doc:
+    with patch("connectors_service.sources.mysql.row2doc", return_value=MagicMock()) as row2doc:
         yield row2doc
 
 
 @pytest.fixture
 def patch_default_wait_multiplier():
-    with patch("connectors.sources.mysql.RETRY_INTERVAL", 0):
+    with patch("connectors_service.sources.mysql.RETRY_INTERVAL", 0):
         yield
 
 

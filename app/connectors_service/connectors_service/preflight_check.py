@@ -202,7 +202,7 @@ class PreflightCheck:
             )
 
         # Connector client mode
-        configured_connectors = self.config.get("connectors", []) or []
+        configured_connectors = self.config.get("connectors_service", []) or []
         deprecated_connector_id = self.config.get("connector_id", None)
         deprecated_service_type = self.config.get("service_type", None)
         if (
@@ -211,7 +211,7 @@ class PreflightCheck:
             and deprecated_service_type
         ):
             logger.warning(
-                "The configuration 'connector_id' and 'serivce_type' has been deprecated and will be removed in later release. Please configure the connector in 'connectors'."
+                "The configuration 'connector_id' and 'serivce_type' has been deprecated and will be removed in later release. Please configure the connector in 'connectors_service'."
             )
             configured_connectors.append(
                 {
@@ -225,7 +225,7 @@ class PreflightCheck:
                 "Please update your config.yml to configure at least one connector"
             )
             logger.info(
-                "Using Kibana or the connectors CLI, create a connector. You will then be provided with the necessary fields (connector_id, service_type, api_key) to add to your config.yml"
+                "Using Kibana or the connectors_service CLI, create a connector. You will then be provided with the necessary fields (connector_id, service_type, api_key) to add to your config.yml"
             )
 
         # Unset configuration

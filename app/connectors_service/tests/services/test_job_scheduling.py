@@ -31,7 +31,7 @@ JOB_TYPES = [JobType.FULL, JobType.ACCESS_CONTROL]
 @pytest.fixture(autouse=True)
 def connector_index_mock():
     with patch(
-        "connectors.services.job_scheduling.ConnectorIndex"
+        "connectors_service.services.job_scheduling.ConnectorIndex"
     ) as connector_index_klass_mock:
         connector_index_mock = Mock()
         connector_index_mock.stop_waiting = Mock()
@@ -47,7 +47,7 @@ def connector_index_mock():
 @pytest.fixture(autouse=True)
 def sync_job_index_mock():
     with patch(
-        "connectors.services.job_scheduling.SyncJobIndex"
+        "connectors_service.services.job_scheduling.SyncJobIndex"
     ) as sync_job_index_klass_mock:
         sync_job_index_mock = Mock()
         sync_job_index_mock.create = AsyncMock(return_value="1")
@@ -338,17 +338,17 @@ async def test_run_when_sync_fails_then_continues_service_execution(
     # but is there a better way to tell service to execute loop a couple of times?
     await create_and_run_service(JobSchedulingService, stop_after=0.15)
 
-    # assert that service tried to call connector heartbeat for all connectors
+    # assert that service tried to call connector heartbeat for all connectors_service
     connector.heartbeat.assert_awaited()
     another_connector.heartbeat.assert_awaited()
 
-    # assert that service did not crash and kept asking index for connectors
+    # assert that service did not crash and kept asking index for connectors_service
     # we don't have a good criteria of what a "crashed service is"
     assert connector_index_mock.supported_connectors.call_count > 1
 
 
 @pytest.mark.asyncio
-@patch("connectors.services.job_scheduling.get_source_klass")
+@patch("connectors_service.services.job_scheduling.get_source_klass")
 async def test_run_when_connector_fields_are_invalid(
     get_source_klass_mock, connector_index_mock, set_env
 ):
@@ -380,7 +380,7 @@ async def test_run_when_connector_fields_are_invalid(
 
 
 @pytest.mark.asyncio
-@patch("connectors.services.job_scheduling.get_source_klass")
+@patch("connectors_service.services.job_scheduling.get_source_klass")
 async def test_run_when_connector_failed_validation_then_succeeded(
     get_source_klass_mock, connector_index_mock, set_env
 ):
@@ -419,7 +419,7 @@ async def test_run_when_connector_failed_validation_then_succeeded(
 
 
 @pytest.mark.asyncio
-@patch("connectors.services.job_scheduling.get_source_klass")
+@patch("connectors_service.services.job_scheduling.get_source_klass")
 async def test_run_when_connector_ping_fails(
     get_source_klass_mock, connector_index_mock, set_env
 ):
@@ -451,7 +451,7 @@ async def test_run_when_connector_ping_fails(
 
 
 @pytest.mark.asyncio
-@patch("connectors.services.job_scheduling.get_source_klass")
+@patch("connectors_service.services.job_scheduling.get_source_klass")
 async def test_run_when_connector_validate_config_fails(
     get_source_klass_mock, connector_index_mock, set_env
 ):
@@ -504,7 +504,7 @@ async def test_initial_loop_run_heartbeat_only_once(
 
 
 @pytest.mark.asyncio
-@patch("connectors.services.job_scheduling.get_source_klass")
+@patch("connectors_service.services.job_scheduling.get_source_klass")
 async def test_run_when_validation_is_very_slow(
     get_source_klass_mock, connector_index_mock, set_env
 ):

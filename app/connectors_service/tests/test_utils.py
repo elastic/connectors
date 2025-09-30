@@ -994,7 +994,7 @@ def test_html_to_text_with_lxml_exception():
             parser_mock = Mock()
             return parser_mock
 
-    with patch("connectors.utils.BeautifulSoup") as beautiful_soup_patch:
+    with patch("connectors_service.utils.BeautifulSoup") as beautiful_soup_patch:
         beautiful_soup_patch.side_effect = _init_func
         html = "lala <br/>"
 

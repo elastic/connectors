@@ -659,7 +659,7 @@ async def test_get_token_raises_correct_exception_when_any_other_status():
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+@patch("connectors_service.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_get_with_429_status():
     initial_response = ClientResponseError(None, None)
     initial_response.status = 429
@@ -685,7 +685,7 @@ async def test_get_with_429_status():
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+@patch("connectors_service.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_get_with_429_status_without_retry_after_header():
     initial_response = ClientResponseError(None, None)
     initial_response.status = 429
@@ -695,7 +695,7 @@ async def test_get_with_429_status_without_retry_after_header():
     payload = {"value": "Test rate limit"}
 
     retried_response.__aenter__ = AsyncMock(return_value=JSONAsyncMock(payload))
-    with patch("connectors.sources.onedrive.DEFAULT_RETRY_SECONDS", 0.3):
+    with patch("connectors_service.sources.onedrive.DEFAULT_RETRY_SECONDS", 0.3):
         async with create_onedrive_source() as source:
             with patch.object(AccessToken, "get", return_value="abc"):
                 with patch(
@@ -729,7 +729,7 @@ async def test_get_with_404_status():
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+@patch("connectors_service.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_get_with_500_status():
     error = ClientResponseError(None, None)
     error.status = 500
@@ -748,7 +748,7 @@ async def test_get_with_500_status():
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+@patch("connectors_service.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_post_with_429_status():
     initial_response = ClientPayloadError(None, None)
     initial_response.status = 429
@@ -774,7 +774,7 @@ async def test_post_with_429_status():
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+@patch("connectors_service.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_post_with_429_status_without_retry_after_header():
     initial_response = ClientPayloadError(None, None)
     initial_response.status = 429
@@ -784,7 +784,7 @@ async def test_post_with_429_status_without_retry_after_header():
     payload = {"value": "Test rate limit"}
 
     retried_response.__aenter__ = AsyncMock(return_value=JSONAsyncMock(payload))
-    with patch("connectors.sources.onedrive.DEFAULT_RETRY_SECONDS", 0.3):
+    with patch("connectors_service.sources.onedrive.DEFAULT_RETRY_SECONDS", 0.3):
         async with create_onedrive_source() as source:
             with patch.object(AccessToken, "get", return_value="abc"):
                 with patch(

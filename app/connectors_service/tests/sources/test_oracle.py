@@ -45,7 +45,7 @@ def oracle_client(**extras):
         client.close()
 
 
-@patch("connectors.sources.oracle.create_engine")
+@patch("connectors_service.sources.oracle.create_engine")
 @pytest.mark.parametrize(
     "connection_source, DSN",
     [
@@ -65,7 +65,7 @@ def test_engine_in_thin_mode(mock_fun, connection_source, DSN):
         mock_fun.assert_called_with(DSN)
 
 
-@patch("connectors.sources.oracle.create_engine")
+@patch("connectors_service.sources.oracle.create_engine")
 @pytest.mark.parametrize(
     "connection_source, DSN",
     [

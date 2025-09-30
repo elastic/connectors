@@ -117,7 +117,7 @@ def connector(ctx):
     pass
 
 
-@click.command(name="list", help="List all existing connectors")
+@click.command(name="list", help="List all existing connectors_service")
 @click.pass_obj
 def list_connectors(obj):
     connector = Connector(config=obj["config"]["elasticsearch"])
@@ -127,10 +127,10 @@ def list_connectors(obj):
         connectors = asyncio.run(coro)
         click.echo("")
         if len(connectors) == 0:
-            click.echo("No connectors found")
+            click.echo("No connectors_service found")
             return
 
-        click.echo(f"Showing {len(connectors)} connectors \n")
+        click.echo(f"Showing {len(connectors)} connectors_service \n")
 
         table_rows = []
         for connector in connectors:
@@ -360,10 +360,10 @@ def create(
             if not service_config:
                 service_config = {}
 
-            if "connectors" not in service_config:
-                service_config["connectors"] = []
+            if "connectors_service" not in service_config:
+                service_config["connectors_service"] = []
 
-            service_config["connectors"].append(
+            service_config["connectors_service"].append(
                 {
                     "connector_id": result["id"],
                     "service_type": service_type,

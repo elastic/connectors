@@ -29,7 +29,7 @@ def input_mock():
         "connector_name": _string_config_field_mock("test-connector"),
         "id": _string_config_field_mock("test-id"),
     }
-    unit_mock.config.type = "connectors-py"
+    unit_mock.config.type = "connectors_service-py"
     return unit_mock
 
 
@@ -187,7 +187,7 @@ class TestConnectorCheckingHandler:
 
         await checkin_handler.apply_from_client()
 
-        # Only ES output from the policy should be used by connectors component
+        # Only ES output from the policy should be used by connectors_service component
         assert config_wrapper_mock.try_update.called_once()
         _, called_kwargs = config_wrapper_mock.try_update.call_args
         called_output_unit = called_kwargs.get("output_unit")
@@ -232,7 +232,7 @@ class TestConnectorCheckingHandler:
 
         await checkin_handler.apply_from_client()
 
-        # First ES output from the policy should be used by connectors component
+        # First ES output from the policy should be used by connectors_service component
         assert config_wrapper_mock.try_update.called_once()
         _, called_kwargs = config_wrapper_mock.try_update.call_args
         called_output_unit = called_kwargs.get("output_unit")

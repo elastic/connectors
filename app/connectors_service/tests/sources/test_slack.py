@@ -135,7 +135,7 @@ async def test_slack_client_list_users(slack_client, mock_responses):
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+@patch("connectors_service.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_handle_throttled_error(slack_client, mock_responses):
     channel = {"id": 1, "name": "test"}
     error_response_data = {"ok": False, "error": "rate_limited"}
@@ -172,7 +172,7 @@ async def test_ping(slack_client, mock_responses):
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+@patch("connectors_service.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_bad_ping(slack_client, mock_responses):
     response_data = {"ok": False, "error": "not_authed"}
     mock_responses.get(

@@ -196,7 +196,7 @@ async def test_client_ping_success(sandfly_client, mock_responses):
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+@patch("connectors_service.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_client_ping_failure(sandfly_client, mock_responses):
     request_error = ClientResponseError(None, None)
     request_error.status = 403
@@ -211,7 +211,7 @@ async def test_client_ping_failure(sandfly_client, mock_responses):
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+@patch("connectors_service.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_client_login_failures(sandfly_client, mock_responses):
     request_error = FetchTokenError(None, None)
     request_error.status = 403
@@ -243,7 +243,7 @@ async def test_client_login_failures(sandfly_client, mock_responses):
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+@patch("connectors_service.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_client_resource_not_found(sandfly_client, mock_responses):
     mock_responses.post(
         URL_SANDFLY_LOGIN,
@@ -448,7 +448,7 @@ async def test_data_source_ping_success(sandfly_data_source, mock_responses):
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+@patch("connectors_service.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_data_source_ping_failure(sandfly_data_source, mock_responses):
     request_error = ClientResponseError(None, None)
     request_error.status = 403

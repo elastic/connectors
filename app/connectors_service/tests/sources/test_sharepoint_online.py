@@ -536,7 +536,7 @@ class TestEntraAPIToken:
         certificate_credential_mock.close = AsyncMock()
 
         with patch(
-            "connectors.sources.sharepoint_online.CertificateCredential",
+            "connectors_service.sources.sharepoint_online.CertificateCredential",
             return_value=certificate_credential_mock,
         ):
             actual_token, actual_expires_at = await token._fetch_token()
@@ -565,7 +565,7 @@ class TestEntraAPIToken:
         certificate_credential_mock.get_token = AsyncMock(side_effect=effect())
 
         with patch(
-            "connectors.sources.sharepoint_online.CertificateCredential",
+            "connectors_service.sources.sharepoint_online.CertificateCredential",
             return_value=certificate_credential_mock,
         ):
             actual_token, actual_expires_at = await token._fetch_token()
@@ -2285,7 +2285,7 @@ class TestSharepointOnlineDataSource:
         client = AsyncMock()
 
         with patch(
-            "connectors.sources.sharepoint_online.SharepointOnlineClient",
+            "connectors_service.sources.sharepoint_online.SharepointOnlineClient",
             return_value=AsyncMock(),
         ) as new_mock:
             client = new_mock.return_value
@@ -2392,7 +2392,7 @@ class TestSharepointOnlineDataSource:
 
     @pytest.mark.asyncio
     @patch(
-        "connectors.sources.sharepoint_online.ACCESS_CONTROL",
+        "connectors_service.sources.sharepoint_online.ACCESS_CONTROL",
         ALLOW_ACCESS_CONTROL_PATCHED,
     )
     @freeze_time(iso_utc())
@@ -2881,7 +2881,7 @@ class TestSharepointOnlineDataSource:
 
     @pytest.mark.asyncio
     @patch(
-        "connectors.sources.sharepoint_online.ACCESS_CONTROL",
+        "connectors_service.sources.sharepoint_online.ACCESS_CONTROL",
         ALLOW_ACCESS_CONTROL_PATCHED,
     )
     async def test_drive_items_permissions_when_fetch_drive_item_permissions_enabled(
@@ -2931,7 +2931,7 @@ class TestSharepointOnlineDataSource:
 
     @pytest.mark.asyncio
     @patch(
-        "connectors.sources.sharepoint_online.ACCESS_CONTROL",
+        "connectors_service.sources.sharepoint_online.ACCESS_CONTROL",
         ALLOW_ACCESS_CONTROL_PATCHED,
     )
     async def test_site_page_permissions_when_fetch_drive_item_permissions_enabled(
@@ -3405,7 +3405,7 @@ class TestSharepointOnlineDataSource:
         ],
     )
     @patch(
-        "connectors.sources.sharepoint_online.ACCESS_CONTROL",
+        "connectors_service.sources.sharepoint_online.ACCESS_CONTROL",
         ALLOW_ACCESS_CONTROL_PATCHED,
     )
     async def test_decorate_with_access_control(
@@ -3472,7 +3472,7 @@ class TestSharepointOnlineDataSource:
 
     @pytest.mark.asyncio
     @patch(
-        "connectors.sources.sharepoint_online.TIMESTAMP_FORMAT",
+        "connectors_service.sources.sharepoint_online.TIMESTAMP_FORMAT",
         TIMESTAMP_FORMAT_PATCHED,
     )
     @pytest.mark.asyncio

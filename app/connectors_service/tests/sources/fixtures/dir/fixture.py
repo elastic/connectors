@@ -14,7 +14,7 @@ SYSTEM_DIR = os.path.join(os.path.dirname(__file__), "data")
 DATA_SIZE = os.environ.get("DATA_SIZE", "small").lower()
 
 if DATA_SIZE == "small":
-    REPO = "connectors-python"
+    REPO = "connectors_service-python"
 elif DATA_SIZE == "medium":
     REPO = "elasticsearch"
 else:

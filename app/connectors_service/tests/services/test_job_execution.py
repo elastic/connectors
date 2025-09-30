@@ -24,7 +24,7 @@ from tests.services.test_base import create_and_run_service
 @pytest.fixture(autouse=True)
 def connector_index_mock():
     with patch(
-        "connectors.services.job_execution.ConnectorIndex"
+        "connectors_service.services.job_execution.ConnectorIndex"
     ) as connector_index_klass_mock:
         connector_index_mock = Mock()
         connector_index_mock.stop_waiting = Mock()
@@ -40,7 +40,7 @@ def connector_index_mock():
 @pytest.fixture(autouse=True)
 def sync_job_index_mock():
     with patch(
-        "connectors.services.job_execution.SyncJobIndex"
+        "connectors_service.services.job_execution.SyncJobIndex"
     ) as sync_job_index_klass_mock:
         sync_job_index_mock = Mock()
         sync_job_index_mock.stop_waiting = Mock()
@@ -62,7 +62,7 @@ def concurrent_task_mock():
 @pytest.fixture(autouse=True)
 def concurrent_tasks_mocks():
     with patch(
-        "connectors.services.job_execution.ConcurrentTasks"
+        "connectors_service.services.job_execution.ConcurrentTasks"
     ) as concurrent_tasks_klass_mock:
         concurrent_content_syncs_tasks_mock = concurrent_task_mock()
         concurrent_tasks_klass_mock.return_value = concurrent_content_syncs_tasks_mock
@@ -73,7 +73,7 @@ def concurrent_tasks_mocks():
 @pytest.fixture(autouse=True)
 def sync_job_runner_mock():
     with patch(
-        "connectors.services.job_execution.SyncJobRunner"
+        "connectors_service.services.job_execution.SyncJobRunner"
     ) as sync_job_runner_klass_mock:
         sync_job_runner_mock = Mock()
         sync_job_runner_mock.execute = AsyncMock()

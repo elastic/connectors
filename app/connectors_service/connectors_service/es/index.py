@@ -20,7 +20,7 @@ class DocumentNotFoundError(Exception):
 class TemporaryConnectorApiWrapper(ESClient):
     """Temporary class to wrap calls to Connectors API.
 
-    When connectors API becomes part of official client
+    When connectors_service API becomes part of official client
     this class will be removed.
     """
 

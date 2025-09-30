@@ -23,7 +23,7 @@ config = {
         "initial_backoff_duration": 0.1,
     },
     "service": {"preflight_max_attempts": 4, "preflight_idle": 0.1},
-    "connectors": [
+    "connectors_service": [
         {
             "connector_id": "connector_1",
             "service_type": "some_type",
@@ -128,7 +128,7 @@ async def test_pass(mock_responses):
 
 
 @pytest.mark.asyncio
-@patch("connectors.preflight_check.logger")
+@patch("connectors_service.preflight_check.logger")
 async def test_pass_serverless(patched_logger, mock_responses):
     mock_es_info(mock_responses, serverless=True)
     mock_index_exists(mock_responses, CONCRETE_CONNECTORS_INDEX)
@@ -142,7 +142,7 @@ async def test_pass_serverless(patched_logger, mock_responses):
 
 
 @pytest.mark.asyncio
-@patch("connectors.preflight_check.logger")
+@patch("connectors_service.preflight_check.logger")
 async def test_pass_serverless_mismatched_versions(patched_logger, mock_responses):
     mock_es_info(mock_responses, es_version="2.0.0-SNAPSHOT", serverless=True)
     mock_index_exists(mock_responses, CONCRETE_CONNECTORS_INDEX)
@@ -156,7 +156,7 @@ async def test_pass_serverless_mismatched_versions(patched_logger, mock_response
 
 
 @pytest.mark.asyncio
-@patch("connectors.preflight_check.logger")
+@patch("connectors_service.preflight_check.logger")
 @pytest.mark.parametrize(
     "es_version, expected_log",
     [
@@ -183,7 +183,7 @@ async def test_fail_mismatched_version(
 
 
 @pytest.mark.asyncio
-@patch("connectors.preflight_check.logger")
+@patch("connectors_service.preflight_check.logger")
 @pytest.mark.parametrize(
     "es_version, expected_log",
     [
@@ -210,7 +210,7 @@ async def test_warn_mismatched_version(
 
 
 @pytest.mark.asyncio
-@patch("connectors.preflight_check.logger")
+@patch("connectors_service.preflight_check.logger")
 @pytest.mark.parametrize(
     "es_version, connectors_version, expected_log",
     [
@@ -287,14 +287,14 @@ async def test_index_exist_transient_error(mock_responses):
 
 
 @pytest.mark.asyncio
-@patch("connectors.preflight_check.logger")
+@patch("connectors_service.preflight_check.logger")
 async def test_native_config_is_warned(patched_logger, mock_responses):
     mock_es_info(mock_responses)
     mock_index_exists(mock_responses, CONCRETE_CONNECTORS_INDEX)
     mock_index_exists(mock_responses, CONCRETE_JOBS_INDEX)
     local_config = deepcopy(config)
     local_config["native_service_types"] = ["foo", "bar"]
-    del local_config["connectors"]
+    del local_config["connectors_service"]
     preflight = PreflightCheck(local_config, connectors_version)
     result = await preflight.run()
     assert result == (True, False)
@@ -310,7 +310,7 @@ async def test_native_config_is_warned(patched_logger, mock_responses):
 
 
 @pytest.mark.asyncio
-@patch("connectors.preflight_check.logger")
+@patch("connectors_service.preflight_check.logger")
 async def test_native_config_is_forced(patched_logger, mock_responses):
     mock_es_info(mock_responses)
     mock_index_exists(mock_responses, CONCRETE_CONNECTORS_INDEX)
@@ -325,14 +325,14 @@ async def test_native_config_is_forced(patched_logger, mock_responses):
 
 
 @pytest.mark.asyncio
-@patch("connectors.preflight_check.logger")
+@patch("connectors_service.preflight_check.logger")
 async def test_client_config(patched_logger, mock_responses):
     mock_es_info(mock_responses)
     mock_index_exists(mock_responses, CONCRETE_CONNECTORS_INDEX)
     mock_index_exists(mock_responses, CONCRETE_JOBS_INDEX)
     local_config = deepcopy(config)
-    local_config["connectors"][0]["connector_id"] = "foo"
-    local_config["connectors"][0]["service_type"] = "bar"
+    local_config["connectors_service"][0]["connector_id"] = "foo"
+    local_config["connectors_service"][0]["service_type"] = "bar"
     preflight = PreflightCheck(local_config, connectors_version)
     result = await preflight.run()
     assert result == (True, False)
@@ -340,14 +340,14 @@ async def test_client_config(patched_logger, mock_responses):
 
 
 @pytest.mark.asyncio
-@patch("connectors.preflight_check.logger")
+@patch("connectors_service.preflight_check.logger")
 async def test_unmodified_default_config(patched_logger, mock_responses):
     mock_es_info(mock_responses)
     mock_index_exists(mock_responses, CONCRETE_CONNECTORS_INDEX)
     mock_index_exists(mock_responses, CONCRETE_JOBS_INDEX)
     local_config = deepcopy(config)
-    local_config["connectors"][0]["connector_id"] = "changeme"
-    local_config["connectors"][0]["service_type"] = "changeme"
+    local_config["connectors_service"][0]["connector_id"] = "changeme"
+    local_config["connectors_service"][0]["service_type"] = "changeme"
     preflight = PreflightCheck(local_config, connectors_version)
     result = await preflight.run()
     assert result == (False, False)
@@ -357,13 +357,13 @@ async def test_unmodified_default_config(patched_logger, mock_responses):
 
 
 @pytest.mark.asyncio
-@patch("connectors.preflight_check.logger")
+@patch("connectors_service.preflight_check.logger")
 async def test_missing_mode_config(patched_logger, mock_responses):
     mock_es_info(mock_responses)
     mock_index_exists(mock_responses, CONCRETE_CONNECTORS_INDEX)
     mock_index_exists(mock_responses, CONCRETE_JOBS_INDEX)
     local_config = deepcopy(config)
-    del local_config["connectors"]
+    del local_config["connectors_service"]
     preflight = PreflightCheck(local_config, connectors_version)
     result = await preflight.run()
     assert result == (False, False)
@@ -371,7 +371,7 @@ async def test_missing_mode_config(patched_logger, mock_responses):
 
 
 @pytest.mark.asyncio
-@patch("connectors.preflight_check.logger")
+@patch("connectors_service.preflight_check.logger")
 async def test_extraction_service_enabled_and_found_writes_info_log(
     patched_logger, mock_responses
 ):
@@ -395,7 +395,7 @@ async def test_extraction_service_enabled_and_found_writes_info_log(
 
 
 @pytest.mark.asyncio
-@patch("connectors.preflight_check.logger")
+@patch("connectors_service.preflight_check.logger")
 async def test_extraction_service_enabled_but_missing_logs_warning(
     patched_logger, mock_responses
 ):
@@ -419,7 +419,7 @@ async def test_extraction_service_enabled_but_missing_logs_warning(
 
 
 @pytest.mark.asyncio
-@patch("connectors.preflight_check.logger")
+@patch("connectors_service.preflight_check.logger")
 async def test_extraction_service_enabled_but_missing_logs_critical(
     patched_logger, mock_responses
 ):

@@ -22,7 +22,7 @@ CONNECTOR_SERVICE = "connector-service"
 
 
 class ConnectorsAgentComponent:
-    """Entry point into running connectors service in Agent.
+    """Entry point into running connectors_service service in Agent.
 
     This class provides a simple abstraction over Agent components and Connectors Service manager.
 
@@ -54,7 +54,7 @@ class ConnectorsAgentComponent:
 
         Additionally services for handling Check-in and Actions will be started to implement the protocol correctly.
         """
-        logger.info("Starting connectors agent component")
+        logger.info("Starting connectors_service agent component")
         client = new_v2_from_reader(self.buffer, self.ver, self.opts)
         action_handler = ConnectorActionHandler()
         self.connector_service_manager = ConnectorServiceManager(self.config_wrapper)
@@ -77,5 +77,5 @@ class ConnectorsAgentComponent:
 
         Attempts to gracefully shutdown the services that are running under the component.
         """
-        logger.info("Shutting down connectors agent component")
+        logger.info("Shutting down connectors_service agent component")
         self.multi_service.shutdown(sig)

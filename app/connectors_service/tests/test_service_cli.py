@@ -30,8 +30,8 @@ def test_main_exits_on_sigterm(mock_responses):
     host = "http://localhost:9200"
 
     mock_responses.get(host, headers=headers)
-    mock_responses.head(f"{host}/.elastic-connectors", headers=headers)
-    mock_responses.head(f"{host}/.elastic-connectors-sync-jobs", headers=headers)
+    mock_responses.head(f"{host}/.elastic-connectors_service", headers=headers)
+    mock_responses.head(f"{host}/.elastic-connectors_service-sync-jobs", headers=headers)
     mock_responses.get(
         f"{host}/_ingest/pipeline/search-default-ingestion", headers=headers
     )
@@ -58,8 +58,8 @@ def test_version_action(option):
 
 
 @pytest.mark.asyncio
-@patch("connectors.service_cli.PreflightCheck")
-@patch("connectors.service_cli.get_services")
+@patch("connectors_service.service_cli.PreflightCheck")
+@patch("connectors_service.service_cli.get_services")
 async def test_shutdown_signal_registered(
     patch_get_services, patch_preflight_check, set_env
 ):
@@ -89,7 +89,7 @@ def test_list_action(set_env):
 
     output = result.output
 
-    assert "Registered connectors:" in output
+    assert "Registered connectors_service:" in output
     assert "- Fakey" in output
     assert "- Large Fake" in output
     assert "Bye" in output
@@ -168,9 +168,9 @@ def test_config_cannot_be_used_with_other_actions(set_env):
     assert "Cannot use the `config` action with other actions" in result.output
 
 
-@patch("connectors.service_cli.set_logger")
+@patch("connectors_service.service_cli.set_logger")
 @patch(
-    "connectors.service_cli.load_config", side_effect=Exception("something went wrong")
+    "connectors_service.service_cli.load_config", side_effect=Exception("something went wrong")
 )
 def test_main_with_invalid_configuration(load_config, set_logger):
     runner = CliRunner()
@@ -209,8 +209,8 @@ def test_unknown_service_type(set_env):
     )
 
 
-@patch("connectors.service_cli._get_uvloop")
-@patch("connectors.service_cli.asyncio")
+@patch("connectors_service.service_cli._get_uvloop")
+@patch("connectors_service.service_cli.asyncio")
 def test_uvloop_success(patched_asyncio, patched_uvloop):
     get_event_loop(True)
     assert patched_asyncio.set_event_loop_policy.called_once_with(
@@ -218,9 +218,9 @@ def test_uvloop_success(patched_asyncio, patched_uvloop):
     )
 
 
-@patch("connectors.service_cli._get_uvloop", side_effect=Exception("import fails"))
-@patch("connectors.service_cli.asyncio")
-@patch("connectors.service_cli.logger")
+@patch("connectors_service.service_cli._get_uvloop", side_effect=Exception("import fails"))
+@patch("connectors_service.service_cli.asyncio")
+@patch("connectors_service.service_cli.logger")
 def test_uvloop_error(patched_logger, patched_asyncio, patched_uvloop):
     get_event_loop(True)
     patched_logger.warning.assert_any_call(

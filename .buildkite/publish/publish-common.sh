@@ -36,7 +36,7 @@ elif [[ -n "${VERSION_QUALIFIER:-}" ]]; then
 fi
 
 # Create a build.yaml file for reference after build process
-cat <<EOL > connectors/build.yaml
+cat <<EOL > connectors_service/build.yaml
 version: "$version"
 qualifier: "$version_qualifier"
 revision: "$revision"
@@ -44,7 +44,7 @@ repository: "$repository"
 EOL
 
 echo "Created connectors/build.yaml file:"
-cat connectors/build.yaml
+cat connectors_service/build.yaml
 
 if [[ "${MANUAL_RELEASE:-}" == "true" ]]; then
   # This block is for out-of-band releases, triggered by the release-pipeline
@@ -64,9 +64,9 @@ else
   export DOCKER_TAG_VERSION=${VERSION}
 fi
 
-export BASE_TAG_NAME=${DOCKER_IMAGE_NAME:-docker.elastic.co/integrations/elastic-connectors}
+export BASE_TAG_NAME=${DOCKER_IMAGE_NAME:-docker.elastic.co/integrations/elastic-connectors_service}
 export DOCKERFILE_PATH=${DOCKERFILE_PATH:-Dockerfile}
-export PROJECT_NAME=${PROJECT_NAME:-elastic-connectors}
+export PROJECT_NAME=${PROJECT_NAME:-elastic-connectors_service}
 export DOCKER_ARTIFACT_KEY=${DOCKER_ARTIFACT_KEY:-${PROJECT_NAME}-docker}
 export VAULT_ADDR=${VAULT_ADDR:-https://vault-ci-prod.elastic.dev}
 export VAULT_USER="docker-swiftypeadmin"
