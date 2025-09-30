@@ -3,7 +3,7 @@ requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "elasticsearch-connectors-service"
+name = "connectors_service"
 description = "Elasticsearch Connectors"
 dynamic = ["version"]
 readme = "README.md"
@@ -115,7 +115,7 @@ elastic-agent-connectors = "connectors_service.agent.cli:main"
 test-connectors = "scripts.testing.cli:main"
 
 [tool.setuptools]
-packages = ["connectors_service", "scripts"]
+packages = ["connectors_service"]
 
 [tool.setuptools.dynamic]
 version = {file = "connectors_service/VERSION"}
@@ -151,7 +151,7 @@ reportMissingModuleSource = false
 reportOptionalMemberAccess = false
 exclude = ["**/tests", "**/__pycache__"]
 executionEnvironments = [
-    { root = "./", venv = "./" }
+    { root = "./", venv = ".venv" }
 ]
 
 [tool.ruff]
