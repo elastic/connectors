@@ -16,7 +16,7 @@ from aiogoogle.auth.managers import ServiceAccountManager
 from aiogoogle.models import Request, Response
 from connectors_sdk.source import ConfigurableFieldValueError, DataSourceConfiguration
 
-from connectors.sources.google_cloud_storage import GoogleCloudStorageDataSource
+from app.connectors_service.connectors.sources.google_cloud_storage.gcp_clients import GoogleCloudStorageDataSource
 from tests.sources.support import create_source
 
 SERVICE_ACCOUNT_CREDENTIALS = '{"project_id": "dummy123"}'

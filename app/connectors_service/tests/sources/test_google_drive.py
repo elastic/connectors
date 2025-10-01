@@ -22,7 +22,7 @@ from connectors_sdk.source import (
 )
 
 from connectors.access_control import DLS_QUERY
-from connectors.sources.google import GoogleServiceAccountClient
+from app.connectors_service.connectors.sources.shared.google.google import GoogleServiceAccountClient
 from connectors.sources.google_drive import (
     RETRIES,
     GoogleDriveDataSource,

@@ -9,7 +9,7 @@ import pytest
 import pytest_asyncio
 from connectors_sdk.source import ConfigurableFieldValueError
 
-from connectors.sources.google import (
+from app.connectors_service.connectors.sources.shared.google.google import (
     GMailClient,
     GoogleDirectoryClient,
     GoogleServiceAccountClient,

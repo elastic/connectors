@@ -23,7 +23,7 @@ from smbprotocol.exceptions import (
 )
 
 from connectors.access_control import ACCESS_CONTROL
-from connectors.sources.network_drive import (
+from app.connectors_service.connectors.sources.network_drive.netdrive import (
     ClientPermissionException,
     InvalidLogonHoursException,
     NASDataSource,
