@@ -18,7 +18,7 @@ from connectors_sdk.utils import (
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import ProgrammingError
 
-from connectors.sources.generic_database import (
+from app.connectors_service.connectors.sources.shared.database.generic_database import (
     DEFAULT_FETCH_SIZE,
     DEFAULT_RETRY_COUNT,
     Queries,

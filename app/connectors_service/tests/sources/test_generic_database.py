@@ -9,7 +9,7 @@ from functools import partial
 
 import pytest
 
-from connectors.sources.generic_database import (
+from app.connectors_service.connectors.sources.shared.database.generic_database import (
     configured_tables,
     fetch,
     is_wildcard,

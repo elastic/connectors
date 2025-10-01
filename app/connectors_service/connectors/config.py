@@ -125,7 +125,7 @@ def _default_config():
             "microsoft_teams": "connectors.sources.microsoft_teams:MicrosoftTeamsDataSource",
             "mongodb": "connectors.sources.mongo.datasource:MongoDataSource",
             "mssql": "connectors.sources.mssql:MSSQLDataSource",
-            "mysql": "connectors.sources.mysql:MySqlDataSource",
+            "mysql": "connectors.sources.mysql.datasource:MySqlDataSource",
             "network_drive": "connectors.sources.network_drive:NASDataSource",
             "notion": "connectors.sources.notion:NotionDataSource",
             "onedrive": "connectors.sources.onedrive:OneDriveDataSource",

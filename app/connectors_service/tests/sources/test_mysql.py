@@ -14,7 +14,7 @@ from connectors_sdk.logger import logger
 from connectors_sdk.source import ConfigurableFieldValueError
 from freezegun import freeze_time
 
-from connectors.sources.mysql import (
+from app.connectors_service.connectors.sources.mysql.mysql import (
     MySQLAdvancedRulesValidator,
     MySQLClient,
     MySqlDataSource,
