@@ -192,7 +192,8 @@ function fetch_elasticsearch_image {
       continue
     fi
 
-    local tarball_url=$(get_docker_tarball_url "$manifest_url" "$tarball_name")
+    local tarball_url
+    tarball_url=$(get_docker_tarball_url "$manifest_url" "$tarball_name")
     if [ $? -ne 0 ]; then
       echo "Failed to get tarball URL for version $version, trying next..." >&2
       continue
