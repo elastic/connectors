@@ -28,7 +28,7 @@ pyOpenSSL==24.3.0
 dropbox==11.36.2
 beautifulsoup4==4.12.2
 gidgethub==5.2.1
-python-gitlab==6.4.0
+python-gitlab[graphql]==6.4.0
 wcmatch==8.4.1
 msal==1.30.0
 exchangelib==5.4.0

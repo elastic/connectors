@@ -23,17 +23,21 @@ RETRIES = 3
 RETRY_INTERVAL = 2
 DEFAULT_PAGE_SIZE = 100
 
+# Pagination sizes for GraphQL queries
+NODE_SIZE = 100  # For projects, issues, merge requests
+NESTED_FIELD_SIZE = 100  # For assignees, labels, discussions
+
 SUPPORTED_EXTENSION = [".md", ".rst", ".txt"]
 
-# GraphQL query to fetch projects with nested issues and MRs
-PROJECTS_QUERY = """
-query($cursor: String) {
-  projects(membership: true, first: 100, after: $cursor) {
-    pageInfo {
+# GraphQL query to fetch projects (simplified to avoid complexity limits)
+PROJECTS_QUERY = f"""
+query($cursor: String) {{
+  projects(membership: true, first: {NODE_SIZE}, after: $cursor) {{
+    pageInfo {{
       hasNextPage
       endCursor
-    }
-    nodes {
+    }}
+    nodes {{
       id
       name
       path
@@ -44,122 +48,222 @@ query($cursor: String) {
       forksCount
       createdAt
       lastActivityAt
-      defaultBranch
       archived
       webUrl
-      repository {
-        tree(recursive: true) {
-          blobs {
-            nodes {
-              name
-              path
-              type
-            }
-          }
-        }
-      }
-      issues(first: 100) {
-        pageInfo {
-          hasNextPage
-          endCursor
-        }
-        nodes {
-          iid
-          title
-          description
-          state
-          createdAt
-          updatedAt
-          closedAt
-          webUrl
-          author {
+      repository {{
+        rootRef
+      }}
+    }}
+  }}
+}}
+"""
+
+# GraphQL query to fetch issues for a project
+ISSUES_QUERY = f"""
+query($projectPath: ID!, $cursor: String) {{
+  project(fullPath: $projectPath) {{
+    issues(first: {NODE_SIZE}, after: $cursor) {{
+      pageInfo {{
+        hasNextPage
+        endCursor
+      }}
+      nodes {{
+        iid
+        title
+        description
+        state
+        createdAt
+        updatedAt
+        closedAt
+        webUrl
+        author {{
+          username
+          name
+        }}
+        assignees(first: {NESTED_FIELD_SIZE}) {{
+          pageInfo {{
+            hasNextPage
+            endCursor
+          }}
+          nodes {{
             username
             name
-          }
-          assignees {
-            nodes {
-              username
-              name
-            }
-          }
-          labels {
-            nodes {
-              title
-            }
-          }
-          userNotesCount
-          discussions(first: 100) {
-            nodes {
-              notes {
-                nodes {
-                  id
-                  body
-                  createdAt
-                  updatedAt
-                  author {
-                    username
-                    name
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-      mergeRequests(first: 100) {
-        pageInfo {
-          hasNextPage
-          endCursor
-        }
-        nodes {
-          iid
-          title
-          description
-          state
-          createdAt
-          updatedAt
-          mergedAt
-          closedAt
-          webUrl
-          sourceBranch
-          targetBranch
-          author {
+          }}
+        }}
+        labels(first: {NESTED_FIELD_SIZE}) {{
+          pageInfo {{
+            hasNextPage
+            endCursor
+          }}
+          nodes {{
+            title
+          }}
+        }}
+        userNotesCount
+        discussions(first: {NESTED_FIELD_SIZE}) {{
+          pageInfo {{
+            hasNextPage
+            endCursor
+          }}
+          nodes {{
+            notes {{
+              nodes {{
+                id
+                body
+                createdAt
+                updatedAt
+                author {{
+                  username
+                  name
+                }}
+              }}
+            }}
+          }}
+        }}
+      }}
+    }}
+  }}
+}}
+"""
+
+# GraphQL query to fetch merge requests for a project
+MERGE_REQUESTS_QUERY = f"""
+query($projectPath: ID!, $cursor: String) {{
+  project(fullPath: $projectPath) {{
+    mergeRequests(first: {NODE_SIZE}, after: $cursor) {{
+      pageInfo {{
+        hasNextPage
+        endCursor
+      }}
+      nodes {{
+        iid
+        title
+        description
+        state
+        createdAt
+        updatedAt
+        mergedAt
+        closedAt
+        webUrl
+        sourceBranch
+        targetBranch
+        author {{
+          username
+          name
+        }}
+        assignees(first: {NESTED_FIELD_SIZE}) {{
+          pageInfo {{
+            hasNextPage
+            endCursor
+          }}
+          nodes {{
             username
             name
-          }
-          assignees {
-            nodes {
-              username
-              name
-            }
-          }
-          labels {
-            nodes {
-              title
-            }
-          }
-          userNotesCount
-          discussions(first: 100) {
-            nodes {
-              notes {
-                nodes {
-                  id
-                  body
-                  createdAt
-                  updatedAt
-                  author {
-                    username
-                    name
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-}
+          }}
+        }}
+        labels(first: {NESTED_FIELD_SIZE}) {{
+          pageInfo {{
+            hasNextPage
+            endCursor
+          }}
+          nodes {{
+            title
+          }}
+        }}
+        userNotesCount
+        discussions(first: {NESTED_FIELD_SIZE}) {{
+          pageInfo {{
+            hasNextPage
+            endCursor
+          }}
+          nodes {{
+            notes {{
+              nodes {{
+                id
+                body
+                createdAt
+                updatedAt
+                author {{
+                  username
+                  name
+                }}
+              }}
+            }}
+          }}
+        }}
+      }}
+    }}
+  }}
+}}
+"""
+
+# GraphQL query to fetch remaining assignees for an issue or MR
+ASSIGNEES_QUERY = f"""
+query($projectPath: ID!, $iid: String!, $cursor: String) {{{{
+  project(fullPath: $projectPath) {{{{
+    {{issuable_type}}(iid: $iid) {{{{
+      assignees(first: {NESTED_FIELD_SIZE}, after: $cursor) {{{{
+        pageInfo {{{{
+          hasNextPage
+          endCursor
+        }}}}
+        nodes {{{{
+          username
+          name
+        }}}}
+      }}}}
+    }}}}
+  }}}}
+}}}}
+"""
+
+# GraphQL query to fetch remaining labels for an issue or MR
+LABELS_QUERY = f"""
+query($projectPath: ID!, $iid: String!, $cursor: String) {{{{
+  project(fullPath: $projectPath) {{{{
+    {{issuable_type}}(iid: $iid) {{{{
+      labels(first: {NESTED_FIELD_SIZE}, after: $cursor) {{{{
+        pageInfo {{{{
+          hasNextPage
+          endCursor
+        }}}}
+        nodes {{{{
+          title
+        }}}}
+      }}}}
+    }}}}
+  }}}}
+}}}}
+"""
+
+# GraphQL query to fetch remaining discussions for an issue or MR
+DISCUSSIONS_QUERY = f"""
+query($projectPath: ID!, $iid: String!, $cursor: String) {{{{
+  project(fullPath: $projectPath) {{{{
+    {{issuable_type}}(iid: $iid) {{{{
+      discussions(first: {NESTED_FIELD_SIZE}, after: $cursor) {{{{
+        pageInfo {{{{
+          hasNextPage
+          endCursor
+        }}}}
+        nodes {{{{
+          notes {{{{
+            nodes {{{{
+              id
+              body
+              createdAt
+              updatedAt
+              author {{{{
+                username
+                name
+              }}}}
+            }}}}
+          }}}}
+        }}}}
+      }}}}
+    }}}}
+  }}}}
+}}}}
 """
 
 
@@ -182,13 +286,11 @@ class GitLabClient:
         interval=RETRY_INTERVAL,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
-    async def get_projects_with_issues_and_mrs(self):
-        """Fetch projects with nested issues and merge requests using GraphQL.
-
-        This is the main bulk fetch method that reduces API calls significantly.
+    async def get_projects(self):
+        """Fetch projects using GraphQL.
 
         Yields:
-            dict: Project data with nested issues and merge requests
+            dict: Project data
         """
         cursor = None
 
@@ -214,6 +316,164 @@ class GitLabClient:
 
             cursor = page_info.get("endCursor")
 
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    )
+    async def get_issues(self, project_path):
+        """Fetch issues for a project using GraphQL.
+
+        Args:
+            project_path (str): Full path of the project (e.g., 'namespace/project')
+
+        Yields:
+            dict: Issue data
+        """
+        cursor = None
+
+        while True:
+            variables = {"projectPath": project_path}
+            if cursor:
+                variables["cursor"] = cursor
+
+            try:
+                result = await self.graphql_client.execute(ISSUES_QUERY, variables)
+            except Exception as e:
+                self._logger.warning(f"Failed to fetch issues for {project_path}: {e}")
+                return
+
+            project_data = result.get("project")
+            if not project_data:
+                return
+
+            issues_data = project_data.get("issues", {})
+            issues = issues_data.get("nodes", [])
+
+            for issue in issues:
+                yield issue
+
+            # Check pagination
+            page_info = issues_data.get("pageInfo", {})
+            if not page_info.get("hasNextPage"):
+                break
+
+            cursor = page_info.get("endCursor")
+
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    )
+    async def get_merge_requests(self, project_path):
+        """Fetch merge requests for a project using GraphQL.
+
+        Args:
+            project_path (str): Full path of the project (e.g., 'namespace/project')
+
+        Yields:
+            dict: Merge request data
+        """
+        cursor = None
+
+        while True:
+            variables = {"projectPath": project_path}
+            if cursor:
+                variables["cursor"] = cursor
+
+            try:
+                result = await self.graphql_client.execute(
+                    MERGE_REQUESTS_QUERY, variables
+                )
+            except Exception as e:
+                self._logger.warning(
+                    f"Failed to fetch merge requests for {project_path}: {e}"
+                )
+                return
+
+            project_data = result.get("project")
+            if not project_data:
+                return
+
+            mrs_data = project_data.get("mergeRequests", {})
+            mrs = mrs_data.get("nodes", [])
+
+            for mr in mrs:
+                yield mr
+
+            # Check pagination
+            page_info = mrs_data.get("pageInfo", {})
+            if not page_info.get("hasNextPage"):
+                break
+
+            cursor = page_info.get("endCursor")
+
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    )
+    async def fetch_remaining_field(
+        self, project_path, iid, field_type, issuable_type, cursor
+    ):
+        """Fetch remaining items for a paginated field (assignees, labels, discussions).
+
+        Args:
+            project_path (str): Full path of the project
+            iid (str): Issue or MR internal ID
+            field_type (str): Type of field ('assignees', 'labels', 'discussions')
+            issuable_type (str): Type of issuable ('issue' or 'mergeRequest')
+            cursor (str): Pagination cursor
+
+        Yields:
+            dict: Field items
+        """
+        query_map = {
+            "assignees": ASSIGNEES_QUERY,
+            "labels": LABELS_QUERY,
+            "discussions": DISCUSSIONS_QUERY,
+        }
+
+        query_template = query_map.get(field_type)
+        if not query_template:
+            self._logger.warning(f"Unknown field type: {field_type}")
+            return
+
+        # Format the query with the issuable type
+        query = query_template.format(issuable_type=issuable_type)
+
+        while cursor:
+            variables = {"projectPath": project_path, "iid": str(iid), "cursor": cursor}
+
+            try:
+                result = await self.graphql_client.execute(query, variables)
+            except Exception as e:
+                self._logger.warning(
+                    f"Failed to fetch remaining {field_type} for {issuable_type} {iid}: {e}"
+                )
+                return
+
+            project_data = result.get("project")
+            if not project_data:
+                return
+
+            issuable_data = project_data.get(issuable_type)
+            if not issuable_data:
+                return
+
+            field_data = issuable_data.get(field_type, {})
+            items = field_data.get("nodes", [])
+
+            for item in items:
+                yield item
+
+            # Check pagination
+            page_info = field_data.get("pageInfo", {})
+            if not page_info.get("hasNextPage"):
+                break
+
+            cursor = page_info.get("endCursor")
+
     async def get_file_content(self, project_id, file_path, ref=None):
         """Get file content from repository using REST API (runs in thread pool).
 
@@ -225,19 +485,25 @@ class GitLabClient:
         Returns:
             dict: File data with content (base64 encoded)
         """
+
         def _sync_get_file():
             try:
                 project = self.rest_client.projects.get(project_id)
-                file_data = project.files.get(file_path, ref=ref or project.default_branch)
+                file_data = project.files.get(
+                    file_path, ref=ref or project.default_branch
+                )
                 return file_data.attributes
             except Exception as e:
-                self._logger.warning(f"Failed to fetch file {file_path} from project {project_id}: {e}")
+                self._logger.warning(
+                    f"Failed to fetch file {file_path} from project {project_id}: {e}"
+                )
                 return None
 
         return await asyncio.to_thread(_sync_get_file)
 
     async def ping(self):
         """Test the connection to GitLab (runs in thread pool)."""
+
         def _sync_auth():
             try:
                 self.rest_client.auth()
@@ -273,7 +539,7 @@ class GitLabDataSource(BaseDataSource):
         self.gitlab_client = GitLabClient(
             token=self.configuration["token"],
         )
-        self.configured_projects = self.configuration.get("projects", [])
+        self.configured_projects = self.configuration["projects"]
 
     def _set_internal_logger(self):
         self.gitlab_client.set_logger(self._logger)
@@ -333,13 +599,16 @@ class GitLabDataSource(BaseDataSource):
         Raises:
             ConfigurableFieldValueError: If any project is invalid.
         """
+
         def _sync_validate_project(project_path):
             try:
-                project = self.gitlab_client.rest_client.projects.get(project_path)
+                self.gitlab_client.rest_client.projects.get(project_path)
                 self._logger.debug(f"✓ Project '{project_path}' is accessible")
                 return None
             except Exception as e:
-                self._logger.warning(f"✗ Project '{project_path}' is not accessible: {e}")
+                self._logger.warning(
+                    f"✗ Project '{project_path}' is not accessible: {e}"
+                )
                 return project_path
 
         invalid_projects = []
@@ -386,6 +655,50 @@ class GitLabDataSource(BaseDataSource):
         # Check if project is in the configured list
         return project_path in self.configured_projects
 
+    async def _fetch_remaining_issue_fields(
+        self, issuable, project_path, issuable_type
+    ):
+        """Fetch remaining items for paginated fields in an issue or MR.
+
+        Args:
+            issuable (dict): Issue or MR data from GraphQL
+            project_path (str): Full path of the project
+            issuable_type (str): 'issue' or 'mergeRequest'
+        """
+        iid = issuable.get("iid")
+        if not iid:
+            return
+
+        # Check and fetch remaining assignees
+        assignees_data = issuable.get("assignees", {})
+        assignees_page_info = assignees_data.get("pageInfo", {})
+        if assignees_page_info.get("hasNextPage"):
+            cursor = assignees_page_info.get("endCursor")
+            async for assignee in self.gitlab_client.fetch_remaining_field(
+                project_path, iid, "assignees", issuable_type, cursor
+            ):
+                issuable["assignees"]["nodes"].append(assignee)
+
+        # Check and fetch remaining labels
+        labels_data = issuable.get("labels", {})
+        labels_page_info = labels_data.get("pageInfo", {})
+        if labels_page_info.get("hasNextPage"):
+            cursor = labels_page_info.get("endCursor")
+            async for label in self.gitlab_client.fetch_remaining_field(
+                project_path, iid, "labels", issuable_type, cursor
+            ):
+                issuable["labels"]["nodes"].append(label)
+
+        # Check and fetch remaining discussions
+        discussions_data = issuable.get("discussions", {})
+        discussions_page_info = discussions_data.get("pageInfo", {})
+        if discussions_page_info.get("hasNextPage"):
+            cursor = discussions_page_info.get("endCursor")
+            async for discussion in self.gitlab_client.fetch_remaining_field(
+                project_path, iid, "discussions", issuable_type, cursor
+            ):
+                issuable["discussions"]["nodes"].append(discussion)
+
     async def get_docs(self, filtering=None):
         """Main method to fetch documents from GitLab.
 
@@ -395,8 +708,8 @@ class GitLabDataSource(BaseDataSource):
         Yields:
             tuple: (document dict, download function or None)
         """
-        # Fetch projects with nested issues and MRs via GraphQL
-        async for project_data in self.gitlab_client.get_projects_with_issues_and_mrs():
+        # Fetch projects via GraphQL
+        async for project_data in self.gitlab_client.get_projects():
             # Extract project ID (GraphQL returns global ID, need numeric ID)
             project_gid = project_data.get("id", "")
             # GitLab GraphQL IDs are like "gid://gitlab/Project/123"
@@ -409,27 +722,39 @@ class GitLabDataSource(BaseDataSource):
             # Filter projects based on configuration
             project_full_path = project_data.get("fullPath", "")
             if not self._should_sync_project(project_full_path):
-                self._logger.debug(f"Skipping project '{project_full_path}' (not in configured projects)")
+                self._logger.debug(
+                    f"Skipping project '{project_full_path}' (not in configured projects)"
+                )
                 continue
 
             # Yield project document
             project_doc = self._format_project_doc(project_data)
             yield project_doc, None
 
-            # Process issues from GraphQL response
-            issues_data = project_data.get("issues", {})
-            for issue in issues_data.get("nodes", []):
+            # Fetch and process issues for this project
+            async for issue in self.gitlab_client.get_issues(project_full_path):
+                # Fetch remaining fields if they have more pages
+                await self._fetch_remaining_issue_fields(
+                    issue, project_full_path, "issue"
+                )
+
                 issue_doc = self._format_issue_doc(issue, project_data)
 
                 # Extract notes from GraphQL response
-                notes = self._extract_notes_from_discussions(issue.get("discussions", {}))
+                notes = self._extract_notes_from_discussions(
+                    issue.get("discussions", {})
+                )
                 issue_doc["notes"] = notes
 
                 yield issue_doc, None
 
-            # Process merge requests from GraphQL response
-            mrs_data = project_data.get("mergeRequests", {})
-            for mr in mrs_data.get("nodes", []):
+            # Fetch and process merge requests for this project
+            async for mr in self.gitlab_client.get_merge_requests(project_full_path):
+                # Fetch remaining fields if they have more pages
+                await self._fetch_remaining_issue_fields(
+                    mr, project_full_path, "mergeRequest"
+                )
+
                 mr_doc = self._format_merge_request_doc(mr, project_data)
 
                 # Extract notes from GraphQL response
@@ -439,7 +764,9 @@ class GitLabDataSource(BaseDataSource):
                 yield mr_doc, None
 
             # Fetch README files via REST
-            async for readme_doc, download_func in self._fetch_readme_files(project_id, project_data):
+            async for readme_doc, download_func in self._fetch_readme_files(
+                project_id, project_data
+            ):
                 yield readme_doc, download_func
 
     def _format_project_doc(self, project_data):
@@ -468,7 +795,7 @@ class GitLabDataSource(BaseDataSource):
             "forks_count": project_data.get("forksCount", 0),
             "created_at": project_data.get("createdAt"),
             "last_activity_at": project_data.get("lastActivityAt"),
-            "default_branch": project_data.get("defaultBranch"),
+            "default_branch": project_data.get("repository", {}).get("rootRef"),
             "archived": project_data.get("archived", False),
             "web_url": project_data.get("webUrl"),
         }
@@ -502,8 +829,12 @@ class GitLabDataSource(BaseDataSource):
             "web_url": issue.get("webUrl"),
             "author": issue.get("author", {}).get("username"),
             "author_name": issue.get("author", {}).get("name"),
-            "assignees": [a.get("username") for a in issue.get("assignees", {}).get("nodes", [])],
-            "labels": [l.get("title") for l in issue.get("labels", {}).get("nodes", [])],
+            "assignees": [
+                a.get("username") for a in issue.get("assignees", {}).get("nodes", [])
+            ],
+            "labels": [
+                label.get("title") for label in issue.get("labels", {}).get("nodes", [])
+            ],
         }
 
     def _extract_notes_from_discussions(self, discussions_data):
@@ -518,14 +849,16 @@ class GitLabDataSource(BaseDataSource):
         notes = []
         for discussion in discussions_data.get("nodes", []):
             for note in discussion.get("notes", {}).get("nodes", []):
-                notes.append({
-                    "id": note.get("id"),
-                    "body": note.get("body"),
-                    "created_at": note.get("createdAt"),
-                    "updated_at": note.get("updatedAt"),
-                    "author": note.get("author", {}).get("username"),
-                    "author_name": note.get("author", {}).get("name"),
-                })
+                notes.append(
+                    {
+                        "id": note.get("id"),
+                        "body": note.get("body"),
+                        "created_at": note.get("createdAt"),
+                        "updated_at": note.get("updatedAt"),
+                        "author": note.get("author", {}).get("username"),
+                        "author_name": note.get("author", {}).get("name"),
+                    }
+                )
         return notes
 
     def _format_merge_request_doc(self, mr, project_data):
@@ -560,8 +893,12 @@ class GitLabDataSource(BaseDataSource):
             "target_branch": mr.get("targetBranch"),
             "author": mr.get("author", {}).get("username"),
             "author_name": mr.get("author", {}).get("name"),
-            "assignees": [a.get("username") for a in mr.get("assignees", {}).get("nodes", [])],
-            "labels": [l.get("title") for l in mr.get("labels", {}).get("nodes", [])],
+            "assignees": [
+                a.get("username") for a in mr.get("assignees", {}).get("nodes", [])
+            ],
+            "labels": [
+                label.get("title") for label in mr.get("labels", {}).get("nodes", [])
+            ],
         }
 
     async def _fetch_readme_files(self, project_id, project_data):
@@ -574,12 +911,16 @@ class GitLabDataSource(BaseDataSource):
         Yields:
             tuple: (document dict, download function)
         """
-        default_branch = project_data.get("defaultBranch")
+        # Get repository data from GraphQL
+        repository = project_data.get("repository", {})
+        if not repository:
+            return
+
+        default_branch = repository.get("rootRef")
         if not default_branch:
             return
 
-        # Get repository tree from GraphQL data
-        repository = project_data.get("repository", {})
+        # Get file tree from GraphQL data
         tree = repository.get("tree", {})
         blobs = tree.get("blobs", {})
         tree_items = blobs.get("nodes", [])
@@ -595,7 +936,7 @@ class GitLabDataSource(BaseDataSource):
             # Check if extension is supported
             file_extension = ""
             if "." in file_name:
-                file_extension = file_name[file_name.rfind("."):]
+                file_extension = file_name[file_name.rfind(".") :]
 
             if file_extension not in SUPPORTED_EXTENSION and file_extension != "":
                 continue
@@ -676,7 +1017,9 @@ class GitLabDataSource(BaseDataSource):
         Yields:
             bytes: File content
         """
-        file_data = await self.gitlab_client.get_file_content(project_id, file_path, ref)
+        file_data = await self.gitlab_client.get_file_content(
+            project_id, file_path, ref
+        )
 
         if file_data and "content" in file_data:
             # GitLab returns base64-encoded content
