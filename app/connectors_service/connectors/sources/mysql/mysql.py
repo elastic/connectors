@@ -13,9 +13,7 @@ from connectors_sdk.filtering.validation import (
     AdvancedRulesValidator,
     SyncRuleValidationResult,
 )
-from connectors_sdk.utils import (
-    iso_utc,
-)
+
 from fastjsonschema import JsonSchemaValueException
 
 from connectors.utils import (
@@ -25,17 +23,13 @@ from connectors.utils import (
     ssl_context,
 )
 
-SPLIT_BY_COMMA_OUTSIDE_BACKTICKS_PATTERN = re.compile(r"`(?:[^`]|``)+`|\w+")
-
-MAX_POOL_SIZE = 10
-DEFAULT_FETCH_SIZE = 5000
-RETRIES = 3
-RETRY_INTERVAL = 2
-
-
-def format_list(list_):
-    return ", ".join(list_)
-
+from connectors.sources.mysql.mysql_utils import (
+    format_list,
+    MAX_POOL_SIZE,
+    DEFAULT_FETCH_SIZE,
+    RETRIES,
+    RETRY_INTERVAL
+)
 
 class MySQLAdvancedRulesValidator(AdvancedRulesValidator):
     QUERY_OBJECT_SCHEMA_DEFINITION = {
@@ -308,34 +302,3 @@ class MySQLClient:
                 self._logger.exception(
                     f"Fetched {fetched_rows} rows in {successful_batches} batches. Encountered exception {e} in batch {successful_batches + 1}."
                 )
-
-
-def row2doc(row, column_names, primary_key_columns, table, timestamp):
-    row = dict(zip(column_names, row, strict=True))
-    row.update(
-        {
-            "_id": generate_id(table, row, primary_key_columns),
-            "_timestamp": timestamp or iso_utc(),
-            "Table": table,
-        }
-    )
-
-    return row
-
-
-def generate_id(tables, row, primary_key_columns):
-    """Generates an id using table names as prefix in sorted order and primary key values.
-
-    Example:
-        tables: table1, table2
-        primary key values: 1, 42
-        table1_table2_1_42
-    """
-
-    if not isinstance(tables, list):
-        tables = [tables]
-
-    return (
-        f"{'_'.join(sorted(tables))}_"
-        f"{'_'.join([str(pk_value) for pk in primary_key_columns if (pk_value := row.get(pk)) is not None])}"
-    )

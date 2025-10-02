@@ -124,7 +124,7 @@ def _default_config():
             "jira": "connectors.sources.jira:JiraDataSource",
             "microsoft_teams": "connectors.sources.microsoft_teams:MicrosoftTeamsDataSource",
             "mongodb": "connectors.sources.mongo.datasource:MongoDataSource",
-            "mssql": "connectors.sources.mssql:MSSQLDataSource",
+            "mssql": "connectors.sources.mssql.datasource:MSSQLDataSource",
             "mysql": "connectors.sources.mysql.datasource:MySqlDataSource",
             "network_drive": "connectors.sources.network_drive:NASDataSource",
             "notion": "connectors.sources.notion:NotionDataSource",

@@ -1,14 +1,21 @@
+#
+# Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+# or more contributor license agreements. Licensed under the Elastic License 2.0;
+# you may not use this file except in compliance with the Elastic License 2.0.
+#
 import aiomysql
-import re
 
 from connectors.sources.mysql.mysql import (
     MySQLAdvancedRulesValidator,
     MySQLClient,
+)
+
+from connectors.sources.mysql.mysql_utils import (
+    format_list,
+    row2doc,
     DEFAULT_FETCH_SIZE,
     RETRIES,
     RETRY_INTERVAL,
-    row2doc,
-    format_list
 )
 
 from connectors.sources.shared.database.generic_database import (
@@ -23,8 +30,6 @@ from connectors.utils import (
 )
 
 from connectors_sdk.source import BaseDataSource, ConfigurableFieldValueError
-
-SPLIT_BY_COMMA_OUTSIDE_BACKTICKS_PATTERN = re.compile(r"`(?:[^`]|``)+`|\w+")
 
 
 class MySqlDataSource(BaseDataSource):

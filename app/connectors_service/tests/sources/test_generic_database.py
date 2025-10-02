@@ -15,7 +15,7 @@ from app.connectors_service.connectors.sources.shared.database.generic_database 
     is_wildcard,
     map_column_names,
 )
-from connectors.sources.mssql import MSSQLQueries
+from app.connectors_service.connectors.sources.mssql.mssql import MSSQLQueries
 
 SCHEMA = "dbo"
 TABLE = "emp_table"
