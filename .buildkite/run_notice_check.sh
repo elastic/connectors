@@ -21,8 +21,9 @@ if is_pr && ! is_fork; then
     echo 'New changes to NOTICE.txt:'
     git --no-pager diff
 
-    git add NOTICE.txt
-    git commit -m"Update NOTICE.txt"
+    git status --porcelain | grep app/connectors_service/NOTICE.txt && git add app/connectors_service/NOTICE.txt
+    git status --porcelain | grep lib/connectors_sdk/NOTICE.txt && git add lib/connectors_sdk/NOTICE.txt
+    git commit -m "Update NOTICE.txt"
     git push
 
     exit 1
