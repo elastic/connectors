@@ -53,6 +53,8 @@ steps:
           machineType: "n1-standard-8"
           useVault: true
           image: family/enterprise-search-ubuntu-2204-connectors-py
+        env:
+          TWINE_USERNAME: "__token__"
         matrix:
           setup:
             python_version:
@@ -61,11 +63,14 @@ steps:
             package_path:
               - "${SERVICE_PACKAGE_PATH}"
         commands:
+          # splitting the assignment in 2 lines to avoid leaking the key in the buildkite logs
+          - "TWINE_PASSWORD=$(vault read -field publishing-api-key secret/ent-search-team/test-pypi-ent-search-dev)"
+          - "export TWINE_PASSWORD"
           - "mkdir -p {{matrix.package_path}}/dist"
           - "buildkite-agent artifact download '{{matrix.package_path}}/dist/*' ."
           - "cd {{matrix.package_path}}"
           - "python{{matrix.python_version}} -m pip install --upgrade twine"
-          - "python{{matrix.python_version}} -m twine upload --repository testpypi dist/* --username __token__ --password $TEST_PYPI_TOKEN"
+          - "python{{matrix.python_version}} -m twine upload --repository testpypi dist/*"
 
   - group: ":truck: Publish to Production PyPI"
     key: "publish_to_pypi"
@@ -79,6 +84,8 @@ steps:
           machineType: "n1-standard-8"
           useVault: true
           image: family/enterprise-search-ubuntu-2204-connectors-py
+        env:
+          TWINE_USERNAME: "__token__"
         matrix:
           setup:
             python_version:
@@ -87,8 +94,11 @@ steps:
             package_path:
               - "${SERVICE_PACKAGE_PATH}"
         commands:
+          # splitting the assignment in 2 lines to avoid leaking the key in the buildkite logs
+          - "TWINE_PASSWORD=$(vault read -field publishing-api-key secret/ent-search-team/pypi-ent-search-dev)"
+          - "export TWINE_PASSWORD"
           - "mkdir -p {{matrix.package_path}}/dist"
           - "buildkite-agent artifact download '{{matrix.package_path}}/dist/*' ."
           - "cd {{matrix.package_path}}"
           - "python{{matrix.python_version}} -m pip install --upgrade twine"
-          - "python{{matrix.python_version}} -m twine upload --repository pypi dist/* --username __token__ --password $PYPI_TOKEN"
+          - "python{{matrix.python_version}} -m twine upload --repository pypi dist/*"
