@@ -5,7 +5,7 @@ _AGENTS = """\
 agents:
   provider: aws
   instanceType: m6g.xlarge
-  imagePrefix: enterprise-search-ubuntu-2204-aarch64-connectors_service-py
+  imagePrefix: enterprise-search-ubuntu-2204-aarch64-connectors-py
 """
 
 with open(os.path.join(os.path.dirname(__file__), "nightly_steps.yml")) as f:

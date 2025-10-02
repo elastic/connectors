@@ -47,7 +47,7 @@ def test_logger_filebeat():
 
         # make sure it's JSON and we have service.type
         data = json.loads(ecs_log)
-        assert data["service"]["type"] == "connectors_service-python"
+        assert data["service"]["type"] == "connectors-service-python"
 
 
 def test_tracer():

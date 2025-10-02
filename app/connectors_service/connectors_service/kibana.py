@@ -18,8 +18,8 @@ from connectors_service.es.management_client import ESManagementClient
 from connectors_service.protocol import ConnectorIndex
 from connectors_service.utils import get_source_klass, validate_index_name
 
-CONNECTORS_INDEX = ".elastic-connectors_service-v1"
-JOBS_INDEX = ".elastic-connectors_service-sync-jobs-v1"
+CONNECTORS_INDEX = ".elastic-connectors-v1"
+JOBS_INDEX = ".elastic-connectors-sync-jobs-v1"
 DEFAULT_CONFIG = os.path.join(os.path.dirname(__file__), "..", "config.yml")
 DEFAULT_PIPELINE = {
     "version": 1,
@@ -70,7 +70,7 @@ async def prepare(service_type, index_name, config, connector_definition=None):
         logger.info(f"Creating '{connector_name}' connector")
 
         await connector_index.connector_put(
-            connector_id=config["connectors_service"][0]["connector_id"],
+            connector_id=config["connectors"][0]["connector_id"],
             service_type=service_type,
             connector_name=connector_name,
             index_name=index_name,
@@ -79,7 +79,7 @@ async def prepare(service_type, index_name, config, connector_definition=None):
         logger.info(f"Updating scheduling for '{connector_name}' connector")
 
         await connector_index.connector_update_scheduling(
-            connector_id=config["connectors_service"][0]["connector_id"],
+            connector_id=config["connectors"][0]["connector_id"],
             full={
                 "enabled": True,
                 "interval": "1 * * * * ?",  # every minute
@@ -89,7 +89,7 @@ async def prepare(service_type, index_name, config, connector_definition=None):
         logger.info(f"Updating configuration for '{connector_name}' connector")
 
         await connector_index.connector_update_configuration(
-            connector_id=config["connectors_service"][0]["connector_id"],
+            connector_id=config["connectors"][0]["connector_id"],
             schema=connector_configuration,
         )
 

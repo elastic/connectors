@@ -71,7 +71,7 @@ class ConnectorServiceManager:
                     )  # Log Level for connectors_service is managed like this
                     connectors_sdk.logger.set_logger(log_level, filebeat=True)
                     # Log Level for agent connectors_service component itself
-                    connectors.agent.logger.update_logger_level(log_level)
+                    connectors_service.agent.logger.update_logger_level(log_level)
 
                     await self._multi_service.run()
                 except Exception as e:

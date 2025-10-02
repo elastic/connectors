@@ -39,7 +39,7 @@ class License(Enum):
     UNSET = None
 
 
-USER_AGENT_BASE = f"elastic-connectors_service-{__version__}"
+USER_AGENT_BASE = f"elastic-connectors-service-{__version__}"
 
 
 class ESClient:
@@ -109,7 +109,7 @@ class ESClient:
 
         options["headers"] = config.get("headers", {})
         options["headers"]["user-agent"] = self.__class__.user_agent
-        options["headers"]["X-elastic-product-origin"] = "connectors_service"
+        options["headers"]["X-elastic-product-origin"] = "connectors"  # TODO: update this and dashboard depending on this value
 
         self.client = AsyncElasticsearch(**options)
         self._keep_waiting = True

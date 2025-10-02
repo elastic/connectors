@@ -23,7 +23,7 @@ config = {
         "initial_backoff_duration": 0.1,
     },
     "service": {"preflight_max_attempts": 4, "preflight_idle": 0.1},
-    "connectors_service": [
+    "connectors": [
         {
             "connector_id": "connector_1",
             "service_type": "some_type",
@@ -294,7 +294,7 @@ async def test_native_config_is_warned(patched_logger, mock_responses):
     mock_index_exists(mock_responses, CONCRETE_JOBS_INDEX)
     local_config = deepcopy(config)
     local_config["native_service_types"] = ["foo", "bar"]
-    del local_config["connectors_service"]
+    del local_config["connectors"]
     preflight = PreflightCheck(local_config, connectors_version)
     result = await preflight.run()
     assert result == (True, False)
@@ -331,8 +331,8 @@ async def test_client_config(patched_logger, mock_responses):
     mock_index_exists(mock_responses, CONCRETE_CONNECTORS_INDEX)
     mock_index_exists(mock_responses, CONCRETE_JOBS_INDEX)
     local_config = deepcopy(config)
-    local_config["connectors_service"][0]["connector_id"] = "foo"
-    local_config["connectors_service"][0]["service_type"] = "bar"
+    local_config["connectors"][0]["connector_id"] = "foo"
+    local_config["connectors"][0]["service_type"] = "bar"
     preflight = PreflightCheck(local_config, connectors_version)
     result = await preflight.run()
     assert result == (True, False)
@@ -346,8 +346,8 @@ async def test_unmodified_default_config(patched_logger, mock_responses):
     mock_index_exists(mock_responses, CONCRETE_CONNECTORS_INDEX)
     mock_index_exists(mock_responses, CONCRETE_JOBS_INDEX)
     local_config = deepcopy(config)
-    local_config["connectors_service"][0]["connector_id"] = "changeme"
-    local_config["connectors_service"][0]["service_type"] = "changeme"
+    local_config["connectors"][0]["connector_id"] = "changeme"
+    local_config["connectors"][0]["service_type"] = "changeme"
     preflight = PreflightCheck(local_config, connectors_version)
     result = await preflight.run()
     assert result == (False, False)
@@ -363,7 +363,7 @@ async def test_missing_mode_config(patched_logger, mock_responses):
     mock_index_exists(mock_responses, CONCRETE_CONNECTORS_INDEX)
     mock_index_exists(mock_responses, CONCRETE_JOBS_INDEX)
     local_config = deepcopy(config)
-    del local_config["connectors_service"]
+    del local_config["connectors"]
     preflight = PreflightCheck(local_config, connectors_version)
     result = await preflight.run()
     assert result == (False, False)

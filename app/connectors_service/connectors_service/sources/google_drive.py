@@ -383,7 +383,7 @@ class GoogleDriveDataSource(BaseDataSource):
                 "label": "Google Drive service account JSON",
                 "sensitive": True,
                 "order": 1,
-                "tooltip": "This connectors_service authenticates as a service account to synchronize content from Google Drive.",
+                "tooltip": "This connector authenticates as a service account to synchronize content from Google Drive.",
                 "type": "str",
             },
             "use_domain_wide_delegation_for_sync": {

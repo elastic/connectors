@@ -133,7 +133,7 @@ def test_connector_list_no_connectors():
     runner = CliRunner()
     result = runner.invoke(cli, ["connector", "list"])
     assert result.exit_code == 0
-    assert "No connectors_service found" in result.output
+    assert "No connectors found" in result.output
 
 
 def test_connector_list_one_connector():
@@ -187,7 +187,7 @@ def test_connector_create(patch_click_confirm):
     )
 
     with patch(
-        "connectors_service.protocol.connectors_service.ConnectorIndex.index",
+        "connectors_service.protocol.connectors.ConnectorIndex.index",
         AsyncMock(return_value={"_id": "new_connector_id"}),
     ) as patched_create:
         result = runner.invoke(
@@ -236,7 +236,7 @@ def test_connector_create_with_native_flags(
     )
 
     with patch(
-        "connectors_service.protocol.connectors_service.ConnectorIndex.index",
+        "connectors_service.protocol.connectors.ConnectorIndex.index",
         AsyncMock(return_value={"_id": "new_connector_id"}),
     ) as patched_create:
         args = ["connector", "create", "--service-type", "mongodb"]
@@ -279,7 +279,7 @@ def test_connector_create_from_index(patch_click_confirm):
     )
 
     with patch(
-        "connectors_service.protocol.connectors_service.ConnectorIndex.index",
+        "connectors_service.protocol.connectors.ConnectorIndex.index",
         AsyncMock(return_value={"_id": "new_connector_id"}),
     ) as patched_create:
         result = runner.invoke(
@@ -333,7 +333,7 @@ def test_connector_create_fails_when_index_or_connector_exists(
         MagicMock(return_value=[index_exists, connector_exists]),
     ):
         with patch(
-            "connectors_service.protocol.connectors_service.ConnectorIndex.index",
+            "connectors_service.protocol.connectors.ConnectorIndex.index",
             AsyncMock(return_value={"_id": "new_connector_id"}),
         ) as patched_create:
             args = ["connector", "create", "--service-type", "mongodb"]
@@ -369,7 +369,7 @@ def test_connector_create_from_file():
     )
 
     with patch(
-        "connectors_service.protocol.connectors_service.ConnectorIndex.index",
+        "connectors_service.protocol.connectors.ConnectorIndex.index",
         AsyncMock(return_value={"_id": "new_connector_id"}),
     ) as patched_create:
         with runner.isolated_filesystem():
@@ -434,7 +434,7 @@ def test_connector_create_and_update_the_service_config():
     )
 
     with patch(
-        "connectors_service.protocol.connectors_service.ConnectorIndex.index",
+        "connectors_service.protocol.connectors.ConnectorIndex.index",
         AsyncMock(return_value={"_id": connector_id}),
     ) as patched_create:
         with runner.isolated_filesystem():
@@ -454,7 +454,7 @@ def test_connector_create_and_update_the_service_config():
             )
 
             config = yaml.load(open("config.yml"), Loader=yaml.FullLoader)[
-                "connectors_service"
+                "connectors"
             ][0]
 
             patched_create.assert_called_once()
@@ -498,7 +498,7 @@ def test_connector_create_native_connector(patched_confirm):
             AsyncMock(return_value="secret-123"),
         ) as patched_store_api_key:
             with patch(
-                "connectors_service.protocol.connectors_service.ConnectorIndex.index",
+                "connectors_service.protocol.connectors.ConnectorIndex.index",
                 AsyncMock(return_value={"_id": "new_connector_id"}),
             ) as patched_create:
                 result = runner.invoke(
@@ -748,7 +748,7 @@ def test_job_list_one_job():
     job = SyncJobObject(job_index, doc)
 
     with patch(
-        "connectors_service.protocol.connectors_service.SyncJobIndex.get_all_docs", AsyncIterator([job])
+        "connectors_service.protocol.connectors.SyncJobIndex.get_all_docs", AsyncIterator([job])
     ):
         result = runner.invoke(cli, ["job", "list", connector_id])
 
@@ -763,7 +763,7 @@ def test_job_list_one_job():
 
 
 @patch(
-    "connectors_service.protocol.connectors_service.ConnectorIndex.fetch_by_id",
+    "connectors_service.protocol.connectors.ConnectorIndex.fetch_by_id",
     AsyncMock(return_value=MagicMock()),
 )
 def test_job_start():
@@ -772,7 +772,7 @@ def test_job_start():
     job_id = "test_job_id"
 
     with patch(
-        "connectors_service.protocol.connectors_service.SyncJobIndex.create",
+        "connectors_service.protocol.connectors.SyncJobIndex.create",
         AsyncMock(return_value=job_id),
     ) as patched_create:
         result = runner.invoke(cli, ["job", "start", "-i", connector_id, "-t", "full"])
@@ -815,7 +815,7 @@ def test_job_view():
     job = SyncJobObject(job_index, doc)
 
     with patch(
-        "connectors_service.protocol.connectors_service.SyncJobIndex.fetch_by_id",
+        "connectors_service.protocol.connectors.SyncJobIndex.fetch_by_id",
         AsyncMock(return_value=job),
     ):
         result = runner.invoke(cli, ["job", "view", job_id])

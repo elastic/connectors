@@ -160,9 +160,9 @@ class Filter(dict):
 
     def transform_filtering(self):
         """
-        Transform the filtering in .elastic-connectors_service to filtering ready-to-use in .elastic-connectors_service-sync-jobs
+        Transform the filtering in .elastic-connectors to filtering ready-to-use in .elastic-connectors-sync-jobs
         """
-        # deepcopy to not change the reference resulting in changing .elastic-connectors_service filtering
+        # deepcopy to not change the reference resulting in changing .elastic-connectors filtering
         filtering = (
             {"advanced_snippet": {}, "rules": []} if len(self) == 0 else deepcopy(self)
         )

@@ -15,12 +15,12 @@ steps:
     key: "release_setup"
     steps:
     # ----
-    # Set the build timestamp (for the verion suffix)
+    # Set the build timestamp (for the version suffix)
     # ---
     - label: "Set build metadata"
       commands:
         - buildkite-agent meta-data set timestamp "$(date -u +'%Y%m%d%H%M')"
-        - buildkite-agent meta-data set orig_version "$(cat connectors_service/VERSION)"
+        - buildkite-agent meta-data set orig_version "$(cat app/connectors_service/connectors_service/VERSION)"
       key: set_timestamp
     - wait
     - label: ":github: update version and tag"

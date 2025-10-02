@@ -30,8 +30,8 @@ def test_main_exits_on_sigterm(mock_responses):
     host = "http://localhost:9200"
 
     mock_responses.get(host, headers=headers)
-    mock_responses.head(f"{host}/.elastic-connectors_service", headers=headers)
-    mock_responses.head(f"{host}/.elastic-connectors_service-sync-jobs", headers=headers)
+    mock_responses.head(f"{host}/.elastic-connectors", headers=headers)
+    mock_responses.head(f"{host}/.elastic-connectors-sync-jobs", headers=headers)
     mock_responses.get(
         f"{host}/_ingest/pipeline/search-default-ingestion", headers=headers
     )
@@ -89,7 +89,7 @@ def test_list_action(set_env):
 
     output = result.output
 
-    assert "Registered connectors_service:" in output
+    assert "Registered connectors:" in output
     assert "- Fakey" in output
     assert "- Large Fake" in output
     assert "Bye" in output

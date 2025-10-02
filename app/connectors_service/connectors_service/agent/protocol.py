@@ -14,7 +14,7 @@ from connectors_service.agent.logger import get_logger
 logger = get_logger("protocol")
 
 
-CONNECTORS_INPUT_TYPE = "connectors_service-py"
+CONNECTORS_INPUT_TYPE = "connectors-service-py"
 ELASTICSEARCH_OUTPUT_TYPE = "elasticsearch"
 
 
@@ -170,7 +170,7 @@ class ConnectorCheckinHandler(BaseCheckinHandler):
                         )
                         self.service_manager.restart()
                     else:
-                        logger.debug("No changes to connectors_service config")
+                        logger.debug("No changes to connectors config")
                 else:
                     logger.warning("No Elasticsearch output found")
             else:

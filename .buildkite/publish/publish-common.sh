@@ -64,9 +64,9 @@ else
   export DOCKER_TAG_VERSION=${VERSION}
 fi
 
-export BASE_TAG_NAME=${DOCKER_IMAGE_NAME:-docker.elastic.co/integrations/elastic-connectors_service}
+export BASE_TAG_NAME=${DOCKER_IMAGE_NAME:-docker.elastic.co/integrations/elastic-connectors-service}
 export DOCKERFILE_PATH=${DOCKERFILE_PATH:-Dockerfile}
-export PROJECT_NAME=${PROJECT_NAME:-elastic-connectors_service}
+export PROJECT_NAME=${PROJECT_NAME:-elastic-connectors-service}
 export DOCKER_ARTIFACT_KEY=${DOCKER_ARTIFACT_KEY:-${PROJECT_NAME}-docker}
 export VAULT_ADDR=${VAULT_ADDR:-https://vault-ci-prod.elastic.dev}
 export VAULT_USER="docker-swiftypeadmin"

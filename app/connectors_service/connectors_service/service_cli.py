@@ -106,7 +106,7 @@ def run(action, config_file, log_level, filebeat, service_type, uvloop):
     """Loads the config file, sets the logger and executes an action.
 
     Actions:
-    - list: prints out a list of all connectors_service and exits
+    - list: prints out a list of all connectors and exits
     - poll: starts the event loop and run forever (default)
     """
     logger.info(f"Running connector service version {__version__}")
@@ -133,9 +133,9 @@ def run(action, config_file, log_level, filebeat, service_type, uvloop):
         filebeat=filebeat,
     )
 
-    # just display the list of connectors_service
+    # just display the list of connectors
     if action == ("list",):
-        print("Registered connectors_service:")  # noqa: T201
+        print("Registered connectors:")  # noqa: T201
         for source in get_source_klasses(config):
             print(f"- {source.name}")  # noqa: T201
         print("Bye")  # noqa: T201

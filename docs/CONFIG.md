@@ -49,14 +49,14 @@ Use this example as a guide:
 
 elasticsearch:
   api_key: <key1>
-  # Used to write data to .elastic-connectors_service and .elastic-connectors_service-sync-jobs
-  # Any connectors_service without a specific `api_key` value will default to using this key
+  # Used to write data to .elastic-connectors and .elastic-connectors-sync-jobs
+  # Any connectors without a specific `api_key` value will default to using this key
 connectors:
   - connector_id: 1234
     service_type: <service_type>
     api_key: <key2>
     # Used to write data to the `search-*` index associated with connector 1234
-    # You may have multiple connectors_service in your config file!
+    # You may have multiple connectors in your config file!
   - connector_id: 5678
     service_type: <service_type>
     api_key: <key3>

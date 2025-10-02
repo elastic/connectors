@@ -1,6 +1,6 @@
 version: 2
 inputs:
-  - name: connectors_service-py
+  - name: connectors-service-py
     description: "Connectors Py component input"
     platforms: &platforms
       - linux/amd64

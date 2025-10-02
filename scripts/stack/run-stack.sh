@@ -31,7 +31,7 @@ fi
 if [ "${update_images:-}" = true ]
 then
   echo "Ensuring we have the latest images..."
-  docker-compose -f $compose_file pull elasticsearch kibana elastic-connectors_service
+  docker-compose -f $compose_file pull elasticsearch kibana elastic-connectors-service
 fi
 
 if [[ "${connectors_only}" != true ]]; then
@@ -75,7 +75,7 @@ if [ "${no_connectors:-}" == false ]; then
     exit 2
   fi
 
-  docker-compose -f $compose_file up --detach elastic-connectors_service
+  docker-compose -f $compose_file up --detach elastic-connectors-service
 else
   echo "... Connectors service is set to not start... skipping..."
 fi

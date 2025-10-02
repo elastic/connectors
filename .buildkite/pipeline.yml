@@ -5,7 +5,7 @@ definitions:
           provider: "gcp"
           machineType: "n1-standard-8"
           useVault: true
-          image: family/enterprise-search-ubuntu-2204-connectors_service-py
+          image: family/enterprise-search-ubuntu-2204-connectors-py
   retries: &retries
     retry:
       automatic:
@@ -75,7 +75,7 @@ steps:
       machineType: "n1-standard-8"
       provider: "gcp"
       useVault: true
-      image: family/enterprise-search-ubuntu-2204-connectors_service-py
+      image: family/enterprise-search-ubuntu-2204-connectors-py
 
   - label: ":sweating: Checking for changes in connectors_service"
     key: "relevant_ftests"
@@ -665,8 +665,8 @@ steps:
         env:
           ARCHITECTURE: "amd64"
           DOCKERFILE_PATH: "Dockerfile"
-          DOCKER_IMAGE_NAME: "docker.elastic.co/ci-agent-images/elastic-connectors_service-oss-dockerfile"
-          DOCKER_ARTIFACT_KEY: "elastic-connectors_service-oss-dockerfile"
+          DOCKER_IMAGE_NAME: "docker.elastic.co/ci-agent-images/elastic-connectors-service-oss-dockerfile"
+          DOCKER_ARTIFACT_KEY: "elastic-connectors-service-oss-dockerfile"
         command: ".buildkite/publish/build-docker.sh"
         key: "build_oss_dockerfile_image_amd64"
         artifact_paths: ".artifacts/*.tar.gz"
@@ -678,8 +678,8 @@ steps:
         env:
           ARCHITECTURE: "amd64"
           DOCKERFILE_PATH: "Dockerfile"
-          DOCKER_IMAGE_NAME: "docker.elastic.co/ci-agent-images/elastic-connectors_service-oss-dockerfile"
-          DOCKER_ARTIFACT_KEY: "elastic-connectors_service-oss-dockerfile"
+          DOCKER_IMAGE_NAME: "docker.elastic.co/ci-agent-images/elastic-connectors-service-oss-dockerfile"
+          DOCKER_ARTIFACT_KEY: "elastic-connectors-service-oss-dockerfile"
         depends_on: "build_oss_dockerfile_image_amd64"
         key: "test_oss_dockerfile_image_amd64"
         commands:
@@ -714,8 +714,8 @@ steps:
         env:
           ARCHITECTURE: "arm64"
           DOCKERFILE_PATH: "Dockerfile"
-          DOCKER_IMAGE_NAME: "docker.elastic.co/ci-agent-images/elastic-connectors_service-oss-dockerfile"
-          DOCKER_ARTIFACT_KEY: "elastic-connectors_service-oss-dockerfile"
+          DOCKER_IMAGE_NAME: "docker.elastic.co/ci-agent-images/elastic-connectors-service-oss-dockerfile"
+          DOCKER_ARTIFACT_KEY: "elastic-connectors-service-oss-dockerfile"
         command: ".buildkite/publish/build-docker.sh"
         key: "build_oss_dockerfile_image_arm64"
         artifact_paths: ".artifacts/*.tar.gz"
@@ -729,8 +729,8 @@ steps:
         env:
           ARCHITECTURE: "arm64"
           DOCKERFILE_PATH: "Dockerfile"
-          DOCKER_IMAGE_NAME: "docker.elastic.co/ci-agent-images/elastic-connectors_service-oss-dockerfile"
-          DOCKER_ARTIFACT_KEY: "elastic-connectors_service-oss-dockerfile"
+          DOCKER_IMAGE_NAME: "docker.elastic.co/ci-agent-images/elastic-connectors-service-oss-dockerfile"
+          DOCKER_ARTIFACT_KEY: "elastic-connectors-service-oss-dockerfile"
         depends_on: "build_oss_dockerfile_image_arm64"
         key: "test_oss_dockerfile_image_arm64"
         commands:

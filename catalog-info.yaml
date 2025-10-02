@@ -7,13 +7,13 @@
 apiVersion: "backstage.io/v1alpha1"
 kind: "Component"
 metadata:
-  name: "elastic-connectors_service"
+  name: "elastic-connectors-service"
   description: "Ingestion service hosting connectors_service that can be used to ingest data into Elasticsearch"
   annotations:
-    backstage.io/source-location: "url:https://github.com/elastic/connectors_service/"
-    github.com/project-slug: "elastic/connectors_service"
+    backstage.io/source-location: "url:https://github.com/elastic/connectors/"
+    github.com/project-slug: "elastic/connectors"
     github.com/team-slug: "elastic/search-extract-and-transform"
-    buildkite.com/project-slug: "elastic/connectors_service"
+    buildkite.com/project-slug: "elastic/connectors"
     pagerduty.com/service-id: "PN2MP2P"
   tags:
     - "python"
@@ -48,7 +48,7 @@ spec:
     spec:
       branch_configuration: "main"
       pipeline_file: ".buildkite/pipeline.yml"
-      repository: "elastic/connectors_service"
+      repository: "elastic/connectors"
       schedules:
         Daily main:
           branch: main
@@ -90,10 +90,10 @@ spec:
 apiVersion: "backstage.io/v1alpha1"
 kind: "Resource"
 metadata:
-  name: "connectors_service-nightly"
+  name: "connectors-service-nightly"
   description: "Nightly Connector Service Tests"
   links:
-    - title: "connectors_service Nightly Buildkite Jobs"
+    - title: "connectors-service Nightly Buildkite Jobs"
       url: "https://buildkite.com/elastic/connectors"
 spec:
   type: "buildkite-pipeline"
@@ -103,7 +103,7 @@ spec:
     apiVersion: "buildkite.elastic.dev/v1"
     kind: "Pipeline"
     metadata:
-      name: "connectors_service-nightly"
+      name: "connectors-service-nightly"
       description: "Connectors Service Nightly Tests"
       links:
         - title: "Connector Service Nightly Pipeline"
@@ -112,7 +112,7 @@ spec:
       pipeline_file: ".buildkite/nightly.py"
       provider_settings:
         trigger_mode: "none"
-      repository: "elastic/connectors_service"
+      repository: "elastic/connectors"
       schedules:
         Daily 8_18:
           branch: '8.18'
@@ -148,7 +148,7 @@ spec:
 apiVersion: "backstage.io/v1alpha1"
 kind: "Resource"
 metadata:
-  name: "connectors_service-nightly-aarch64"
+  name: "connectors-service-nightly-aarch64"
   description: "Nightly Connector Service Tests on aarch64"
   links:
     - title: "connectors_service Nightly Buildkite Jobs"
@@ -161,7 +161,7 @@ spec:
     apiVersion: "buildkite.elastic.dev/v1"
     kind: "Pipeline"
     metadata:
-      name: "connectors_service-nightly-aarch64"
+      name: "connectors-service-nightly-aarch64"
       description: "Connectors Service Nightly Tests on aarch64"
       links:
         - title: "Connector Service Nightly Pipeline"
@@ -170,7 +170,7 @@ spec:
       pipeline_file: ".buildkite/nightly_aarch64.py"
       provider_settings:
         trigger_mode: "none"
-      repository: "elastic/connectors_service"
+      repository: "elastic/connectors"
       schedules:
         Daily 8_18:
           branch: '8.18'
@@ -209,7 +209,7 @@ spec:
 apiVersion: "backstage.io/v1alpha1"
 kind: "Resource"
 metadata:
-  name: "connectors_service-docker-build-publish"
+  name: "connectors-service-docker-build-publish"
   description: "Docker image build and publish for Elastic connectors_service"
   links:
     - title: "Connectors Docker Build and Publish"
@@ -222,9 +222,9 @@ spec:
     apiVersion: "buildkite.elastic.dev/v1"
     kind: "Pipeline"
     metadata:
-      name: "connectors_service-docker-build-publish"
+      name: "connectors-service-docker-build-publish"
     spec:
-      repository: "elastic/connectors_service"
+      repository: "elastic/connectors"
       pipeline_file: ".buildkite/release-pipeline.yml"
       provider_settings:
         trigger_mode: "none"

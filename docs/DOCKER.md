@@ -30,7 +30,7 @@ docker network create elastic
 This directory will contain the configuration file used to run the Connector Service. The examples in this guide will use the user's home directory (`~`).
 
 ```sh
-cd ~ && mkdir connectors_service-config
+cd ~ && mkdir connectors-config
 ```
 
 ## 3. Download sample configuration file from this repository into newly created directory.
@@ -38,7 +38,7 @@ cd ~ && mkdir connectors_service-config
 You can download the file manually, or simply run the command below. Make sure to update the `--output` argument value if your directory name is different, or you want to use a different config file name.
 
 ```sh
-curl https://raw.githubusercontent.com/elastic/connectors/main/config.yml.example --output ~/connectors_service-config/config.yml
+curl https://raw.githubusercontent.com/elastic/connectors/main/config.yml.example --output ~/connectors-config/config.yml
 ```
 
 ## 4. Update the configuration file for your [self-managed connector](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-build-connector.html#build-connector-usage)
@@ -87,11 +87,11 @@ Now you can run the Docker image with the Connector Service. Here's an example c
 
 ```sh
 docker run \
--v ~/connectors_service-config:/config \
+-v ~/connectors-config:/config \
 --network "elastic" \
 --tty \
 --rm \
-docker.elastic.co/integrations/elastic-connectors_service:<VERSION>-SNAPSHOT \
+docker.elastic.co/integrations/elastic-connectors-service:<VERSION>-SNAPSHOT \
 /app/bin/elastic-ingest \
 -c /config/config.yml
 ```

@@ -244,7 +244,7 @@ class TestESClient:
 
         es_client = ESClient(config)
 
-        assert es_client.client._headers["X-elastic-product-origin"] == "connectors_service"
+        assert es_client.client._headers["X-elastic-product-origin"] == "connectors"
 
     def test_sets_user_agent(self):
         config = {"headers": {"some-header": "some-value"}}
@@ -253,7 +253,7 @@ class TestESClient:
 
         assert (
             es_client.client._headers["user-agent"]
-            == f"elastic-connectors_service-{__version__}/service"
+            == f"elastic-connectors-service-{__version__}/service"
         )
 
 

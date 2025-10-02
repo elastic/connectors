@@ -32,7 +32,7 @@ When you run any command you can specify a configuration file using `-c` argumen
 Example:
 
 ```bash
-.venv/bin/connectors_service -c <config-file-path.yml> connector list
+.venv/bin/connectors -c <config-file-path.yml> connector list
 ```
 
 ## Available commands
@@ -41,10 +41,10 @@ Connectors CLI provides a `--help`/`-h` argument that can be used with any comma
 
 For example:
 ```bash
-.venv/bin/connectors_service --help
+.venv/bin/connectors --help
 
 
-Usage: connectors_service [OPTIONS] COMMAND [ARGS]...
+Usage: connectors [OPTIONS] COMMAND [ARGS]...
 
 Options:
   -v, --version          Show the version and exit.
