@@ -1,5 +1,5 @@
 ## .buildkite/pypi-publish-pipeline.yml
-# Manually-triggered pipeline to build and publish connectors_service to PyPI
+# Manually-triggered pipeline to build and publish Python packages to PyPI
 notify:
   - if: 'build.branch =~ /^((main)|([0-9]+\.[0-9]+))$/ && (build.state == "failed" || pipeline.started_passing)'
     slack:
@@ -7,67 +7,44 @@ notify:
         - "#search-et-alerts"
       message: "${BUILDKITE_MESSAGE}"
 
+# add paths for all the packages we want to build here
+# then make sure they're added to the matrix.setup.package_path lists in the steps below
 env:
-  PACKAGE_PATH: "app/connectors_service"
+  SERVICE_PACKAGE_PATH: "app/connectors_service"
 
 steps:
-  - group: "PyPI Release setup"
-    key: "pypi_release_setup"
-    steps:
-      - label: ":package: Validate package version"
-        key: validate_version
-        agents:
-          provider: "gcp"
-          machineType: "n1-standard-8"
-          useVault: true
-          image: family/enterprise-search-ubuntu-2204-connectors-py
-        env:
-          PYTHON_VERSION: "3.10"
-        commands:
-          - "cd ${PACKAGE_PATH}"
-          - "echo 'Package version:'"
-          - "cat connectors_service/VERSION"
-          - "buildkite-agent meta-data set package_version \"$(cat connectors_service/VERSION)\""
-
-  - wait
-
   - group: ":building_construction: Build `connectors_service` Python Package"
     key: "build_package"
-    depends_on:
-      - pypi_release_setup
     steps:
-      - label: ":python: Build Python {{matrix}} package"
+      - label: ":python: Build Python {{matrix.python_version}} {{matrix.package_path}} package"
         key: build_python_package
         agents:
           provider: "gcp"
           machineType: "n1-standard-8"
           useVault: true
           image: family/enterprise-search-ubuntu-2204-connectors-py
-        env:
-          PYTHON_VERSION: "{{matrix}}"
         matrix:
-          - "3.10"
-          - "3.11"
+          setup:
+            python_version:
+              - "3.10"
+              - "3.11"
+            package_path:
+              - "${SERVICE_PACKAGE_PATH}"
         commands:
-          - "cd ${PACKAGE_PATH}"
-          - "python${PYTHON_VERSION} -m pip install --upgrade build twine"
-          - "python${PYTHON_VERSION} -m build"
+          - "cd {{matrix.package_path}}"
+          - "python{{matrix.python_version}} -m pip install --upgrade build twine"
+          - "python{{matrix.python_version}} -m build"
           - "ls -lah dist/"
-          - "python${PYTHON_VERSION} -m twine check dist/*"
+          - "python{{matrix.python_version}} -m twine check dist/*"
         artifact_paths:
-          - "${PACKAGE_PATH}/dist/*"
+          - "{{matrix.package_path}}/dist/*"
 
   - wait
-
-  - block: ":rocket: Publish to PyPI?"
-    prompt: "This will publish connectors_service to PyPI. Are you sure?"
-    key: "confirm_publish"
 
   - group: ":test_tube: Publish to Test PyPI"
     key: "publish_to_test_pypi"
     depends_on:
       - build_package
-      - confirm_publish
     steps:
       - label: ":package: Publish to Test PyPI"
         key: publish_test_pypi
@@ -76,16 +53,19 @@ steps:
           machineType: "n1-standard-8"
           useVault: true
           image: family/enterprise-search-ubuntu-2204-connectors-py
-        env:
-          PYTHON_VERSION: "3.10"
+        matrix:
+          setup:
+            python_version:
+              - "3.10"
+              - "3.11"
+            package_path:
+              - "${SERVICE_PACKAGE_PATH}"
         commands:
-          - "mkdir -p ${PACKAGE_PATH}/dist"
-          - "buildkite-agent artifact download '${PACKAGE_PATH}/dist/*' ."
-          - "cd ${PACKAGE_PATH}"
-          - "python${PYTHON_VERSION} -m pip install --upgrade twine"
-          - "python${PYTHON_VERSION} -m twine upload --repository testpypi dist/* --username __token__ --password $TEST_PYPI_TOKEN"
-
-  - wait
+          - "mkdir -p {{matrix.package_path}}/dist"
+          - "buildkite-agent artifact download '{{matrix.package_path}}/dist/*' ."
+          - "cd {{matrix.package_path}}"
+          - "python{{matrix.python_version}} -m pip install --upgrade twine"
+          - "python{{matrix.python_version}} -m twine upload --repository testpypi dist/* --username __token__ --password $TEST_PYPI_TOKEN"
 
   - group: ":truck: Publish to Production PyPI"
     key: "publish_to_pypi"
@@ -99,11 +79,16 @@ steps:
           machineType: "n1-standard-8"
           useVault: true
           image: family/enterprise-search-ubuntu-2204-connectors-py
-        env:
-          PYTHON_VERSION: "3.10"
+        matrix:
+          setup:
+            python_version:
+              - "3.10"
+              - "3.11"
+            package_path:
+              - "${SERVICE_PACKAGE_PATH}"
         commands:
-          - "mkdir -p ${PACKAGE_PATH}/dist"
-          - "buildkite-agent artifact download '${PACKAGE_PATH}/dist/*' ."
-          - "cd ${PACKAGE_PATH}"
-          - "python${PYTHON_VERSION} -m pip install --upgrade twine"
-          - "python${PYTHON_VERSION} -m twine upload --repository pypi dist/* --username __token__ --password $PYPI_TOKEN"
+          - "mkdir -p {{matrix.package_path}}/dist"
+          - "buildkite-agent artifact download '{{matrix.package_path}}/dist/*' ."
+          - "cd {{matrix.package_path}}"
+          - "python{{matrix.python_version}} -m pip install --upgrade twine"
+          - "python{{matrix.python_version}} -m twine upload --repository pypi dist/* --username __token__ --password $PYPI_TOKEN"
