@@ -2127,7 +2127,9 @@ async def test_github_client_get_installations():
         source.github_client._get_client._make_request = AsyncMock(
             return_value=(mock_response, None)
         )
-        with patch("connectors_service.sources.github.get_jwt", return_value="changeme"):
+        with patch(
+            "connectors_service.sources.github.get_jwt", return_value="changeme"
+        ):
             expected_installations = [
                 installation
                 async for installation in source.github_client.get_installations()
@@ -2148,7 +2150,9 @@ async def test_github_app_paginated_get():
         source.github_client._get_client._make_request = AsyncMock(
             side_effect=[([item_1, item_2], "fake_url_2"), ([item_3], None)]
         )
-        with patch("connectors_service.sources.github.get_jwt", return_value="changeme"):
+        with patch(
+            "connectors_service.sources.github.get_jwt", return_value="changeme"
+        ):
             expected_results = [
                 item
                 async for item in source.github_client._github_app_paginated_get(

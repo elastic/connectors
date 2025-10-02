@@ -125,7 +125,9 @@ def patch_ping():
 
 @pytest.fixture
 def patch_row2doc():
-    with patch("connectors_service.sources.mysql.row2doc", return_value=MagicMock()) as row2doc:
+    with patch(
+        "connectors_service.sources.mysql.row2doc", return_value=MagicMock()
+    ) as row2doc:
         yield row2doc
 
 

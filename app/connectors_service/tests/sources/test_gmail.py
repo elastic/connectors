@@ -165,7 +165,8 @@ class TestGMailDataSource:
     @pytest_asyncio.fixture
     async def patch_google_directory_client(self):
         with patch(
-            "connectors_service.sources.gmail.GoogleDirectoryClient", return_value=AsyncMock()
+            "connectors_service.sources.gmail.GoogleDirectoryClient",
+            return_value=AsyncMock(),
         ) as mock:
             client = mock.return_value
             yield client

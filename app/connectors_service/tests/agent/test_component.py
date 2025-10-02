@@ -28,8 +28,12 @@ class StubMultiService:
 
 
 @pytest.mark.asyncio
-@patch("connectors_service.agent.component.MultiService", return_value=StubMultiService())
-@patch("connectors_service.agent.component.new_v2_from_reader", return_value=MagicMock())
+@patch(
+    "connectors_service.agent.component.MultiService", return_value=StubMultiService()
+)
+@patch(
+    "connectors_service.agent.component.new_v2_from_reader", return_value=MagicMock()
+)
 async def test_try_update_without_auth_data(
     stub_multi_service, patch_new_v2_from_reader
 ):

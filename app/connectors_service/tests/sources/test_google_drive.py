@@ -134,7 +134,9 @@ async def test_ping_for_successful_connection():
             await source.ping()
 
 
-@patch("connectors_service.utils.time_to_sleep_between_retries", mock.Mock(return_value=0))
+@patch(
+    "connectors_service.utils.time_to_sleep_between_retries", mock.Mock(return_value=0)
+)
 @pytest.mark.asyncio
 async def test_ping_for_failed_connection():
     """Tests the ping functionality when connection can not be established to Google Drive."""

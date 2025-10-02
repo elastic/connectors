@@ -109,7 +109,9 @@ class ESClient:
 
         options["headers"] = config.get("headers", {})
         options["headers"]["user-agent"] = self.__class__.user_agent
-        options["headers"]["X-elastic-product-origin"] = "connectors"  # TODO: update this and dashboard depending on this value
+        options["headers"]["X-elastic-product-origin"] = (
+            "connectors"  # TODO: update this and dashboard depending on this value
+        )
 
         self.client = AsyncElasticsearch(**options)
         self._keep_waiting = True

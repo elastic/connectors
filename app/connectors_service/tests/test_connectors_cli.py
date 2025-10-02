@@ -59,7 +59,10 @@ def test_help_page(commands):
     assert "Commands:" in result.output
 
 
-@patch("connectors_service.cli.auth.Auth._Auth__ping_es_client", AsyncMock(return_value=False))
+@patch(
+    "connectors_service.cli.auth.Auth._Auth__ping_es_client",
+    AsyncMock(return_value=False),
+)
 def test_login_unsuccessful(tmp_path):
     runner = CliRunner()
     with runner.isolated_filesystem(temp_dir=tmp_path) as temp_dir:
@@ -71,7 +74,10 @@ def test_login_unsuccessful(tmp_path):
         assert not os.path.isfile(os.path.join(temp_dir, CONFIG_FILE_PATH))
 
 
-@patch("connectors_service.cli.auth.Auth._Auth__ping_es_client", AsyncMock(return_value=True))
+@patch(
+    "connectors_service.cli.auth.Auth._Auth__ping_es_client",
+    AsyncMock(return_value=True),
+)
 def test_login_successful(tmp_path):
     runner = CliRunner()
     with runner.isolated_filesystem(temp_dir=tmp_path) as temp_dir:
@@ -83,7 +89,10 @@ def test_login_successful(tmp_path):
         assert os.path.isfile(os.path.join(temp_dir, CONFIG_FILE_PATH))
 
 
-@patch("connectors_service.cli.auth.Auth._Auth__ping_es_client", AsyncMock(return_value=True))
+@patch(
+    "connectors_service.cli.auth.Auth._Auth__ping_es_client",
+    AsyncMock(return_value=True),
+)
 def test_login_successful_with_apikey_method(tmp_path):
     runner = CliRunner()
     api_key = "testapikey"
@@ -128,7 +137,10 @@ def test_connector_help_page():
     assert "Commands:" in result.output
 
 
-@patch("connectors_service.cli.connector.Connector.list_connectors", AsyncMock(return_value=[]))
+@patch(
+    "connectors_service.cli.connector.Connector.list_connectors",
+    AsyncMock(return_value=[]),
+)
 def test_connector_list_no_connectors():
     runner = CliRunner()
     result = runner.invoke(cli, ["connector", "list"])
@@ -152,7 +164,8 @@ def test_connector_list_one_connector():
     connectors = [ConnectorObject(connector_index, doc)]
 
     with patch(
-        "connectors_service.protocol.ConnectorIndex.all_connectors", AsyncIterator(connectors)
+        "connectors_service.protocol.ConnectorIndex.all_connectors",
+        AsyncIterator(connectors),
     ):
         result = runner.invoke(cli, ["connector", "list"])
 
@@ -678,7 +691,9 @@ def test_job_cancel():
 
     job = SyncJobObject(job_index, doc)
 
-    with patch("connectors_service.protocol.SyncJobIndex.get_all_docs", AsyncIterator([job])):
+    with patch(
+        "connectors_service.protocol.SyncJobIndex.get_all_docs", AsyncIterator([job])
+    ):
         with patch.object(job, "_terminate") as mocked_method:
             result = runner.invoke(cli, ["job", "cancel", job_id])
 
@@ -706,7 +721,8 @@ def test_job_list_no_jobs():
     connector_id = "test_connector_id"
 
     with patch(
-        "connectors_service.cli.job.Job._Job__async_list_jobs", AsyncMock(return_value=[])
+        "connectors_service.cli.job.Job._Job__async_list_jobs",
+        AsyncMock(return_value=[]),
     ):
         result = runner.invoke(cli, ["job", "list", connector_id])
 
@@ -748,7 +764,8 @@ def test_job_list_one_job():
     job = SyncJobObject(job_index, doc)
 
     with patch(
-        "connectors_service.protocol.connectors.SyncJobIndex.get_all_docs", AsyncIterator([job])
+        "connectors_service.protocol.connectors.SyncJobIndex.get_all_docs",
+        AsyncIterator([job]),
     ):
         result = runner.invoke(cli, ["job", "list", connector_id])
 

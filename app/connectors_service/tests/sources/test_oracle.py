@@ -11,7 +11,11 @@ from unittest.mock import patch
 import pytest
 from sqlalchemy.engine import Engine
 
-from connectors_service.sources.oracle import OracleClient, OracleDataSource, OracleQueries
+from connectors_service.sources.oracle import (
+    OracleClient,
+    OracleDataSource,
+    OracleQueries,
+)
 from tests.sources.support import create_source
 from tests.sources.test_generic_database import ConnectionSync
 

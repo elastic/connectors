@@ -734,7 +734,9 @@ async def test_get_docs(
         [(str(doc["_id"]), doc["_timestamp"]) for doc in existing_docs]
     )
 
-    with mock.patch("connectors_service.utils.ConcurrentTasks", return_value=lazy_downloads):
+    with mock.patch(
+        "connectors_service.utils.ConcurrentTasks", return_value=lazy_downloads
+    ):
         queue = await queue_mock()
         basic_rule_engine = await basic_rule_engine_mock(doc_should_ingest)
 
@@ -911,7 +913,9 @@ async def test_get_docs_incrementally(
 ):
     lazy_downloads = await lazy_downloads_mock()
 
-    with mock.patch("connectors_service.utils.ConcurrentTasks", return_value=lazy_downloads):
+    with mock.patch(
+        "connectors_service.utils.ConcurrentTasks", return_value=lazy_downloads
+    ):
         queue = await queue_mock()
         basic_rule_engine = await basic_rule_engine_mock(doc_should_ingest)
 

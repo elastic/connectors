@@ -170,7 +170,8 @@ def test_config_cannot_be_used_with_other_actions(set_env):
 
 @patch("connectors_service.service_cli.set_logger")
 @patch(
-    "connectors_service.service_cli.load_config", side_effect=Exception("something went wrong")
+    "connectors_service.service_cli.load_config",
+    side_effect=Exception("something went wrong"),
 )
 def test_main_with_invalid_configuration(load_config, set_logger):
     runner = CliRunner()
@@ -218,7 +219,9 @@ def test_uvloop_success(patched_asyncio, patched_uvloop):
     )
 
 
-@patch("connectors_service.service_cli._get_uvloop", side_effect=Exception("import fails"))
+@patch(
+    "connectors_service.service_cli._get_uvloop", side_effect=Exception("import fails")
+)
 @patch("connectors_service.service_cli.asyncio")
 @patch("connectors_service.service_cli.logger")
 def test_uvloop_error(patched_logger, patched_asyncio, patched_uvloop):
