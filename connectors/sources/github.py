@@ -775,8 +775,11 @@ class GitHubClient:
         skipped_exceptions=UnauthorizedException,
     )
     async def graphql(
-        self, query, variables=None, ignore_errors: list[str] | None = None
-    ):
+        self,
+        query: str,
+        variables: dict | None = None,
+        ignore_errors: list[str] | None = None,
+    ) -> dict:
         """Invoke GraphQL request to fetch repositories, pull requests, and issues.
 
         Args:
@@ -1027,7 +1030,7 @@ class GitHubClient:
 
     async def get_repos_by_fully_qualified_name_batch(
         self, repo_names: list[str], batch_size: int = 15
-    ):
+    ) -> dict[str, dict | None]:
         """Batch validate multiple repositories by fully qualified name in fewer GraphQL requests.
 
         Args:
@@ -1426,7 +1429,7 @@ class GitHubDataSource(BaseDataSource):
         else:
             return await self._get_invalid_repos_for_personal_access_token()
 
-    async def _get_invalid_repos_for_github_app(self):
+    async def _get_invalid_repos_for_github_app(self) -> list[str]:
         # A github app can be installed on multiple orgs/personal accounts,
         # so the repo must be configured in the format of 'OWNER/REPO', any other format will be rejected
         invalid_repos = set(
@@ -1487,7 +1490,9 @@ class GitHubDataSource(BaseDataSource):
 
         return list(invalid_repos)
 
-    async def _get_repo_object_for_github_app(self, owner, repo_name):
+    async def _get_repo_object_for_github_app(
+        self, owner: str, repo_name: str
+    ) -> dict | None:
         # Note: this method fetches potentially all user or org repos and caches them,
         # so it should be used sparingly as it could consume a lot of API rate limit
         # due to possibly multiple pages of repos
@@ -1523,7 +1528,7 @@ class GitHubDataSource(BaseDataSource):
 
         return cached_repo[owner][full_repo_name]
 
-    async def _get_invalid_repos_for_personal_access_token(self):
+    async def _get_invalid_repos_for_personal_access_token(self) -> list[str]:
         try:
             # Combine all repos for unified batch validation
             if self.configuration["repo_type"] == "other":
