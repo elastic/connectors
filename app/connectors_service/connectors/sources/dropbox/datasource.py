@@ -25,7 +25,7 @@ from connectors.sources.dropbox.common import (
     RETRY_COUNT,
     InvalidPathException,
 )
-from connectors.sources.dropbox.dropbox_client import (
+from connectors.sources.dropbox.client import (
     BASE_URLS,
     ClientResponseError,
     DropBoxAdvancedRulesValidator,

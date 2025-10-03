@@ -29,7 +29,7 @@ from connectors.sources.dropbox.common import (
     InvalidRefreshTokenException,
 )
 from connectors.sources.dropbox.datasource import DropboxDataSource
-from connectors.sources.dropbox.dropbox_client import (
+from connectors.sources.dropbox.client import (
     DropBoxAdvancedRulesValidator,
     DropboxClient,
 )
@@ -750,7 +750,7 @@ async def test_ping():
 
 
 @pytest.mark.asyncio
-@patch("connectors.sources.dropbox.dropbox_client.RETRY_INTERVAL", 0)
+@patch("connectors.sources.dropbox.client.RETRY_INTERVAL", 0)
 async def test_ping_when_server_timeout_error_raises():
     async with create_source(DropboxDataSource) as source:
         setup_dropbox(source)
@@ -763,7 +763,7 @@ async def test_ping_when_server_timeout_error_raises():
 
 
 @pytest.mark.asyncio
-@patch("connectors.sources.dropbox.dropbox_client.RETRY_INTERVAL", 0)
+@patch("connectors.sources.dropbox.client.RETRY_INTERVAL", 0)
 async def test_ping_when_client_response_error_occurs():
     async with create_source(DropboxDataSource) as source:
         setup_dropbox(source)
@@ -785,7 +785,7 @@ async def test_ping_when_client_response_error_occurs():
 
 
 @pytest.mark.asyncio
-@patch("connectors.sources.dropbox.dropbox_client.RETRY_INTERVAL", 0)
+@patch("connectors.sources.dropbox.client.RETRY_INTERVAL", 0)
 async def test_ping_when_client_response_error_occur_with_unexpected_url():
     async with create_source(DropboxDataSource) as source:
         setup_dropbox(source)
@@ -807,7 +807,7 @@ async def test_ping_when_client_response_error_occur_with_unexpected_url():
 
 
 @pytest.mark.asyncio
-@patch("connectors.sources.dropbox.dropbox_client.RETRY_INTERVAL", 0)
+@patch("connectors.sources.dropbox.client.RETRY_INTERVAL", 0)
 async def test_api_call_negative():
     async with create_source(DropboxDataSource) as source:
         setup_dropbox(source)
@@ -911,7 +911,7 @@ async def test_set_access_token_when_token_expires_at_is_str():
 
 @pytest.fixture
 def patch_default_wait_multiplier():
-    with mock.patch("connectors.sources.dropbox.dropbox_client.RETRY_INTERVAL", 0):
+    with mock.patch("connectors.sources.dropbox.client.RETRY_INTERVAL", 0):
         yield
 
 
@@ -982,7 +982,7 @@ async def test_api_call_when_status_429_exception():
 
 
 @pytest.mark.asyncio
-@patch("connectors.sources.dropbox.dropbox_client.DEFAULT_RETRY_AFTER", 0)
+@patch("connectors.sources.dropbox.client.DEFAULT_RETRY_AFTER", 0)
 async def test_api_call_when_status_429_exception_without_retry_after_header():
     async with create_source(DropboxDataSource) as source:
         setup_dropbox(source)

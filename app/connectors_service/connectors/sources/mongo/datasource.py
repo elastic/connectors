@@ -16,7 +16,7 @@ from connectors_sdk.source import BaseDataSource, ConfigurableFieldValueError
 from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo.errors import OperationFailure
 
-from connectors.sources.mongo.mongoconnectorutils import MongoAdvancedRulesValidator
+from connectors.sources.mongo.validator import MongoAdvancedRulesValidator
 from connectors.utils import get_pem_format
 
 
@@ -146,7 +146,7 @@ class MongoDataSource(BaseDataSource):
         with self.get_client() as client:
             await client.admin.command("ping")
 
-    def remove_temp_file(self, temp_file):  # type: ignore
+    def remove_temp_file(self, temp_file):
         if os.path.exists(temp_file):
             try:
                 os.remove(temp_file)
