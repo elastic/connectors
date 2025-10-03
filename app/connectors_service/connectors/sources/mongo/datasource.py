@@ -10,84 +10,14 @@ from copy import deepcopy
 from datetime import datetime
 from tempfile import NamedTemporaryFile
 
-import fastjsonschema
 from bson import OLD_UUID_SUBTYPE, Binary, DBRef, Decimal128, ObjectId
 from bson.binary import UUID_SUBTYPE
-from connectors_sdk.filtering.validation import (
-    AdvancedRulesValidator,
-    SyncRuleValidationResult,
-)
 from connectors_sdk.source import BaseDataSource, ConfigurableFieldValueError
-from fastjsonschema import JsonSchemaValueException
 from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo.errors import OperationFailure
 
+from connectors.sources.mongo.validator import MongoAdvancedRulesValidator
 from connectors.utils import get_pem_format
-
-
-class MongoAdvancedRulesValidator(AdvancedRulesValidator):
-    """
-    Validate advanced rules for MongoDB, so that they're adhering to the motor asyncio API (see: https://motor.readthedocs.io/en/stable/api-asyncio/asyncio_motor_collection.html)
-    """
-
-    # see: https://motor.readthedocs.io/en/stable/api-asyncio/asyncio_motor_collection.html#motor.motor_asyncio.AsyncIOMotorCollection.aggregate
-    AGGREGATE_SCHEMA_DEFINITION = {
-        "type": "object",
-        "properties": {
-            "allowDiskUse": {"type": "boolean"},
-            "maxTimeMS": {"type": "integer"},
-            "batchSize": {"type": "integer"},
-            "let": {"type": "object"},
-            "pipeline": {"type": "array", "minItems": 1},
-        },
-        "additionalProperties": False,
-    }
-
-    # see: https://pymongo.readthedocs.io/en/4.3.2/api/pymongo/collection.html#pymongo.collection.Collection.find
-    FIND_SCHEMA_DEFINITION = {
-        "type": "object",
-        "properties": {
-            "filter": {"type": "object"},
-            "projection": {"type": ["array", "object"], "minItems": 1},
-            "skip": {"type": "integer"},
-            "limit": {"type": "integer"},
-            "no_cursor_timeout": {"type": "boolean"},
-            "allow_partial_results": {"type": "boolean"},
-            "batch_size": {"type": "integer"},
-            "return_key": {"type": "boolean"},
-            "show_record_id": {"type": "boolean"},
-            "max_time_ms": {"type": "integer"},
-            "allow_disk_use": {"type": "boolean"},
-        },
-        "additionalProperties": False,
-    }
-
-    SCHEMA_DEFINITION = {
-        "type": "object",
-        "properties": {
-            "aggregate": AGGREGATE_SCHEMA_DEFINITION,
-            "find": FIND_SCHEMA_DEFINITION,
-        },
-        "additionalProperties": False,
-        # at most one property -> only "aggregate" OR "find" allowed
-        "maxProperties": 1,
-    }
-
-    SCHEMA = fastjsonschema.compile(definition=SCHEMA_DEFINITION)
-
-    async def validate(self, advanced_rules):
-        try:
-            MongoAdvancedRulesValidator.SCHEMA(advanced_rules)
-
-            return SyncRuleValidationResult.valid_result(
-                rule_id=SyncRuleValidationResult.ADVANCED_RULES
-            )
-        except JsonSchemaValueException as e:
-            return SyncRuleValidationResult(
-                rule_id=SyncRuleValidationResult.ADVANCED_RULES,
-                is_valid=False,
-                validation_message=e.message,
-            )
 
 
 class MongoDataSource(BaseDataSource):
@@ -259,7 +189,7 @@ class MongoDataSource(BaseDataSource):
 
         return doc
 
-    async def get_docs(self, filtering=None):
+    async def get_docs(self, filtering=None):  # type: ignore
         with self.get_client() as client:
             db = client[self.configuration["database"]]
             collection = db[self.configuration["collection"]]

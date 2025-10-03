@@ -19,7 +19,7 @@ from connectors_sdk.utils import (
 )
 from fastjsonschema import JsonSchemaValueException
 
-from connectors.sources.generic_database import (
+from connectors.sources.shared.database.generic_database import (
     configured_tables,
     is_wildcard,
 )
