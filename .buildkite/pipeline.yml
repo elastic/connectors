@@ -580,6 +580,37 @@ steps:
               artifact_paths:
                 - "perf8-report-*/**/*"
 
+  - group: ":building_construction: Build Python Packages"
+    key: "build_package"
+    depends_on:
+      - "lint"
+      - "unit_tests"
+      - "smoke_test"
+      - "relevant_ftests"
+    steps:
+      - label: ":python: Build Python {{matrix.python_version}} {{matrix.package_path}} package"
+        key: build_python_package
+        agents:
+          provider: "gcp"
+          machineType: "n1-standard-8"
+          useVault: true
+          image: family/enterprise-search-ubuntu-2204-connectors-py
+        matrix:
+          setup:
+            python_version:
+              - "3.10"
+              - "3.11"
+            package_path:
+              - "app/connectors"
+        commands:
+          - "cd {{matrix.package_path}}"
+          - "python{{matrix.python_version}} -m pip install --upgrade build twine"
+          - "python{{matrix.python_version}} -m build"
+          - "ls -lah dist/"
+          - "python{{matrix.python_version}} -m twine check dist/*"
+        artifact_paths:
+          - "{{matrix.package_path}}/dist/*"
+
   # ----
   # DRA publishing
   # ----
@@ -587,10 +618,7 @@ steps:
     key: "mbp_dra_group"
     if: "(build.branch == \"main\" || build.branch == \"9.1\" || build.branch == \"9.0\" || build.branch == \"8.19\" || build.branch == \"8.18\" || build.branch == \"8.17\" || build.pull_request.labels includes \"ci:packaging\")" # Add new maintenance branches here
     depends_on:
-      - "lint"
-      - "unit_tests"
-      - "smoke_test"
-      - "relevant_ftests"
+      - "build_package"
     steps:
       # ----
       # Docker builds for amd64
