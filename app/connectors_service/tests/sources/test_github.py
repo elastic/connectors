@@ -12,10 +12,10 @@ from unittest.mock import ANY, AsyncMock, Mock, patch
 
 import gidgethub
 import pytest
+from aioresponses import aioresponses
 from connectors_sdk.filtering.validation import Filter, SyncRuleValidationResult
 from connectors_sdk.source import ConfigurableFieldValueError
 from connectors_sdk.utils import Features
-from aioresponses import aioresponses
 from gidgethub.abc import BadGraphQLRequest, GraphQLAuthorizationFailure, QueryError
 
 from connectors.access_control import DLS_QUERY
