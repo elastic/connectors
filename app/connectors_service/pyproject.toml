@@ -119,3 +119,70 @@ packages = ["connectors", "scripts"]
 
 [tool.setuptools.dynamic]
 version = {file = "connectors/VERSION"}
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+addopts = [
+    "-v"
+]
+filterwarnings = [
+    "error",
+    # botocore has this warning that is reported by them to be irrelevant
+    "ignore:.*urllib3.contrib.pyopenssl.*:DeprecationWarning:botocore.*",
+    # latest main of aioresponses does not have this problem, but current package uses deprecated pkg_resources API
+    "ignore:.*pkg_resources.*:DeprecationWarning",
+    # SQLAlchemy uses deprecated APIs internally
+    "ignore:.*dbapi().*:DeprecationWarning",
+    # aiogoogle inherits on top of AioHttpSession, which is not recommended by aiohttp
+    "ignore:Inheritance class AiohttpSession from ClientSession is discouraged:DeprecationWarning",
+    # aiogoogle inherits on top of RetryableAioHttpSession, which is not recommended by aiohttp
+    "ignore:Inheritance class RetryableAiohttpSession from ClientSession is discouraged:DeprecationWarning",
+    # pytest may generate its own warnings in some situations, such as improper usage or deprecated features.
+    "ignore::pytest.PytestUnraisableExceptionWarning",
+    # this error comes from 8.16 Elasticsearch client: we use some non-GA features in our CI code
+    "ignore::elasticsearch.exceptions.GeneralAvailabilityWarning",
+]
+
+[tool.pyright]
+pythonVersion = "3.10"
+include = ["connectors_service"]
+reportMissingImports = false
+reportMissingModuleSource = false
+reportOptionalMemberAccess = false
+exclude = ["**/tests", "**/__pycache__"]
+executionEnvironments = [
+    { root = "./", venv = ".venv" }
+]
+
+[tool.ruff]
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["A", "ASYNC", "I", "E", "F", "B", "C4", "T10", "T20", "EM", "ISC", "S", "CPY001"]
+ignore = ["E501", "ISC001"]
+preview = true
+
+# Allow autofix for all enabled rules (when `--fix`) is provided.
+fixable = ["A", "B", "C", "C4", "D", "E", "F", "G", "I", "N", "Q", "S", "T", "W", "ANN", "ARG", "BLE", "COM", "DJ", "DTZ", "EM", "ERA", "EXE", "FBT", "ICN", "INP", "ISC", "NPY", "PD", "PGH", "PIE", "PL", "PT", "PTH", "PYI", "RET", "RSE", "RUF", "SIM", "SLF", "TCH", "TID", "TRY", "UP", "YTT", "T10", "T20"]
+unfixable = []
+
+exclude = [
+    ".git",
+    "__pycache__",
+    "lib",
+    "bin",
+    "include"
+]
+dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+
+[tool.ruff.lint.per-file-ignores]
+"connectors_service/*" = ["S608"]
+"scripts/verify.py" = ["EM"]
+"tests/*" = ["B017", "S101", "S", "ASYNC110"]
+"tests/conftest.py" = ["EM"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["connectors_service", "tests"]
+
+[tool.ruff.lint.flake8-copyright]
+notice-rgx = "#\n# Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one\n# or more contributor license agreements. Licensed under the Elastic License 2.0;\n# you may not use this file except in compliance with the Elastic License 2.0.\n#"
