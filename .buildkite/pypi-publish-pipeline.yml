@@ -72,10 +72,16 @@ steps:
           - "python{{matrix.python_version}} -m pip install --upgrade twine"
           - "python{{matrix.python_version}} -m twine upload --repository testpypi dist/*"
 
+  - block: ":rocket: Publish to Production PyPI?"
+    prompt: "Test PyPI publish succeeded. Proceed to publish to Production PyPI?"
+    key: "confirm_production_publish"
+    depends_on:
+      - publish_to_test_pypi
+
   - group: ":truck: Publish to Production PyPI"
     key: "publish_to_pypi"
     depends_on:
-      - publish_to_test_pypi
+      - confirm_production_publish
     steps:
       - label: ":package: Publish to Production PyPI"
         key: publish_pypi
