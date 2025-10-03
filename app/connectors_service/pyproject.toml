@@ -145,7 +145,7 @@ filterwarnings = [
 
 [tool.pyright]
 pythonVersion = "3.10"
-include = ["connectors_service"]
+include = ["connectors"]
 reportMissingImports = false
 reportMissingModuleSource = false
 reportOptionalMemberAccess = false
@@ -176,13 +176,13 @@ exclude = [
 dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
 
 [tool.ruff.lint.per-file-ignores]
-"connectors_service/*" = ["S608"]
+"connectors/*" = ["S608"]
 "scripts/verify.py" = ["EM"]
 "tests/*" = ["B017", "S101", "S", "ASYNC110"]
 "tests/conftest.py" = ["EM"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["connectors_service", "tests"]
+known-first-party = ["connectors", "tests"]
 
 [tool.ruff.lint.flake8-copyright]
 notice-rgx = "#\n# Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one\n# or more contributor license agreements. Licensed under the Elastic License 2.0;\n# you may not use this file except in compliance with the Elastic License 2.0.\n#"
