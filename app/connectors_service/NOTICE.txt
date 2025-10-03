@@ -3547,7 +3547,7 @@ Apache Software License
 
 elasticsearch-connectors
 9.2.0
-Apache Software License
+Elastic License 2.0
 UNKNOWN
 
 elasticsearch-connectors-sdk
