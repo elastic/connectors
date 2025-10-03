@@ -1564,7 +1564,9 @@ class GitHubDataSource(BaseDataSource):
                     # Store configured repos in the appropriate cache
                     if self.configuration["repo_type"] == "other":
                         logged_in_user = await self._logged_in_user()
-                        self.user_repos.setdefault(logged_in_user, {})[repo_name] = repo_data
+                        self.user_repos.setdefault(logged_in_user, {})[repo_name] = (
+                            repo_data
+                        )
                     else:
                         org_name = self.configuration["org_name"]
                         self.org_repos.setdefault(org_name, {})[repo_name] = repo_data
