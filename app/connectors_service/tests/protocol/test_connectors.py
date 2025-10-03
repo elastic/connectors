@@ -650,7 +650,7 @@ mock_next_run = iso_utc()
         (True, mock_next_run, JobType.INCREMENTAL),
     ],
 )
-@patch("connectors_service.protocol.connectors_service.next_run")
+@patch("connectors_service.protocol.connectors.next_run")
 async def test_connector_next_sync(
     next_run, scheduling_enabled, expected_next_sync, job_type
 ):

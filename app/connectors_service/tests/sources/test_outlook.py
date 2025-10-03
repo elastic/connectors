@@ -570,7 +570,7 @@ async def test_ping_for_cloud():
         (MockException(status=404), NotFound),
     ],
 )
-@mock.patch("connectors.utils.time_to_sleep_between_retries")
+@mock.patch("connectors_service.utils.time_to_sleep_between_retries")
 async def test_ping_for_cloud_for_failed_connection(
     mock_time_to_sleep_between_retries, raised_exception, side_effect_exception
 ):

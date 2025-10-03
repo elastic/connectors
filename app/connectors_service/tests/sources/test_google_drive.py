@@ -1255,7 +1255,7 @@ async def test_api_call_ping_retries(
 
 
 @pytest.mark.asyncio
-@mock.patch("connectors.utils.time_to_sleep_between_retries")
+@mock.patch("connectors_service.utils.time_to_sleep_between_retries")
 async def test_api_call_list_drives_retries(
     mock_time_to_sleep_between_retries, mock_responses
 ):

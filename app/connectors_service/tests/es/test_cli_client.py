@@ -17,5 +17,5 @@ def test_overrides_user_agent_header():
 
     assert (
         cli_client.client._headers["user-agent"]
-        == f"elastic-connectors-{__version__}/cli"
+        == f"elastic-connectors-service-{__version__}/cli"
     )

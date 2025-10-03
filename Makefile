@@ -1,7 +1,7 @@
 app_dir := app/connectors_service
 connectors_sdk_dir := libs/connectors_sdk
 
-VERSION=$(shell cat app/connectors_service/connectors/VERSION)
+VERSION=$(shell cat app/connectors_service/connectors_service/VERSION)
 
 DOCKER_IMAGE_NAME?=docker.elastic.co/integrations/elastic-connectors
 DOCKERFILE_PATH?=Dockerfile

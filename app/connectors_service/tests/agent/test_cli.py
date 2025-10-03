@@ -20,6 +20,7 @@ def test_main_responds_to_sigterm(patch_component):
         os.kill(os.getpid(), signal.SIGTERM)
 
     loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
     loop.create_task(kill())
 
     # No asserts here.

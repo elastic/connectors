@@ -712,7 +712,7 @@ async def setup_extractor(
     ],
 )
 @mock.patch(
-    "connectors.es.management_client.ESManagementClient.yield_existing_documents_metadata"
+    "connectors_service.es.management_client.ESManagementClient.yield_existing_documents_metadata"
 )
 @pytest.mark.asyncio
 async def test_get_docs(
@@ -1012,7 +1012,7 @@ async def test_get_docs_incrementally(
     ],
 )
 @mock.patch(
-    "connectors.es.management_client.ESManagementClient.yield_existing_documents_metadata"
+    "connectors_service.es.management_client.ESManagementClient.yield_existing_documents_metadata"
 )
 @pytest.mark.asyncio
 async def test_get_access_control_docs(
@@ -1345,9 +1345,9 @@ async def test_extractor_put_doc():
 
 @pytest.mark.asyncio
 @mock.patch(
-    "connectors.es.management_client.ESManagementClient.yield_existing_documents_metadata"
+    "connectors_service.es.management_client.ESManagementClient.yield_existing_documents_metadata"
 )
-@mock.patch("connectors.utils.ConcurrentTasks.cancel")
+@mock.patch("connectors_service.utils.ConcurrentTasks.cancel")
 async def test_extractor_get_docs_when_downloads_fail(
     yield_existing_documents_metadata, concurrent_tasks_cancel
 ):

@@ -74,7 +74,7 @@ autoformat: .venv/bin/python .venv/bin/ruff .venv/bin/elastic-ingest
 	.venv/bin/ruff format scripts
 
 test: .venv/bin/python .venv/bin/elastic-ingest .venv/bin/pytest
-	.venv/bin/pytest --cov-report term-missing --cov-fail-under 90 --cov-report html --cov=connectors --fail-slow=$(SLOW_TEST_THRESHOLD) -sv tests
+	.venv/bin/pytest --cov-report term-missing --cov-fail-under 90 --cov-report html --cov=connectors_service --fail-slow=$(SLOW_TEST_THRESHOLD) -sv tests
 
 
 ftest: .venv/bin/pytest

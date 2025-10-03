@@ -251,7 +251,9 @@ async def test_traverse_diretory_with_invalid_path(dir_mock):
 
 
 @mock.patch("smbclient.scandir")
-@mock.patch("connectors.utils.time_to_sleep_between_retries", mock.Mock(return_value=0))
+@mock.patch(
+    "connectors_service.utils.time_to_sleep_between_retries", mock.Mock(return_value=0)
+)
 @pytest.mark.asyncio
 async def test_traverse_diretory_retried_on_smb_timeout(dir_mock):
     """Tests the scandir method of smbclient is retried on SMBConnectionClosed error
@@ -1141,7 +1143,9 @@ async def test_validate_drive_path():
 
 
 @mock.patch("smbclient.scandir")
-@mock.patch("connectors.utils.time_to_sleep_between_retries", mock.Mock(return_value=0))
+@mock.patch(
+    "connectors_service.utils.time_to_sleep_between_retries", mock.Mock(return_value=0)
+)
 @pytest.mark.asyncio
 async def test_traverse_diretory_smb_timeout_for_sync_rule(dir_mock):
     with mock.patch.object(SMBSession, "create_connection"):

@@ -910,7 +910,7 @@ async def test_generate_token_with_unexpected_error_retries(
     ],
 )
 @mock.patch(
-    "connectors.sources.salesforce.RELEVANT_SOBJECTS",
+    "connectors_service.sources.salesforce.RELEVANT_SOBJECTS",
     ["FooField", "BarField", "ArghField"],
 )
 async def test_get_queryable_sobjects(mock_responses, sobject, expected_result):
@@ -939,9 +939,9 @@ async def test_get_queryable_sobjects(mock_responses, sobject, expected_result):
 
 
 @pytest.mark.asyncio
-@mock.patch("connectors.sources.salesforce.RELEVANT_SOBJECTS", ["Account"])
+@mock.patch("connectors_service.sources.salesforce.RELEVANT_SOBJECTS", ["Account"])
 @mock.patch(
-    "connectors.sources.salesforce.RELEVANT_SOBJECT_FIELDS",
+    "connectors_service.sources.salesforce.RELEVANT_SOBJECT_FIELDS",
     ["FooField", "BarField", "ArghField"],
 )
 async def test_get_queryable_fields(mock_responses):
