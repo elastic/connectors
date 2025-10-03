@@ -161,6 +161,30 @@ query($projectPath: ID!, $cursor: String) {{
             name
           }}
         }}
+        reviewers(first: {NESTED_FIELD_SIZE}) {{
+          pageInfo {{
+            hasNextPage
+            endCursor
+          }}
+          nodes {{
+            username
+            name
+          }}
+        }}
+        approvedBy(first: {NESTED_FIELD_SIZE}) {{
+          pageInfo {{
+            hasNextPage
+            endCursor
+          }}
+          nodes {{
+            username
+            name
+          }}
+        }}
+        mergeUser {{
+          username
+          name
+        }}
         labels(first: {NESTED_FIELD_SIZE}) {{
           pageInfo {{
             hasNextPage
@@ -259,6 +283,46 @@ query($projectPath: ID!, $iid: String!, $cursor: String) {{{{
               }}}}
             }}}}
           }}}}
+        }}}}
+      }}}}
+    }}}}
+  }}}}
+}}}}
+"""
+
+# GraphQL query to fetch remaining reviewers for a merge request
+REVIEWERS_QUERY = f"""
+query($projectPath: ID!, $iid: String!, $cursor: String) {{{{
+  project(fullPath: $projectPath) {{{{
+    {{issuable_type}}(iid: $iid) {{{{
+      reviewers(first: {NESTED_FIELD_SIZE}, after: $cursor) {{{{
+        pageInfo {{{{
+          hasNextPage
+          endCursor
+        }}}}
+        nodes {{{{
+          username
+          name
+        }}}}
+      }}}}
+    }}}}
+  }}}}
+}}}}
+"""
+
+# GraphQL query to fetch remaining approvers for a merge request
+APPROVEDBY_QUERY = f"""
+query($projectPath: ID!, $iid: String!, $cursor: String) {{{{
+  project(fullPath: $projectPath) {{{{
+    {{issuable_type}}(iid: $iid) {{{{
+      approvedBy(first: {NESTED_FIELD_SIZE}, after: $cursor) {{{{
+        pageInfo {{{{
+          hasNextPage
+          endCursor
+        }}}}
+        nodes {{{{
+          username
+          name
         }}}}
       }}}}
     }}}}
@@ -416,12 +480,12 @@ class GitLabClient:
     async def fetch_remaining_field(
         self, project_path, iid, field_type, issuable_type, cursor
     ):
-        """Fetch remaining items for a paginated field (assignees, labels, discussions).
+        """Fetch remaining items for a paginated field.
 
         Args:
             project_path (str): Full path of the project
             iid (str): Issue or MR internal ID
-            field_type (str): Type of field ('assignees', 'labels', 'discussions')
+            field_type (str): Type of field ('assignees', 'labels', 'discussions', 'reviewers', 'approvedBy')
             issuable_type (str): Type of issuable ('issue' or 'mergeRequest')
             cursor (str): Pagination cursor
 
@@ -432,6 +496,8 @@ class GitLabClient:
             "assignees": ASSIGNEES_QUERY,
             "labels": LABELS_QUERY,
             "discussions": DISCUSSIONS_QUERY,
+            "reviewers": REVIEWERS_QUERY,
+            "approvedBy": APPROVEDBY_QUERY,
         }
 
         query_template = query_map.get(field_type)
@@ -699,6 +765,27 @@ class GitLabDataSource(BaseDataSource):
             ):
                 issuable["discussions"]["nodes"].append(discussion)
 
+        # Check and fetch remaining reviewers (MRs only)
+        if issuable_type == "mergeRequest":
+            reviewers_data = issuable.get("reviewers", {})
+            reviewers_page_info = reviewers_data.get("pageInfo", {})
+            if reviewers_page_info.get("hasNextPage"):
+                cursor = reviewers_page_info.get("endCursor")
+                async for reviewer in self.gitlab_client.fetch_remaining_field(
+                    project_path, iid, "reviewers", issuable_type, cursor
+                ):
+                    issuable["reviewers"]["nodes"].append(reviewer)
+
+            # Check and fetch remaining approvedBy (MRs only)
+            approvedby_data = issuable.get("approvedBy", {})
+            approvedby_page_info = approvedby_data.get("pageInfo", {})
+            if approvedby_page_info.get("hasNextPage"):
+                cursor = approvedby_page_info.get("endCursor")
+                async for approver in self.gitlab_client.fetch_remaining_field(
+                    project_path, iid, "approvedBy", issuable_type, cursor
+                ):
+                    issuable["approvedBy"]["nodes"].append(approver)
+
     async def get_docs(self, filtering=None):
         """Main method to fetch documents from GitLab.
 
@@ -896,6 +983,16 @@ class GitLabDataSource(BaseDataSource):
             "assignees": [
                 a.get("username") for a in mr.get("assignees", {}).get("nodes", [])
             ],
+            "reviewers": [
+                r.get("username") for r in mr.get("reviewers", {}).get("nodes", [])
+            ],
+            "approved_by": [
+                a.get("username")
+                for a in mr.get("approvedBy", {}).get("nodes", [])
+            ],
+            "merged_by": mr.get("mergeUser", {}).get("username")
+            if mr.get("mergeUser")
+            else None,
             "labels": [
                 label.get("title") for label in mr.get("labels", {}).get("nodes", [])
             ],
