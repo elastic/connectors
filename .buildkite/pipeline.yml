@@ -582,11 +582,6 @@ steps:
 
   - group: ":building_construction: Build Python Packages"
     key: "build_package"
-    depends_on:
-      - "lint"
-      - "unit_tests"
-      - "smoke_test"
-      - "relevant_ftests"
     steps:
       - label: ":python: Build Python {{matrix.python_version}} {{matrix.package_path}} package"
         key: build_python_package
@@ -601,7 +596,7 @@ steps:
               - "3.10"
               - "3.11"
             package_path:
-              - "app/connectors"
+              - "app/connectors_service"
         commands:
           - "cd {{matrix.package_path}}"
           - "python{{matrix.python_version}} -m pip install --upgrade build twine"
@@ -618,6 +613,10 @@ steps:
     key: "mbp_dra_group"
     if: "(build.branch == \"main\" || build.branch == \"9.1\" || build.branch == \"9.0\" || build.branch == \"8.19\" || build.branch == \"8.18\" || build.branch == \"8.17\" || build.pull_request.labels includes \"ci:packaging\")" # Add new maintenance branches here
     depends_on:
+      - "lint"
+      - "unit_tests"
+      - "smoke_test"
+      - "relevant_ftests"
       - "build_package"
     steps:
       # ----
