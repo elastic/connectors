@@ -5,7 +5,6 @@
 #
 """Network Drive source module responsible to fetch documents from Network Drive."""
 
-
 from functools import cached_property
 
 import fastjsonschema
@@ -28,14 +27,9 @@ from smbprotocol.security_descriptor import (
     SMB2CreateSDBuffer,
 )
 
-ACCESS_ALLOWED_TYPE = 0
-ACCESS_DENIED_TYPE = 1
-ACCESS_MASK_ALLOWED_WRITE_PERMISSION = 1048854
-ACCESS_MASK_DENIED_WRITE_PERMISSION = 278
 GET_USERS_COMMAND = "Get-LocalUser | Select Name, SID"
 GET_GROUPS_COMMAND = "Get-LocalGroup | Select-Object Name, SID"
 GET_GROUP_MEMBERS = 'Get-LocalGroupMember -Name "{name}" | Select-Object Name, SID'
-SECURITY_INFO_DACL = 0x00000004
 STATUS_NO_LOGON_SERVERS = 3221225566
 STATUS_INVALID_LOGON_HOURS = 3221225583
 STATUS_INVALID_WORKSTATION = 3221225584
@@ -43,8 +37,6 @@ STATUS_ACCOUNT_DISABLED = 3221225586
 STATUS_PASSWORD_MUST_CHANGE = 3221226020
 
 MAX_CHUNK_SIZE = 65536
-RETRIES = 3
-RETRY_INTERVAL = 2
 
 WINDOWS = "windows"
 LINUX = "linux"

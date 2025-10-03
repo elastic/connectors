@@ -104,14 +104,16 @@ class TestGoogleServiceAccountClient:
     @pytest_asyncio.fixture(autouse=True)
     async def patch_service_account_creds(self):
         with patch(
-            "connectors.sources.shared.google.google.ServiceAccountCreds", return_value=Mock()
+            "connectors.sources.shared.google.google.ServiceAccountCreds",
+            return_value=Mock(),
         ) as class_mock:
             yield class_mock
 
     @pytest_asyncio.fixture
     async def patch_aiogoogle(self):
         with patch(
-            "connectors.sources.shared.google.google.Aiogoogle", return_value=MagicMock()
+            "connectors.sources.shared.google.google.Aiogoogle",
+            return_value=MagicMock(),
         ) as mock:
             aiogoogle_client = AsyncMock()
             mock.return_value.__aenter__.return_value = aiogoogle_client

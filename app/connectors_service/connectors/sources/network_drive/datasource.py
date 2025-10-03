@@ -1,7 +1,12 @@
+#
+# Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+# or more contributor license agreements. Licensed under the Elastic License 2.0;
+# you may not use this file except in compliance with the Elastic License 2.0.
+#
 import asyncio
 import csv
 from collections import deque
-from functools import partial
+from functools import cached_property, partial
 
 import requests.exceptions
 from connectors_sdk.source import BaseDataSource, ConfigurableFieldValueError
@@ -20,13 +25,30 @@ from wcmatch import glob
 from connectors.access_control import (
     ACCESS_CONTROL,
     es_access_control_query,
-    prefix_identity
+    prefix_identity,
 )
-from connectors.sources.network_drive.netdrive import *
+from connectors.sources.network_drive.netdrive import (
+    MAX_CHUNK_SIZE,
+    NetworkDriveAdvancedRulesValidator,
+    SecurityInfo,
+    SMBSession,
+    smbclient,
+)
 from connectors.utils import (
     RetryStrategy,
     retryable,
 )
+
+ACCESS_ALLOWED_TYPE = 0
+ACCESS_DENIED_TYPE = 1
+ACCESS_MASK_ALLOWED_WRITE_PERMISSION = 1048854
+ACCESS_MASK_DENIED_WRITE_PERMISSION = 278
+SECURITY_INFO_DACL = 0x00000004
+RETRIES = 3
+RETRY_INTERVAL = 2
+
+WINDOWS = "windows"
+LINUX = "linux"
 
 
 class NASDataSource(BaseDataSource):
