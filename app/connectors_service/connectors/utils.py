@@ -6,7 +6,6 @@
 import asyncio
 import base64
 import functools
-import importlib
 import inspect
 import re
 import secrets
@@ -17,7 +16,6 @@ import urllib.parse
 from copy import deepcopy
 from datetime import datetime, timedelta
 from enum import Enum
-from functools import cache
 
 import dateutil.parser as parser
 import pytz
@@ -38,6 +36,11 @@ DEFAULT_CONCURRENT_DOWNLOADS = 10
 
 # Regular expression pattern to match a basic email format (no whitespace, valid domain)
 EMAIL_REGEX_PATTERN = r"^\S+@\S+\.\S+$"
+
+# Regular expression pattern to match HTTPS URLs only
+HTTPS_URL_PATTERN = r"^https://.*"
+
+ISO_ZULU_TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 
 
 def parse_datetime_string(datetime):
@@ -917,18 +920,3 @@ def generate_random_id(length=4):
     return "".join(
         secrets.choice(string.ascii_letters + string.digits) for _ in range(length)
     )
-
-
-@cache
-def get_source_klass(fqn):
-    """Converts a Fully Qualified Name into a class instance."""
-    module_name, klass_name = fqn.split(":")
-    logger.debug(f"Importing module {module_name}")
-    module = importlib.import_module(module_name)
-    return getattr(module, klass_name)
-
-
-def get_source_klasses(config):
-    """Returns an iterator of all registered sources."""
-    for fqn in config["sources"].values():
-        yield get_source_klass(fqn)

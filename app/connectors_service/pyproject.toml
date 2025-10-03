@@ -103,6 +103,7 @@ ftest= [
     "google-cloud-storage==2.10.0",
     "mysql-connector-python==9.0.0",
     "oracledb==2.3.0",
+    "pyOpenSSL==24.2.1",
     "smbprotocol==1.10.1",
     "yattag==1.16.0",
 ]

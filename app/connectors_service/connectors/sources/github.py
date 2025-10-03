@@ -36,6 +36,7 @@ from connectors.access_control import (
     prefix_identity,
 )
 from connectors.utils import (
+    HTTPS_URL_PATTERN,
     CancellableSleeps,
     RetryStrategy,
     decode_base64_value,
@@ -1175,6 +1176,7 @@ class GitHubDataSource(BaseDataSource):
                 "label": "Server URL",
                 "order": 2,
                 "type": "str",
+                "validations": [{"type": "regex", "constraint": HTTPS_URL_PATTERN}],
             },
             "auth_method": {
                 "display": "dropdown",
