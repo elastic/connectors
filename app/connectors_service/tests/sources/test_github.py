@@ -12,6 +12,7 @@ from unittest.mock import ANY, AsyncMock, Mock, patch
 
 import gidgethub
 import pytest
+from aioresponses import aioresponses
 from connectors_sdk.filtering.validation import Filter, SyncRuleValidationResult
 from connectors_sdk.source import ConfigurableFieldValueError
 from connectors_sdk.utils import Features
@@ -815,6 +816,7 @@ async def create_github_source(
     repo_type="other",
     org_name="",
     repos="*",
+    host="github.example.com",
     use_document_level_security=False,
     use_text_extraction_service=False,
 ):
@@ -828,6 +830,7 @@ async def create_github_source(
         repositories=repos,
         repo_type=repo_type,
         org_name=org_name,
+        host=host,
         ssl_enabled=False,
         use_document_level_security=use_document_level_security,
         use_text_extraction_service=use_text_extraction_service,
@@ -861,6 +864,40 @@ async def test_validate_config_missing_fields_then_raise(field):
 
         with pytest.raises(ConfigurableFieldValueError):
             await source.validate_config()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "host_url,should_raise",
+    [
+        pytest.param(
+            "http://github.example.com", True, id="HTTP URL should be rejected"
+        ),
+        pytest.param(
+            "https://github.example.com", False, id="HTTPS URL should be accepted"
+        ),
+    ],
+)
+async def test_validate_config_https_url_validation(host_url, should_raise):
+    """Test that only HTTPS URLs are considered valid for GitHub Server host field"""
+    async with create_github_source(host=host_url) as source:
+        source.configuration.get_field("data_source").value = "github_server"
+
+        with aioresponses() as m:
+            m.head(
+                "https://github.example.com/api/graphql",
+                headers={"X-OAuth-Scopes": "repo, user, read:org"},
+            )
+            m.post(
+                "https://github.example.com/api/graphql",
+                payload={"data": {"viewer": {"login": "testuser"}}},
+            )
+
+            if should_raise:
+                with pytest.raises(ConfigurableFieldValueError):
+                    await source.validate_config()
+            else:
+                await source.validate_config()
 
 
 @pytest.mark.asyncio

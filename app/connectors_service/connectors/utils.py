@@ -39,6 +39,9 @@ DEFAULT_CONCURRENT_DOWNLOADS = 10
 # Regular expression pattern to match a basic email format (no whitespace, valid domain)
 EMAIL_REGEX_PATTERN = r"^\S+@\S+\.\S+$"
 
+# Regular expression pattern to match HTTPS URLs only
+HTTPS_URL_PATTERN = r"^https://.*"
+
 
 def parse_datetime_string(datetime):
     return parser.parse(datetime)

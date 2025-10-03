@@ -231,17 +231,63 @@ class MySQLClient:
         interval=RETRY_INTERVAL,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
-    async def yield_rows_for_table(self, table, primary_keys, table_row_count):
-        offset = 0
-        while offset < table_row_count:
-            async for row in self._fetchmany_in_batches(
-                f"SELECT * FROM `{self.database}`.`{table}` ORDER BY '{', '.join(primary_keys)}' LIMIT {self.fetch_size} OFFSET {offset}"
-            ):
-                if row:
-                    yield row
+    async def yield_rows_for_table(self, table, primary_keys):
+        last_primary_key_values = None
+        primary_keys_str = ", ".join(f"`{pk}`" for pk in primary_keys)
+
+        while True:
+            # Build WHERE clause for cursor-based pagination
+            where_clause = ""
+            params = []
+
+            if last_primary_key_values:
+                # For composite keys, we need a more sophisticated WHERE clause
+                # to handle cases like (a,b) > (last_a, last_b)
+                if len(primary_keys) == 1:
+                    # Simple case: single primary key
+                    where_clause = f"WHERE `{primary_keys[0]}` > %s"
+                    params = [last_primary_key_values[0]]
                 else:
-                    break
-            offset += self.fetch_size
+                    # Complex case: composite primary key using tuple comparison
+                    pk_tuple = f"({primary_keys_str})"
+                    param_tuple = f"({', '.join(['%s'] * len(primary_keys))})"
+                    # (a,b) > (last_a, last_b)
+                    where_clause = f"WHERE {pk_tuple} > {param_tuple}"
+                    params = last_primary_key_values
+
+            query = f"""
+                SELECT * FROM `{self.database}`.`{table}` 
+                {where_clause} 
+                ORDER BY {primary_keys_str} 
+                LIMIT {self.fetch_size}
+            """
+            self._logger.debug(f"Running query: {query}")
+
+            batch_count = 0
+            async with self.connection.cursor(aiomysql.cursors.SSCursor) as cursor:
+                if params:
+                    self._logger.debug(f"Params: {params}")
+                    await cursor.execute(query, params)
+                else:
+                    await cursor.execute(query)
+
+                column_names = [desc[0] for desc in cursor.description]
+                pk_positions = [column_names.index(pk) for pk in primary_keys]
+
+                async for row in cursor:
+                    yield row
+                    # Update the cursor to this row's primary key values
+                    # Since we SELECT * and order by primary keys first,
+                    # we need to find the primary key values by column position
+                    last_primary_key_values = [row[pos] for pos in pk_positions]
+                    batch_count += 1
+
+            # If we got fewer rows than fetch_size, we've reached the end
+            if batch_count < self.fetch_size:
+                self._logger.debug(
+                    f"Fetched final batch of {batch_count} rows. Fetch size: {self.fetch_size}."
+                )
+                break
 
     async def _get_table_row_count_for_query(self, query):
         table_row_count_query = re.sub(
@@ -562,15 +608,7 @@ class MySqlDataSource(BaseDataSource):
             last_update_time = await client.get_last_update_time(table)
             column_names = await client.get_column_names_for_table(table)
 
-            async with client.connection.cursor(aiomysql.cursors.SSCursor) as cursor:
-                await cursor.execute(
-                    f"SELECT COUNT(*) FROM `{self.database}`.`{table}`"
-                )
-                table_row_count = await cursor.fetchone()
-
-            async for row in client.yield_rows_for_table(
-                table, primary_key_columns, int(table_row_count[0])
-            ):
+            async for row in client.yield_rows_for_table(table, primary_key_columns):
                 yield row2doc(
                     row=row,
                     column_names=column_names,
