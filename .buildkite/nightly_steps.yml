@@ -337,3 +337,15 @@ steps:
     matrix:
       - "3.10"
       - "3.11"
+  - label: "🔨 [Python {{ matrix }}] Sandfly"
+    <<: *retries
+    command: ".buildkite/run_functional_test.sh"
+    env:
+      PYTHON_VERSION: "{{ matrix }}"
+      CONNECTOR: "sandfly"
+      DATA_SIZE: "small"
+    artifact_paths:
+      - "perf8-report-*/**/*"
+    matrix:
+      - "3.10"
+      - "3.11"

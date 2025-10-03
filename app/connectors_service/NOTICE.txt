@@ -4052,7 +4052,7 @@ Apache Software License
 
 
 google-auth
-2.41.0
+2.41.1
 Apache Software License
                                  Apache License
                            Version 2.0, January 2004
