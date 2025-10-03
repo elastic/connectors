@@ -10,7 +10,7 @@ readme = "README.md"
 authors = [
     { name = "Search Extract and Transform Team", email = "enterprise-search-ingestion-team@elastic.co" }
 ]
-license = {text = "Elastic License 2.0"}
+license = "Elastic-2.0"
 classifiers = [
     "Programming Language :: Python",
     "Programming Language :: Python :: 3.10",
