@@ -599,6 +599,26 @@ steps:
               artifact_paths:
                 - "perf8-report-*/**/*"
 
+  - group: ":building_construction: Build Python Packages"
+    key: "build_package"
+    steps:
+      - label: ":python: Build Python {{matrix.python_version}} {{matrix.package_path}} package"
+        key: build_python_package
+        <<: *test-agents
+        matrix:
+          setup:
+            python_version:
+              - "3.10"
+              - "3.11"
+            package_path:
+              - "app/connectors_service"
+              - "libs/connectors_sdk"
+        env:
+          PYTHON_VERSION: "{{ matrix.python_version }}"
+          PACKAGE_PATH: "{{ matrix.package_path }}"
+        command: ".buildkite/test_python_packages.sh"
+        timeout_in_minutes: 10
+
   # ----
   # DRA publishing
   # ----
@@ -610,6 +630,7 @@ steps:
       - "unit_tests"
       - "smoke_test"
       - "relevant_ftests"
+      - "build_package"
     steps:
       # ----
       # Docker builds for amd64

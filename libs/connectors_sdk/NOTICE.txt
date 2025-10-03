@@ -978,7 +978,7 @@ UNKNOWN
 
 elasticsearch-connectors-sdk
 9.2.0
-Apache Software License
+UNKNOWN
 UNKNOWN
 
 fastjsonschema
