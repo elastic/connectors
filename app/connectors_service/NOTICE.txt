@@ -3547,12 +3547,12 @@ Apache Software License
 
 elasticsearch-connectors
 9.2.0
-Elastic License 2.0
+UNKNOWN
 UNKNOWN
 
 elasticsearch-connectors-sdk
 9.2.0
-Apache Software License
+UNKNOWN
 UNKNOWN
 
 envyaml
