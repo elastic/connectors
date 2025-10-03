@@ -14,6 +14,13 @@ from connectors.access_control import (
     es_access_control_query,
     prefix_identity,
 )
+from connectors.sources.dropbox.client import (
+    BASE_URLS,
+    ClientResponseError,
+    DropBoxAdvancedRulesValidator,
+    DropboxClient,
+    EndpointName,
+)
 from connectors.sources.dropbox.common import (
     AUTHENTICATED_ADMIN_URL,
     ENDPOINTS,
@@ -24,13 +31,6 @@ from connectors.sources.dropbox.common import (
     REQUEST_BATCH_SIZE,
     RETRY_COUNT,
     InvalidPathException,
-)
-from connectors.sources.dropbox.client import (
-    BASE_URLS,
-    ClientResponseError,
-    DropBoxAdvancedRulesValidator,
-    DropboxClient,
-    EndpointName,
 )
 
 

@@ -22,6 +22,10 @@ from connectors_sdk.filtering.validation import Filter, SyncRuleValidationResult
 from connectors_sdk.source import ConfigurableFieldValueError
 from freezegun import freeze_time
 
+from connectors.sources.dropbox.client import (
+    DropBoxAdvancedRulesValidator,
+    DropboxClient,
+)
 from connectors.sources.dropbox.common import (
     AUTHENTICATED_ADMIN_URL,
     InvalidClientCredentialException,
@@ -29,10 +33,6 @@ from connectors.sources.dropbox.common import (
     InvalidRefreshTokenException,
 )
 from connectors.sources.dropbox.datasource import DropboxDataSource
-from connectors.sources.dropbox.client import (
-    DropBoxAdvancedRulesValidator,
-    DropboxClient,
-)
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
 
