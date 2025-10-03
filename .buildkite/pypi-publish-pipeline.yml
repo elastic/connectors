@@ -64,6 +64,7 @@ steps:
               - "3.11"
             package_path:
               - "${SERVICE_PACKAGE_PATH}"
+              - "${SDK_PACKAGE_PATH}"
         commands:
           # splitting the assignment in 2 lines to avoid leaking the key in the buildkite logs
           - "TWINE_PASSWORD=$(vault read -field publishing-api-key secret/ent-search-team/test-pypi-ent-search-dev)"
@@ -101,6 +102,7 @@ steps:
               - "3.11"
             package_path:
               - "${SERVICE_PACKAGE_PATH}"
+              - "${SDK_PACKAGE_PATH}"
         commands:
           # splitting the assignment in 2 lines to avoid leaking the key in the buildkite logs
           - "TWINE_PASSWORD=$(vault read -field publishing-api-key secret/ent-search-team/pypi-ent-search-dev)"
