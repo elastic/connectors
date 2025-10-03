@@ -1530,6 +1530,7 @@ class GitHubDataSource(BaseDataSource):
 
     async def _get_invalid_repos_for_personal_access_token(self) -> list[str]:
         try:
+            all_repos: list[str] = []
             # Combine all repos for unified batch validation
             if self.configuration["repo_type"] == "other":
                 logged_in_user = await self._logged_in_user()
@@ -1546,32 +1547,27 @@ class GitHubDataSource(BaseDataSource):
                 all_repos = configured_repos + foreign_repos
 
             invalid_repos = []
-            if all_repos:
-                batch_results = (
-                    await self.github_client.get_repos_by_fully_qualified_name_batch(
-                        all_repos
-                    )
+            batch_results = (
+                await self.github_client.get_repos_by_fully_qualified_name_batch(
+                    all_repos
                 )
-                for repo_name, repo_data in batch_results.items():
-                    if repo_data:
-                        # Store valid repos for potential later use
-                        if repo_name in foreign_repos:
-                            self.foreign_repos[repo_name] = repo_data
-                        else:
-                            # Store configured repos in the appropriate cache
-                            if self.configuration["repo_type"] == "other":
-                                logged_in_user = await self._logged_in_user()
-                                if logged_in_user not in self.user_repos:
-                                    self.user_repos[logged_in_user] = {}
-                                self.user_repos[logged_in_user][repo_name] = repo_data
-                            else:
-                                org_name = self.configuration["org_name"]
-                                if org_name not in self.org_repos:
-                                    self.org_repos[org_name] = {}
-                                self.org_repos[org_name][repo_name] = repo_data
+            )
+            for repo_name, repo_data in batch_results.items():
+                if not repo_data:
+                    self._logger.debug(f"Detected invalid repository: {repo_name}.")
+                    invalid_repos.append(repo_name)
+                    continue
+                # Store valid repos for potential later use
+                if repo_name in foreign_repos:
+                    self.foreign_repos[repo_name] = repo_data
+                else:
+                    # Store configured repos in the appropriate cache
+                    if self.configuration["repo_type"] == "other":
+                        logged_in_user = await self._logged_in_user()
+                        self.user_repos.setdefault(logged_in_user, {})[repo_name] = repo_data
                     else:
-                        self._logger.debug(f"Detected invalid repository: {repo_name}.")
-                        invalid_repos.append(repo_name)
+                        org_name = self.configuration["org_name"]
+                        self.org_repos.setdefault(org_name, {})[repo_name] = repo_data
             return invalid_repos
         except Exception as exception:
             self._logger.exception(
