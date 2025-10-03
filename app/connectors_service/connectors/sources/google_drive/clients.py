@@ -4,10 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 
-from connectors.access_control import (
-    prefix_identity,
-)
-from app.connectors_service.connectors.sources.shared.google.google import (
+from connectors.sources.shared.google.google import (
     GoogleServiceAccountClient,
     remove_universe_domain,
 )
@@ -277,34 +274,6 @@ class GoogleAdminDirectoryClient(GoogleServiceAccountClient):
             fields="kind,groups(email),nextPageToken",
         ):
             yield group
-
-
-def _prefix_group(group):
-    return prefix_identity("group", group)
-
-
-def _prefix_user(user):
-    return prefix_identity("user", user)
-
-
-def _prefix_domain(domain):
-    return prefix_identity("domain", domain)
-
-
-def _is_user_permission(permission_type):
-    return permission_type == "user"
-
-
-def _is_group_permission(permission_type):
-    return permission_type == "group"
-
-
-def _is_domain_permission(permission_type):
-    return permission_type == "domain"
-
-
-def _is_anyone_permission(permission_type):
-    return permission_type == "anyone"
 
 
 def _get_domain_from_email(email):

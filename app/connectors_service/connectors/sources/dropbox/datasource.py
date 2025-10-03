@@ -1,30 +1,34 @@
+import json
+from functools import partial
+
+from connectors_sdk.source import BaseDataSource
+from connectors_sdk.utils import iso_utc
+
 from connectors.access_control import (
     ACCESS_CONTROL,
     es_access_control_query,
+    prefix_identity,
 )
-from connectors_sdk.source import BaseDataSource
-from connectors_sdk.utils import iso_utc
-from functools import partial
-from connectors.sources.dropbox.dropbox_client import (
-    DropboxClient,
-    DropBoxAdvancedRulesValidator,
-    EndpointName,
+from connectors.sources.dropbox.common import (
+    AUTHENTICATED_ADMIN_URL,
     ENDPOINTS,
+    FILE,
+    FOLDER,
+    MAX_CONCURRENT_DOWNLOADS,
+    PAPER,
+    REQUEST_BATCH_SIZE,
+    RETRY_COUNT,
+    InvalidPathException,
+)
+from connectors.sources.dropbox.dropbox_client import (
     BASE_URLS,
+    ENDPOINTS,
     ClientResponseError,
+    DropBoxAdvancedRulesValidator,
+    DropboxClient,
+    EndpointName,
 )
 
-RETRY_COUNT = 3
-MAX_CONCURRENT_DOWNLOADS = 100
-REQUEST_BATCH_SIZE = 50
-LIMIT = 300  # Limit for fetching shared files per call
-PAPER = "paper"
-FILE = "File"
-FOLDER = "Folder"
-RECEIVED_FILE = "Received File"
-AUTHENTICATED_ADMIN_URL = (
-    "https://api.dropboxapi.com/2/team/token/get_authenticated_admin"
-)
 
 class DropboxDataSource(BaseDataSource):
     """Dropbox"""
@@ -616,3 +620,21 @@ class DropboxDataSource(BaseDataSource):
                     document=document,
                     attachment=attachment,
                 )
+
+
+def _prefix_user(user):
+    if not user:
+        return
+    return prefix_identity("user", user)
+
+
+def _prefix_user_id(user_id):
+    return prefix_identity("user_id", user_id)
+
+
+def _prefix_email(email):
+    return prefix_identity("email", email)
+
+
+def _prefix_group(group):
+    return prefix_identity("group", group)

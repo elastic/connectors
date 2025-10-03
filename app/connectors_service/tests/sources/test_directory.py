@@ -5,7 +5,7 @@
 #
 import pytest
 
-from app.connectors_service.connectors.sources.directory.datasource import DEFAULT_DIR, DirectoryDataSource
+from connectors.sources.directory.datasource import DEFAULT_DIR, DirectoryDataSource
 from tests.sources.support import assert_basics, create_source
 
 

@@ -17,7 +17,8 @@ from connectors_sdk.filtering.validation import Filter
 from connectors_sdk.source import ConfigurableFieldValueError
 from pymongo.errors import OperationFailure
 
-from connectors.sources.mongo import MongoAdvancedRulesValidator, MongoDataSource
+from connectors.sources.mongo.mongoconnectorutils import MongoAdvancedRulesValidator
+from connectors.sources.mongo.datasource import MongoDataSource
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
 

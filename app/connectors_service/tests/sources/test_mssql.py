@@ -13,7 +13,7 @@ from connectors_sdk.filtering.validation import Filter, SyncRuleValidationResult
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import ProgrammingError
 
-from app.connectors_service.connectors.sources.mssql.mssql import (
+from connectors.sources.mssql import (
     MSSQLAdvancedRulesValidator,
     MSSQLDataSource,
     MSSQLQueries,

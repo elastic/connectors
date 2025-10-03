@@ -5,13 +5,11 @@ from functools import cached_property, partial
 from aiogoogle import HTTPError
 from connectors_sdk.source import BaseDataSource
 
+from connectors.sources.google_cloud_storage.client import GoogleCloudStorageClient
 from connectors.sources.shared.google.google import (
     load_service_account_json,
     validate_service_account_json,
 )
-
-from connectors.sources.google_cloud_storage.gcp_clients import GoogleCloudStorageClient
-
 from connectors.utils import get_pem_format
 
 CLOUD_STORAGE_BASE_URL = "https://console.cloud.google.com/storage/browser/_details/"
@@ -48,6 +46,7 @@ REQUIRED_CREDENTIAL_KEYS = [
 RUNNING_FTEST = (
     "RUNNING_FTEST" in os.environ
 )  # Flag to check if a connector is run for ftest or not.
+
 
 class GoogleCloudStorageDataSource(BaseDataSource):
     """Google Cloud Storage"""

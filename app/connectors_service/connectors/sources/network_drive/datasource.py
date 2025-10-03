@@ -1,9 +1,9 @@
-import requests.exceptions
 import asyncio
 import csv
-
 from collections import deque
 from functools import partial
+
+import requests.exceptions
 from connectors_sdk.source import BaseDataSource, ConfigurableFieldValueError
 from connectors_sdk.utils import iso_utc
 from smbprotocol.exceptions import (
@@ -16,15 +16,18 @@ from smbprotocol.open import (
     FilePipePrinterAccessMask,
 )
 from wcmatch import glob
-from connectors.sources.network_drive.netdrive import *
+
 from connectors.access_control import (
     ACCESS_CONTROL,
     es_access_control_query,
+    prefix_identity
 )
+from connectors.sources.network_drive.netdrive import *
 from connectors.utils import (
     RetryStrategy,
     retryable,
 )
+
 
 class NASDataSource(BaseDataSource):
     """Network Drive"""
@@ -621,6 +624,7 @@ class NASDataSource(BaseDataSource):
                         else None
                     ),
                 )
+
 
 def _prefix_user(user):
     return prefix_identity("user", user)

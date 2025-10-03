@@ -6,7 +6,7 @@
 """Network Drive source module responsible to fetch documents from Network Drive."""
 
 
-from functools import cached_property, partial
+from functools import cached_property
 
 import fastjsonschema
 import smbclient
@@ -16,7 +16,6 @@ from connectors_sdk.filtering.validation import (
     SyncRuleValidationResult,
 )
 from connectors_sdk.logger import logger
-
 from smbprotocol.exceptions import SMBResponseException
 from smbprotocol.file_info import (
     InfoType,
@@ -27,10 +26,6 @@ from smbprotocol.open import (
 )
 from smbprotocol.security_descriptor import (
     SMB2CreateSDBuffer,
-)
-
-from connectors.access_control import (
-    prefix_identity,
 )
 
 ACCESS_ALLOWED_TYPE = 0

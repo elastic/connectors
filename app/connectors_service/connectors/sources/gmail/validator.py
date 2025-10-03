@@ -11,6 +11,7 @@ from connectors_sdk.filtering.validation import (
 )
 from fastjsonschema import JsonSchemaValueException
 
+
 class GMailAdvancedRulesValidator(AdvancedRulesValidator):
     MESSAGES_SCHEMA_DEFINITION = {
         "type": "array",

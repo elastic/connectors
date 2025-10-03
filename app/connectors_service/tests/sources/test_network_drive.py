@@ -23,10 +23,9 @@ from smbprotocol.exceptions import (
 )
 
 from connectors.access_control import ACCESS_CONTROL
-from app.connectors_service.connectors.sources.network_drive.netdrive import (
+from connectors.sources.network_drive.netdrive import (
     ClientPermissionException,
     InvalidLogonHoursException,
-    NASDataSource,
     NetworkDriveAdvancedRulesValidator,
     NoLogonServerException,
     PasswordChangeRequiredException,
@@ -34,6 +33,7 @@ from app.connectors_service.connectors.sources.network_drive.netdrive import (
     SMBSession,
     UserAccountDisabledException,
 )
+from connectors.sources.network_drive.datasource import NASDataSource
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
 

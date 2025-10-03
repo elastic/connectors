@@ -24,7 +24,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from app.connectors_service.connectors.sources.shared.database.generic_database import (
+from connectors.sources.shared.database.generic_database import (
     DEFAULT_FETCH_SIZE,
     DEFAULT_RETRY_COUNT,
     DEFAULT_WAIT_MULTIPLIER,

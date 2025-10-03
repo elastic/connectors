@@ -1,30 +1,23 @@
-from aiogoogle import AuthError
 from functools import cached_property
 
-from connectors.access_control import ACCESS_CONTROL, es_access_control_query
-from connectors.sources.shared.google.google import MessageFields
-
-from connectors_sdk.utils import iso_utc
+from aiogoogle import AuthError
 from connectors_sdk.source import BaseDataSource, ConfigurableFieldValueError
+from connectors_sdk.utils import iso_utc
 
+from connectors.access_control import ACCESS_CONTROL, es_access_control_query
+from connectors.sources.gmail.validator import GMailAdvancedRulesValidator
 from connectors.sources.shared.google.google import (
     GMailClient,
     GoogleDirectoryClient,
+    MessageFields,
     UserFields,
     load_service_account_json,
     validate_service_account_json,
 )
 from connectors.utils import (
     EMAIL_REGEX_PATTERN,
+    base64url_to_base64,
     validate_email_address,
-)
-from connectors.sources.gmail.validator import (
-    GMailAdvancedRulesValidator
-)
-from connectors.utils import (
-    EMAIL_REGEX_PATTERN,
-    validate_email_address,
-    base64url_to_base64
 )
 
 SERVICE_ACCOUNT_CREDENTIALS_LABEL = "GMail service account JSON"
@@ -329,6 +322,7 @@ class GMailDataSource(BaseDataSource):
                     )
 
                     yield message_doc_with_access_control, None
+
 
 def _message_doc(message):
     timestamp_field = "_timestamp"

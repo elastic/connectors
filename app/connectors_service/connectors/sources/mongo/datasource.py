@@ -1,19 +1,19 @@
-from connectors_sdk.source import BaseDataSource, ConfigurableFieldValueError
-from connectors.utils import get_pem_format
-from contextlib import contextmanager
-from copy import deepcopy
-from bson import OLD_UUID_SUBTYPE, Binary, DBRef, Decimal128, ObjectId
-from tempfile import NamedTemporaryFile
-from fastjsonschema import JsonSchemaValueException
-from motor.motor_asyncio import AsyncIOMotorClient
-from pymongo.errors import OperationFailure
-from bson.binary import UUID_SUBTYPE
-from datetime import datetime
-
-from connectors.sources.mongo.mongoconnectorutils import MongoAdvancedRulesValidator
-
 import os
 import urllib.parse
+from contextlib import contextmanager
+from copy import deepcopy
+from datetime import datetime
+from tempfile import NamedTemporaryFile
+
+from bson import OLD_UUID_SUBTYPE, Binary, DBRef, Decimal128, ObjectId
+from bson.binary import UUID_SUBTYPE
+from connectors_sdk.source import BaseDataSource, ConfigurableFieldValueError
+from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo.errors import OperationFailure
+
+from connectors.sources.mongo.mongoconnectorutils import MongoAdvancedRulesValidator
+from connectors.utils import get_pem_format
+
 
 class MongoDataSource(BaseDataSource):
     """MongoDB"""
@@ -141,7 +141,7 @@ class MongoDataSource(BaseDataSource):
         with self.get_client() as client:
             await client.admin.command("ping")
 
-    def remove_temp_file(self, temp_file): # type: ignore
+    def remove_temp_file(self, temp_file):  # type: ignore
         if os.path.exists(temp_file):
             try:
                 os.remove(temp_file)
@@ -184,7 +184,7 @@ class MongoDataSource(BaseDataSource):
 
         return doc
 
-    async def get_docs(self, filtering=None): # type: ignore
+    async def get_docs(self, filtering=None):  # type: ignore
         with self.get_client() as client:
             db = client[self.configuration["database"]]
             collection = db[self.configuration["collection"]]

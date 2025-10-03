@@ -7,15 +7,20 @@ from connectors_sdk.source import (
     BaseDataSource,
     ConfigurableFieldValueError,
 )
-from connectors_sdk.utils import (
-    iso_zulu,
-)
+from connectors_sdk.utils import iso_zulu
+
 from connectors.access_control import (
     ACCESS_CONTROL,
     es_access_control_query,
+    prefix_identity,
 )
 from connectors.es.sink import OP_DELETE, OP_INDEX
-from app.connectors_service.connectors.sources.shared.google.google import (
+from connectors.sources.google_drive.clients import (
+    GoogleAdminDirectoryClient,
+    GoogleDriveClient,
+    SyncCursorEmpty,
+)
+from connectors.sources.shared.google.google import (
     UserFields,
     load_service_account_json,
     validate_service_account_json,
@@ -23,12 +28,6 @@ from app.connectors_service.connectors.sources.shared.google.google import (
 from connectors.utils import (
     EMAIL_REGEX_PATTERN,
     validate_email_address,
-)
-
-from app.connectors_service.connectors.sources.google_drive.drive_clients import (
-  GoogleDriveClient,
-  SyncCursorEmpty,
-  GoogleAdminDirectoryClient
 )
 
 GOOGLE_DRIVE_SERVICE_NAME = "Google Drive"
@@ -49,6 +48,7 @@ GOOGLE_MIME_TYPES_MAPPING = {
 }
 
 FOLDER_MIME_TYPE = "application/vnd.google-apps.folder"
+
 
 class GoogleDriveDataSource(BaseDataSource):
     """Google Drive"""
@@ -1044,3 +1044,35 @@ class GoogleDriveDataSource(BaseDataSource):
             }
 
         return self._sync_cursor
+
+
+def _prefix_group(group):
+    return prefix_identity("group", group)
+
+
+def _prefix_user(user):
+    return prefix_identity("user", user)
+
+
+def _prefix_domain(domain):
+    return prefix_identity("domain", domain)
+
+
+def _is_user_permission(permission_type):
+    return permission_type == "user"
+
+
+def _is_group_permission(permission_type):
+    return permission_type == "group"
+
+
+def _is_domain_permission(permission_type):
+    return permission_type == "domain"
+
+
+def _is_anyone_permission(permission_type):
+    return permission_type == "anyone"
+
+
+def _get_domain_from_email(email):
+    return email.split("@")[-1]

@@ -1,10 +1,10 @@
+import fastjsonschema
 from connectors_sdk.filtering.validation import (
     AdvancedRulesValidator,
     SyncRuleValidationResult,
 )
-
-import fastjsonschema
 from fastjsonschema import JsonSchemaValueException
+
 
 class MongoAdvancedRulesValidator(AdvancedRulesValidator):
     """
