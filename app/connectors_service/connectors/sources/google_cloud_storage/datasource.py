@@ -11,7 +11,7 @@ from aiogoogle import HTTPError
 from connectors_sdk.source import BaseDataSource
 
 from connectors.sources.google_cloud_storage.client import GoogleCloudStorageClient
-from connectors.sources.shared.google.google import (
+from connectors.sources.shared.google import (
     load_service_account_json,
     validate_service_account_json,
 )

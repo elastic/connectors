@@ -4,7 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 
-from connectors.sources.shared.google.google import (
+from connectors.sources.shared.google import (
     GoogleServiceAccountClient,
     remove_universe_domain,
 )

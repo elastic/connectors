@@ -11,7 +11,7 @@ from connectors_sdk.utils import iso_utc
 
 from connectors.access_control import ACCESS_CONTROL, es_access_control_query
 from connectors.sources.gmail.validator import GMailAdvancedRulesValidator
-from connectors.sources.shared.google.google import (
+from connectors.sources.shared.google import (
     GMailClient,
     GoogleDirectoryClient,
     MessageFields,

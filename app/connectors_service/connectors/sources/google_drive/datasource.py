@@ -25,7 +25,7 @@ from connectors.sources.google_drive.clients import (
     GoogleDriveClient,
     SyncCursorEmpty,
 )
-from connectors.sources.shared.google.google import (
+from connectors.sources.shared.google import (
     UserFields,
     load_service_account_json,
     validate_service_account_json,
