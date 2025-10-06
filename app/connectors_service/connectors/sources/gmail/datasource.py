@@ -243,6 +243,29 @@ class GMailDataSource(BaseDataSource):
 
                 yield self._user_access_control_doc(user, access_control)
 
+    def _message_doc(self, message):
+        timestamp_field = "_timestamp"
+
+        # We're using the `_attachment` field here so the attachment processor on the ES side decodes the base64 value
+        message_fields_to_es_doc_mappings = {
+            MessageFields.ID: "_id",
+            MessageFields.FULL_MESSAGE: "_attachment",
+            MessageFields.CREATION_DATE: timestamp_field,
+        }
+
+        es_doc = {
+            es_doc_field: message.get(message_field.value)
+            for message_field, es_doc_field in message_fields_to_es_doc_mappings.items()
+        }
+
+        # The attachment processor cannot handle base64url encoded values (only ordinary base64)
+        es_doc["_attachment"] = base64url_to_base64(es_doc["_attachment"])
+
+        if es_doc.get(timestamp_field) is None:
+            es_doc[timestamp_field] = iso_utc()
+
+        return es_doc
+
     async def _message_doc_with_access_control(
         self, access_control, gmail_client, message
     ):
@@ -250,9 +273,9 @@ class GMailDataSource(BaseDataSource):
         message_content = await gmail_client.message(message_id)
         message_content["id"] = message_id
 
-        message_doc = _message_doc(message_content)
+        msg_doc = self._message_doc(message_content)
         message_doc_with_access_control = self._decorate_with_access_control(
-            message_doc, access_control
+            msg_doc, access_control
         )
 
         return message_doc_with_access_control
@@ -327,31 +350,6 @@ class GMailDataSource(BaseDataSource):
                     )
 
                     yield message_doc_with_access_control, None
-
-
-def _message_doc(message):
-    timestamp_field = "_timestamp"
-
-    # We're using the `_attachment` field here so the attachment processor on the ES side decodes the base64 value
-    message_fields_to_es_doc_mappings = {
-        MessageFields.ID: "_id",
-        MessageFields.FULL_MESSAGE: "_attachment",
-        MessageFields.CREATION_DATE: timestamp_field,
-    }
-
-    es_doc = {
-        es_doc_field: message.get(message_field.value)
-        for message_field, es_doc_field in message_fields_to_es_doc_mappings.items()
-    }
-
-    # The attachment processor cannot handle base64url encoded values (only ordinary base64)
-    es_doc["_attachment"] = base64url_to_base64(es_doc["_attachment"])
-
-    if es_doc.get(timestamp_field) is None:
-        es_doc[timestamp_field] = iso_utc()
-
-    return es_doc
-
 
 def _filtering_enabled(filtering):
     return filtering is not None and filtering.has_advanced_rules()
