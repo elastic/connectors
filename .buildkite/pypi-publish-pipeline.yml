@@ -10,8 +10,8 @@ notify:
 # add paths for all the packages we want to build here
 # then make sure they're added to the matrix.setup.package_path lists in the steps below
 env:
-  SERVICE_PACKAGE_PATH: "app/connectors"
-  SDK_PACKAGE_PATH: "lib/connectors_sdk"
+  SERVICE_PACKAGE_PATH: "app/connectors_service"
+  SDK_PACKAGE_PATH: "libs/connectors_sdk"
 
 steps:
   - group: ":building_construction: Build Python Packages"
@@ -32,14 +32,10 @@ steps:
             package_path:
               - "${SERVICE_PACKAGE_PATH}"
               - "${SDK_PACKAGE_PATH}"
-        commands:
-          - "cd {{matrix.package_path}}"
-          - "python{{matrix.python_version}} -m pip install --upgrade build twine"
-          - "python{{matrix.python_version}} -m build"
-          - "ls -lah dist/"
-          - "python{{matrix.python_version}} -m twine check dist/*"
-        artifact_paths:
-          - "{{matrix.package_path}}/dist/*"
+        env:
+          PYTHON_VERSION: "{{ matrix.python_version }}"
+          PACKAGE_PATH: "{{ matrix.package_path }}"
+        commands: ".buildkite/test_python_packages.sh"
 
   - wait
 
