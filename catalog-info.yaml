@@ -57,7 +57,7 @@ spec:
         Daily 9.1:
           branch: "9.1"
           cronline: '@daily'
-          message: "Builds, tests, and pushes daily `9.0` DRA artifacts"
+          message: "Builds, tests, and pushes daily `9.1` DRA artifacts"
         Daily 9.0:
           branch: "9.0"
           cronline: '@daily'
