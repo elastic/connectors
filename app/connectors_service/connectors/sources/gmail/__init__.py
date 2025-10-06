@@ -3,4 +3,10 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-from connectors.sources.gmail.datasource import GMailDataSource as GMailDataSource
+from .datasource import (
+    GMailDataSource,
+    _message_doc,
+)
+from .validator import GMailAdvancedRulesValidator
+
+__all__ = ["GMailDataSource", "_message_doc", "GMailAdvancedRulesValidator"]

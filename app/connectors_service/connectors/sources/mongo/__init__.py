@@ -3,4 +3,7 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-from connectors.sources.mongo.datasource import MongoDataSource as MongoDataSource
+from .datasource import MongoDataSource
+from .validator import MongoAdvancedRulesValidator
+
+__all__ = ["MongoDataSource", "MongoAdvancedRulesValidator"]
