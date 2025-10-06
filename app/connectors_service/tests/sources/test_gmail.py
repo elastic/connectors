@@ -15,13 +15,13 @@ from connectors_sdk.source import ConfigurableFieldValueError
 from connectors_sdk.utils import Features, iso_utc
 from freezegun import freeze_time
 
+from connectors.access_control import ACCESS_CONTROL
 from connectors.sources.gmail import (
-    ACCESS_CONTROL,
     GMailAdvancedRulesValidator,
     GMailDataSource,
     _message_doc,
 )
-from connectors.sources.google import MessageFields, UserFields
+from connectors.sources.shared.google import MessageFields, UserFields
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
 
@@ -157,7 +157,7 @@ class TestGMailDataSource:
     @pytest_asyncio.fixture
     async def patch_gmail_client(self):
         with patch(
-            "connectors.sources.gmail.GMailClient", return_value=AsyncMock()
+            "connectors.sources.gmail.datasource.GMailClient", return_value=AsyncMock()
         ) as mock:
             client = mock.return_value
             yield client
@@ -165,7 +165,8 @@ class TestGMailDataSource:
     @pytest_asyncio.fixture
     async def patch_google_directory_client(self):
         with patch(
-            "connectors.sources.gmail.GoogleDirectoryClient", return_value=AsyncMock()
+            "connectors.sources.gmail.datasource.GoogleDirectoryClient",
+            return_value=AsyncMock(),
         ) as mock:
             client = mock.return_value
             yield client

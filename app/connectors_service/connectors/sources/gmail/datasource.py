@@ -5,20 +5,13 @@
 #
 from functools import cached_property
 
-import fastjsonschema
 from aiogoogle import AuthError
-from connectors_sdk.filtering.validation import (
-    AdvancedRulesValidator,
-    SyncRuleValidationResult,
-)
 from connectors_sdk.source import BaseDataSource, ConfigurableFieldValueError
-from connectors_sdk.utils import (
-    iso_utc,
-)
-from fastjsonschema import JsonSchemaValueException
+from connectors_sdk.utils import iso_utc
 
 from connectors.access_control import ACCESS_CONTROL, es_access_control_query
-from connectors.sources.google import (
+from connectors.sources.gmail.validator import GMailAdvancedRulesValidator
+from connectors.sources.shared.google import (
     GMailClient,
     GoogleDirectoryClient,
     MessageFields,
@@ -32,76 +25,9 @@ from connectors.utils import (
     validate_email_address,
 )
 
-CUSTOMER_ID_LABEL = "Google customer id"
-
-SUBJECT_LABEL = "Google Workspace admin email"
-
 SERVICE_ACCOUNT_CREDENTIALS_LABEL = "GMail service account JSON"
-
-
-class GMailAdvancedRulesValidator(AdvancedRulesValidator):
-    MESSAGES_SCHEMA_DEFINITION = {
-        "type": "array",
-        "items": {"type": "string"},
-        "minItems": 1,
-    }
-
-    SCHEMA_DEFINITION = {
-        "type": "object",
-        "properties": {"messages": MESSAGES_SCHEMA_DEFINITION},
-        "additionalProperties": False,
-    }
-
-    SCHEMA = fastjsonschema.compile(
-        definition=SCHEMA_DEFINITION,
-    )
-
-    async def validate(self, advanced_rules):
-        if len(advanced_rules) == 0:
-            return SyncRuleValidationResult.valid_result(
-                SyncRuleValidationResult.ADVANCED_RULES
-            )
-
-        try:
-            GMailAdvancedRulesValidator.SCHEMA(advanced_rules)
-
-            return SyncRuleValidationResult.valid_result(
-                rule_id=SyncRuleValidationResult.ADVANCED_RULES
-            )
-        except JsonSchemaValueException as e:
-            return SyncRuleValidationResult(
-                rule_id=SyncRuleValidationResult.ADVANCED_RULES,
-                is_valid=False,
-                validation_message=e.message,
-            )
-
-
-def _message_doc(message):
-    timestamp_field = "_timestamp"
-
-    # We're using the `_attachment` field here so the attachment processor on the ES side decodes the base64 value
-    message_fields_to_es_doc_mappings = {
-        MessageFields.ID: "_id",
-        MessageFields.FULL_MESSAGE: "_attachment",
-        MessageFields.CREATION_DATE: timestamp_field,
-    }
-
-    es_doc = {
-        es_doc_field: message.get(message_field.value)
-        for message_field, es_doc_field in message_fields_to_es_doc_mappings.items()
-    }
-
-    # The attachment processor cannot handle base64url encoded values (only ordinary base64)
-    es_doc["_attachment"] = base64url_to_base64(es_doc["_attachment"])
-
-    if es_doc.get(timestamp_field) is None:
-        es_doc[timestamp_field] = iso_utc()
-
-    return es_doc
-
-
-def _filtering_enabled(filtering):
-    return filtering is not None and filtering.has_advanced_rules()
+SUBJECT_LABEL = "Google Workspace admin email"
+CUSTOMER_ID_LABEL = "Google customer id"
 
 
 class GMailDataSource(BaseDataSource):
@@ -401,3 +327,31 @@ class GMailDataSource(BaseDataSource):
                     )
 
                     yield message_doc_with_access_control, None
+
+
+def _message_doc(message):
+    timestamp_field = "_timestamp"
+
+    # We're using the `_attachment` field here so the attachment processor on the ES side decodes the base64 value
+    message_fields_to_es_doc_mappings = {
+        MessageFields.ID: "_id",
+        MessageFields.FULL_MESSAGE: "_attachment",
+        MessageFields.CREATION_DATE: timestamp_field,
+    }
+
+    es_doc = {
+        es_doc_field: message.get(message_field.value)
+        for message_field, es_doc_field in message_fields_to_es_doc_mappings.items()
+    }
+
+    # The attachment processor cannot handle base64url encoded values (only ordinary base64)
+    es_doc["_attachment"] = base64url_to_base64(es_doc["_attachment"])
+
+    if es_doc.get(timestamp_field) is None:
+        es_doc[timestamp_field] = iso_utc()
+
+    return es_doc
+
+
+def _filtering_enabled(filtering):
+    return filtering is not None and filtering.has_advanced_rules()

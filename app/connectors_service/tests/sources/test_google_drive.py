@@ -22,12 +22,12 @@ from connectors_sdk.source import (
 )
 
 from connectors.access_control import DLS_QUERY
-from connectors.sources.google import GoogleServiceAccountClient
 from connectors.sources.google_drive import (
     RETRIES,
     GoogleDriveDataSource,
     SyncCursorEmpty,
 )
+from connectors.sources.shared.google import GoogleServiceAccountClient
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
 
