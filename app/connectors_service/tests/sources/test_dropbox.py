@@ -22,25 +22,15 @@ from connectors_sdk.filtering.validation import Filter, SyncRuleValidationResult
 from connectors_sdk.source import ConfigurableFieldValueError
 from freezegun import freeze_time
 
-<<<<<<< HEAD
-from connectors.sources.dropbox.client import (
+from connectors.sources.dropbox import (
+    AUTHENTICATED_ADMIN_URL,
     DropBoxAdvancedRulesValidator,
     DropboxClient,
-)
-=======
-from connectors.sources.dropbox.client import DropboxClient
->>>>>>> 9f983d35 (Corrected __init__.py imports by changing to relative imports + add __all__ to prevent ruff from adding a redundant import alias on autoformat + broke out dropbox validator bc I forgot to do it)
-from connectors.sources.dropbox.common import (
-    AUTHENTICATED_ADMIN_URL,
+    DropboxDataSource,
     InvalidClientCredentialException,
     InvalidPathException,
     InvalidRefreshTokenException,
 )
-from connectors.sources.dropbox.datasource import DropboxDataSource
-<<<<<<< HEAD
-=======
-from connectors.sources.dropbox.validator import DropBoxAdvancedRulesValidator
->>>>>>> 9f983d35 (Corrected __init__.py imports by changing to relative imports + add __all__ to prevent ruff from adding a redundant import alias on autoformat + broke out dropbox validator bc I forgot to do it)
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
 

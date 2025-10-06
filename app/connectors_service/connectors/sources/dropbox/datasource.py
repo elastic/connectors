@@ -17,10 +17,6 @@ from connectors.access_control import (
 from connectors.sources.dropbox.client import (
     BASE_URLS,
     ClientResponseError,
-<<<<<<< HEAD
-    DropBoxAdvancedRulesValidator,
-=======
->>>>>>> 9f983d35 (Corrected __init__.py imports by changing to relative imports + add __all__ to prevent ruff from adding a redundant import alias on autoformat + broke out dropbox validator bc I forgot to do it)
     DropboxClient,
     EndpointName,
 )
@@ -35,10 +31,7 @@ from connectors.sources.dropbox.common import (
     RETRY_COUNT,
     InvalidPathException,
 )
-<<<<<<< HEAD
-=======
 from connectors.sources.dropbox.validator import DropBoxAdvancedRulesValidator
->>>>>>> 9f983d35 (Corrected __init__.py imports by changing to relative imports + add __all__ to prevent ruff from adding a redundant import alias on autoformat + broke out dropbox validator bc I forgot to do it)
 
 
 class DropboxDataSource(BaseDataSource):
