@@ -273,9 +273,9 @@ class GMailDataSource(BaseDataSource):
         message_content = await gmail_client.message(message_id)
         message_content["id"] = message_id
 
-        msg_doc = self._message_doc(message_content)
+        message_doc = self._message_doc(message_content)
         message_doc_with_access_control = self._decorate_with_access_control(
-            msg_doc, access_control
+            message_doc, access_control
         )
 
         return message_doc_with_access_control
