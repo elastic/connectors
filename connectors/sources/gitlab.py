@@ -6,7 +6,7 @@
 """GitLab source module responsible to fetch documents from GitLab Cloud."""
 
 from functools import partial
-from typing import Any
+from typing import Any, Dict, Union
 from urllib.parse import quote
 
 import aiohttp
@@ -533,7 +533,7 @@ query($projectPath: ID!, $iid: String!, $discussionId: ID!, $cursor: String) {{{
 class GitLabClient:
     """Client for interacting with GitLab Cloud API using aiohttp."""
 
-    def __init__(self, token):
+    def __init__(self, token) -> None:
         self._logger = logger
         self.token = token
         self.api_url = f"{GITLAB_CLOUD_URL}/api/v4"
@@ -541,7 +541,7 @@ class GitLabClient:
         self._sleeps = CancellableSleeps()
         self._session = None
 
-    def set_logger(self, logger_):
+    def set_logger(self, logger_) -> None:
         self._logger = logger_
 
     def _get_session(self):
@@ -553,7 +553,7 @@ class GitLabClient:
             )
         return self._session
 
-    async def _handle_rate_limit(self, response):
+    async def _handle_rate_limit(self, response) -> bool:
         """Handle rate limiting by sleeping until reset time.
 
         Args:
@@ -647,7 +647,7 @@ class GitLabClient:
             response.raise_for_status()
             return await response.json()
 
-    async def close(self):
+    async def close(self) -> None:
         """Close the aiohttp session."""
         if self._session and not self._session.closed:
             await self._session.close()
@@ -945,7 +945,7 @@ class GitLabClient:
             )
             return None
 
-    async def ping(self):
+    async def ping(self) -> None:
         """Test the connection to GitLab."""
         try:
             await self._get_rest("user")
@@ -964,7 +964,7 @@ class GitLabDataSource(BaseDataSource):
     dls_enabled = False
     incremental_sync_enabled = False
 
-    def __init__(self, configuration):
+    def __init__(self, configuration) -> None:
         """Setup the connection to the GitLab instance.
 
         Args:
@@ -976,7 +976,7 @@ class GitLabDataSource(BaseDataSource):
         )
         self.configured_projects = self.configuration["projects"]
 
-    def _set_internal_logger(self):
+    def _set_internal_logger(self) -> None:
         self.gitlab_client.set_logger(self._logger)
 
     @classmethod
@@ -1004,14 +1004,14 @@ class GitLabDataSource(BaseDataSource):
             },
         }
 
-    async def validate_config(self):
+    async def validate_config(self) -> None:
         """Validates whether user input is empty or not for configuration fields.
         Also validates if the configured projects are accessible.
         """
         await super().validate_config()
         await self._remote_validation()
 
-    async def _remote_validation(self):
+    async def _remote_validation(self) -> None:
         """Validate GitLab connection and project accessibility.
 
         Raises:
@@ -1028,7 +1028,7 @@ class GitLabDataSource(BaseDataSource):
         if self.configured_projects and self.configured_projects != ["*"]:
             await self._validate_configured_projects()
 
-    async def _validate_configured_projects(self):
+    async def _validate_configured_projects(self) -> None:
         """Validate that configured projects exist and are accessible (runs in thread pool).
 
         Raises:
@@ -1056,7 +1056,7 @@ class GitLabDataSource(BaseDataSource):
             msg = f"The following projects are not accessible: {', '.join(invalid_projects)}. Please check the project paths and ensure your token has access."
             raise ConfigurableFieldValueError(msg)
 
-    async def ping(self):
+    async def ping(self) -> None:
         """Test the connection to GitLab."""
         try:
             await self.gitlab_client.ping()
@@ -1065,7 +1065,7 @@ class GitLabDataSource(BaseDataSource):
             self._logger.exception("Error while connecting to GitLab.")
             raise
 
-    async def close(self):
+    async def close(self) -> None:
         """Close the GitLab client connection."""
         await self.gitlab_client.close()
 
@@ -1085,17 +1085,13 @@ class GitLabDataSource(BaseDataSource):
         # Check if project is in the configured list
         return project_path in self.configured_projects
 
-    async def _fetch_remaining_issue_fields(
-        self, issuable, project_path, issuable_type
-    ):
-        """Fetch remaining items for paginated fields in an issue or MR.
-
-        Args:
-            issuable (GitLabIssue | GitLabMergeRequest): Issue or MR Pydantic model
-            project_path (str): Full path of the project
-            issuable_type (str): 'issue' or 'mergeRequest'
-        """
-        # Check and fetch remaining assignees
+    async def _fetch_remaining_assignees(
+        self,
+        issuable: GitLabIssue | GitLabMergeRequest,
+        project_path: str,
+        issuable_type: str,
+    ) -> None:
+        """Fetch remaining assignees for an issue or MR."""
         assignees_page_info = issuable.assignees.get("pageInfo", {})
         if assignees_page_info.get("hasNextPage"):
             cursor = assignees_page_info.get("endCursor")
@@ -1104,7 +1100,13 @@ class GitLabDataSource(BaseDataSource):
             ):
                 issuable.assignees["nodes"].append(assignee)
 
-        # Check and fetch remaining labels
+    async def _fetch_remaining_labels(
+        self,
+        issuable: GitLabIssue | GitLabMergeRequest,
+        project_path: str,
+        issuable_type: str,
+    ) -> None:
+        """Fetch remaining labels for an issue or MR."""
         labels_page_info = issuable.labels.get("pageInfo", {})
         if labels_page_info.get("hasNextPage"):
             cursor = labels_page_info.get("endCursor")
@@ -1113,7 +1115,13 @@ class GitLabDataSource(BaseDataSource):
             ):
                 issuable.labels["nodes"].append(label)
 
-        # Check and fetch remaining discussions
+    async def _fetch_remaining_discussions(
+        self,
+        issuable: GitLabIssue | GitLabMergeRequest,
+        project_path: str,
+        issuable_type: str,
+    ) -> None:
+        """Fetch remaining discussions for an issue or MR."""
         discussions_page_info = issuable.discussions.get("pageInfo", {})
         if discussions_page_info.get("hasNextPage"):
             cursor = discussions_page_info.get("endCursor")
@@ -1122,24 +1130,52 @@ class GitLabDataSource(BaseDataSource):
             ):
                 issuable.discussions["nodes"].append(discussion)
 
-        # Check and fetch remaining reviewers (MRs only)
-        if issuable_type == "mergeRequest":
-            reviewers_page_info = issuable.reviewers.get("pageInfo", {})
-            if reviewers_page_info.get("hasNextPage"):
-                cursor = reviewers_page_info.get("endCursor")
-                async for reviewer in self.gitlab_client.fetch_remaining_field(
-                    project_path, issuable.iid, "reviewers", issuable_type, cursor
-                ):
-                    issuable.reviewers["nodes"].append(reviewer)
+    async def _fetch_remaining_issue_fields(
+        self,
+        issue: GitLabIssue,
+        project_path: str,
+    ) -> None:
+        """Fetch remaining paginated fields for an issue.
 
-            # Check and fetch remaining approvedBy (MRs only)
-            approvedby_page_info = issuable.approved_by.get("pageInfo", {})
-            if approvedby_page_info.get("hasNextPage"):
-                cursor = approvedby_page_info.get("endCursor")
-                async for approver in self.gitlab_client.fetch_remaining_field(
-                    project_path, issuable.iid, "approvedBy", issuable_type, cursor
-                ):
-                    issuable.approved_by["nodes"].append(approver)
+        Args:
+            issue: Issue Pydantic model
+            project_path: Full path of the project
+        """
+        await self._fetch_remaining_assignees(issue, project_path, "issue")
+        await self._fetch_remaining_labels(issue, project_path, "issue")
+        await self._fetch_remaining_discussions(issue, project_path, "issue")
+
+    async def _fetch_remaining_mr_fields(
+        self,
+        mr: GitLabMergeRequest,
+        project_path: str,
+    ) -> None:
+        """Fetch remaining paginated fields for a merge request.
+
+        Args:
+            mr: Merge request Pydantic model
+            project_path: Full path of the project
+        """
+        await self._fetch_remaining_assignees(mr, project_path, "mergeRequest")
+        await self._fetch_remaining_labels(mr, project_path, "mergeRequest")
+        await self._fetch_remaining_discussions(mr, project_path, "mergeRequest")
+
+        # MR-specific fields
+        reviewers_page_info = mr.reviewers.get("pageInfo", {})
+        if reviewers_page_info.get("hasNextPage"):
+            cursor = reviewers_page_info.get("endCursor")
+            async for reviewer in self.gitlab_client.fetch_remaining_field(
+                project_path, mr.iid, "reviewers", "mergeRequest", cursor
+            ):
+                mr.reviewers["nodes"].append(reviewer)
+
+        approvedby_page_info = mr.approved_by.get("pageInfo", {})
+        if approvedby_page_info.get("hasNextPage"):
+            cursor = approvedby_page_info.get("endCursor")
+            async for approver in self.gitlab_client.fetch_remaining_field(
+                project_path, mr.iid, "approvedBy", "mergeRequest", cursor
+            ):
+                mr.approved_by["nodes"].append(approver)
 
     async def get_docs(self, filtering=None):
         """Main method to fetch documents from GitLab.
@@ -1174,9 +1210,7 @@ class GitLabDataSource(BaseDataSource):
             # Fetch and process issues for this project
             async for issue in self.gitlab_client.get_issues(project.full_path):
                 # Fetch remaining fields if they have more pages
-                await self._fetch_remaining_issue_fields(
-                    issue, project.full_path, "issue"
-                )
+                await self._fetch_remaining_issue_fields(issue, project.full_path)
 
                 issue_doc = self._format_issue_doc(issue, project)
 
@@ -1194,9 +1228,7 @@ class GitLabDataSource(BaseDataSource):
             # Fetch and process merge requests for this project
             async for mr in self.gitlab_client.get_merge_requests(project.full_path):
                 # Fetch remaining fields if they have more pages
-                await self._fetch_remaining_issue_fields(
-                    mr, project.full_path, "mergeRequest"
-                )
+                await self._fetch_remaining_mr_fields(mr, project.full_path)
 
                 mr_doc = self._format_merge_request_doc(mr, project)
 
@@ -1217,7 +1249,7 @@ class GitLabDataSource(BaseDataSource):
             ):
                 yield readme_doc, download_func
 
-    def _format_project_doc(self, project: GitLabProject):
+    def _format_project_doc(self, project: GitLabProject) -> Dict[str, Union[None, bool, int, str]]:
         """Format project data into Elasticsearch document.
 
         Args:
@@ -1284,15 +1316,19 @@ class GitLabDataSource(BaseDataSource):
         }
 
     async def _extract_notes_from_discussions(
-        self, discussions_data, project_path, iid, issuable_type
-    ):
+        self,
+        discussions_data: dict[str, Any],
+        project_path: str,
+        iid: int,
+        issuable_type: str,
+    ) -> list[dict[str, Any]]:
         """Extract and flatten notes from discussions structure, paginating if needed.
 
         Args:
-            discussions_data (dict): GraphQL discussions data
-            project_path (str): Full path of the project
-            iid (str): Issue or MR internal ID
-            issuable_type (str): 'issue' or 'mergeRequest'
+            discussions_data: GraphQL discussions data
+            project_path: Full path of the project
+            iid: Issue or MR internal ID
+            issuable_type: 'issue' or 'mergeRequest'
 
         Returns:
             list: Flattened list of notes
@@ -1475,7 +1511,7 @@ class GitLabDataSource(BaseDataSource):
 
             yield readme_doc, partial(self.get_content, attachment=file_metadata)
 
-    async def get_content(self, attachment, timestamp=None, doit=False):
+    async def get_content(self, attachment, timestamp=None, doit: bool = False):
         """Extract content for supported file types.
 
         Args:
