@@ -51,8 +51,6 @@ steps:
           machineType: "n1-standard-8"
           useVault: true
           image: family/enterprise-search-ubuntu-2204-connectors-py
-        env:
-          TWINE_USERNAME: "__token__"
         matrix:
           setup:
             python_version:
@@ -61,15 +59,10 @@ steps:
             package_path:
               - "${SERVICE_PACKAGE_PATH}"
               - "${SDK_PACKAGE_PATH}"
-        commands:
-          # splitting the assignment in 2 lines to avoid leaking the key in the buildkite logs
-          - "TWINE_PASSWORD=$(vault read -field publishing-api-key secret/ent-search-team/test-pypi-ent-search-dev)"
-          - "export TWINE_PASSWORD"
-          - "mkdir -p {{matrix.package_path}}/dist"
-          - "buildkite-agent artifact download '{{matrix.package_path}}/dist/*' ."
-          - "cd {{matrix.package_path}}"
-          - "python{{matrix.python_version}} -m pip install --upgrade twine"
-          - "python{{matrix.python_version}} -m twine upload --repository testpypi dist/*"
+        env:
+          PYTHON_VERSION: "{{ matrix.python_version }}"
+          PACKAGE_PATH: "{{ matrix.package_path }}"
+        commands: "TEST_PYPI=1 ./buildkite/publish_to_pypi.sh"
 
   - block: ":rocket: Publish to Production PyPI?"
     prompt: "Test PyPI publish succeeded. Proceed to publish to Production PyPI?"
@@ -89,8 +82,6 @@ steps:
           machineType: "n1-standard-8"
           useVault: true
           image: family/enterprise-search-ubuntu-2204-connectors-py
-        env:
-          TWINE_USERNAME: "__token__"
         matrix:
           setup:
             python_version:
@@ -99,12 +90,7 @@ steps:
             package_path:
               - "${SERVICE_PACKAGE_PATH}"
               - "${SDK_PACKAGE_PATH}"
-        commands:
-          # splitting the assignment in 2 lines to avoid leaking the key in the buildkite logs
-          - "TWINE_PASSWORD=$(vault read -field publishing-api-key secret/ent-search-team/pypi-ent-search-dev)"
-          - "export TWINE_PASSWORD"
-          - "mkdir -p {{matrix.package_path}}/dist"
-          - "buildkite-agent artifact download '{{matrix.package_path}}/dist/*' ."
-          - "cd {{matrix.package_path}}"
-          - "python{{matrix.python_version}} -m pip install --upgrade twine"
-          - "python{{matrix.python_version}} -m twine upload --repository pypi dist/*"
+        env:
+          PYTHON_VERSION: "{{ matrix.python_version }}"
+          PACKAGE_PATH: "{{ matrix.package_path }}"
+        commands: ".buildkite/publish_to_pypi.sh"
