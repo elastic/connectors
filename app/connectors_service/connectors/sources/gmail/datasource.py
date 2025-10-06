@@ -351,5 +351,6 @@ class GMailDataSource(BaseDataSource):
 
                     yield message_doc_with_access_control, None
 
+
 def _filtering_enabled(filtering):
     return filtering is not None and filtering.has_advanced_rules()
