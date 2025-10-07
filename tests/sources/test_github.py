@@ -1125,7 +1125,7 @@ async def test_graphql_with_ignore_errors_all_ignored():
         query_error = QueryError(
             response={
                 "data": {"repo0": {"name": "test"}},
-                "errors": [{"type": "NOT_FOUND", "message": "Not found"}]
+                "errors": [{"type": "NOT_FOUND", "message": "Not found"}],
             }
         )
         source.github_client._get_client.graphql = Mock(side_effect=query_error)
@@ -1143,8 +1143,8 @@ async def test_graphql_with_ignore_errors_partial():
                 "data": {},
                 "errors": [
                     {"type": "NOT_FOUND", "message": "Not found"},
-                    {"type": "FORBIDDEN", "message": "Forbidden"}
-                ]
+                    {"type": "FORBIDDEN", "message": "Forbidden"},
+                ],
             }
         )
         source.github_client._get_client.graphql = Mock(side_effect=query_error)
