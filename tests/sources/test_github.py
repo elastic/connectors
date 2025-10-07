@@ -2598,3 +2598,25 @@ async def test_fetch_repos_batch_empty_list():
     async with create_github_source() as source:
         results = await source.github_client._fetch_repos_batch([])
         assert results == {}
+
+
+@pytest.mark.asyncio
+async def test_fetch_repos_batch_with_not_found_repos():
+    """Test batch fetching with repos that don't exist"""
+    async with create_github_source() as source:
+        # Mock graphql to return None for non-existent repos
+        mock_response = {
+            "repo0": {
+                "nameWithOwner": "owner1/repo1",
+                "id": "id1",
+            },
+            "repo1": None,  # Non-existent repo
+        }
+        source.github_client.graphql = AsyncMock(return_value=mock_response)
+
+        results = await source.github_client._fetch_repos_batch(
+            ["owner1/repo1", "owner1/nonexistent"]
+        )
+
+        assert results["owner1/repo1"]["nameWithOwner"] == "owner1/repo1"
+        assert results["owner1/nonexistent"] is None
