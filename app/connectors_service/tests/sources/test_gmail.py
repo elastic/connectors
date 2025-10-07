@@ -165,8 +165,7 @@ class TestGMailDataSource:
     )
     @freeze_time(DATE)
     async def test_message_doc(self, message, expected_doc):
-        async with create_gmail_source() as source:
-            assert source._message_doc(message) == expected_doc
+        assert GMailDataSource._message_doc(message) == expected_doc
 
     @pytest.mark.asyncio
     async def test_ping_successful(

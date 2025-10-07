@@ -243,7 +243,8 @@ class GMailDataSource(BaseDataSource):
 
                 yield self._user_access_control_doc(user, access_control)
 
-    def _message_doc(self, message):
+    @staticmethod
+    def _message_doc(message):
         timestamp_field = "_timestamp"
 
         # We're using the `_attachment` field here so the attachment processor on the ES side decodes the base64 value
