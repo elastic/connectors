@@ -21,17 +21,21 @@ from freezegun import freeze_time
 
 from connectors.access_control import DLS_QUERY
 from connectors.sources.atlassian.confluence import (
-    CONFLUENCE_CLOUD,
-    CONFLUENCE_DATA_CENTER,
-    CONFLUENCE_SERVER,
-    BadRequest,
     ConfluenceClient,
     ConfluenceDataSource,
+)
+from connectors.sources.atlassian.confluence.client import (
+    BadRequest,
     Forbidden,
     InternalServerError,
     InvalidConfluenceDataSourceTypeError,
     NotFound,
     Unauthorized,
+)
+from connectors.sources.atlassian.confluence.constants import (
+    CONFLUENCE_CLOUD,
+    CONFLUENCE_DATA_CENTER,
+    CONFLUENCE_SERVER,
 )
 from connectors.utils import ssl_context
 from tests.commons import AsyncIterator
@@ -721,7 +725,7 @@ async def test_remote_validation_when_space_keys_are_unavailable_then_raise_exce
         async_response.json.return_value = RESPONSE_SPACE_KEYS
 
         with mock.patch(
-            "connectors.sources.confluence.ConfluenceClient.api_call",
+            "connectors.sources.atlassian.confluence.ConfluenceClient.api_call",
             return_value=async_response,
         ):
             with pytest.raises(
@@ -1457,7 +1461,7 @@ async def test_fetch_confluence_server_users():
         async_response = AsyncMock()
         async_response.json.return_value = {"start": 0, "users": []}
         with mock.patch(
-            "connectors.sources.confluence.ConfluenceClient.api_call",
+            "connectors.sources.atlassian.confluence.ConfluenceClient.api_call",
             return_value=async_response,
         ):
             async for user in source.confluence_client.fetch_confluence_server_users():
@@ -1646,7 +1650,7 @@ async def test_fetch_server_space_permission():
         async_response = AsyncMock()
         async_response.json.return_value = payload
         with mock.patch(
-            "connectors.sources.confluence.ConfluenceClient.api_call",
+            "connectors.sources.atlassian.confluence.ConfluenceClient.api_call",
             return_value=async_response,
         ):
             expected_response = await source.fetch_server_space_permission(
