@@ -3,10 +3,22 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-"""GitLab source module responsible to fetch documents from GitLab Cloud."""
+"""GitLab source module responsible to fetch documents from GitLab Cloud.
+
+This connector fetches:
+- Projects (repositories)
+- Issues (with notes/comments including inline diff comments)
+- Merge Requests (with notes/comments, reviewers, approvals)
+- README files (.md, .rst, .txt)
+
+Note: Currently uses the Issues and Merge Requests GraphQL API. GitLab is migrating
+to a unified Work Items API (replacing Issues, Epics, Tasks, etc.) in v18.1+.
+Future versions may need to migrate to the Work Items API.
+See: https://docs.gitlab.com/ee/api/graphql/reference/#workitem
+"""
 
 from functools import partial
-from typing import Any, Dict, Union
+from typing import Any, AsyncGenerator
 from urllib.parse import quote
 
 import aiohttp
@@ -1249,7 +1261,7 @@ class GitLabDataSource(BaseDataSource):
             ):
                 yield readme_doc, download_func
 
-    def _format_project_doc(self, project: GitLabProject) -> Dict[str, Union[None, bool, int, str]]:
+    def _format_project_doc(self, project: GitLabProject) -> dict[str, Any]:
         """Format project data into Elasticsearch document.
 
         Args:
@@ -1439,15 +1451,17 @@ class GitLabDataSource(BaseDataSource):
             ],
         }
 
-    async def _fetch_readme_files(self, project_id, project: GitLabProject):
+    async def _fetch_readme_files(
+        self, project_id: int, project: GitLabProject
+    ) -> AsyncGenerator[tuple[dict[str, Any], Any], None]:
         """Fetch README files from a project using REST API.
 
         Args:
-            project_id (int): Numeric project ID
-            project (GitLabProject): Validated project model
+            project_id: Numeric project ID
+            project: Validated project model
 
         Yields:
-            tuple: (document dict, download function)
+            Tuple of (document dict, download function)
         """
         default_branch = project.default_branch
         if not default_branch:
