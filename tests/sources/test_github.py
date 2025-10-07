@@ -2634,7 +2634,10 @@ async def test_github_client_with_github_cloud():
         repo_type="other",
         ssl_enabled=True,
     ) as source:
-        assert source.github_client.endpoints["TREE"] == "/repos/{repo_name}/git/trees/{default_branch}?recursive=1"
+        assert (
+            source.github_client.endpoints["TREE"]
+            == "/repos/{repo_name}/git/trees/{default_branch}?recursive=1"
+        )
         assert source.github_client.base_url == "https://api.github.com"
 
 
@@ -2643,6 +2646,7 @@ async def test_github_client_set_logger():
     """Test set_logger method"""
     async with create_github_source() as source:
         from logging import getLogger
+
         test_logger = getLogger("test")
         source.github_client.set_logger(test_logger)
         assert source.github_client._logger == test_logger
