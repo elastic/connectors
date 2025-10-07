@@ -233,3 +233,33 @@ spec:
         search-productivity-team: {}
         everyone:
           access_level: "READ_ONLY"
+
+########
+# Publish Python packages to PyPI - manual release
+########
+---
+apiVersion: "backstage.io/v1alpha1"
+kind: "Resource"
+metadata:
+  name: "connectors-publish-to-pypi"
+  description: "Publish packages related to content connectors to PyPI"
+  links: null
+spec:
+    type: "buildkite-pipeline"
+    owner: "group:search-extract-and-transform"
+    system: "buildkite"
+    implementation:
+      apiVersion: "buildkite.elastic.dev/v1"
+      kind: "Pipeline"
+      metadata:
+          name: "connectors-publish-to-pypi"
+      spec:
+        repository: "elastic/connectors"
+        pipeline_file: ".buildkite/publish-to-pypi.yml"
+        provider_settings:
+          trigger_mode: "none"
+        teams:
+          search-extract-and-transform: {}
+          search-productivity-team: {}
+          everyone:
+            access_level: "READ_ONLY"
