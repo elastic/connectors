@@ -1854,7 +1854,7 @@ Copyright (C) 2016-present the asyncpg authors and contributors.
 
 
 attrs
-25.3.0
+25.4.0
 UNKNOWN
 The MIT License (MIT)
 
@@ -5655,7 +5655,7 @@ MIT License
 
 
 multidict
-6.6.4
+6.7.0
 Apache License 2.0
    Copyright 2016 Andrew Svetlov and aio-libs contributors
 
@@ -8422,7 +8422,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 
 yarl
-1.21.0
+1.22.0
 Apache Software License
 
                                  Apache License
