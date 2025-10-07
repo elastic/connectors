@@ -580,12 +580,31 @@ steps:
               artifact_paths:
                 - "perf8-report-*/**/*"
 
+          - path:
+            - "connectors/sources/sandfly.py"
+            - "tests/sources/fixtures/sandfly/**"
+            - "tests/sources/fixtures/fixture.py"
+            - "${DOCKERFILE_FTEST_PATH}"
+            - "requirements/**"
+            config:
+              label: "🔨 Sandfly"
+              <<: *test-agents
+              <<: *retries
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=sandfly
+              command:
+                - ".buildkite/run_functional_test.sh"
+              artifact_paths:
+                - "perf8-report-*/**/*"
+
   # ----
   # DRA publishing
   # ----
   - group: ":truck: Packaging and DRA"
     key: "mbp_dra_group"
-    if: "(build.branch == \"main\" || build.branch == \"9.1\" || build.branch == \"9.0\" || build.branch == \"8.19\" || build.branch == \"8.18\" || build.branch == \"8.17\" || build.pull_request.labels includes \"ci:packaging\")" # Add new maintenance branches here
+    if: "(build.branch == \"main\" || build.branch == \"9.2\" || build.branch == \"9.1\" || build.branch == \"9.0\" || build.branch == \"8.19\" || build.branch == \"8.18\" || build.pull_request.labels includes \"ci:packaging\")" # Add new maintenance branches here
     depends_on:
       - "lint"
       - "unit_tests"
