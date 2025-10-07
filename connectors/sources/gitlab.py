@@ -19,6 +19,7 @@ continue to use the legacy GraphQL API as they have not yet been migrated to Wor
 Work Items API Reference: https://docs.gitlab.com/ee/api/graphql/reference/#workitem
 """
 
+from enum import Enum
 from functools import partial
 from typing import Any, AsyncGenerator
 from urllib.parse import quote
@@ -41,15 +42,25 @@ RETRY_INTERVAL = 2
 DEFAULT_PAGE_SIZE = 100
 
 # Pagination sizes for GraphQL queries
-NODE_SIZE = 100  # For projects, merge requests
-WORK_ITEMS_NODE_SIZE = 50  # For work items (lower to avoid complexity limit with widgets)
-WORK_ITEMS_NESTED_SIZE = 50  # For discussions/notes in work items (reduced to lower complexity)
-NESTED_FIELD_SIZE = 100  # For assignees, labels, discussions in MRs/legacy
+# ⚠️ TESTING MODE: Set to 1 to force pagination on every request
+# TODO: Restore to production values after testing
+NODE_SIZE = 1  # For projects, merge requests (PRODUCTION: 100)
+WORK_ITEMS_NODE_SIZE = 1  # For work items (PRODUCTION: 50)
+WORK_ITEMS_NESTED_SIZE = 1  # For discussions/notes in work items (PRODUCTION: 50)
+NESTED_FIELD_SIZE = 1  # For assignees, labels, discussions in MRs/legacy (PRODUCTION: 100)
 
 SUPPORTED_EXTENSION = [".md", ".rst", ".txt"]
 
 
-# Pydantic models for type-safe parsing
+class WorkItemType(str, Enum):
+    """GitLab Work Item types for GraphQL queries."""
+
+    ISSUE = "ISSUE"
+    EPIC = "EPIC"
+    TASK = "TASK"
+
+
+# Pydantic models for GitLab GraphQL responses
 class PageInfo(BaseModel):
     """GraphQL pagination info."""
 
@@ -218,7 +229,7 @@ class GitLabRelease(BaseModel):
         populate_by_name = True
 
 
-# GraphQL query to fetch projects (simplified to avoid complexity limits)
+# GraphQL query to fetch projects
 PROJECTS_QUERY = f"""
 query($cursor: String) {{
   projects(membership: true, first: {NODE_SIZE}, after: $cursor) {{
@@ -852,6 +863,53 @@ query($groupPath: ID!, $iid: String!, $workItemType: IssueType!) {{
 }}
 """
 
+# GraphQL query to fetch remaining assignees for a work item
+WORK_ITEM_ASSIGNEES_QUERY = f"""
+query($projectPath: ID!, $iid: String!, $workItemType: IssueType!, $cursor: String) {{
+  project(fullPath: $projectPath) {{
+    workItems(iid: $iid, types: [$workItemType]) {{
+      nodes {{
+        widgets {{
+          __typename
+          ... on WorkItemWidgetAssignees {{
+            assignees(first: {WORK_ITEMS_NESTED_SIZE}, after: $cursor) {{
+              pageInfo {{ hasNextPage endCursor }}
+              nodes {{
+                username
+                name
+              }}
+            }}
+          }}
+        }}
+      }}
+    }}
+  }}
+}}
+"""
+
+# GraphQL query to fetch remaining labels for a work item
+WORK_ITEM_LABELS_QUERY = f"""
+query($projectPath: ID!, $iid: String!, $workItemType: IssueType!, $cursor: String) {{
+  project(fullPath: $projectPath) {{
+    workItems(iid: $iid, types: [$workItemType]) {{
+      nodes {{
+        widgets {{
+          __typename
+          ... on WorkItemWidgetLabels {{
+            labels(first: {WORK_ITEMS_NESTED_SIZE}, after: $cursor) {{
+              pageInfo {{ hasNextPage endCursor }}
+              nodes {{
+                title
+              }}
+            }}
+          }}
+        }}
+      }}
+    }}
+  }}
+}}
+"""
+
 # GraphQL query to fetch remaining discussions for a work item
 WORK_ITEM_DISCUSSIONS_QUERY = f"""
 query($projectPath: ID!, $iid: String!, $workItemType: IssueType!, $cursor: String) {{
@@ -880,6 +938,43 @@ query($projectPath: ID!, $iid: String!, $workItemType: IssueType!, $cursor: Stri
                       oldPath
                       positionType
                     }}
+                    author {{
+                      username
+                      name
+                    }}
+                  }}
+                }}
+              }}
+            }}
+          }}
+        }}
+      }}
+    }}
+  }}
+}}
+"""
+
+# GraphQL query to fetch remaining discussions for a group-level work item (e.g., Epic)
+WORK_ITEM_GROUP_DISCUSSIONS_QUERY = f"""
+query($groupPath: ID!, $iid: String!, $workItemType: IssueType!, $cursor: String) {{
+  group(fullPath: $groupPath) {{
+    workItems(iid: $iid, types: [$workItemType]) {{
+      nodes {{
+        widgets {{
+          __typename
+          ... on WorkItemWidgetNotes {{
+            discussions(first: {NESTED_FIELD_SIZE}, after: $cursor) {{
+              pageInfo {{ hasNextPage endCursor }}
+              nodes {{
+                id
+                notes(first: {NESTED_FIELD_SIZE}) {{
+                  pageInfo {{ hasNextPage endCursor }}
+                  nodes {{
+                    id
+                    body
+                    createdAt
+                    updatedAt
+                    system
                     author {{
                       username
                       name
@@ -956,6 +1051,24 @@ class GitLabClient:
 
     def set_logger(self, logger_) -> None:
         self._logger = logger_
+
+    def _extract_numeric_id(self, gid: str) -> int | None:
+        """Extract numeric ID from GitLab global ID format.
+
+        GitLab GraphQL returns global IDs like 'gid://gitlab/Project/123'.
+        This method extracts the numeric portion.
+
+        Args:
+            gid: GitLab global ID string
+
+        Returns:
+            Numeric ID or None if extraction fails
+        """
+        try:
+            return int(gid.split("/")[-1])
+        except (ValueError, AttributeError, IndexError):
+            self._logger.warning(f"Failed to parse GitLab ID: {gid}")
+            return None
 
     def _get_session(self):
         """Get or create aiohttp session."""
@@ -1576,6 +1689,144 @@ class GitLabClient:
         interval=RETRY_INTERVAL,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
+    async def fetch_remaining_work_item_assignees(
+        self, project_path, iid, work_item_type, cursor
+    ):
+        """Fetch remaining assignees for a work item.
+
+        Args:
+            project_path (str): Full path of the project
+            iid (int): Work item internal ID
+            work_item_type (str): Work item type (e.g., 'ISSUE', 'TASK')
+            cursor (str): Pagination cursor
+
+        Yields:
+            dict: Assignee data
+        """
+        while cursor:
+            variables = {
+                "projectPath": project_path,
+                "iid": str(iid),
+                "workItemType": work_item_type,
+                "cursor": cursor,
+            }
+
+            try:
+                result = await self._execute_graphql(
+                    WORK_ITEM_ASSIGNEES_QUERY, variables
+                )
+            except (aiohttp.ClientError, TimeoutError) as e:
+                self._logger.warning(
+                    f"Failed to fetch remaining assignees for work item {iid}: {e}"
+                )
+                return
+
+            project_data = result.get("project")
+            if not project_data:
+                return
+
+            work_items = project_data.get("workItems", {}).get("nodes", [])
+            if not work_items:
+                return
+
+            # Should only be one work item (filtered by iid)
+            work_item = work_items[0]
+            widgets = work_item.get("widgets", [])
+
+            # Find the Assignees widget
+            assignees_data = None
+            for widget in widgets:
+                if widget.get("__typename") == "WorkItemWidgetAssignees":
+                    assignees_data = widget.get("assignees", {})
+                    break
+
+            if not assignees_data:
+                return
+
+            assignees = assignees_data.get("nodes", [])
+            for assignee in assignees:
+                yield assignee
+
+            # Check pagination
+            page_info = assignees_data.get("pageInfo", {})
+            if not page_info.get("hasNextPage"):
+                break
+
+            cursor = page_info.get("endCursor")
+
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    )
+    async def fetch_remaining_work_item_labels(
+        self, project_path, iid, work_item_type, cursor
+    ):
+        """Fetch remaining labels for a work item.
+
+        Args:
+            project_path (str): Full path of the project
+            iid (int): Work item internal ID
+            work_item_type (str): Work item type (e.g., 'ISSUE', 'TASK')
+            cursor (str): Pagination cursor
+
+        Yields:
+            dict: Label data
+        """
+        while cursor:
+            variables = {
+                "projectPath": project_path,
+                "iid": str(iid),
+                "workItemType": work_item_type,
+                "cursor": cursor,
+            }
+
+            try:
+                result = await self._execute_graphql(WORK_ITEM_LABELS_QUERY, variables)
+            except (aiohttp.ClientError, TimeoutError) as e:
+                self._logger.warning(
+                    f"Failed to fetch remaining labels for work item {iid}: {e}"
+                )
+                return
+
+            project_data = result.get("project")
+            if not project_data:
+                return
+
+            work_items = project_data.get("workItems", {}).get("nodes", [])
+            if not work_items:
+                return
+
+            # Should only be one work item (filtered by iid)
+            work_item = work_items[0]
+            widgets = work_item.get("widgets", [])
+
+            # Find the Labels widget
+            labels_data = None
+            for widget in widgets:
+                if widget.get("__typename") == "WorkItemWidgetLabels":
+                    labels_data = widget.get("labels", {})
+                    break
+
+            if not labels_data:
+                return
+
+            labels = labels_data.get("nodes", [])
+            for label in labels:
+                yield label
+
+            # Check pagination
+            page_info = labels_data.get("pageInfo", {})
+            if not page_info.get("hasNextPage"):
+                break
+
+            cursor = page_info.get("endCursor")
+
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    )
     async def fetch_remaining_work_item_discussions(
         self, project_path, iid, work_item_type, cursor
     ):
@@ -1602,7 +1853,7 @@ class GitLabClient:
                 result = await self._execute_graphql(
                     WORK_ITEM_DISCUSSIONS_QUERY, variables
                 )
-            except Exception as e:
+            except (aiohttp.ClientError, TimeoutError) as e:
                 self._logger.warning(
                     f"Failed to fetch remaining discussions for work item {iid}: {e}"
                 )
@@ -1613,6 +1864,76 @@ class GitLabClient:
                 return
 
             work_items = project_data.get("workItems", {}).get("nodes", [])
+            if not work_items:
+                return
+
+            # Should only be one work item (filtered by iid)
+            work_item = work_items[0]
+            widgets = work_item.get("widgets", [])
+
+            # Find the Notes widget
+            discussions_data = None
+            for widget in widgets:
+                if widget.get("__typename") == "WorkItemWidgetNotes":
+                    discussions_data = widget.get("discussions", {})
+                    break
+
+            if not discussions_data:
+                return
+
+            discussions = discussions_data.get("nodes", [])
+            for discussion in discussions:
+                yield discussion
+
+            # Check pagination
+            page_info = discussions_data.get("pageInfo", {})
+            if not page_info.get("hasNextPage"):
+                break
+
+            cursor = page_info.get("endCursor")
+
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    )
+    async def fetch_remaining_work_item_group_discussions(
+        self, group_path, iid, work_item_type, cursor
+    ):
+        """Fetch remaining discussions for a group-level work item (e.g., Epic).
+
+        Args:
+            group_path (str): Full path of the group
+            iid (int): Work item internal ID
+            work_item_type (str): Work item type (e.g., 'EPIC')
+            cursor (str): Pagination cursor
+
+        Yields:
+            dict: Discussion data with notes
+        """
+        while cursor:
+            variables = {
+                "groupPath": group_path,
+                "iid": str(iid),
+                "workItemType": work_item_type,
+                "cursor": cursor,
+            }
+
+            try:
+                result = await self._execute_graphql(
+                    WORK_ITEM_GROUP_DISCUSSIONS_QUERY, variables
+                )
+            except (aiohttp.ClientError, TimeoutError) as e:
+                self._logger.warning(
+                    f"Failed to fetch remaining discussions for group work item {iid}: {e}"
+                )
+                return
+
+            group_data = result.get("group")
+            if not group_data:
+                return
+
+            work_items = group_data.get("workItems", {}).get("nodes", [])
             if not work_items:
                 return
 
@@ -1832,19 +2153,27 @@ class GitLabDataSource(BaseDataSource):
 
     def _extract_widget_assignees(
         self, work_item: GitLabWorkItem
-    ) -> list[dict[str, Any]]:
-        """Extract assignees from work item widgets."""
+    ) -> dict[str, Any]:
+        """Extract assignees data from work item widgets.
+
+        Returns:
+            dict with 'nodes' and 'pageInfo' keys, or empty structure if not found
+        """
         assignees_widget = self._extract_widget(work_item, "Assignees")
         if assignees_widget:
-            return assignees_widget.get("assignees", {}).get("nodes", [])
-        return []
+            return assignees_widget.get("assignees", {})
+        return {"nodes": [], "pageInfo": {"hasNextPage": False}}
 
-    def _extract_widget_labels(self, work_item: GitLabWorkItem) -> list[dict[str, Any]]:
-        """Extract labels from work item widgets."""
+    def _extract_widget_labels(self, work_item: GitLabWorkItem) -> dict[str, Any]:
+        """Extract labels data from work item widgets.
+
+        Returns:
+            dict with 'nodes' and 'pageInfo' keys, or empty structure if not found
+        """
         labels_widget = self._extract_widget(work_item, "Labels")
         if labels_widget:
-            return labels_widget.get("labels", {}).get("nodes", [])
-        return []
+            return labels_widget.get("labels", {})
+        return {"nodes": [], "pageInfo": {"hasNextPage": False}}
 
     def _extract_widget_discussions(self, work_item: GitLabWorkItem) -> dict[str, Any]:
         """Extract discussions from work item widgets."""
@@ -1966,8 +2295,7 @@ class GitLabDataSource(BaseDataSource):
         # Fetch projects via GraphQL
         async for project in self.gitlab_client.get_projects():
             # Extract project ID (GraphQL returns global ID, need numeric ID)
-            # GitLab GraphQL IDs are like "gid://gitlab/Project/123"
-            project_id = int(project.id.split("/")[-1]) if "/" in project.id else None
+            project_id = self.gitlab_client._extract_numeric_id(project.id)
 
             if not project_id:
                 self._logger.warning(f"Could not extract project ID from {project.id}")
@@ -1987,9 +2315,34 @@ class GitLabDataSource(BaseDataSource):
             # Fetch Issues using Work Items API
             # Single query with reduced node size (50 instead of 100) to avoid complexity limits
             async for work_item in self.gitlab_client.get_work_items_project(
-                project.full_path, ["ISSUE"]
+                project.full_path, [WorkItemType.ISSUE]
             ):
-                work_item_doc = self._format_work_item_doc(work_item, project=project)
+                # Extract widget data for assignees and labels
+                assignees_data = self._extract_widget_assignees(work_item)
+                labels_data = self._extract_widget_labels(work_item)
+
+                # Fetch remaining assignees if paginated
+                assignees_page_info = assignees_data.get("pageInfo", {})
+                if assignees_page_info.get("hasNextPage"):
+                    cursor = assignees_page_info.get("endCursor")
+                    async for assignee in self.gitlab_client.fetch_remaining_work_item_assignees(
+                        project.full_path, work_item.iid, WorkItemType.ISSUE, cursor
+                    ):
+                        assignees_data["nodes"].append(assignee)
+
+                # Fetch remaining labels if paginated
+                labels_page_info = labels_data.get("pageInfo", {})
+                if labels_page_info.get("hasNextPage"):
+                    cursor = labels_page_info.get("endCursor")
+                    async for label in self.gitlab_client.fetch_remaining_work_item_labels(
+                        project.full_path, work_item.iid, WorkItemType.ISSUE, cursor
+                    ):
+                        labels_data["nodes"].append(label)
+
+                # Update work item with complete data
+                work_item_doc = self._format_work_item_doc(
+                    work_item, project=project, assignees_data=assignees_data, labels_data=labels_data
+                )
 
                 # Extract notes from work item widgets
                 discussions_data = self._extract_widget_discussions(work_item)
@@ -2002,7 +2355,7 @@ class GitLabDataSource(BaseDataSource):
                     async for (
                         discussion
                     ) in self.gitlab_client.fetch_remaining_work_item_discussions(
-                        project.full_path, work_item.iid, "ISSUE", cursor
+                        project.full_path, work_item.iid, WorkItemType.ISSUE, cursor
                     ):
                         discussions_data["nodes"].append(discussion)
 
@@ -2051,12 +2404,12 @@ class GitLabDataSource(BaseDataSource):
                         # 1. Get list of epics (minimal query)
                         # 2. Fetch full widget data for each epic separately
                         async for epic in self.gitlab_client.get_work_items_group(
-                            group_path, ["EPIC"]
+                            group_path, [WorkItemType.EPIC]
                         ):
                             # Fetch full widget data for this epic
                             widgets = (
                                 await self.gitlab_client.fetch_work_item_widgets_group(
-                                    group_path, epic.iid, "EPIC"
+                                    group_path, epic.iid, WorkItemType.EPIC
                                 )
                             )
 
@@ -2069,6 +2422,18 @@ class GitLabDataSource(BaseDataSource):
 
                             # Extract notes from epic widgets
                             discussions_data = self._extract_widget_discussions(epic)
+
+                            # Check if there are more discussions to fetch
+                            discussions_page_info = discussions_data.get("pageInfo", {})
+                            if discussions_page_info.get("hasNextPage"):
+                                cursor = discussions_page_info.get("endCursor")
+                                # Fetch remaining discussions and append them
+                                async for (
+                                    discussion
+                                ) in self.gitlab_client.fetch_remaining_work_item_group_discussions(
+                                    group_path, epic.iid, WorkItemType.EPIC, cursor
+                                ):
+                                    discussions_data["nodes"].append(discussion)
 
                             # Extract notes from discussions
                             notes = []
@@ -2089,17 +2454,6 @@ class GitLabDataSource(BaseDataSource):
                                         ),
                                     }
                                     notes.append(note_dict)
-
-                            # Check if there are more discussions to fetch
-                            discussions_page_info = discussions_data.get("pageInfo", {})
-                            if discussions_page_info.get("hasNextPage"):
-                                # Note: For group-level epics, we'd need a group-specific
-                                # pagination query similar to fetch_remaining_work_item_discussions
-                                # For now, log a warning if we're truncating
-                                self._logger.warning(
-                                    f"Epic {epic.iid} has more discussions than fetched. "
-                                    "Implement group-level discussion pagination if needed."
-                                )
 
                             epic_doc["notes"] = notes
                             yield epic_doc, None
@@ -2125,7 +2479,7 @@ class GitLabDataSource(BaseDataSource):
         Returns:
             dict: Formatted project document
         """
-        project_id = project.id.split("/")[-1] if "/" in project.id else project.id
+        project_id = self.gitlab_client._extract_numeric_id(project.id) or project.id
 
         return {
             "_id": f"project_{project_id}",
@@ -2156,7 +2510,7 @@ class GitLabDataSource(BaseDataSource):
         Returns:
             dict: Formatted issue document
         """
-        project_id = project.id.split("/")[-1] if "/" in project.id else project.id
+        project_id = self.gitlab_client._extract_numeric_id(project.id) or project.id
 
         return {
             "_id": f"issue_{project_id}_{issue.iid}",
@@ -2266,7 +2620,7 @@ class GitLabDataSource(BaseDataSource):
         Returns:
             dict: Formatted merge request document
         """
-        project_id = project.id.split("/")[-1] if "/" in project.id else project.id
+        project_id = self.gitlab_client._extract_numeric_id(project.id) or project.id
 
         return {
             "_id": f"mr_{project_id}_{mr.iid}",
@@ -2299,6 +2653,8 @@ class GitLabDataSource(BaseDataSource):
         work_item: GitLabWorkItem,
         project: GitLabProject | None = None,
         group_path: str | None = None,
+        assignees_data: dict[str, Any] | None = None,
+        labels_data: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Format work item data into Elasticsearch document.
 
@@ -2306,19 +2662,26 @@ class GitLabDataSource(BaseDataSource):
             work_item: Work item model (Issue, Task, Epic, etc.)
             project: Parent project (for Issues/MRs) or None (for Epics)
             group_path: Group path (for Epics) or None (for Issues/MRs)
+            assignees_data: Pre-fetched assignees data (with pagination) or None to extract from widgets
+            labels_data: Pre-fetched labels data (with pagination) or None to extract from widgets
 
         Returns:
             Formatted work item document
         """
         # Extract widgets
         description = self._extract_widget_description(work_item)
-        assignees = self._extract_widget_assignees(work_item)
-        labels = self._extract_widget_labels(work_item)
+
+        # Use provided data or extract from widgets
+        if assignees_data is None:
+            assignees_data = self._extract_widget_assignees(work_item)
+        if labels_data is None:
+            labels_data = self._extract_widget_labels(work_item)
+
         hierarchy = self._extract_widget_hierarchy(work_item)
 
         # Determine parent ID (project or group)
         if project:
-            parent_id = project.id.split("/")[-1] if "/" in project.id else project.id
+            parent_id = self.gitlab_client._extract_numeric_id(project.id) or project.id
             parent_path = project.full_path
             parent_type = "project"
         elif group_path:
@@ -2348,8 +2711,8 @@ class GitLabDataSource(BaseDataSource):
             "web_url": work_item.web_url,
             "author": work_item.author.username if work_item.author else None,
             "author_name": work_item.author.name if work_item.author else None,
-            "assignees": [a.get("username") for a in assignees],
-            "labels": [label.get("title") for label in labels],
+            "assignees": [a.get("username") for a in assignees_data.get("nodes", [])],
+            "labels": [label.get("title") for label in labels_data.get("nodes", [])],
         }
 
         # Add hierarchy info for Epics
@@ -2382,7 +2745,7 @@ class GitLabDataSource(BaseDataSource):
         Returns:
             Formatted release document
         """
-        project_id = project.id.split("/")[-1] if "/" in project.id else project.id
+        project_id = self.gitlab_client._extract_numeric_id(project.id) or project.id
 
         # Extract milestone info
         milestones = release.milestones.get("nodes", [])
