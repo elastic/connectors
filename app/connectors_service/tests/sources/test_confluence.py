@@ -20,7 +20,7 @@ from connectors_sdk.source import ConfigurableFieldValueError
 from freezegun import freeze_time
 
 from connectors.access_control import DLS_QUERY
-from connectors.sources.confluence import (
+from connectors.sources.atlassian.confluence import (
     CONFLUENCE_CLOUD,
     CONFLUENCE_DATA_CENTER,
     CONFLUENCE_SERVER,

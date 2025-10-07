@@ -17,7 +17,7 @@ from connectors.sources.atlassian import (
     AtlassianAccessControl,
     AtlassianAdvancedRulesValidator,
 )
-from connectors.sources.jira import JiraClient, JiraDataSource
+from connectors.sources.atlassian.jira import JiraClient, JiraDataSource
 from tests.sources.support import create_source
 
 

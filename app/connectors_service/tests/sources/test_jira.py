@@ -20,7 +20,7 @@ from connectors_sdk.source import ConfigurableFieldValueError
 from freezegun import freeze_time
 
 from connectors.access_control import DLS_QUERY
-from connectors.sources.jira import (
+from connectors.sources.atlassian.jira import (
     JIRA_CLOUD,
     JIRA_DATA_CENTER,
     JIRA_SERVER,
