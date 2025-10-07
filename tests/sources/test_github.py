@@ -2620,3 +2620,49 @@ async def test_fetch_repos_batch_with_not_found_repos():
 
         assert results["owner1/repo1"]["nameWithOwner"] == "owner1/repo1"
         assert results["owner1/nonexistent"] is None
+
+
+@pytest.mark.asyncio
+async def test_github_client_with_github_cloud():
+    """Test GitHubClient initialization with GitHub Cloud (api.github.com)"""
+    async with create_source(
+        GitHubDataSource,
+        data_source="github_cloud",
+        auth_method=PERSONAL_ACCESS_TOKEN,
+        token="changeme",
+        repositories="*",
+        repo_type="other",
+        ssl_enabled=True,
+    ) as source:
+        assert source.github_client.endpoints["TREE"] == "/repos/{repo_name}/git/trees/{default_branch}?recursive=1"
+        assert source.github_client.base_url == "https://api.github.com"
+
+
+@pytest.mark.asyncio
+async def test_github_client_set_logger():
+    """Test set_logger method"""
+    async with create_github_source() as source:
+        from logging import getLogger
+        test_logger = getLogger("test")
+        source.github_client.set_logger(test_logger)
+        assert source.github_client._logger == test_logger
+
+
+@pytest.mark.asyncio
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_graphql_with_unauthorized_github_app():
+    """Test GraphQL with GitHub App when auth fails"""
+    async with create_github_source(auth_method=GITHUB_APP) as source:
+        source.github_client._installation_id = 123
+        source.github_client._installation_access_token = "test_token"
+        source.github_client._update_installation_access_token = AsyncMock()
+        source.github_client._get_client.graphql = Mock(
+            side_effect=GraphQLAuthorizationFailure(
+                response={"message": "Unauthorized access"}
+            )
+        )
+        with pytest.raises(GraphQLAuthorizationFailure):
+            await source.github_client.graphql(
+                query="QUERY", variables={"owner": "demo_user"}
+            )
+        assert source.github_client._update_installation_access_token.await_count > 0
