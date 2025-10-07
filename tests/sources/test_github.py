@@ -1120,6 +1120,42 @@ async def test_graphql_with_unauthorized():
 
 
 @pytest.mark.asyncio
+async def test_graphql_with_ignore_errors_all_ignored():
+    async with create_github_source() as source:
+        query_error = QueryError(
+            response={
+                "data": {"repo0": {"name": "test"}},
+                "errors": [{"type": "NOT_FOUND", "message": "Not found"}]
+            }
+        )
+        source.github_client._get_client.graphql = Mock(side_effect=query_error)
+        result = await source.github_client.graphql(
+            query="QUERY", variables={}, ignore_errors=["NOT_FOUND"]
+        )
+        assert result == {"repo0": {"name": "test"}}
+
+
+@pytest.mark.asyncio
+async def test_graphql_with_ignore_errors_partial():
+    async with create_github_source() as source:
+        query_error = QueryError(
+            response={
+                "data": {},
+                "errors": [
+                    {"type": "NOT_FOUND", "message": "Not found"},
+                    {"type": "FORBIDDEN", "message": "Forbidden"}
+                ]
+            }
+        )
+        source.github_client._get_client.graphql = Mock(side_effect=query_error)
+        with pytest.raises(Exception) as exc:
+            await source.github_client.graphql(
+                query="QUERY", variables={}, ignore_errors=["NOT_FOUND"]
+            )
+        assert "FORBIDDEN" in str(exc.value)
+
+
+@pytest.mark.asyncio
 async def test_paginated_api_call():
     expected_response = MOCK_RESPONSE_REPO
     async with create_github_source() as source:
@@ -1164,6 +1200,62 @@ async def test_get_invalid_repos():
 
 
 @pytest.mark.asyncio
+async def test_get_invalid_repos_stores_foreign_repos():
+    """Test that foreign repos are stored in foreign_repos dict - exercises real batch logic"""
+    async with create_github_source(repos="repo1, owner2/repo2") as source:
+        # Mock graphql to return repos as if they exist
+        def mock_graphql(query, variables=None, ignore_errors=None):
+            if "viewer" in query:
+                return {"viewer": {"login": "owner1"}}
+            # This is the batch query for repos
+            return {
+                "repo0": {
+                    "nameWithOwner": "owner1/repo1",
+                    "id": "id1",
+                    "updatedAt": "2023-01-01T00:00:00Z",
+                    "name": "repo1",
+                    "url": "https://github.com/owner1/repo1",
+                    "description": "test",
+                    "visibility": "PUBLIC",
+                    "primaryLanguage": None,
+                    "defaultBranchRef": {"name": "main"},
+                    "isFork": False,
+                    "stargazerCount": 0,
+                    "watchers": {"totalCount": 0},
+                    "forkCount": 0,
+                    "createdAt": "2023-01-01T00:00:00Z",
+                    "isArchived": False,
+                },
+                "repo1": {
+                    "nameWithOwner": "owner2/repo2",
+                    "id": "id2",
+                    "updatedAt": "2023-01-01T00:00:00Z",
+                    "name": "repo2",
+                    "url": "https://github.com/owner2/repo2",
+                    "description": "test",
+                    "visibility": "PUBLIC",
+                    "primaryLanguage": None,
+                    "defaultBranchRef": {"name": "main"},
+                    "isFork": False,
+                    "stargazerCount": 0,
+                    "watchers": {"totalCount": 0},
+                    "forkCount": 0,
+                    "createdAt": "2023-01-01T00:00:00Z",
+                    "isArchived": False,
+                },
+            }
+
+        source.github_client.graphql = AsyncMock(side_effect=mock_graphql)
+
+        await source.get_invalid_repos()
+
+        # Check that foreign repo was stored
+        assert "owner2/repo2" in source.foreign_repos
+        # Check that user repo was stored
+        assert "owner1/repo1" in source.user_repos.get("owner1", {})
+
+
+@pytest.mark.asyncio
 async def test_get_invalid_repos_organization():
     expected_response = ["owner1/repo2", "org1/repo3"]
     async with create_github_source(
@@ -1186,6 +1278,62 @@ async def test_get_invalid_repos_organization():
 
         invalid_repos = await source.get_invalid_repos()
         assert sorted(expected_response) == sorted(invalid_repos)
+
+
+@pytest.mark.asyncio
+async def test_get_invalid_repos_organization_stores_repos():
+    """Test that organization repos are stored correctly - exercises real batch logic"""
+    async with create_github_source(
+        repos="repo1, owner2/repo2", repo_type="organization", org_name="org1"
+    ) as source:
+        # Mock graphql at the lowest level to exercise batch query construction
+        def mock_graphql(query, variables=None, ignore_errors=None):
+            # Return both repos as valid
+            return {
+                "repo0": {
+                    "nameWithOwner": "org1/repo1",
+                    "id": "id1",
+                    "updatedAt": "2023-01-01T00:00:00Z",
+                    "name": "repo1",
+                    "url": "https://github.com/org1/repo1",
+                    "description": "test",
+                    "visibility": "PUBLIC",
+                    "primaryLanguage": None,
+                    "defaultBranchRef": {"name": "main"},
+                    "isFork": False,
+                    "stargazerCount": 0,
+                    "watchers": {"totalCount": 0},
+                    "forkCount": 0,
+                    "createdAt": "2023-01-01T00:00:00Z",
+                    "isArchived": False,
+                },
+                "repo1": {
+                    "nameWithOwner": "owner2/repo2",
+                    "id": "id2",
+                    "updatedAt": "2023-01-01T00:00:00Z",
+                    "name": "repo2",
+                    "url": "https://github.com/owner2/repo2",
+                    "description": "test",
+                    "visibility": "PUBLIC",
+                    "primaryLanguage": None,
+                    "defaultBranchRef": {"name": "main"},
+                    "isFork": False,
+                    "stargazerCount": 0,
+                    "watchers": {"totalCount": 0},
+                    "forkCount": 0,
+                    "createdAt": "2023-01-01T00:00:00Z",
+                    "isArchived": False,
+                },
+            }
+
+        source.github_client.graphql = AsyncMock(side_effect=mock_graphql)
+
+        await source.get_invalid_repos()
+
+        # Check that org repo was stored
+        assert "org1/repo1" in source.org_repos.get("org1", {})
+        # Check that foreign repo was stored
+        assert "owner2/repo2" in source.foreign_repos
 
 
 @pytest.mark.asyncio
@@ -1250,6 +1398,38 @@ async def test_get_invalid_repos_organization_for_github_app(
 
         invalid_repos = await source.get_invalid_repos()
         assert set(invalid_repos) == expected_invalid_repos
+
+
+@pytest.mark.asyncio
+async def test_get_invalid_repos_github_app_not_installed_on_owner():
+    """Test that repos are marked invalid when GitHub App is not installed on the owner"""
+    async with create_github_source(
+        auth_method=GITHUB_APP,
+        repos="org_3/repo_1, org_1/repo_1",
+        repo_type="organization",
+    ) as source:
+        source.github_client.get_installations = Mock(
+            return_value=AsyncIterator(MOCK_INSTALLATIONS)
+        )
+        source.github_client._installation_access_token = "changeme"
+        source.github_client._update_installation_access_token = AsyncMock()
+
+        def mock_batch_validation(repo_names):
+            existing_repos = {
+                "org_1/repo_1": {"nameWithOwner": "org_1/repo_1"},
+            }
+            result = {}
+            for repo_name in repo_names:
+                result[repo_name] = existing_repos.get(repo_name)
+            return result
+
+        source.github_client.get_repos_by_fully_qualified_name_batch = AsyncMock(
+            side_effect=mock_batch_validation
+        )
+
+        invalid_repos = await source.get_invalid_repos()
+        # org_3/repo_1 should be invalid because GitHub App is not installed on org_3
+        assert "org_3/repo_1" in invalid_repos
 
 
 @pytest.mark.asyncio
