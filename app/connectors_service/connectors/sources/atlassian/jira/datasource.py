@@ -12,26 +12,39 @@ from functools import partial
 from urllib import parse
 
 import pytz
-
-from connectors.sources.atlassian.jira.client import JiraClient
-from connectors.sources.atlassian.jira.constants import FINISHED, WILDCARD, QUEUE_MEM_SIZE, MAX_CONCURRENCY, \
-    MAX_CONCURRENT_DOWNLOADS, PROJECT, ATTACHMENT_CLOUD, ATTACHMENT_SERVER, USERS, USERS_FOR_DATA_CENTER, URLS, \
-    JIRA_CLOUD, JIRA_SERVER, JIRA_DATA_CENTER, ATLASSIAN, USER_QUERY
 from connectors_sdk.source import BaseDataSource
 from connectors_sdk.utils import (
     iso_utc,
 )
 
 from connectors.access_control import ACCESS_CONTROL
-from connectors.sources.atlassian.validator import (
-    AtlassianAccessControl,
-    AtlassianAdvancedRulesValidator,
-
+from connectors.sources.atlassian.jira.client import JiraClient
+from connectors.sources.atlassian.jira.constants import (
+    ATLASSIAN,
+    ATTACHMENT_CLOUD,
+    ATTACHMENT_SERVER,
+    FINISHED,
+    JIRA_CLOUD,
+    JIRA_DATA_CENTER,
+    JIRA_SERVER,
+    MAX_CONCURRENCY,
+    MAX_CONCURRENT_DOWNLOADS,
+    PROJECT,
+    QUEUE_MEM_SIZE,
+    URLS,
+    USER_QUERY,
+    USERS,
+    USERS_FOR_DATA_CENTER,
+    WILDCARD,
 )
 from connectors.sources.atlassian.utils import (
     prefix_account_id,
     prefix_account_name,
     prefix_group_id,
+)
+from connectors.sources.atlassian.validator import (
+    AtlassianAccessControl,
+    AtlassianAdvancedRulesValidator,
 )
 from connectors.utils import (
     ConcurrentTasks,

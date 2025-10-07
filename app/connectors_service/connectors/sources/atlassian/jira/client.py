@@ -6,13 +6,60 @@
 from urllib import parse
 
 import aiohttp
-from aiohttp import ServerConnectionError, ClientResponseError
-
-from connectors.sources.atlassian.jira.constants import RETRIES, RETRY_INTERVAL, DEFAULT_RETRY_SECONDS, FETCH_SIZE, \
-    MAX_USER_FETCH_LIMIT, PING, PROJECT, PROJECT_BY_KEY, ISSUES, ISSUE_DATA, PERMISSIONS_BY_KEY, ISSUE_SECURITY_LEVEL, \
-    SECURITY_LEVEL_MEMBERS, PROJECT_ROLE_MEMBERS_BY_ROLE_ID, ALL_FIELDS, URLS, JIRA_CLOUD, JIRA_SERVER, JIRA_DATA_CENTER
-from connectors.utils import CancellableSleeps, ssl_context, retryable, RetryStrategy
+from aiohttp import ClientResponseError, ServerConnectionError
 from connectors_sdk.logger import logger
+
+from connectors.sources.atlassian.jira.constants import (
+    ALL_FIELDS,
+    DEFAULT_RETRY_SECONDS,
+    FETCH_SIZE,
+    ISSUE_DATA,
+    ISSUE_SECURITY_LEVEL,
+    ISSUES,
+    JIRA_CLOUD,
+    JIRA_DATA_CENTER,
+    JIRA_SERVER,
+    MAX_USER_FETCH_LIMIT,
+    PERMISSIONS_BY_KEY,
+    PING,
+    PROJECT,
+    PROJECT_BY_KEY,
+    PROJECT_ROLE_MEMBERS_BY_ROLE_ID,
+    RETRIES,
+    RETRY_INTERVAL,
+    SECURITY_LEVEL_MEMBERS,
+    URLS,
+)
+from connectors.sources.atlassian.utils import (
+    prefix_account_id,
+    prefix_account_name,
+    prefix_group_id,
+)
+from connectors.utils import CancellableSleeps, RetryStrategy, retryable, ssl_context
+
+
+class ThrottledError(Exception):
+    """Internal exception class to indicate that request was throttled by the API"""
+
+    pass
+
+
+class InternalServerError(Exception):
+    pass
+
+
+class NotFound(Exception):
+    pass
+
+
+class InvalidJiraDataSourceTypeError(ValueError):
+    pass
+
+
+class EmptyResponseError(Exception):
+    """Exception raised when the API response is empty."""
+
+    pass
 
 
 class JiraClient:
@@ -397,27 +444,3 @@ class JiraClient:
                 for field in jira_fields
                 if field["custom"] is True
             }
-
-
-class ThrottledError(Exception):
-    """Internal exception class to indicate that request was throttled by the API"""
-
-    pass
-
-
-class InternalServerError(Exception):
-    pass
-
-
-class NotFound(Exception):
-    pass
-
-
-class InvalidJiraDataSourceTypeError(ValueError):
-    pass
-
-
-class EmptyResponseError(Exception):
-    """Exception raised when the API response is empty."""
-
-    pass

@@ -7,14 +7,35 @@ import os
 from urllib.parse import urljoin
 
 import aiohttp
-from aiohttp import ServerDisconnectedError, ClientResponseError
-
-from connectors.sources.atlassian.confluence.constants import RETRIES, RETRY_INTERVAL, DEFAULT_RETRY_SECONDS, LIMIT, \
-    SPACE, ATTACHMENT, CONTENT, SEARCH, USERS_FOR_DATA_CENTER, SEARCH_FOR_DATA_CENTER, USERS_FOR_SERVER, SPACE_QUERY, \
-    ATTACHMENT_QUERY, SEARCH_QUERY, LABEL, URLS, PING_URL, SERVER_USER_BATCH, DATACENTER_USER_BATCH, CONFLUENCE_CLOUD, \
-    CONFLUENCE_SERVER, CONFLUENCE_DATA_CENTER, WILDCARD
-from connectors.utils import CancellableSleeps, ssl_context, retryable, RetryStrategy
+from aiohttp import ClientResponseError, ServerDisconnectedError
 from connectors_sdk.logger import logger
+
+from connectors.sources.atlassian.confluence.constants import (
+    ATTACHMENT,
+    ATTACHMENT_QUERY,
+    CONFLUENCE_CLOUD,
+    CONFLUENCE_DATA_CENTER,
+    CONFLUENCE_SERVER,
+    CONTENT,
+    DATACENTER_USER_BATCH,
+    DEFAULT_RETRY_SECONDS,
+    LABEL,
+    LIMIT,
+    PING_URL,
+    RETRIES,
+    RETRY_INTERVAL,
+    SEARCH,
+    SEARCH_FOR_DATA_CENTER,
+    SEARCH_QUERY,
+    SERVER_USER_BATCH,
+    SPACE,
+    SPACE_QUERY,
+    URLS,
+    USERS_FOR_DATA_CENTER,
+    USERS_FOR_SERVER,
+    WILDCARD,
+)
+from connectors.utils import CancellableSleeps, RetryStrategy, retryable, ssl_context
 
 
 class InvalidConfluenceDataSourceTypeError(ValueError):
@@ -365,4 +386,3 @@ class ConfluenceClient:
         label_data = await self.api_call(url=url)
         labels = await label_data.json()
         return [label.get("name") for label in labels["results"]]
-

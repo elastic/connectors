@@ -5,9 +5,6 @@
 #
 
 import fastjsonschema
-
-from connectors.sources.atlassian.utils import prefix_account_id, prefix_group_id, prefix_role_key, prefix_account_name, \
-    prefix_account_email, prefix_account_locale
 from connectors_sdk.filtering.validation import (
     AdvancedRulesValidator,
     SyncRuleValidationResult,
@@ -16,6 +13,14 @@ from connectors_sdk.utils import iso_utc
 from fastjsonschema import JsonSchemaValueException
 
 from connectors.access_control import es_access_control_query
+from connectors.sources.atlassian.utils import (
+    prefix_account_email,
+    prefix_account_id,
+    prefix_account_locale,
+    prefix_account_name,
+    prefix_group_id,
+    prefix_role_key,
+)
 from connectors.utils import RetryStrategy, retryable
 
 RETRIES = 3

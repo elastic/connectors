@@ -10,10 +10,6 @@ import os
 from copy import copy
 from functools import partial
 
-from connectors.sources.atlassian.confluence.client import ConfluenceClient
-from connectors.sources.atlassian.confluence.constants import SPACE, SPACE_PERMISSION, BLOGPOST, PAGE, CONTENT, USER, \
-    SPACE_QUERY, CONTENT_QUERY, USER_QUERY, URLS, MAX_CONCURRENT_DOWNLOADS, MAX_CONCURRENCY, QUEUE_SIZE, QUEUE_MEM_SIZE, \
-    END_SIGNAL, CONFLUENCE_CLOUD, CONFLUENCE_SERVER, CONFLUENCE_DATA_CENTER, WILDCARD
 from connectors_sdk.source import BaseDataSource, ConfigurableFieldValueError
 from connectors_sdk.utils import (
     iso_utc,
@@ -21,6 +17,28 @@ from connectors_sdk.utils import (
 )
 
 from connectors.access_control import ACCESS_CONTROL
+from connectors.sources.atlassian.confluence.client import ConfluenceClient
+from connectors.sources.atlassian.confluence.constants import (
+    BLOGPOST,
+    CONFLUENCE_CLOUD,
+    CONFLUENCE_DATA_CENTER,
+    CONFLUENCE_SERVER,
+    CONTENT,
+    CONTENT_QUERY,
+    END_SIGNAL,
+    MAX_CONCURRENCY,
+    MAX_CONCURRENT_DOWNLOADS,
+    PAGE,
+    QUEUE_MEM_SIZE,
+    QUEUE_SIZE,
+    SPACE,
+    SPACE_PERMISSION,
+    SPACE_QUERY,
+    URLS,
+    USER,
+    USER_QUERY,
+    WILDCARD,
+)
 from connectors.sources.atlassian.utils import (
     prefix_account_email,
     prefix_account_id,
@@ -29,7 +47,10 @@ from connectors.sources.atlassian.utils import (
     prefix_group_id,
     prefix_user,
 )
-from connectors.sources.atlassian.validator import AtlassianAccessControl, AtlassianAdvancedRulesValidator
+from connectors.sources.atlassian.validator import (
+    AtlassianAccessControl,
+    AtlassianAdvancedRulesValidator,
+)
 from connectors.utils import (
     ConcurrentTasks,
     MemQueue,
@@ -397,8 +418,8 @@ class ConfluenceDataSource(BaseDataSource):
         for permission in permissions:
             permission_operation = permission.get("operation", {})
             if permission_operation.get("targetType") != target_type and (
-                    permission_operation.get("targetType") != SPACE
-                    and permission_operation.get("operation") != "read"
+                permission_operation.get("targetType") != SPACE
+                and permission_operation.get("operation") != "read"
             ):
                 continue
 
