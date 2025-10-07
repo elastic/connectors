@@ -1136,6 +1136,7 @@ async def test_graphql_with_ignore_errors_all_ignored():
 
 
 @pytest.mark.asyncio
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_graphql_with_ignore_errors_partial():
     async with create_github_source() as source:
         query_error = QueryError(
