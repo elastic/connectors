@@ -393,7 +393,7 @@ class BaseDataSource:
             msg = f"Configuration expected type is {DataSourceConfiguration.__name__}, actual: {type(configuration).__name__}."
             raise TypeError(msg)
 
-        self.configuration = configuration
+        self.configuration: DataSourceConfiguration = configuration
         self.configuration.set_defaults(self.get_default_configuration())
         self._features = None
         # A dictionary, the structure of which is connector dependent, to indicate a point where the sync is at
