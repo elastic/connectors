@@ -123,7 +123,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/s3.py"
+            - "connectors/sources/s3/**"
             - "tests/sources/fixtures/s3/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
