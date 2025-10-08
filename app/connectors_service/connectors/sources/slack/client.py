@@ -13,7 +13,6 @@ from connectors_sdk.logger import logger
 
 from connectors.utils import CancellableSleeps, retryable
 
-
 BASE_URL = "https://slack.com/api"
 CURSOR = "cursor"
 RESPONSE_METADATA = "response_metadata"
