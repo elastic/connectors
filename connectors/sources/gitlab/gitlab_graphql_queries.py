@@ -7,8 +7,12 @@
 
 # Pagination sizes for GraphQL queries
 NODE_SIZE = 100  # For projects, merge requests
-WORK_ITEMS_NODE_SIZE = 50  # For work items (lower to avoid complexity limit with widgets)
-WORK_ITEMS_NESTED_SIZE = 50  # For discussions/notes in work items (reduced to lower complexity)
+WORK_ITEMS_NODE_SIZE = (
+    50  # For work items (lower to avoid complexity limit with widgets)
+)
+WORK_ITEMS_NESTED_SIZE = (
+    50  # For discussions/notes in work items (reduced to lower complexity)
+)
 NESTED_FIELD_SIZE = 100  # For assignees, labels, discussions in MRs/legacy
 
 # GraphQL query to fetch projects

@@ -194,14 +194,18 @@ class GitLabDataSource(BaseDataSource):
                 return widget.assignees
         return PaginatedList[GitLabUser](nodes=[])
 
-    def _extract_widget_labels(self, work_item: GitLabWorkItem) -> PaginatedList[GitLabLabel]:
+    def _extract_widget_labels(
+        self, work_item: GitLabWorkItem
+    ) -> PaginatedList[GitLabLabel]:
         """Extract labels data from work item widgets."""
         for widget in work_item.widgets:
             if isinstance(widget, WorkItemWidgetLabels):
                 return widget.labels
         return PaginatedList[GitLabLabel](nodes=[])
 
-    def _extract_widget_discussions(self, work_item: GitLabWorkItem) -> PaginatedList[GitLabDiscussion]:
+    def _extract_widget_discussions(
+        self, work_item: GitLabWorkItem
+    ) -> PaginatedList[GitLabDiscussion]:
         """Extract discussions from work item widgets."""
         for widget in work_item.widgets:
             if isinstance(widget, WorkItemWidgetNotes):
@@ -258,7 +262,9 @@ class GitLabDataSource(BaseDataSource):
             async for discussion in self.gitlab_client.fetch_remaining_field(
                 project_path, issuable.iid, "discussions", issuable_type, cursor
             ):
-                issuable.discussions.nodes.append(GitLabDiscussion.model_validate(discussion))
+                issuable.discussions.nodes.append(
+                    GitLabDiscussion.model_validate(discussion)
+                )
 
     async def _fetch_remaining_issue_fields(
         self,
@@ -348,7 +354,9 @@ class GitLabDataSource(BaseDataSource):
                 # Fetch remaining assignees if paginated
                 if assignees_data.page_info.has_next_page:
                     cursor = assignees_data.page_info.end_cursor
-                    async for assignee in self.gitlab_client.fetch_remaining_work_item_assignees(
+                    async for (
+                        assignee
+                    ) in self.gitlab_client.fetch_remaining_work_item_assignees(
                         project.full_path, work_item.iid, WorkItemType.ISSUE, cursor
                     ):
                         assignees_data.nodes.append(GitLabUser.model_validate(assignee))
@@ -356,14 +364,19 @@ class GitLabDataSource(BaseDataSource):
                 # Fetch remaining labels if paginated
                 if labels_data.page_info.has_next_page:
                     cursor = labels_data.page_info.end_cursor
-                    async for label in self.gitlab_client.fetch_remaining_work_item_labels(
+                    async for (
+                        label
+                    ) in self.gitlab_client.fetch_remaining_work_item_labels(
                         project.full_path, work_item.iid, WorkItemType.ISSUE, cursor
                     ):
                         labels_data.nodes.append(GitLabLabel.model_validate(label))
 
                 # Update work item with complete data
                 work_item_doc = self._format_work_item_doc(
-                    work_item, project=project, assignees_data=assignees_data, labels_data=labels_data
+                    work_item,
+                    project=project,
+                    assignees_data=assignees_data,
+                    labels_data=labels_data,
                 )
 
                 # Extract notes from work item widgets
@@ -378,7 +391,9 @@ class GitLabDataSource(BaseDataSource):
                     ) in self.gitlab_client.fetch_remaining_work_item_discussions(
                         project.full_path, work_item.iid, WorkItemType.ISSUE, cursor
                     ):
-                        discussions_data.nodes.append(GitLabDiscussion.model_validate(discussion))
+                        discussions_data.nodes.append(
+                            GitLabDiscussion.model_validate(discussion)
+                        )
 
                 notes = await self._extract_notes_from_discussions(
                     discussions_data,
@@ -447,12 +462,12 @@ class GitLabDataSource(BaseDataSource):
                             if discussions_data.page_info.has_next_page:
                                 cursor = discussions_data.page_info.end_cursor
                                 # Fetch remaining discussions and append them
-                                async for (
-                                    discussion
-                                ) in self.gitlab_client.fetch_remaining_work_item_group_discussions(
+                                async for discussion in self.gitlab_client.fetch_remaining_work_item_group_discussions(
                                     group_path, epic.iid, WorkItemType.EPIC, cursor
                                 ):
-                                    discussions_data.nodes.append(GitLabDiscussion.model_validate(discussion))
+                                    discussions_data.nodes.append(
+                                        GitLabDiscussion.model_validate(discussion)
+                                    )
 
                             # Extract notes from discussions using the common method
                             notes = await self._extract_notes_from_discussions(

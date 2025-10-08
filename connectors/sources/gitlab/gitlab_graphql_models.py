@@ -149,7 +149,9 @@ class WorkItemWidgetHierarchy(BaseModel):
 
     type_name: Literal["WorkItemWidgetHierarchy"] = Field(alias="__typename")
     parent: dict[str, Any] | None = None
-    children: PaginatedList[dict[str, Any]] = Field(default_factory=lambda: PaginatedList(nodes=[]))
+    children: PaginatedList[dict[str, Any]] = Field(
+        default_factory=lambda: PaginatedList(nodes=[])
+    )
 
     model_config = {"populate_by_name": True}
 
@@ -252,11 +254,17 @@ class GitLabProject(BaseModel):
 
 # Extract tag values from Literal type annotations
 # This ensures tags stay in sync with the model definitions
-_TAG_DESCRIPTION = get_args(WorkItemWidgetDescription.model_fields["type_name"].annotation)[0]
-_TAG_ASSIGNEES = get_args(WorkItemWidgetAssignees.model_fields["type_name"].annotation)[0]
+_TAG_DESCRIPTION = get_args(
+    WorkItemWidgetDescription.model_fields["type_name"].annotation
+)[0]
+_TAG_ASSIGNEES = get_args(WorkItemWidgetAssignees.model_fields["type_name"].annotation)[
+    0
+]
 _TAG_LABELS = get_args(WorkItemWidgetLabels.model_fields["type_name"].annotation)[0]
 _TAG_NOTES = get_args(WorkItemWidgetNotes.model_fields["type_name"].annotation)[0]
-_TAG_HIERARCHY = get_args(WorkItemWidgetHierarchy.model_fields["type_name"].annotation)[0]
+_TAG_HIERARCHY = get_args(WorkItemWidgetHierarchy.model_fields["type_name"].annotation)[
+    0
+]
 
 # Build discriminator lookup set from extracted tags
 _KNOWN_WIDGET_TAGS = {
@@ -312,7 +320,9 @@ class GitLabWorkItem(BaseModel):
     web_url: str = Field(alias="webUrl")
     author: GitLabUser | None = None
     work_item_type: WorkItemTypeInfo = Field(alias="workItemType")
-    widgets: list[WorkItemWidget] = []  # Typed widgets, fetched separately in two-phase approach
+    widgets: list[
+        WorkItemWidget
+    ] = []  # Typed widgets, fetched separately in two-phase approach
 
     @property
     def type_name(self) -> str:

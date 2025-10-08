@@ -12,13 +12,10 @@ import aiohttp
 from connectors.logger import logger
 from connectors.source import ConfigurableFieldValueError
 from connectors.sources.gitlab.gitlab_graphql_models import (
-    GitLabDiscussion,
     GitLabIssue,
-    GitLabLabel,
     GitLabMergeRequest,
     GitLabProject,
     GitLabRelease,
-    GitLabUser,
     GitLabWorkItem,
     PageInfo,
 )
