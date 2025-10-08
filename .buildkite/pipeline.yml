@@ -85,7 +85,7 @@ steps:
         wait: false
         watch:
           - path:
-            - "connectors/sources/mysql.py"
+            - "connectors/sources/mysql/**"
             - "tests/sources/fixtures/mysql/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
