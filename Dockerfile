@@ -8,7 +8,7 @@ COPY --chown=nonroot:nonroot . /app
 
 USER nonroot
 WORKDIR /app
-RUN make clean install
+RUN make clean install-package
 RUN ln -s .venv/bin /app/bin
 
 USER root

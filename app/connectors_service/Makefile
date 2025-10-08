@@ -41,6 +41,9 @@ install: .venv/bin/python .venv/bin/elastic-ingest notice
 
 install-agent: .venv/bin/elastic-ingest
 
+install-package: .venv/bin/python
+	$(VENV_DIR)/python -m build
+	$(VENV_DIR)/pip install dist/*.whl
 
 .venv/bin/elastic-ingest: .venv/bin/python
 	.venv/bin/pip install -e ../../libs/connectors_sdk
