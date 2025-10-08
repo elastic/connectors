@@ -85,7 +85,7 @@ steps:
         wait: false
         watch:
           - path:
-            - "connectors/sources/mysql.py"
+            - "connectors/sources/mysql/**"
             - "tests/sources/fixtures/mysql/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
@@ -294,8 +294,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/jira.py"
-            - "connectors/sources/atlassian.py"
+            - "connectors/sources/atlassian/**"
             - "tests/sources/fixtures/jira/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
@@ -314,8 +313,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/confluence.py"
-            - "connectors/sources/atlassian.py"
+            - "connectors/sources/atlassian/**"
             - "tests/sources/fixtures/confluence/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
