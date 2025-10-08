@@ -9,6 +9,6 @@ This package provides integration with GitLab Cloud for syncing projects, issues
 merge requests, epics, releases, and README files to Elasticsearch.
 """
 
-from connectors.sources.gitlab.gitlab_connector import GitLabDataSource
+from connectors.sources.gitlab.datasource import GitLabDataSource
 
 __all__ = ["GitLabDataSource"]
