@@ -20,7 +20,9 @@ Work Items API Reference: https://docs.gitlab.com/ee/api/graphql/reference/#work
 """
 
 from functools import partial
-from typing import Any, AsyncGenerator
+from typing import Any, AsyncGenerator, Type, TypeVar
+
+from pydantic import BaseModel
 
 from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.sources.gitlab.gitlab_graphql_client import GitLabClient
@@ -232,6 +234,34 @@ class GitLabDataSource(BaseDataSource):
                 return widget
         return None
 
+    T = TypeVar("T", bound=BaseModel)
+
+    async def _fetch_remaining_paginated_field(
+        self,
+        paginated_list: PaginatedList[T],
+        project_path: str,
+        iid: int,
+        field_name: str,
+        issuable_type: str,
+        model_class: Type[T],
+    ) -> None:
+        """Generic method to fetch remaining items for any paginated field.
+
+        Args:
+            paginated_list: The paginated list to append items to
+            project_path: Full path of the project
+            iid: Issue or MR internal ID
+            field_name: Name of field ('assignees', 'labels', 'discussions', 'reviewers', 'approvedBy')
+            issuable_type: Type of issuable ('issue' or 'mergeRequest')
+            model_class: Pydantic model class for validation
+        """
+        if paginated_list.page_info.has_next_page:
+            cursor = paginated_list.page_info.end_cursor
+            async for item in self.gitlab_client.fetch_remaining_field(
+                project_path, iid, field_name, issuable_type, cursor
+            ):
+                paginated_list.nodes.append(model_class.model_validate(item))
+
     async def _fetch_remaining_assignees(
         self,
         issuable: GitLabIssue | GitLabMergeRequest,
@@ -239,12 +269,9 @@ class GitLabDataSource(BaseDataSource):
         issuable_type: str,
     ) -> None:
         """Fetch remaining assignees for an issue or MR."""
-        if issuable.assignees.page_info.has_next_page:
-            cursor = issuable.assignees.page_info.end_cursor
-            async for assignee in self.gitlab_client.fetch_remaining_field(
-                project_path, issuable.iid, "assignees", issuable_type, cursor
-            ):
-                issuable.assignees.nodes.append(GitLabUser.model_validate(assignee))
+        await self._fetch_remaining_paginated_field(
+            issuable.assignees, project_path, issuable.iid, "assignees", issuable_type, GitLabUser
+        )
 
     async def _fetch_remaining_labels(
         self,
@@ -253,12 +280,9 @@ class GitLabDataSource(BaseDataSource):
         issuable_type: str,
     ) -> None:
         """Fetch remaining labels for an issue or MR."""
-        if issuable.labels.page_info.has_next_page:
-            cursor = issuable.labels.page_info.end_cursor
-            async for label in self.gitlab_client.fetch_remaining_field(
-                project_path, issuable.iid, "labels", issuable_type, cursor
-            ):
-                issuable.labels.nodes.append(GitLabLabel.model_validate(label))
+        await self._fetch_remaining_paginated_field(
+            issuable.labels, project_path, issuable.iid, "labels", issuable_type, GitLabLabel
+        )
 
     async def _fetch_remaining_discussions(
         self,
@@ -267,14 +291,9 @@ class GitLabDataSource(BaseDataSource):
         issuable_type: str,
     ) -> None:
         """Fetch remaining discussions for an issue or MR."""
-        if issuable.discussions.page_info.has_next_page:
-            cursor = issuable.discussions.page_info.end_cursor
-            async for discussion in self.gitlab_client.fetch_remaining_field(
-                project_path, issuable.iid, "discussions", issuable_type, cursor
-            ):
-                issuable.discussions.nodes.append(
-                    GitLabDiscussion.model_validate(discussion)
-                )
+        await self._fetch_remaining_paginated_field(
+            issuable.discussions, project_path, issuable.iid, "discussions", issuable_type, GitLabDiscussion
+        )
 
     async def _fetch_remaining_issue_fields(
         self,
@@ -307,19 +326,12 @@ class GitLabDataSource(BaseDataSource):
         await self._fetch_remaining_discussions(mr, project_path, "mergeRequest")
 
         # MR-specific fields
-        if mr.reviewers.page_info.has_next_page:
-            cursor = mr.reviewers.page_info.end_cursor
-            async for reviewer in self.gitlab_client.fetch_remaining_field(
-                project_path, mr.iid, "reviewers", "mergeRequest", cursor
-            ):
-                mr.reviewers.nodes.append(GitLabUser.model_validate(reviewer))
-
-        if mr.approved_by.page_info.has_next_page:
-            cursor = mr.approved_by.page_info.end_cursor
-            async for approver in self.gitlab_client.fetch_remaining_field(
-                project_path, mr.iid, "approvedBy", "mergeRequest", cursor
-            ):
-                mr.approved_by.nodes.append(GitLabUser.model_validate(approver))
+        await self._fetch_remaining_paginated_field(
+            mr.reviewers, project_path, mr.iid, "reviewers", "mergeRequest", GitLabUser
+        )
+        await self._fetch_remaining_paginated_field(
+            mr.approved_by, project_path, mr.iid, "approvedBy", "mergeRequest", GitLabUser
+        )
 
     async def get_docs(self, filtering=None):
         """Main method to fetch documents from GitLab using Work Items API.
