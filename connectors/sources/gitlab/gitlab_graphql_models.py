@@ -144,14 +144,41 @@ class GitLabMergeRequest(BaseModel):
     model_config = {"populate_by_name": True}
 
 
+class WorkItemReference(BaseModel):
+    """Reference to a work item (parent/child in hierarchy)."""
+
+    id: str
+    iid: int
+    title: str
+
+
 class WorkItemWidgetHierarchy(BaseModel):
     """Work item hierarchy widget (for Epics)."""
 
     type_name: Literal["WorkItemWidgetHierarchy"] = Field(alias="__typename")
-    parent: dict[str, Any] | None = None
-    children: PaginatedList[dict[str, Any]] = Field(
-        default_factory=lambda: PaginatedList(nodes=[])
-    )
+    parent: WorkItemReference | None = None
+    children: PaginatedList[WorkItemReference] = Field(default_factory=lambda: PaginatedList(nodes=[]))
+
+    model_config = {"populate_by_name": True}
+
+
+class LinkedItemNode(BaseModel):
+    """A linked work item with link metadata."""
+
+    link_id: str = Field(alias="linkId")
+    link_type: str = Field(alias="linkType")
+    link_created_at: str = Field(alias="linkCreatedAt")
+    link_updated_at: str = Field(alias="linkUpdatedAt")
+    work_item: WorkItemReference = Field(alias="workItem")
+
+    model_config = {"populate_by_name": True}
+
+
+class WorkItemWidgetLinkedItems(BaseModel):
+    """Work item linked items widget (for related/blocking items)."""
+
+    type_name: Literal["WorkItemWidgetLinkedItems"] = Field(alias="__typename")
+    linked_items: PaginatedList[LinkedItemNode] = Field(alias="linkedItems", default_factory=lambda: PaginatedList(nodes=[]))
 
     model_config = {"populate_by_name": True}
 
@@ -262,9 +289,8 @@ _TAG_ASSIGNEES = get_args(WorkItemWidgetAssignees.model_fields["type_name"].anno
 ]
 _TAG_LABELS = get_args(WorkItemWidgetLabels.model_fields["type_name"].annotation)[0]
 _TAG_NOTES = get_args(WorkItemWidgetNotes.model_fields["type_name"].annotation)[0]
-_TAG_HIERARCHY = get_args(WorkItemWidgetHierarchy.model_fields["type_name"].annotation)[
-    0
-]
+_TAG_HIERARCHY = get_args(WorkItemWidgetHierarchy.model_fields["type_name"].annotation)[0]
+_TAG_LINKED_ITEMS = get_args(WorkItemWidgetLinkedItems.model_fields["type_name"].annotation)[0]
 
 # Build discriminator lookup set from extracted tags
 _KNOWN_WIDGET_TAGS = {
@@ -273,6 +299,7 @@ _KNOWN_WIDGET_TAGS = {
     _TAG_LABELS,
     _TAG_NOTES,
     _TAG_HIERARCHY,
+    _TAG_LINKED_ITEMS,
 }
 
 
@@ -295,6 +322,7 @@ WorkItemWidget = Annotated[
         Annotated[WorkItemWidgetLabels, Tag(_TAG_LABELS)],
         Annotated[WorkItemWidgetNotes, Tag(_TAG_NOTES)],
         Annotated[WorkItemWidgetHierarchy, Tag(_TAG_HIERARCHY)],
+        Annotated[WorkItemWidgetLinkedItems, Tag(_TAG_LINKED_ITEMS)],
         Annotated[WorkItemWidgetUnknown, Tag("unknown")],  # Fallback
     ],
     Discriminator(widget_discriminator),

@@ -541,12 +541,12 @@ query($projectPath: ID!, $iid: String!, $workItemType: IssueType!) {{
 }}
 """
 
-# GraphQL query to fetch work items (Epics) for a group
-# Minimal query - widgets are fetched separately to avoid complexity limits
+# GraphQL query to fetch work items (Epics) for a group with full widgets
+# Using reduced page size like project-level queries
 WORK_ITEMS_GROUP_QUERY = f"""
 query($groupPath: ID!, $types: [IssueType!], $cursor: String) {{
   group(fullPath: $groupPath) {{
-    workItems(types: $types, first: {NODE_SIZE}, after: $cursor) {{
+    workItems(types: $types, first: {WORK_ITEMS_NODE_SIZE}, after: $cursor) {{
       pageInfo {{
         hasNextPage
         endCursor
@@ -566,6 +566,82 @@ query($groupPath: ID!, $types: [IssueType!], $cursor: String) {{
         }}
         workItemType {{
           name
+        }}
+        widgets {{
+          __typename
+          ... on WorkItemWidgetDescription {{
+            description
+          }}
+          ... on WorkItemWidgetAssignees {{
+            assignees(first: {WORK_ITEMS_NESTED_SIZE}) {{
+              pageInfo {{ hasNextPage endCursor }}
+              nodes {{
+                username
+                name
+              }}
+            }}
+          }}
+          ... on WorkItemWidgetLabels {{
+            labels(first: {WORK_ITEMS_NESTED_SIZE}) {{
+              pageInfo {{ hasNextPage endCursor }}
+              nodes {{
+                title
+              }}
+            }}
+          }}
+          ... on WorkItemWidgetNotes {{
+            discussions(first: {WORK_ITEMS_NESTED_SIZE}) {{
+              pageInfo {{ hasNextPage endCursor }}
+              nodes {{
+                id
+                notes(first: {WORK_ITEMS_NESTED_SIZE}) {{
+                  pageInfo {{ hasNextPage endCursor }}
+                  nodes {{
+                    id
+                    body
+                    createdAt
+                    updatedAt
+                    system
+                    author {{
+                      username
+                      name
+                    }}
+                  }}
+                }}
+              }}
+            }}
+          }}
+          ... on WorkItemWidgetHierarchy {{
+            parent {{
+              id
+              iid
+              title
+            }}
+            children(first: {WORK_ITEMS_NESTED_SIZE}) {{
+              pageInfo {{ hasNextPage endCursor }}
+              nodes {{
+                id
+                iid
+                title
+              }}
+            }}
+          }}
+          ... on WorkItemWidgetLinkedItems {{
+            linkedItems(first: {WORK_ITEMS_NESTED_SIZE}) {{
+              pageInfo {{ hasNextPage endCursor }}
+              nodes {{
+                linkId
+                linkType
+                linkCreatedAt
+                linkUpdatedAt
+                workItem {{
+                  id
+                  iid
+                  title
+                }}
+              }}
+            }}
+          }}
         }}
       }}
     }}

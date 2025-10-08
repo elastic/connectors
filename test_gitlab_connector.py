@@ -126,8 +126,8 @@ async def test_gitlab_connector():
             print("-" * 80)
             doc = doc_examples[doc_type]
             # Pretty print the document structure
-            print(json.dumps(doc, indent=2, default=str)[:2000])  # Limit to 2000 chars
-            if len(json.dumps(doc, indent=2, default=str)) > 2000:
+            print(json.dumps(doc, indent=2, default=str)[:1000000])  # Limit to 1000000 chars
+            if len(json.dumps(doc, indent=2, default=str)) > 1000000:
                 print("\n... (truncated)")
             print()
 

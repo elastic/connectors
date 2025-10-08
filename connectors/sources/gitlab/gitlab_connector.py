@@ -39,6 +39,7 @@ from connectors.sources.gitlab.gitlab_graphql_models import (
     WorkItemWidgetDescription,
     WorkItemWidgetHierarchy,
     WorkItemWidgetLabels,
+    WorkItemWidgetLinkedItems,
     WorkItemWidgetNotes,
 )
 from connectors.utils import decode_base64_value
@@ -219,6 +220,15 @@ class GitLabDataSource(BaseDataSource):
         """Extract hierarchy info from work item widgets (for Epics)."""
         for widget in work_item.widgets:
             if isinstance(widget, WorkItemWidgetHierarchy):
+                return widget
+        return None
+
+    def _extract_widget_linked_items(
+        self, work_item: GitLabWorkItem
+    ) -> WorkItemWidgetLinkedItems | None:
+        """Extract linked items from work item widgets (for Epics/Issues)."""
+        for widget in work_item.widgets:
+            if isinstance(widget, WorkItemWidgetLinkedItems):
                 return widget
         return None
 
@@ -435,24 +445,33 @@ class GitLabDataSource(BaseDataSource):
                     self._logger.debug(f"Fetching epics for group: {group_path}")
 
                     try:
-                        # Two-phase approach for epics (same as issues)
-                        # 1. Get list of epics (minimal query)
-                        # 2. Fetch full widget data for each epic separately
+                        # Fetch Epics with inline widgets (same approach as Issues)
                         async for epic in self.gitlab_client.get_work_items_group(
                             group_path, [WorkItemType.EPIC]
                         ):
-                            # Fetch full widget data for this epic
-                            widgets = (
-                                await self.gitlab_client.fetch_work_item_widgets_group(
-                                    group_path, epic.iid, WorkItemType.EPIC
-                                )
-                            )
+                            # Extract widget data for assignees and labels
+                            assignees_data = self._extract_widget_assignees(epic)
+                            labels_data = self._extract_widget_labels(epic)
 
-                            # Update epic with full widget data
-                            epic.widgets = widgets
+                            # Fetch remaining assignees if paginated
+                            if assignees_data.page_info.has_next_page:
+                                cursor = assignees_data.page_info.end_cursor
+                                async for assignee in self.gitlab_client.fetch_remaining_work_item_assignees_group(
+                                    group_path, epic.iid, WorkItemType.EPIC, cursor
+                                ):
+                                    assignees_data.nodes.append(GitLabUser.model_validate(assignee))
 
+                            # Fetch remaining labels if paginated
+                            if labels_data.page_info.has_next_page:
+                                cursor = labels_data.page_info.end_cursor
+                                async for label in self.gitlab_client.fetch_remaining_work_item_labels_group(
+                                    group_path, epic.iid, WorkItemType.EPIC, cursor
+                                ):
+                                    labels_data.nodes.append(GitLabLabel.model_validate(label))
+
+                            # Format epic document
                             epic_doc = self._format_work_item_doc(
-                                epic, group_path=group_path
+                                epic, group_path=group_path, assignees_data=assignees_data, labels_data=labels_data
                             )
 
                             # Extract notes from epic widgets
@@ -687,6 +706,7 @@ class GitLabDataSource(BaseDataSource):
             labels_data = self._extract_widget_labels(work_item)
 
         hierarchy = self._extract_widget_hierarchy(work_item)
+        linked_items = self._extract_widget_linked_items(work_item)
 
         # Determine parent ID (project or group)
         if project:
@@ -724,20 +744,39 @@ class GitLabDataSource(BaseDataSource):
             "labels": [label.title for label in labels_data.nodes],
         }
 
-        # Add hierarchy info for Epics
+        # Add hierarchy info for Epics (parent/child relationships)
         if hierarchy:
             if hierarchy.parent:
-                doc["parent_epic_iid"] = hierarchy.parent.get("iid")
-                doc["parent_epic_title"] = hierarchy.parent.get("title")
+                doc["parent_epic_iid"] = hierarchy.parent.iid
+                doc["parent_epic_title"] = hierarchy.parent.title
 
             children = hierarchy.children.nodes
-            doc["child_count"] = len(children)
-            doc["child_issue_count"] = sum(
-                1 for c in children if c.get("workItemType", {}).get("name") == "Issue"
-            )
-            doc["child_epic_count"] = sum(
-                1 for c in children if c.get("workItemType", {}).get("name") == "Epic"
-            )
+            doc["children_count"] = len(children)
+            doc["children"] = [
+                {
+                    "id": child.id,
+                    "iid": child.iid,
+                    "title": child.title,
+                }
+                for child in children
+            ]
+
+        # Add linked items info (related/blocking items - separate from hierarchy)
+        if linked_items:
+            items = linked_items.linked_items.nodes
+            doc["linked_items_count"] = len(items)
+            doc["linked_items"] = [
+                {
+                    "link_id": item.link_id,
+                    "link_type": item.link_type,
+                    "link_created_at": item.link_created_at,
+                    "link_updated_at": item.link_updated_at,
+                    "work_item_id": item.work_item.id,
+                    "work_item_iid": item.work_item.iid,
+                    "work_item_title": item.work_item.title,
+                }
+                for item in items
+            ]
 
         return doc
 
