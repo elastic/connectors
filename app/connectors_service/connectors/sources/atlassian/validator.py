@@ -12,7 +12,15 @@ from connectors_sdk.filtering.validation import (
 from connectors_sdk.utils import iso_utc
 from fastjsonschema import JsonSchemaValueException
 
-from connectors.access_control import es_access_control_query, prefix_identity
+from connectors.access_control import es_access_control_query
+from connectors.sources.atlassian.utils import (
+    prefix_account_email,
+    prefix_account_id,
+    prefix_account_locale,
+    prefix_account_name,
+    prefix_group_id,
+    prefix_role_key,
+)
 from connectors.utils import RetryStrategy, retryable
 
 RETRIES = 3
@@ -66,40 +74,6 @@ class AtlassianAdvancedRulesValidator(AdvancedRulesValidator):
         )
 
 
-def prefix_account_id(account_id):
-    return prefix_identity("account_id", account_id)
-
-
-def prefix_group_id(group_id):
-    return prefix_identity("group_id", group_id)
-
-
-def prefix_role_key(role_key):
-    return prefix_identity("role_key", role_key)
-
-
-def prefix_account_name(account_name):
-    return prefix_identity("name", account_name.replace(" ", "-"))
-
-
-def prefix_account_email(email):
-    return prefix_identity("email_address", email)
-
-
-def prefix_account_locale(locale):
-    return prefix_identity("locale", locale)
-
-
-def prefix_user(user):
-    if not user:
-        return
-    return prefix_identity("user", user)
-
-
-def prefix_group(group):
-    return prefix_identity("group", group)
-
-
 class AtlassianAccessControl:
     def __init__(self, source, client):
         self.source = source
@@ -109,7 +83,7 @@ class AtlassianAccessControl:
         return es_access_control_query(access_control)
 
     async def fetch_all_users(self, url):
-        from connectors.sources.jira import JIRA_CLOUD
+        from connectors.sources.atlassian.jira.constants import JIRA_CLOUD
 
         start_at = 0
         while True:
@@ -129,7 +103,7 @@ class AtlassianAccessControl:
                     start_at += CLOUD_USER_BATCH
 
     async def fetch_all_users_for_confluence(self, url):
-        from connectors.sources.confluence import CONFLUENCE_CLOUD
+        from connectors.sources.atlassian.confluence.constants import CONFLUENCE_CLOUD
 
         start_at = 0
         while True:
@@ -218,8 +192,8 @@ class AtlassianAccessControl:
         return user_document | self.access_control_query(access_control=access_control)
 
     def is_active_atlassian_user(self, user_info):
-        from connectors.sources.confluence import CONFLUENCE_CLOUD
-        from connectors.sources.jira import JIRA_CLOUD
+        from connectors.sources.atlassian.confluence.constants import CONFLUENCE_CLOUD
+        from connectors.sources.atlassian.jira.constants import JIRA_CLOUD
 
         user_url = user_info.get("self")
         user_name = user_info.get("displayName", "user")
