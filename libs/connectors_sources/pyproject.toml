@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "elasticsearch-connectors-sources"
+description = "Elasticsearch Connectors Data Sources"
+dynamic = ["version"]
+readme = "README.md"
+authors = [
+    { name = "Search Extract and Transform Team", email = "enterprise-search-ingestion-team@elastic.co" }
+]
+license = "Elastic-2.0"
+classifiers = [
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3 :: Only",
+]
+requires-python = ">=3.10,<3.12"
+dependencies = [
+    "elasticsearch-connectors-sdk",
+]
+
+[project.optional-dependencies]
+directory = ["aiofiles==23.2.1"]
+
+tests = [
+    "aioresponses==0.7.6",
+    "faker==18.11.2",
+    "freezegun==1.2.2",
+    "ruff==0.6.3",
+    "pytest==7.4.0",
+    "pytest-cov==4.1.0",
+    "pytest-asyncio==0.21.1",
+    "pytest-mock==3.11.1",
+    "pytest-randomly==3.13.0",
+    "pytest-fail-slow==0.3.0",
+    "pyright==1.1.317",
+    "requests==2.32.4",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["connectors_sources*"]
+
+[tool.setuptools.dynamic]
+version = {file = "connectors_sources/VERSION"}
+
