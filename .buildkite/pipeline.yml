@@ -104,7 +104,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/network_drive.py"
+            - "connectors/sources/network_drive/**"
             - "tests/sources/fixtures/network_drive/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
@@ -142,7 +142,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/google_cloud_storage.py"
+            - "connectors/sources/google_cloud_storage/**"
             - "tests/sources/fixtures/google_cloud_storage/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
@@ -180,7 +180,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/postgresql.py"
+            - "connectors/sources/postgresql/**"
             - "tests/sources/fixtures/postgresql/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
@@ -199,7 +199,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/directory.py"
+            - "connectors/sources/directory/**"
             - "tests/sources/fixtures/dir/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
@@ -351,7 +351,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/mongo.py"
+            - "connectors/sources/mongo/**"
             - "tests/sources/fixtures/mongodb/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
@@ -389,7 +389,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/google_drive.py"
+            - "connectors/sources/google_drive/**"
             - "tests/sources/fixtures/google_drive/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
