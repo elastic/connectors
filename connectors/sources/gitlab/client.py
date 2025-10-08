@@ -11,7 +11,7 @@ import aiohttp
 
 from connectors.logger import logger
 from connectors.source import ConfigurableFieldValueError
-from connectors.sources.gitlab.gitlab_graphql_models import (
+from connectors.sources.gitlab.models import (
     GitLabIssue,
     GitLabMergeRequest,
     GitLabProject,
@@ -19,7 +19,7 @@ from connectors.sources.gitlab.gitlab_graphql_models import (
     GitLabWorkItem,
     PageInfo,
 )
-from connectors.sources.gitlab.gitlab_graphql_queries import (
+from connectors.sources.gitlab.queries import (
     APPROVEDBY_QUERY,
     ASSIGNEES_QUERY,
     DISCUSSIONS_QUERY,

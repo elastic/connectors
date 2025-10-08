@@ -25,8 +25,8 @@ from typing import Any, AsyncGenerator, Type, TypeVar
 from pydantic import BaseModel
 
 from connectors.source import BaseDataSource, ConfigurableFieldValueError
-from connectors.sources.gitlab.gitlab_graphql_client import GitLabClient
-from connectors.sources.gitlab.gitlab_graphql_models import (
+from connectors.sources.gitlab.client import GitLabClient
+from connectors.sources.gitlab.models import (
     GitLabDiscussion,
     GitLabIssue,
     GitLabLabel,
