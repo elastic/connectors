@@ -102,6 +102,18 @@ class GitLabLabel(BaseModel):
     title: str
 
 
+class GitLabPosition(BaseModel):
+    """GitLab note position for diff/inline comments."""
+
+    new_line: int | None = Field(alias="newLine", default=None)
+    old_line: int | None = Field(alias="oldLine", default=None)
+    new_path: str | None = Field(alias="newPath", default=None)
+    old_path: str | None = Field(alias="oldPath", default=None)
+    position_type: str | None = Field(alias="positionType", default=None)
+
+    model_config = {"populate_by_name": True}
+
+
 class GitLabNote(BaseModel):
     """GitLab note (comment) model."""
 
@@ -111,7 +123,7 @@ class GitLabNote(BaseModel):
     updated_at: str = Field(alias="updatedAt")
     author: GitLabUser | None = None
     system: bool = False  # System-generated notes (status changes, etc.)
-    position: dict[str, Any] | None = None  # For diff/inline comments (newLine, oldLine, newPath, oldPath)
+    position: GitLabPosition | None = None  # For diff/inline comments
 
     model_config = {"populate_by_name": True}
 
@@ -232,6 +244,23 @@ class WorkItemWidgetUnknown(BaseModel):
     }
 
 
+class GitLabRepository(BaseModel):
+    """GitLab repository model for projects."""
+
+    root_ref: str | None = Field(alias="rootRef", default=None)
+
+    model_config = {"populate_by_name": True}
+
+
+class GitLabGroup(BaseModel):
+    """GitLab group model for projects."""
+
+    id: str
+    full_path: str = Field(alias="fullPath")
+
+    model_config = {"populate_by_name": True}
+
+
 class GitLabProject(BaseModel):
     """GitLab project model."""
 
@@ -247,14 +276,14 @@ class GitLabProject(BaseModel):
     last_activity_at: str | None = Field(alias="lastActivityAt", default=None)
     archived: bool | None = None
     web_url: str = Field(alias="webUrl")
-    repository: dict[str, Any] | None = None  # Contains rootRef
-    group: dict[str, Any] | None = None  # Contains id, fullPath for group projects
+    repository: GitLabRepository | None = None
+    group: GitLabGroup | None = None
 
     @property
     def default_branch(self) -> str | None:
         """Extract default branch from repository."""
         if self.repository:
-            return self.repository.get("rootRef")
+            return self.repository.root_ref
         return None
 
     model_config = {"populate_by_name": True}
@@ -303,6 +332,12 @@ WorkItemWidget = Annotated[
 ]
 
 
+class WorkItemTypeInfo(BaseModel):
+    """Work item type information."""
+
+    name: str
+
+
 class GitLabWorkItem(BaseModel):
     """Unified Work Item model (Issues, Merge Requests, Epics)."""
 
@@ -315,15 +350,47 @@ class GitLabWorkItem(BaseModel):
     closed_at: str | None = Field(alias="closedAt", default=None)
     web_url: str = Field(alias="webUrl")
     author: GitLabUser | None = None
-    work_item_type: dict[str, str] = Field(alias="workItemType")  # {"name": "Issue"}
+    work_item_type: WorkItemTypeInfo = Field(alias="workItemType")
     widgets: list[WorkItemWidget] = []  # Typed widgets, fetched separately in two-phase approach
 
     @property
     def type_name(self) -> str:
         """Get the work item type name (Issue, Task, Epic, etc)."""
-        return self.work_item_type.get("name", "Unknown")
+        return self.work_item_type.name
 
     model_config = {"populate_by_name": True}
+
+
+class GitLabCommit(BaseModel):
+    """GitLab commit model for releases."""
+
+    sha: str
+    title: str | None = None
+    message: str | None = None
+
+
+class GitLabMilestone(BaseModel):
+    """GitLab milestone model."""
+
+    id: str
+    title: str
+
+
+class GitLabAssetLink(BaseModel):
+    """GitLab release asset link model."""
+
+    name: str
+    url: str
+    link_type: str | None = Field(alias="linkType", default=None)
+
+    model_config = {"populate_by_name": True}
+
+
+class GitLabAssets(BaseModel):
+    """GitLab release assets model."""
+
+    count: int
+    links: PaginatedList[GitLabAssetLink]
 
 
 class GitLabRelease(BaseModel):
@@ -335,9 +402,9 @@ class GitLabRelease(BaseModel):
     created_at: str = Field(alias="createdAt")
     released_at: str | None = Field(alias="releasedAt", default=None)
     author: GitLabUser | None = None
-    commit: dict[str, Any] | None = None  # Contains sha, title, message
-    milestones: dict[str, Any]  # Contains nodes with milestone info
-    assets: dict[str, Any]  # Contains count and links
+    commit: GitLabCommit | None = None
+    milestones: PaginatedList[GitLabMilestone]
+    assets: GitLabAssets
 
     model_config = {"populate_by_name": True}
 
@@ -2474,8 +2541,8 @@ class GitLabDataSource(BaseDataSource):
                 yield release_doc, None
 
             # Fetch Epics if this project belongs to a group
-            if project.group and project.group.get("fullPath"):
-                group_path = project.group["fullPath"]
+            if project.group:
+                group_path = project.group.full_path
 
                 # Only fetch epics once per group
                 if group_path not in seen_groups:
@@ -2804,11 +2871,10 @@ class GitLabDataSource(BaseDataSource):
         project_id = self.gitlab_client._extract_numeric_id(project.id) or project.id
 
         # Extract milestone info
-        milestones = release.milestones.get("nodes", [])
-        milestone_titles = [m.get("title") for m in milestones]
+        milestone_titles = [m.title for m in release.milestones.nodes]
 
         # Extract asset links
-        asset_links = release.assets.get("links", {}).get("nodes", [])
+        asset_links = release.assets.links.nodes
 
         doc = {
             "_id": f"release_{project_id}_{release.tag_name}",
@@ -2824,21 +2890,21 @@ class GitLabDataSource(BaseDataSource):
             "author": release.author.username if release.author else None,
             "author_name": release.author.name if release.author else None,
             "milestones": milestone_titles,
-            "asset_count": release.assets.get("count", 0),
+            "asset_count": release.assets.count,
         }
 
         # Add commit info if available
         if release.commit:
-            doc["commit_sha"] = release.commit.get("sha")
-            doc["commit_title"] = release.commit.get("title")
+            doc["commit_sha"] = release.commit.sha
+            doc["commit_title"] = release.commit.title
 
         # Add asset links
         if asset_links:
             doc["asset_links"] = [
                 {
-                    "name": link.get("name"),
-                    "url": link.get("url"),
-                    "type": link.get("linkType"),
+                    "name": link.name,
+                    "url": link.url,
+                    "type": link.link_type,
                 }
                 for link in asset_links
             ]
