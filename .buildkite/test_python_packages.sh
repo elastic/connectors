@@ -14,7 +14,7 @@ python -m twine check "$PACKAGE_PATH/dist/*"
 
 # If this is the connectors_service package, test the installation and CLI
 if [[ "$PACKAGE_PATH" == *app/connectors_service* ]]; then
-  echo "Testing connectors_service package installation..."
+  echo "Testing connectors_service package installation and CLI..."
 
   # Install the connectors_sdk package first
   LIB_PATH="libs/connectors_sdk"

@@ -116,7 +116,7 @@ test-connectors = "scripts.testing.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["connectors*", "scripts"]
+include = ["connectors*", "scripts*"]
 
 [tool.setuptools.dynamic]
 version = {file = "connectors/VERSION"}
