@@ -8,7 +8,7 @@
 This connector fetches:
 - Projects (repositories)
 - Issues (using Work Items API)
-- Merge Requests (using legacy API - not yet migrated to Work Items)
+- Merge Requests (using legacy API)
 - Epics (using Work Items API, group-level, requires Premium/Ultimate tier)
 - Releases (project-level version releases with changelogs)
 - README files (.md, .rst, .txt)
@@ -21,11 +21,11 @@ Work Items API Reference: https://docs.gitlab.com/ee/api/graphql/reference/#work
 
 from enum import Enum
 from functools import partial
-from typing import Any, AsyncGenerator
+from typing import Annotated, Any, AsyncGenerator, Generic, Literal, TypeVar, Union, get_args, get_origin
 from urllib.parse import quote
 
 import aiohttp
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Discriminator, Field, Tag
 
 from connectors.logger import logger
 from connectors.source import BaseDataSource, ConfigurableFieldValueError
@@ -42,12 +42,10 @@ RETRY_INTERVAL = 2
 DEFAULT_PAGE_SIZE = 100
 
 # Pagination sizes for GraphQL queries
-# ⚠️ TESTING MODE: Set to 1 to force pagination on every request
-# TODO: Restore to production values after testing
-NODE_SIZE = 1  # For projects, merge requests (PRODUCTION: 100)
-WORK_ITEMS_NODE_SIZE = 1  # For work items (PRODUCTION: 50)
-WORK_ITEMS_NESTED_SIZE = 1  # For discussions/notes in work items (PRODUCTION: 50)
-NESTED_FIELD_SIZE = 1  # For assignees, labels, discussions in MRs/legacy (PRODUCTION: 100)
+NODE_SIZE = 100  # For projects, merge requests
+WORK_ITEMS_NODE_SIZE = 50  # For work items (lower to avoid complexity limit with widgets)
+WORK_ITEMS_NESTED_SIZE = 50  # For discussions/notes in work items (reduced to lower complexity)
+NESTED_FIELD_SIZE = 100  # For assignees, labels, discussions in MRs/legacy
 
 SUPPORTED_EXTENSION = [".md", ".rst", ".txt"]
 
@@ -67,8 +65,28 @@ class PageInfo(BaseModel):
     has_next_page: bool = Field(alias="hasNextPage")
     end_cursor: str | None = Field(alias="endCursor", default=None)
 
-    class Config:
-        populate_by_name = True
+    model_config = {"populate_by_name": True}
+
+
+# Generic type variable for paginated lists
+T = TypeVar("T")
+
+
+def _default_page_info() -> PageInfo:
+    """Create default PageInfo instance."""
+    return PageInfo.model_construct(has_next_page=False, end_cursor=None)
+
+
+class PaginatedList(BaseModel, Generic[T]):
+    """Generic paginated list with nodes and pageInfo."""
+
+    nodes: list[T] = []
+    page_info: PageInfo = Field(
+        alias="pageInfo",
+        default_factory=_default_page_info,
+    )
+
+    model_config = {"populate_by_name": True}
 
 
 class GitLabUser(BaseModel):
@@ -92,19 +110,19 @@ class GitLabNote(BaseModel):
     created_at: str = Field(alias="createdAt")
     updated_at: str = Field(alias="updatedAt")
     author: GitLabUser | None = None
+    system: bool = False  # System-generated notes (status changes, etc.)
+    position: dict[str, Any] | None = None  # For diff/inline comments (newLine, oldLine, newPath, oldPath)
 
-    class Config:
-        populate_by_name = True
+    model_config = {"populate_by_name": True}
 
 
 class GitLabDiscussion(BaseModel):
     """GitLab discussion model."""
 
     id: str
-    notes: dict[str, Any]  # Contains nodes and pageInfo
+    notes: PaginatedList[GitLabNote]
 
-    class Config:
-        populate_by_name = True
+    model_config = {"populate_by_name": True}
 
 
 class GitLabIssue(BaseModel):
@@ -120,12 +138,11 @@ class GitLabIssue(BaseModel):
     updated_at: str = Field(alias="updatedAt")
     closed_at: str | None = Field(alias="closedAt", default=None)
     author: GitLabUser | None = None
-    assignees: dict[str, Any]  # Contains nodes and pageInfo
-    labels: dict[str, Any]  # Contains nodes and pageInfo
-    discussions: dict[str, Any]  # Contains nodes and pageInfo
+    assignees: PaginatedList[GitLabUser]
+    labels: PaginatedList[GitLabLabel]
+    discussions: PaginatedList[GitLabDiscussion]
 
-    class Config:
-        populate_by_name = True
+    model_config = {"populate_by_name": True}
 
 
 class GitLabMergeRequest(BaseModel):
@@ -144,17 +161,75 @@ class GitLabMergeRequest(BaseModel):
     source_branch: str = Field(alias="sourceBranch")
     target_branch: str = Field(alias="targetBranch")
     author: GitLabUser | None = None
-    assignees: dict[str, Any]  # Contains nodes and pageInfo
-    reviewers: dict[str, Any]  # Contains nodes and pageInfo
-    labels: dict[str, Any]  # Contains nodes and pageInfo
-    discussions: dict[str, Any]  # Contains nodes and pageInfo
-    approved_by: dict[str, Any] = Field(
-        alias="approvedBy"
-    )  # Contains nodes and pageInfo
+    assignees: PaginatedList[GitLabUser]
+    reviewers: PaginatedList[GitLabUser]
+    labels: PaginatedList[GitLabLabel]
+    discussions: PaginatedList[GitLabDiscussion]
+    approved_by: PaginatedList[GitLabUser] = Field(alias="approvedBy")
     merged_by: GitLabUser | None = Field(alias="mergedBy", default=None)
 
-    class Config:
-        populate_by_name = True
+    model_config = {"populate_by_name": True}
+
+
+class WorkItemWidgetHierarchy(BaseModel):
+    """Work item hierarchy widget (for Epics)."""
+
+    type_name: Literal["WorkItemWidgetHierarchy"] = Field(alias="__typename")
+    parent: dict[str, Any] | None = None
+    children: PaginatedList[dict[str, Any]] = Field(default_factory=lambda: PaginatedList(nodes=[]))
+
+    model_config = {"populate_by_name": True}
+
+
+class WorkItemWidgetDescription(BaseModel):
+    """Work item description widget."""
+
+    type_name: Literal["WorkItemWidgetDescription"] = Field(alias="__typename")
+    description: str | None = None
+
+    model_config = {"populate_by_name": True}
+
+
+class WorkItemWidgetAssignees(BaseModel):
+    """Work item assignees widget."""
+
+    type_name: Literal["WorkItemWidgetAssignees"] = Field(alias="__typename")
+    assignees: PaginatedList[GitLabUser]
+
+    model_config = {"populate_by_name": True}
+
+
+class WorkItemWidgetLabels(BaseModel):
+    """Work item labels widget."""
+
+    type_name: Literal["WorkItemWidgetLabels"] = Field(alias="__typename")
+    labels: PaginatedList[GitLabLabel]
+
+    model_config = {"populate_by_name": True}
+
+
+class WorkItemWidgetNotes(BaseModel):
+    """Work item notes/discussions widget."""
+
+    type_name: Literal["WorkItemWidgetNotes"] = Field(alias="__typename")
+    discussions: PaginatedList[GitLabDiscussion]
+
+    model_config = {"populate_by_name": True}
+
+
+class WorkItemWidgetUnknown(BaseModel):
+    """Fallback for unknown widget types.
+
+    This catches any widget type not explicitly modeled above.
+    Uses 'extra = allow' to accept any fields from unknown widgets.
+    """
+
+    type_name: str = Field(alias="__typename")
+
+    model_config = {
+        "populate_by_name": True,
+        "extra": "allow",  # Allow any extra fields
+    }
 
 
 class GitLabProject(BaseModel):
@@ -182,8 +257,50 @@ class GitLabProject(BaseModel):
             return self.repository.get("rootRef")
         return None
 
-    class Config:
-        populate_by_name = True
+    model_config = {"populate_by_name": True}
+
+
+# Extract tag values from Literal type annotations
+# This ensures tags stay in sync with the model definitions
+_TAG_DESCRIPTION = get_args(WorkItemWidgetDescription.model_fields["type_name"].annotation)[0]
+_TAG_ASSIGNEES = get_args(WorkItemWidgetAssignees.model_fields["type_name"].annotation)[0]
+_TAG_LABELS = get_args(WorkItemWidgetLabels.model_fields["type_name"].annotation)[0]
+_TAG_NOTES = get_args(WorkItemWidgetNotes.model_fields["type_name"].annotation)[0]
+_TAG_HIERARCHY = get_args(WorkItemWidgetHierarchy.model_fields["type_name"].annotation)[0]
+
+# Build discriminator lookup set from extracted tags
+_KNOWN_WIDGET_TAGS = {
+    _TAG_DESCRIPTION,
+    _TAG_ASSIGNEES,
+    _TAG_LABELS,
+    _TAG_NOTES,
+    _TAG_HIERARCHY,
+}
+
+
+def widget_discriminator(v: dict[str, Any]) -> str:
+    """Discriminate widget types based on __typename field.
+
+    Returns the __typename directly for known widgets, or 'unknown' for fallback.
+    """
+    typename = v.get("__typename", "")
+    return typename if typename in _KNOWN_WIDGET_TAGS else "unknown"
+
+
+# Discriminated union of all widget types
+# Tags are automatically extracted from Literal type annotations above
+# To add a new widget type: create the model, extract its tag, add to both lists
+WorkItemWidget = Annotated[
+    Union[
+        Annotated[WorkItemWidgetDescription, Tag(_TAG_DESCRIPTION)],
+        Annotated[WorkItemWidgetAssignees, Tag(_TAG_ASSIGNEES)],
+        Annotated[WorkItemWidgetLabels, Tag(_TAG_LABELS)],
+        Annotated[WorkItemWidgetNotes, Tag(_TAG_NOTES)],
+        Annotated[WorkItemWidgetHierarchy, Tag(_TAG_HIERARCHY)],
+        Annotated[WorkItemWidgetUnknown, Tag("unknown")],  # Fallback
+    ],
+    Discriminator(widget_discriminator),
+]
 
 
 class GitLabWorkItem(BaseModel):
@@ -199,17 +316,14 @@ class GitLabWorkItem(BaseModel):
     web_url: str = Field(alias="webUrl")
     author: GitLabUser | None = None
     work_item_type: dict[str, str] = Field(alias="workItemType")  # {"name": "Issue"}
-    widgets: list[
-        dict[str, Any]
-    ] = []  # Raw widget data, fetched separately in two-phase approach
+    widgets: list[WorkItemWidget] = []  # Typed widgets, fetched separately in two-phase approach
 
     @property
     def type_name(self) -> str:
         """Get the work item type name (Issue, Task, Epic, etc)."""
         return self.work_item_type.get("name", "Unknown")
 
-    class Config:
-        populate_by_name = True
+    model_config = {"populate_by_name": True}
 
 
 class GitLabRelease(BaseModel):
@@ -225,8 +339,7 @@ class GitLabRelease(BaseModel):
     milestones: dict[str, Any]  # Contains nodes with milestone info
     assets: dict[str, Any]  # Contains count and links
 
-    class Config:
-        populate_by_name = True
+    model_config = {"populate_by_name": True}
 
 
 # GraphQL query to fetch projects
@@ -2127,67 +2240,46 @@ class GitLabDataSource(BaseDataSource):
         # Check if project is in the configured list
         return project_path in self.configured_projects
 
-    def _extract_widget(
-        self, work_item: GitLabWorkItem, widget_type_substring: str
-    ) -> dict[str, Any] | None:
-        """Extract a specific widget from a work item by type substring.
-
-        Args:
-            work_item: Work item containing widgets
-            widget_type_substring: Substring to match in widget __typename (e.g., 'Description', 'Assignees')
-
-        Returns:
-            Widget data dict or None if not found
-        """
-        for widget in work_item.widgets:
-            # Widgets have __typename like "WorkItemWidgetDescription", "WorkItemWidgetAssignees", etc.
-            widget_typename = widget.get("__typename", "")
-            if widget_type_substring in widget_typename:
-                return widget
-        return None
 
     def _extract_widget_description(self, work_item: GitLabWorkItem) -> str | None:
         """Extract description from work item widgets."""
-        desc_widget = self._extract_widget(work_item, "Description")
-        return desc_widget.get("description") if desc_widget else None
+        for widget in work_item.widgets:
+            if isinstance(widget, WorkItemWidgetDescription):
+                return widget.description
+        return None
 
     def _extract_widget_assignees(
         self, work_item: GitLabWorkItem
-    ) -> dict[str, Any]:
-        """Extract assignees data from work item widgets.
+    ) -> PaginatedList[GitLabUser]:
+        """Extract assignees data from work item widgets."""
+        for widget in work_item.widgets:
+            if isinstance(widget, WorkItemWidgetAssignees):
+                return widget.assignees
+        return PaginatedList[GitLabUser](nodes=[])
 
-        Returns:
-            dict with 'nodes' and 'pageInfo' keys, or empty structure if not found
-        """
-        assignees_widget = self._extract_widget(work_item, "Assignees")
-        if assignees_widget:
-            return assignees_widget.get("assignees", {})
-        return {"nodes": [], "pageInfo": {"hasNextPage": False}}
+    def _extract_widget_labels(self, work_item: GitLabWorkItem) -> PaginatedList[GitLabLabel]:
+        """Extract labels data from work item widgets."""
+        for widget in work_item.widgets:
+            if isinstance(widget, WorkItemWidgetLabels):
+                return widget.labels
+        return PaginatedList[GitLabLabel](nodes=[])
 
-    def _extract_widget_labels(self, work_item: GitLabWorkItem) -> dict[str, Any]:
-        """Extract labels data from work item widgets.
-
-        Returns:
-            dict with 'nodes' and 'pageInfo' keys, or empty structure if not found
-        """
-        labels_widget = self._extract_widget(work_item, "Labels")
-        if labels_widget:
-            return labels_widget.get("labels", {})
-        return {"nodes": [], "pageInfo": {"hasNextPage": False}}
-
-    def _extract_widget_discussions(self, work_item: GitLabWorkItem) -> dict[str, Any]:
+    def _extract_widget_discussions(self, work_item: GitLabWorkItem) -> PaginatedList[GitLabDiscussion]:
         """Extract discussions from work item widgets."""
-        notes_widget = self._extract_widget(work_item, "Notes")
-        if notes_widget:
-            return notes_widget.get("discussions", {})
-        return {"nodes": [], "pageInfo": {"hasNextPage": False}}
+        for widget in work_item.widgets:
+            if isinstance(widget, WorkItemWidgetNotes):
+                return widget.discussions
+        # Return empty paginated list if not found
+        return PaginatedList[GitLabDiscussion](nodes=[])
 
     def _extract_widget_hierarchy(
         self, work_item: GitLabWorkItem
-    ) -> dict[str, Any] | None:
+    ) -> WorkItemWidgetHierarchy | None:
         """Extract hierarchy info from work item widgets (for Epics)."""
-        hierarchy_widget = self._extract_widget(work_item, "Hierarchy")
-        return hierarchy_widget if hierarchy_widget else None
+        for widget in work_item.widgets:
+            if isinstance(widget, WorkItemWidgetHierarchy):
+                return widget
+        return None
 
     async def _fetch_remaining_assignees(
         self,
@@ -2196,13 +2288,12 @@ class GitLabDataSource(BaseDataSource):
         issuable_type: str,
     ) -> None:
         """Fetch remaining assignees for an issue or MR."""
-        assignees_page_info = issuable.assignees.get("pageInfo", {})
-        if assignees_page_info.get("hasNextPage"):
-            cursor = assignees_page_info.get("endCursor")
+        if issuable.assignees.page_info.has_next_page:
+            cursor = issuable.assignees.page_info.end_cursor
             async for assignee in self.gitlab_client.fetch_remaining_field(
                 project_path, issuable.iid, "assignees", issuable_type, cursor
             ):
-                issuable.assignees["nodes"].append(assignee)
+                issuable.assignees.nodes.append(GitLabUser.model_validate(assignee))
 
     async def _fetch_remaining_labels(
         self,
@@ -2211,13 +2302,12 @@ class GitLabDataSource(BaseDataSource):
         issuable_type: str,
     ) -> None:
         """Fetch remaining labels for an issue or MR."""
-        labels_page_info = issuable.labels.get("pageInfo", {})
-        if labels_page_info.get("hasNextPage"):
-            cursor = labels_page_info.get("endCursor")
+        if issuable.labels.page_info.has_next_page:
+            cursor = issuable.labels.page_info.end_cursor
             async for label in self.gitlab_client.fetch_remaining_field(
                 project_path, issuable.iid, "labels", issuable_type, cursor
             ):
-                issuable.labels["nodes"].append(label)
+                issuable.labels.nodes.append(GitLabLabel.model_validate(label))
 
     async def _fetch_remaining_discussions(
         self,
@@ -2226,13 +2316,12 @@ class GitLabDataSource(BaseDataSource):
         issuable_type: str,
     ) -> None:
         """Fetch remaining discussions for an issue or MR."""
-        discussions_page_info = issuable.discussions.get("pageInfo", {})
-        if discussions_page_info.get("hasNextPage"):
-            cursor = discussions_page_info.get("endCursor")
+        if issuable.discussions.page_info.has_next_page:
+            cursor = issuable.discussions.page_info.end_cursor
             async for discussion in self.gitlab_client.fetch_remaining_field(
                 project_path, issuable.iid, "discussions", issuable_type, cursor
             ):
-                issuable.discussions["nodes"].append(discussion)
+                issuable.discussions.nodes.append(GitLabDiscussion.model_validate(discussion))
 
     async def _fetch_remaining_issue_fields(
         self,
@@ -2265,21 +2354,19 @@ class GitLabDataSource(BaseDataSource):
         await self._fetch_remaining_discussions(mr, project_path, "mergeRequest")
 
         # MR-specific fields
-        reviewers_page_info = mr.reviewers.get("pageInfo", {})
-        if reviewers_page_info.get("hasNextPage"):
-            cursor = reviewers_page_info.get("endCursor")
+        if mr.reviewers.page_info.has_next_page:
+            cursor = mr.reviewers.page_info.end_cursor
             async for reviewer in self.gitlab_client.fetch_remaining_field(
                 project_path, mr.iid, "reviewers", "mergeRequest", cursor
             ):
-                mr.reviewers["nodes"].append(reviewer)
+                mr.reviewers.nodes.append(GitLabUser.model_validate(reviewer))
 
-        approvedby_page_info = mr.approved_by.get("pageInfo", {})
-        if approvedby_page_info.get("hasNextPage"):
-            cursor = approvedby_page_info.get("endCursor")
+        if mr.approved_by.page_info.has_next_page:
+            cursor = mr.approved_by.page_info.end_cursor
             async for approver in self.gitlab_client.fetch_remaining_field(
                 project_path, mr.iid, "approvedBy", "mergeRequest", cursor
             ):
-                mr.approved_by["nodes"].append(approver)
+                mr.approved_by.nodes.append(GitLabUser.model_validate(approver))
 
     async def get_docs(self, filtering=None):
         """Main method to fetch documents from GitLab using Work Items API.
@@ -2322,22 +2409,20 @@ class GitLabDataSource(BaseDataSource):
                 labels_data = self._extract_widget_labels(work_item)
 
                 # Fetch remaining assignees if paginated
-                assignees_page_info = assignees_data.get("pageInfo", {})
-                if assignees_page_info.get("hasNextPage"):
-                    cursor = assignees_page_info.get("endCursor")
+                if assignees_data.page_info.has_next_page:
+                    cursor = assignees_data.page_info.end_cursor
                     async for assignee in self.gitlab_client.fetch_remaining_work_item_assignees(
                         project.full_path, work_item.iid, WorkItemType.ISSUE, cursor
                     ):
-                        assignees_data["nodes"].append(assignee)
+                        assignees_data.nodes.append(GitLabUser.model_validate(assignee))
 
                 # Fetch remaining labels if paginated
-                labels_page_info = labels_data.get("pageInfo", {})
-                if labels_page_info.get("hasNextPage"):
-                    cursor = labels_page_info.get("endCursor")
+                if labels_data.page_info.has_next_page:
+                    cursor = labels_data.page_info.end_cursor
                     async for label in self.gitlab_client.fetch_remaining_work_item_labels(
                         project.full_path, work_item.iid, WorkItemType.ISSUE, cursor
                     ):
-                        labels_data["nodes"].append(label)
+                        labels_data.nodes.append(GitLabLabel.model_validate(label))
 
                 # Update work item with complete data
                 work_item_doc = self._format_work_item_doc(
@@ -2348,16 +2433,15 @@ class GitLabDataSource(BaseDataSource):
                 discussions_data = self._extract_widget_discussions(work_item)
 
                 # Check if there are more discussions to fetch
-                discussions_page_info = discussions_data.get("pageInfo", {})
-                if discussions_page_info.get("hasNextPage"):
-                    cursor = discussions_page_info.get("endCursor")
+                if discussions_data.page_info.has_next_page:
+                    cursor = discussions_data.page_info.end_cursor
                     # Fetch remaining discussions and append them
                     async for (
                         discussion
                     ) in self.gitlab_client.fetch_remaining_work_item_discussions(
                         project.full_path, work_item.iid, WorkItemType.ISSUE, cursor
                     ):
-                        discussions_data["nodes"].append(discussion)
+                        discussions_data.nodes.append(GitLabDiscussion.model_validate(discussion))
 
                 notes = await self._extract_notes_from_discussions(
                     discussions_data,
@@ -2369,8 +2453,7 @@ class GitLabDataSource(BaseDataSource):
 
                 yield work_item_doc, None
 
-            # Note: Merge Requests are NOT yet available as Work Items
-            # Continue using the legacy API for MRs
+            # Note: Merge Requests are not work items
             async for mr in self.gitlab_client.get_merge_requests(project.full_path):
                 await self._fetch_remaining_mr_fields(mr, project.full_path)
                 mr_doc = self._format_merge_request_doc(mr, project)
@@ -2424,37 +2507,23 @@ class GitLabDataSource(BaseDataSource):
                             discussions_data = self._extract_widget_discussions(epic)
 
                             # Check if there are more discussions to fetch
-                            discussions_page_info = discussions_data.get("pageInfo", {})
-                            if discussions_page_info.get("hasNextPage"):
-                                cursor = discussions_page_info.get("endCursor")
+                            if discussions_data.page_info.has_next_page:
+                                cursor = discussions_data.page_info.end_cursor
                                 # Fetch remaining discussions and append them
                                 async for (
                                     discussion
                                 ) in self.gitlab_client.fetch_remaining_work_item_group_discussions(
                                     group_path, epic.iid, WorkItemType.EPIC, cursor
                                 ):
-                                    discussions_data["nodes"].append(discussion)
+                                    discussions_data.nodes.append(GitLabDiscussion.model_validate(discussion))
 
-                            # Extract notes from discussions
-                            notes = []
-                            for discussion in discussions_data.get("nodes", []):
-                                notes_data = discussion.get("notes", {})
-                                for note in notes_data.get("nodes", []):
-                                    note_dict = {
-                                        "id": note.get("id"),
-                                        "body": note.get("body"),
-                                        "created_at": note.get("createdAt"),
-                                        "updated_at": note.get("updatedAt"),
-                                        "system": note.get("system", False),
-                                        "author": note.get("author", {}).get(
-                                            "username"
-                                        ),
-                                        "author_name": note.get("author", {}).get(
-                                            "name"
-                                        ),
-                                    }
-                                    notes.append(note_dict)
-
+                            # Extract notes from discussions using the common method
+                            notes = await self._extract_notes_from_discussions(
+                                discussions_data,
+                                group_path,
+                                epic.iid,
+                                "epic",
+                            )
                             epic_doc["notes"] = notes
                             yield epic_doc, None
                     except Exception as e:
@@ -2528,13 +2597,13 @@ class GitLabDataSource(BaseDataSource):
             "web_url": issue.web_url,
             "author": issue.author.username if issue.author else None,
             "author_name": issue.author.name if issue.author else None,
-            "assignees": [a.get("username") for a in issue.assignees.get("nodes", [])],
-            "labels": [label.get("title") for label in issue.labels.get("nodes", [])],
+            "assignees": [a.username for a in issue.assignees.nodes],
+            "labels": [label.title for label in issue.labels.nodes],
         }
 
     async def _extract_notes_from_discussions(
         self,
-        discussions_data: dict[str, Any],
+        discussions: PaginatedList[GitLabDiscussion],
         project_path: str,
         iid: int,
         issuable_type: str,
@@ -2542,7 +2611,7 @@ class GitLabDataSource(BaseDataSource):
         """Extract and flatten notes from discussions structure, paginating if needed.
 
         Args:
-            discussions_data: GraphQL discussions data
+            discussions: Paginated list of discussions
             project_path: Full path of the project
             iid: Issue or MR internal ID
             issuable_type: 'issue' or 'mergeRequest'
@@ -2551,53 +2620,42 @@ class GitLabDataSource(BaseDataSource):
             list: Flattened list of notes
         """
         notes = []
-        for discussion in discussions_data.get("nodes", []):
-            discussion_id = discussion.get("id")
-            notes_data = discussion.get("notes", {})
+
+        for discussion in discussions.nodes:
+            discussion_id = discussion.id
+            notes_list = discussion.notes
 
             # Add all notes from first fetch
-            for note in notes_data.get("nodes", []):
+            for note in notes_list.nodes:
                 note_dict = {
-                    "id": note.get("id"),
-                    "body": note.get("body"),
-                    "created_at": note.get("createdAt"),
-                    "updated_at": note.get("updatedAt"),
-                    "system": note.get("system", False),
-                    "author": note.get("author", {}).get("username"),
-                    "author_name": note.get("author", {}).get("name"),
+                    "id": note.id,
+                    "body": note.body,
+                    "created_at": note.created_at,
+                    "updated_at": note.updated_at,
+                    "system": note.system,
+                    "author": note.author.username if note.author else None,
+                    "author_name": note.author.name if note.author else None,
                 }
-
-                # Add position info for diff/inline comments
-                if position := note.get("position"):
-                    note_dict["position"] = {
-                        "new_line": position.get("newLine"),
-                        "old_line": position.get("oldLine"),
-                        "new_path": position.get("newPath"),
-                        "old_path": position.get("oldPath"),
-                        "position_type": position.get("positionType"),
-                    }
-
+                if note.position:
+                    note_dict["position"] = note.position
                 notes.append(note_dict)
 
             # Check if there are more notes to fetch for this discussion
-            notes_page_info = notes_data.get("pageInfo", {})
-            if notes_page_info.get("hasNextPage") and discussion_id:
-                cursor = notes_page_info.get("endCursor")
-                async for note in self.gitlab_client.fetch_remaining_notes(
+            if notes_list.page_info.has_next_page and discussion_id:
+                cursor = notes_list.page_info.end_cursor
+                async for note_data in self.gitlab_client.fetch_remaining_notes(
                     project_path, iid, discussion_id, issuable_type, cursor
                 ):
                     note_dict = {
-                        "id": note.get("id"),
-                        "body": note.get("body"),
-                        "created_at": note.get("createdAt"),
-                        "updated_at": note.get("updatedAt"),
-                        "system": note.get("system", False),
-                        "author": note.get("author", {}).get("username"),
-                        "author_name": note.get("author", {}).get("name"),
+                        "id": note_data.get("id"),
+                        "body": note_data.get("body"),
+                        "created_at": note_data.get("createdAt"),
+                        "updated_at": note_data.get("updatedAt"),
+                        "system": note_data.get("system", False),
+                        "author": note_data.get("author", {}).get("username"),
+                        "author_name": note_data.get("author", {}).get("name"),
                     }
-
-                    # Add position info for diff/inline comments
-                    if position := note.get("position"):
+                    if position := note_data.get("position"):
                         note_dict["position"] = {
                             "new_line": position.get("newLine"),
                             "old_line": position.get("oldLine"),
@@ -2605,7 +2663,6 @@ class GitLabDataSource(BaseDataSource):
                             "old_path": position.get("oldPath"),
                             "position_type": position.get("positionType"),
                         }
-
                     notes.append(note_dict)
 
         return notes
@@ -2641,11 +2698,11 @@ class GitLabDataSource(BaseDataSource):
             "target_branch": mr.target_branch,
             "author": mr.author.username if mr.author else None,
             "author_name": mr.author.name if mr.author else None,
-            "assignees": [a.get("username") for a in mr.assignees.get("nodes", [])],
-            "reviewers": [r.get("username") for r in mr.reviewers.get("nodes", [])],
-            "approved_by": [a.get("username") for a in mr.approved_by.get("nodes", [])],
+            "assignees": [a.username for a in mr.assignees.nodes],
+            "reviewers": [r.username for r in mr.reviewers.nodes],
+            "approved_by": [a.username for a in mr.approved_by.nodes],
             "merged_by": mr.merged_by.username if mr.merged_by else None,
-            "labels": [label.get("title") for label in mr.labels.get("nodes", [])],
+            "labels": [label.title for label in mr.labels.nodes],
         }
 
     def _format_work_item_doc(
@@ -2653,8 +2710,8 @@ class GitLabDataSource(BaseDataSource):
         work_item: GitLabWorkItem,
         project: GitLabProject | None = None,
         group_path: str | None = None,
-        assignees_data: dict[str, Any] | None = None,
-        labels_data: dict[str, Any] | None = None,
+        assignees_data: PaginatedList[GitLabUser] | None = None,
+        labels_data: PaginatedList[GitLabLabel] | None = None,
     ) -> dict[str, Any]:
         """Format work item data into Elasticsearch document.
 
@@ -2711,18 +2768,17 @@ class GitLabDataSource(BaseDataSource):
             "web_url": work_item.web_url,
             "author": work_item.author.username if work_item.author else None,
             "author_name": work_item.author.name if work_item.author else None,
-            "assignees": [a.get("username") for a in assignees_data.get("nodes", [])],
-            "labels": [label.get("title") for label in labels_data.get("nodes", [])],
+            "assignees": [a.username for a in assignees_data.nodes],
+            "labels": [label.title for label in labels_data.nodes],
         }
 
         # Add hierarchy info for Epics
         if hierarchy:
-            parent = hierarchy.get("parent")
-            if parent:
-                doc["parent_epic_iid"] = parent.get("iid")
-                doc["parent_epic_title"] = parent.get("title")
+            if hierarchy.parent:
+                doc["parent_epic_iid"] = hierarchy.parent.get("iid")
+                doc["parent_epic_title"] = hierarchy.parent.get("title")
 
-            children = hierarchy.get("children", {}).get("nodes", [])
+            children = hierarchy.children.nodes
             doc["child_count"] = len(children)
             doc["child_issue_count"] = sum(
                 1 for c in children if c.get("workItemType", {}).get("name") == "Issue"
