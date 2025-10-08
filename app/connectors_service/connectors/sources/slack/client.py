@@ -14,6 +14,14 @@ from connectors_sdk.logger import logger
 from connectors.utils import CancellableSleeps, retryable
 
 
+BASE_URL = "https://slack.com/api"
+CURSOR = "cursor"
+RESPONSE_METADATA = "response_metadata"
+NEXT_CURSOR = "next_cursor"
+DEFAULT_RETRY_SECONDS = 3
+PAGE_SIZE = 200
+
+
 class ThrottledError(Exception):
     """Internal exception class to indicate that request was throttled by the API"""
 
@@ -183,11 +191,3 @@ class SlackClient:
             "Authorization": f"Bearer {self.token}",
             "accept": "application/json",
         }
-
-
-BASE_URL = "https://slack.com/api"
-RESPONSE_METADATA = "response_metadata"
-NEXT_CURSOR = "next_cursor"
-DEFAULT_RETRY_SECONDS = 3
-PAGE_SIZE = 200
-CURSOR = "cursor"
