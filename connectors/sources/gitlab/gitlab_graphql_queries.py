@@ -287,7 +287,12 @@ query($projectPath: ID!, $iid: String!, $cursor: String) {{{{
           endCursor
         }}}}
         nodes {{{{
-          notes {{{{
+          id
+          notes(first: {NESTED_FIELD_SIZE}) {{{{
+            pageInfo {{{{
+              hasNextPage
+              endCursor
+            }}}}
             nodes {{{{
               id
               body
