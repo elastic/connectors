@@ -604,7 +604,7 @@ steps:
   # ----
   - group: ":truck: Packaging and DRA"
     key: "mbp_dra_group"
-    if: "(build.branch == \"main\" || build.branch == \"9.1\" || build.branch == \"9.0\" || build.branch == \"8.19\" || build.branch == \"8.18\" || build.branch == \"8.17\" || build.pull_request.labels includes \"ci:packaging\")" # Add new maintenance branches here
+    if: "(build.branch == \"main\" || build.branch == \"9.2\" || build.branch == \"9.1\" || build.branch == \"9.0\" || build.branch == \"8.19\" || build.branch == \"8.18\" || build.pull_request.labels includes \"ci:packaging\")" # Add new maintenance branches here
     depends_on:
       - "lint"
       - "unit_tests"
