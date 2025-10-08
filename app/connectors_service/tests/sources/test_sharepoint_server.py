@@ -16,7 +16,7 @@ from connectors_sdk.logger import logger
 from connectors_sdk.source import ConfigurableFieldValueError
 from httpx import ByteStream
 
-from connectors.sources.sharepoint_server import SharepointServerDataSource
+from connectors.sources.sharepoint.sharepoint_server import SharepointServerDataSource
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
 
