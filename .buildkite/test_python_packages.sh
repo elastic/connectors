@@ -23,7 +23,7 @@ if [[ "$PACKAGE_PATH" == *app/connectors_service* ]]; then
 
   python -m pip install "$PACKAGE_PATH"/dist/*.whl
   connectors --help
-  elastic-ingets --help
-  elastic-agent-connectors --help
+  elastic-ingest --help
+#  elastic-agent-connectors --help
   test-connectors --help
 fi

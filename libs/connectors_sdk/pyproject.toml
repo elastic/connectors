@@ -42,8 +42,9 @@ tests = [
     "requests==2.32.4",
 ]
 
-[tool.setuptools]
-packages = ["connectors_sdk"]
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["connectors_sdk*"]
 
 [tool.setuptools.dynamic]
 version = {file = "connectors_sdk/VERSION"}
