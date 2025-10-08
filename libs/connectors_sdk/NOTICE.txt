@@ -978,7 +978,7 @@ UNKNOWN
 
 elasticsearch-connectors-sdk
 9.2.0
-Apache Software License
+UNKNOWN
 UNKNOWN
 
 fastjsonschema
@@ -1282,7 +1282,7 @@ under the terms of *both* these licenses.
 
 
 propcache
-0.3.2
+0.4.0
 Apache Software License
 
                                  Apache License
