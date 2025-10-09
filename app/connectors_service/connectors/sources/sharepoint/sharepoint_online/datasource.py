@@ -12,9 +12,7 @@ from functools import partial
 import aiofiles
 from aiofiles.os import remove
 from aiofiles.tempfile import NamedTemporaryFile
-
 from connectors_sdk.content_extraction import TIKA_SUPPORTED_FILETYPES
-from connectors_sdk.logger import logger
 from connectors_sdk.source import CURSOR_SYNC_TIMESTAMP, BaseDataSource
 from connectors_sdk.utils import (
     convert_to_b64,
@@ -27,31 +25,33 @@ from connectors.access_control import (
     es_access_control_query,
 )
 from connectors.es.sink import OP_DELETE, OP_INDEX
-from connectors.utils import (
-    html_to_text,
-    iterable_batches_generator
+from connectors.sources.sharepoint.sharepoint_online.client import (
+    SharepointOnlineClient,
 )
 from connectors.sources.sharepoint.sharepoint_online.constants import (
-  SPO_API_MAX_BATCH_SIZE,
-  TIMESTAMP_FORMAT,
-  MAX_DOCUMENT_SIZE,
-  WILDCARD,
-  CURSOR_SITE_DRIVE_KEY,
-  VIEW_ITEM_MASK,
-  VIEW_PAGE_MASK,
-  SPO_MAX_EXPAND_SIZE,
-  VIEW_ROLE_TYPES
+    CURSOR_SITE_DRIVE_KEY,
+    MAX_DOCUMENT_SIZE,
+    SPO_API_MAX_BATCH_SIZE,
+    SPO_MAX_EXPAND_SIZE,
+    TIMESTAMP_FORMAT,
+    VIEW_ITEM_MASK,
+    VIEW_PAGE_MASK,
+    VIEW_ROLE_TYPES,
+    WILDCARD,
 )
-from connectors.sources.sharepoint.sharepoint_online.validator import SharepointOnlineAdvancedRulesValidator
 from connectors.sources.sharepoint.sharepoint_online.utils import (
+    SyncCursorEmpty,
     _get_login_name,
+    _parse_created_date_time,
     _prefix_email,
     _prefix_group,
     _prefix_user,
     _prefix_user_id,
-    _parse_created_date_time,
-    SyncCursorEmpty,
 )
+from connectors.sources.sharepoint.sharepoint_online.validator import (
+    SharepointOnlineAdvancedRulesValidator,
+)
+from connectors.utils import html_to_text, iterable_batches_generator
 
 
 class SharepointOnlineDataSource(BaseDataSource):

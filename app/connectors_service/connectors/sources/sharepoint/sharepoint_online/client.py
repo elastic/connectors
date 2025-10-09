@@ -9,27 +9,28 @@ import re
 
 import aiohttp
 from connectors_sdk.logger import logger
-from connectors.utils import url_encode
+
 from connectors.sources.sharepoint.sharepoint_online.constants import (
     DEFAULT_PARALLEL_CONNECTION_COUNT,
+    DELTA_LINK_KEY,
+    DRIVE_ITEMS_FIELDS,
     GRAPH_API_AUTH_URL,
     GRAPH_API_URL,
     WILDCARD,
-    DRIVE_ITEMS_FIELDS,
-    DELTA_LINK_KEY
 )
 from connectors.sources.sharepoint.sharepoint_online.utils import (
-    MicrosoftAPISession,
-    NotFound,
     BadRequestError,
+    DriveItemsPage,
+    EntraAPIToken,
+    GraphAPIToken,
     InternalServerError,
     InvalidSharepointTenant,
+    MicrosoftAPISession,
+    NotFound,
     PermissionsMissing,
-    GraphAPIToken,
     SharepointRestAPIToken,
-    EntraAPIToken,
-    DriveItemsPage,
 )
+from connectors.utils import url_encode
 
 
 class SharepointOnlineClient:

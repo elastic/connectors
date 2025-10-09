@@ -1,6 +1,12 @@
-import os
-from connectors_sdk.logger import logger
+#
+# Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+# or more contributor license agreements. Licensed under the Elastic License 2.0;
+# you may not use this file except in compliance with the Elastic License 2.0.
+#
 
+import os
+
+from connectors_sdk.logger import logger
 
 SPO_API_MAX_BATCH_SIZE = 20
 

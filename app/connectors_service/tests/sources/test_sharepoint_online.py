@@ -21,28 +21,20 @@ from connectors_sdk.source import ConfigurableFieldValueError
 from connectors_sdk.utils import Features, iso_utc
 from freezegun import freeze_time
 
-from tests.commons import AsyncIterator
-from tests.sources.support import create_source
-
 from connectors.access_control import ACCESS_CONTROL
-
 from connectors.sources.sharepoint.sharepoint_online import (
     SharepointOnlineAdvancedRulesValidator,
     SharepointOnlineClient,
     SharepointOnlineDataSource,
 )
+
 # importing stuff that we don't expose in SPO's __init__.py but need to test
 from connectors.sources.sharepoint.sharepoint_online.constants import (
     DEFAULT_BACKOFF_MULTIPLIER,
     DEFAULT_RETRY_SECONDS,
-    WILDCARD
+    WILDCARD,
 )
 from connectors.sources.sharepoint.sharepoint_online.utils import (
-    _get_login_name,
-    _prefix_email,
-    _prefix_group,
-    _prefix_user,
-    _prefix_user_id,
     BadRequestError,
     DriveItemsPage,
     EntraAPIToken,
@@ -57,7 +49,14 @@ from connectors.sources.sharepoint.sharepoint_online.utils import (
     SyncCursorEmpty,
     ThrottledError,
     TokenFetchFailed,
+    _get_login_name,
+    _prefix_email,
+    _prefix_group,
+    _prefix_user,
+    _prefix_user_id,
 )
+from tests.commons import AsyncIterator
+from tests.sources.support import create_source
 
 SITE_LIST_ONE_NAME = "site-list-one-name"
 
@@ -2292,7 +2291,7 @@ class TestSharepointOnlineDataSource:
         client = AsyncMock()
 
         with patch(
-            "connectors.sources.sharepoint.sharepoint_online.client.SharepointOnlineClient",
+            "connectors.sources.sharepoint.sharepoint_online.datasource.SharepointOnlineClient",
             return_value=AsyncMock(),
         ) as new_mock:
             client = new_mock.return_value
@@ -3479,7 +3478,7 @@ class TestSharepointOnlineDataSource:
 
     @pytest.mark.asyncio
     @patch(
-        "connectors.sources.sharepoint.sharepoint_online.constants.TIMESTAMP_FORMAT",
+        "connectors.sources.sharepoint.sharepoint_online.datasource.TIMESTAMP_FORMAT",
         TIMESTAMP_FORMAT_PATCHED,
     )
     @pytest.mark.asyncio

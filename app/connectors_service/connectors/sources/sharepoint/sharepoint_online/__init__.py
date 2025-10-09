@@ -4,12 +4,12 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 
+from .client import SharepointOnlineClient
 from .datasource import SharepointOnlineDataSource
 from .validator import SharepointOnlineAdvancedRulesValidator
-from .client import SharepointOnlineClient
 
 __all__ = [
-  "SharepointOnlineDataSource",
-  "SharepointOnlineAdvancedRulesValidator",
-  "SharepointOnlineClient"
+    "SharepointOnlineDataSource",
+    "SharepointOnlineAdvancedRulesValidator",
+    "SharepointOnlineClient",
 ]

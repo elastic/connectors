@@ -13,24 +13,25 @@ import aiohttp
 from aiohttp.client_exceptions import ClientPayloadError, ClientResponseError
 from aiohttp.client_reqrep import RequestInfo
 from azure.identity.aio import CertificateCredential
+from connectors_sdk.utils import nested_get_from_dict
 
 from connectors.access_control import prefix_identity
-from connectors_sdk.utils import nested_get_from_dict
+from connectors.sources.sharepoint.sharepoint_online.constants import (
+    DEFAULT_BACKOFF_MULTIPLIER,
+    DEFAULT_RETRY_COUNT,
+    DEFAULT_RETRY_SECONDS,
+    DELTA_NEXT_LINK_KEY,
+    FILE_WRITE_CHUNK_SIZE,
+    GRAPH_API_AUTH_URL,
+    REST_API_AUTH_URL,
+    TIMESTAMP_FORMAT,
+)
 from connectors.utils import (
     CacheWithTimeout,
     CancellableSleeps,
     retryable,
 )
-from connectors.sources.sharepoint.sharepoint_online.constants import (
-    GRAPH_API_AUTH_URL,
-    DEFAULT_RETRY_COUNT,
-    DEFAULT_RETRY_SECONDS,
-    REST_API_AUTH_URL,
-    FILE_WRITE_CHUNK_SIZE,
-    DELTA_NEXT_LINK_KEY,
-    DEFAULT_BACKOFF_MULTIPLIER,
-    TIMESTAMP_FORMAT
-)
+
 
 class NotFound(Exception):
     """Internal exception class to handle 404s from the API that has a meaning, that collection
@@ -488,6 +489,7 @@ class MicrosoftAPISession:
             return retry_after
         else:
             return retry_after + retry_count * backoff
+
 
 class DriveItemsPage(Iterable, Sized):
     """
