@@ -899,3 +899,14 @@ query($projectPath: ID!, $cursor: String) {{
   }}
 }}
 """
+
+# GraphQL query to validate multiple projects exist (max 50 at a time)
+VALIDATE_PROJECTS_QUERY = """
+query($projectPaths: [String!]!) {
+  projects(fullPaths: $projectPaths) {
+    nodes {
+      fullPath
+    }
+  }
+}
+"""

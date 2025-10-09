@@ -124,32 +124,64 @@ class GitLabDataSource(BaseDataSource):
             await self._validate_configured_projects()
 
     async def _validate_configured_projects(self) -> None:
-        """Validate that configured projects exist and are accessible (runs in thread pool).
+        """Validate that configured projects exist and are accessible using batched GraphQL queries.
+
+        GitLab's GraphQL API allows querying up to 50 projects at once using the fullPaths parameter.
+        This is much more efficient than sequential REST API calls.
 
         Raises:
             ConfigurableFieldValueError: If any project is invalid.
         """
-        from urllib.parse import quote
+        from connectors.sources.gitlab.queries import VALIDATE_PROJECTS_QUERY
 
-        invalid_projects = []
+        # Filter out empty project paths
+        valid_project_paths = [
+            p.strip() for p in self.configured_projects if p and p.strip()
+        ]
 
-        for project_path in self.configured_projects:
-            if not project_path or project_path.strip() == "":
-                continue
+        if not valid_project_paths:
+            return
+
+        # GitLab allows max 50 projects per query
+        BATCH_SIZE = 50
+        accessible_projects = set()
+
+        # Batch validate projects
+        for i in range(0, len(valid_project_paths), BATCH_SIZE):
+            batch = valid_project_paths[i:i + BATCH_SIZE]
 
             try:
-                # URL encode the project path for the API
-                encoded_path = quote(project_path, safe="")
-                await self.gitlab_client._get_rest(f"projects/{encoded_path}")
-                self._logger.debug(f"✓ Project '{project_path}' is accessible")
+                result = await self.gitlab_client._execute_graphql(
+                    VALIDATE_PROJECTS_QUERY,
+                    {"projectPaths": batch}
+                )
+
+                # Extract accessible project paths from response
+                projects_data = result.get("projects", {})
+                nodes = projects_data.get("nodes", [])
+
+                for node in nodes:
+                    full_path = node.get("fullPath")
+                    if full_path:
+                        accessible_projects.add(full_path)
+                        self._logger.debug(f"✓ Project '{full_path}' is accessible")
+
             except Exception as e:
                 self._logger.warning(
-                    f"✗ Project '{project_path}' is not accessible: {e}"
+                    f"Failed to validate project batch {batch}: {e}"
                 )
-                invalid_projects.append(project_path)
+                # If batch query fails, we can't determine which specific projects are invalid
+                # so we skip this batch and continue
+
+        # Determine which projects are inaccessible
+        requested_projects = set(valid_project_paths)
+        invalid_projects = requested_projects - accessible_projects
+
+        for project in invalid_projects:
+            self._logger.warning(f"✗ Project '{project}' is not accessible")
 
         if invalid_projects:
-            msg = f"The following projects are not accessible: {', '.join(invalid_projects)}. Please check the project paths and ensure your token has access."
+            msg = f"The following projects are not accessible: {', '.join(sorted(invalid_projects))}. Please check the project paths and ensure your token has access."
             raise ConfigurableFieldValueError(msg)
 
     async def ping(self) -> None:
