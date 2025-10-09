@@ -27,14 +27,7 @@ from connectors.sources.sharepoint.sharepoint_online import (
     SharepointOnlineClient,
     SharepointOnlineDataSource,
 )
-
-# importing stuff that we don't expose in SPO's __init__.py but need to test
-from connectors.sources.sharepoint.sharepoint_online.constants import (
-    DEFAULT_BACKOFF_MULTIPLIER,
-    DEFAULT_RETRY_SECONDS,
-    WILDCARD,
-)
-from connectors.sources.sharepoint.sharepoint_online.utils import (
+from connectors.sources.sharepoint.sharepoint_online.client import (
     BadRequestError,
     DriveItemsPage,
     EntraAPIToken,
@@ -46,9 +39,16 @@ from connectors.sources.sharepoint.sharepoint_online.utils import (
     NotFound,
     PermissionsMissing,
     SharepointRestAPIToken,
-    SyncCursorEmpty,
     ThrottledError,
     TokenFetchFailed,
+)
+from connectors.sources.sharepoint.sharepoint_online.constants import (
+    DEFAULT_BACKOFF_MULTIPLIER,
+    DEFAULT_RETRY_SECONDS,
+    WILDCARD,
+)
+from connectors.sources.sharepoint.sharepoint_online.utils import (
+    SyncCursorEmpty,
     _get_login_name,
     _prefix_email,
     _prefix_group,
@@ -542,7 +542,7 @@ class TestEntraAPIToken:
         certificate_credential_mock.close = AsyncMock()
 
         with patch(
-            "connectors.sources.sharepoint.sharepoint_online.utils.CertificateCredential",
+            "connectors.sources.sharepoint.sharepoint_online.client.CertificateCredential",
             return_value=certificate_credential_mock,
         ):
             actual_token, actual_expires_at = await token._fetch_token()
@@ -571,7 +571,7 @@ class TestEntraAPIToken:
         certificate_credential_mock.get_token = AsyncMock(side_effect=effect())
 
         with patch(
-            "connectors.sources.sharepoint.sharepoint_online.utils.CertificateCredential",
+            "connectors.sources.sharepoint.sharepoint_online.client.CertificateCredential",
             return_value=certificate_credential_mock,
         ):
             actual_token, actual_expires_at = await token._fetch_token()
