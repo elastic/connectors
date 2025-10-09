@@ -7,23 +7,105 @@
 import logging
 
 import aiohttp
+
+from datetime import datetime, timedelta
+
+from connectors_sdk.logger import logger
+from connectors.utils import CacheWithTimeout
+
 from aiohttp.client_exceptions import ClientResponseError
 from connectors_sdk.logger import logger
 
-from connectors.sources.box.utils import (
+from connectors.sources.box.constants import (
     BASE_URL,
     ENDPOINTS,
     FETCH_LIMIT,
     RETRIES,
     RETRY_INTERVAL,
-    AccessToken,
-    NotFound,
+    BOX_FREE,
+    refresh_token
 )
 from connectors.utils import (
     CancellableSleeps,
     RetryStrategy,
     retryable,
 )
+
+
+class TokenError(Exception):
+    pass
+
+
+class NotFound(Exception):
+    pass
+
+
+class AccessToken:
+    def __init__(self, configuration, http_session):
+        global refresh_token
+        self.client_id = configuration["client_id"]
+        self.client_secret = configuration["client_secret"]
+        self._http_session = http_session
+        if refresh_token is None:
+            refresh_token = configuration["refresh_token"]
+        self._token_cache = CacheWithTimeout()
+        self.is_enterprise = configuration["is_enterprise"]
+        self.enterprise_id = configuration["enterprise_id"]
+
+    async def get(self):
+        if cached_value := self._token_cache.get_value():
+            return cached_value
+        logger.debug("No token cache found; fetching new token")
+        await self._set_access_token()
+        return self.access_token
+
+    async def _set_access_token(self):
+        logger.debug("Generating an access token")
+        try:
+            if self.is_enterprise == BOX_FREE:
+                global refresh_token
+                data = {
+                    "grant_type": "refresh_token",
+                    "refresh_token": refresh_token,
+                    "client_id": self.client_id,
+                    "client_secret": self.client_secret,
+                }
+                async with self._http_session.post(
+                    url=ENDPOINTS["TOKEN"],
+                    data=data,
+                ) as response:
+                    tokens = await response.json()
+                    self.access_token = tokens.get("access_token")
+                    refresh_token = tokens.get("refresh_token")
+                    self.expired_at = datetime.utcnow() + timedelta(
+                        seconds=int(tokens.get("expires_in", 3599))
+                    )
+                    self._token_cache.set_value(
+                        value=self.access_token, expiration_date=self.expired_at
+                    )
+            else:
+                data = {
+                    "client_id": self.client_id,
+                    "client_secret": self.client_secret,
+                    "grant_type": "client_credentials",
+                    "box_subject_type": "enterprise",
+                    "box_subject_id": self.enterprise_id,
+                }
+                async with self._http_session.post(
+                    url=ENDPOINTS["TOKEN"],
+                    data=data,
+                ) as response:
+                    tokens = await response.json()
+                    self.access_token = tokens.get("access_token")
+                    self.expired_at = datetime.utcnow() + timedelta(
+                        seconds=int(tokens.get("expires_in", 3599))
+                    )
+                    self._token_cache.set_value(
+                        value=self.access_token, expiration_date=self.expired_at
+                    )
+        except Exception as exception:
+            msg = f"Error while generating access token. Please verify that provided configurations are correct. Exception {exception}."
+            raise TokenError(msg) from exception
 
 
 class BoxClient:

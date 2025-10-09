@@ -15,7 +15,7 @@ from connectors_sdk.source import BaseDataSource
 from connectors_sdk.utils import convert_to_b64
 
 from connectors.sources.box.client import BoxClient
-from connectors.sources.box.utils import (
+from connectors.sources.box.constants import (
     BOX_ENTERPRISE,
     BOX_FREE,
     CHUNK_SIZE,
