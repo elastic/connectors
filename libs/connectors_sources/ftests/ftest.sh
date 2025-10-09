@@ -10,7 +10,10 @@ INDEX_NAME=search-${NAME%"_serverless"}
 
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 ROOT_DIR="$SCRIPT_DIR/.."
-VIRTUAL_ENV="$ROOT_DIR/.venv"
+# Use the main connectors_service venv which has all dependencies
+# Path from libs/connectors_sources -> ../../app/connectors_service
+CONNECTORS_SERVICE_DIR="$ROOT_DIR/../../app/connectors_service"
+VIRTUAL_ENV="$CONNECTORS_SERVICE_DIR/.venv"
 PLATFORM='unknown'
 MAX_RSS="200M"
 MAX_DURATION=600
@@ -280,7 +283,7 @@ elif [[ "$unamestr" == 'Darwin' ]]; then
 fi
 
 
-cd $ROOT_DIR/tests/sources/fixtures
+cd $ROOT_DIR/ftests
 
 # Add project root to PYTHONPATH so tests module can be imported
 export PYTHONPATH="$ROOT_DIR${PYTHONPATH:+:$PYTHONPATH}"
@@ -324,7 +327,7 @@ $PYTHON fixture.py --name $NAME --action monitor --pid $PID_2
 
 
 NUM_DOCS=`$PYTHON fixture.py --name $NAME --action get_num_docs`
-$PYTHON $ROOT_DIR/scripts/verify.py --index-name $INDEX_NAME --service-type $NAME --size $NUM_DOCS
+$PYTHON "$CONNECTORS_SERVICE_DIR"/scripts/verify.py --index-name $INDEX_NAME --service-type $NAME --size $NUM_DOCS
 $PYTHON fixture.py --name $NAME --action teardown
 
 # stopping the stack as a final step once everything else is done.

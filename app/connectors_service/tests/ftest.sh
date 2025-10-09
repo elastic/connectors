@@ -5,6 +5,18 @@ set -o pipefail
 NAME=$1
 PERF8=$2
 
+# If a connector has been migrated to connectors_sources, run the ftest.sh from there instead
+MIGRATED_SOURCES=("dir")
+for source in "${MIGRATED_SOURCES[@]}"; do
+    if [[ "$source" == "$NAME" ]]; then
+        echo "Running ftest for migrated source '$NAME' from connectors_sources..."
+        SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+        CONNECTORS_SOURCES_DIR="$SCRIPT_DIR/../../../libs/connectors_sources"
+        cd "$CONNECTORS_SOURCES_DIR"
+        exec ./ftests/ftest.sh "$NAME" "$PERF8"
+    fi
+done
+
 SERVICE_TYPE=${NAME%"_serverless"}
 INDEX_NAME=search-${NAME%"_serverless"}
 
