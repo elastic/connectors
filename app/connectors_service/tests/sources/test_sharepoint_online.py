@@ -21,11 +21,13 @@ from connectors_sdk.source import ConfigurableFieldValueError
 from connectors_sdk.utils import Features, iso_utc
 from freezegun import freeze_time
 
-from connectors.sources.sharepoint_online import (
-    ACCESS_CONTROL,
-    DEFAULT_BACKOFF_MULTIPLIER,
-    DEFAULT_RETRY_SECONDS,
-    WILDCARD,
+from connectors.access_control import ACCESS_CONTROL
+from connectors.sources.sharepoint.sharepoint_online import (
+    SharepointOnlineAdvancedRulesValidator,
+    SharepointOnlineClient,
+    SharepointOnlineDataSource,
+)
+from connectors.sources.sharepoint.sharepoint_online.client import (
     BadRequestError,
     DriveItemsPage,
     EntraAPIToken,
@@ -36,13 +38,17 @@ from connectors.sources.sharepoint_online import (
     MicrosoftSecurityToken,
     NotFound,
     PermissionsMissing,
-    SharepointOnlineAdvancedRulesValidator,
-    SharepointOnlineClient,
-    SharepointOnlineDataSource,
     SharepointRestAPIToken,
-    SyncCursorEmpty,
     ThrottledError,
     TokenFetchFailed,
+)
+from connectors.sources.sharepoint.sharepoint_online.constants import (
+    DEFAULT_BACKOFF_MULTIPLIER,
+    DEFAULT_RETRY_SECONDS,
+    WILDCARD,
+)
+from connectors.sources.sharepoint.sharepoint_online.utils import (
+    SyncCursorEmpty,
     _get_login_name,
     _prefix_email,
     _prefix_group,
@@ -536,7 +542,7 @@ class TestEntraAPIToken:
         certificate_credential_mock.close = AsyncMock()
 
         with patch(
-            "connectors.sources.sharepoint_online.CertificateCredential",
+            "connectors.sources.sharepoint.sharepoint_online.client.CertificateCredential",
             return_value=certificate_credential_mock,
         ):
             actual_token, actual_expires_at = await token._fetch_token()
@@ -565,7 +571,7 @@ class TestEntraAPIToken:
         certificate_credential_mock.get_token = AsyncMock(side_effect=effect())
 
         with patch(
-            "connectors.sources.sharepoint_online.CertificateCredential",
+            "connectors.sources.sharepoint.sharepoint_online.client.CertificateCredential",
             return_value=certificate_credential_mock,
         ):
             actual_token, actual_expires_at = await token._fetch_token()
@@ -2285,7 +2291,7 @@ class TestSharepointOnlineDataSource:
         client = AsyncMock()
 
         with patch(
-            "connectors.sources.sharepoint_online.SharepointOnlineClient",
+            "connectors.sources.sharepoint.sharepoint_online.datasource.SharepointOnlineClient",
             return_value=AsyncMock(),
         ) as new_mock:
             client = new_mock.return_value
@@ -2392,7 +2398,7 @@ class TestSharepointOnlineDataSource:
 
     @pytest.mark.asyncio
     @patch(
-        "connectors.sources.sharepoint_online.ACCESS_CONTROL",
+        "connectors.sources.sharepoint.sharepoint_online.datasource.ACCESS_CONTROL",
         ALLOW_ACCESS_CONTROL_PATCHED,
     )
     @freeze_time(iso_utc())
@@ -2881,7 +2887,7 @@ class TestSharepointOnlineDataSource:
 
     @pytest.mark.asyncio
     @patch(
-        "connectors.sources.sharepoint_online.ACCESS_CONTROL",
+        "connectors.sources.sharepoint.sharepoint_online.datasource.ACCESS_CONTROL",
         ALLOW_ACCESS_CONTROL_PATCHED,
     )
     async def test_drive_items_permissions_when_fetch_drive_item_permissions_enabled(
@@ -2931,7 +2937,7 @@ class TestSharepointOnlineDataSource:
 
     @pytest.mark.asyncio
     @patch(
-        "connectors.sources.sharepoint_online.ACCESS_CONTROL",
+        "connectors.sources.sharepoint.sharepoint_online.datasource.ACCESS_CONTROL",
         ALLOW_ACCESS_CONTROL_PATCHED,
     )
     async def test_site_page_permissions_when_fetch_drive_item_permissions_enabled(
@@ -3405,7 +3411,7 @@ class TestSharepointOnlineDataSource:
         ],
     )
     @patch(
-        "connectors.sources.sharepoint_online.ACCESS_CONTROL",
+        "connectors.sources.sharepoint.sharepoint_online.datasource.ACCESS_CONTROL",
         ALLOW_ACCESS_CONTROL_PATCHED,
     )
     async def test_decorate_with_access_control(
@@ -3472,7 +3478,7 @@ class TestSharepointOnlineDataSource:
 
     @pytest.mark.asyncio
     @patch(
-        "connectors.sources.sharepoint_online.TIMESTAMP_FORMAT",
+        "connectors.sources.sharepoint.sharepoint_online.datasource.TIMESTAMP_FORMAT",
         TIMESTAMP_FORMAT_PATCHED,
     )
     @pytest.mark.asyncio
