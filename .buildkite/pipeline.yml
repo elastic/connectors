@@ -427,7 +427,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/onedrive.py"
+            - "connectors/sources/onedrive/**"
             - "tests/sources/fixtures/onedrive/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
