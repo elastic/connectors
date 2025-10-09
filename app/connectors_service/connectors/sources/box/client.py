@@ -5,27 +5,23 @@
 #
 
 import logging
-
-import aiohttp
-
 from datetime import datetime, timedelta
 
-from connectors_sdk.logger import logger
-from connectors.utils import CacheWithTimeout
-
+import aiohttp
 from aiohttp.client_exceptions import ClientResponseError
 from connectors_sdk.logger import logger
 
 from connectors.sources.box.constants import (
     BASE_URL,
+    BOX_FREE,
     ENDPOINTS,
     FETCH_LIMIT,
     RETRIES,
     RETRY_INTERVAL,
-    BOX_FREE,
-    refresh_token
+    refresh_token,
 )
 from connectors.utils import (
+    CacheWithTimeout,
     CancellableSleeps,
     RetryStrategy,
     retryable,
