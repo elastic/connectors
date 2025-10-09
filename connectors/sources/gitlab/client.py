@@ -5,6 +5,7 @@
 #
 """GitLab GraphQL and REST API client for interacting with GitLab Cloud."""
 
+import os
 from urllib.parse import quote
 
 import aiohttp
@@ -41,7 +42,10 @@ from connectors.sources.gitlab.queries import (
 )
 from connectors.utils import CancellableSleeps, RetryStrategy, retryable
 
-GITLAB_CLOUD_URL = "https://gitlab.com"
+GITLAB_FTEST_HOST = os.environ.get("GITLAB_FTEST_HOST")
+RUNNING_FTEST = "RUNNING_FTEST" in os.environ
+
+GITLAB_CLOUD_URL = GITLAB_FTEST_HOST if (RUNNING_FTEST and GITLAB_FTEST_HOST) else "https://gitlab.com"
 RETRIES = 3
 RETRY_INTERVAL = 2
 
@@ -81,9 +85,19 @@ class GitLabClient:
     def _get_session(self):
         """Get or create aiohttp session."""
         if self._session is None or self._session.closed:
+            connector_kwargs = {}
+            # Disable SSL verification for ftests (self-signed certificates)
+            if RUNNING_FTEST and GITLAB_FTEST_HOST:
+                import ssl
+                ssl_context = ssl.create_default_context()
+                ssl_context.check_hostname = False
+                ssl_context.verify_mode = ssl.CERT_NONE
+                connector_kwargs["connector"] = aiohttp.TCPConnector(ssl=ssl_context)
+
             self._session = aiohttp.ClientSession(
                 headers={"Authorization": f"Bearer {self.token}"},
                 timeout=aiohttp.ClientTimeout(total=300),
+                **connector_kwargs,
             )
         return self._session
 
