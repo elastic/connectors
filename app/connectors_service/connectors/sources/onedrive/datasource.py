@@ -9,6 +9,18 @@ import json
 from functools import cached_property, partial
 from urllib import parse
 
+from connectors_sdk.logger import logger
+from connectors_sdk.source import BaseDataSource
+from connectors_sdk.utils import (
+    iso_utc,
+)
+
+from connectors.access_control import (
+    ACCESS_CONTROL,
+    es_access_control_query,
+    prefix_identity,
+)
+from connectors.sources.onedrive.client import OneDriveClient
 from connectors.sources.onedrive.constants import (
     BASE_URL,
     BATCH,
@@ -22,18 +34,6 @@ from connectors.sources.onedrive.constants import (
     PING,
     RETRIES,
 )
-from connectors_sdk.logger import logger
-from connectors_sdk.source import BaseDataSource
-from connectors_sdk.utils import (
-    iso_utc,
-)
-
-from connectors.access_control import (
-    ACCESS_CONTROL,
-    es_access_control_query,
-    prefix_identity,
-)
-from connectors.sources.onedrive.client import OneDriveClient
 from connectors.sources.onedrive.validator import OneDriveAdvancedRulesValidator
 
 

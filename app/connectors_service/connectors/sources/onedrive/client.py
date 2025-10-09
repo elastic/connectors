@@ -16,6 +16,9 @@ from aiohttp.client_exceptions import (
     ClientResponseError,
     ServerConnectionError,
 )
+from connectors_sdk.logger import logger
+from wcmatch import glob
+
 from connectors.sources.onedrive.constants import (
     BASE_URL,
     DEFAULT_PARALLEL_CONNECTION_COUNT,
@@ -32,9 +35,6 @@ from connectors.sources.onedrive.constants import (
     RETRY_INTERVAL,
     USERS,
 )
-from connectors_sdk.logger import logger
-from wcmatch import glob
-
 from connectors.utils import (
     CacheWithTimeout,
     CancellableSleeps,
