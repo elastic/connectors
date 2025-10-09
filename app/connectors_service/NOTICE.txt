@@ -3555,6 +3555,11 @@ elasticsearch-connectors-sdk
 Apache Software License
 UNKNOWN
 
+elasticsearch-connectors-sources
+9.2.0
+UNKNOWN
+UNKNOWN
+
 envyaml
 1.10.211231
 MIT License
@@ -5914,7 +5919,7 @@ BSD
 UNKNOWN
 
 propcache
-0.3.2
+0.4.1
 Apache Software License
 
                                  Apache License

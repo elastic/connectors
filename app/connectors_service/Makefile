@@ -44,6 +44,7 @@ install-agent: .venv/bin/elastic-ingest
 
 .venv/bin/elastic-ingest: .venv/bin/python
 	.venv/bin/pip install -e ../../libs/connectors_sdk
+	.venv/bin/pip install -e ../../libs/connectors_sources
 	.venv/bin/pip install -e .
 
 .venv/bin/ruff: .venv/bin/python
