@@ -1021,7 +1021,7 @@ async def test_api_call_successfully():
 
 @pytest.fixture
 def patch_default_wait_multiplier():
-    with mock.patch("connectors.sources.sharepoint_server.RETRY_INTERVAL", 0):
+    with mock.patch("connectors.sources.sharepoint.sharepoint_server.client.RETRY_INTERVAL", 0):
         yield
 
 
