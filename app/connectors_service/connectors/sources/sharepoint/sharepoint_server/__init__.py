@@ -4,7 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 
-from .datasource import SharepointServerDataSource
 from .client import SharepointServerClient
+from .datasource import SharepointServerDataSource
 
 __all__ = ["SharepointServerDataSource", "SharepointServerClient"]

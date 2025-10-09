@@ -13,35 +13,34 @@ from connectors_sdk.content_extraction import (
     TIKA_SUPPORTED_FILETYPES,
 )
 from connectors_sdk.logger import logger
-
 from httpx_ntlm import HttpNtlmAuth
 
+from connectors.sources.sharepoint.sharepoint_server.constants import (
+    ADMIN_USERS,
+    ATTACHMENT,
+    ATTACHMENT_DATA,
+    BASIC_AUTH,
+    DRIVE_ITEM,
+    LIST_ITEM,
+    LISTS,
+    PING,
+    RETRY_INTERVAL,
+    ROLES,
+    ROLES_BY_TITLE_FOR_ITEM,
+    ROLES_BY_TITLE_FOR_LIST,
+    SITE,
+    SITES,
+    TOP,
+    UNIQUE_ROLES,
+    UNIQUE_ROLES_FOR_ITEM,
+    URLS,
+    USERS,
+)
 from connectors.utils import (
     CancellableSleeps,
     ssl_context,
 )
 
-from connectors.sources.sharepoint.sharepoint_server.constants import (
-    BASIC_AUTH,
-    ATTACHMENT,
-    PING,
-    LISTS,
-    SITES,
-    DRIVE_ITEM,
-    LIST_ITEM,
-    URLS,
-    RETRY_INTERVAL,
-    TOP,
-    ATTACHMENT_DATA,
-    SITE,
-    USERS,
-    ADMIN_USERS,
-    ROLES_BY_TITLE_FOR_LIST,
-    ROLES,
-    UNIQUE_ROLES,
-    UNIQUE_ROLES_FOR_ITEM,
-    ROLES_BY_TITLE_FOR_ITEM
-)
 
 class SharepointServerClient:
     """SharePoint client to handle API calls made to SharePoint"""

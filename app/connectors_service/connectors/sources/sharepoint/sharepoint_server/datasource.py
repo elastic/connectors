@@ -21,28 +21,28 @@ from connectors.access_control import (
     es_access_control_query,
     prefix_identity,
 )
-
 from connectors.sources.sharepoint.sharepoint_server.client import (
     SharepointServerClient,
 )
 from connectors.sources.sharepoint.sharepoint_server.constants import (
+    ATTACHMENT,
     BASIC_AUTH,
-    NTLM_AUTH,
-    RETRIES,
+    DOCUMENT_LIBRARY,
+    DRIVE_ITEM,
     IS_USER,
+    LIST_ITEM,
+    LISTS,
+    NTLM_AUTH,
+    PING,
+    RETRIES,
+    SCHEMA,
+    SELECTED_FIELDS,
+    SITES,
     VIEW_ITEM_MASK,
     VIEW_PAGE_MASK,
     VIEW_ROLE_TYPES,
-    DOCUMENT_LIBRARY,
-    ATTACHMENT,
-    PING,
-    SCHEMA,
-    LISTS,
-    SELECTED_FIELDS,
-    SITES,
-    DRIVE_ITEM,
-    LIST_ITEM
 )
+
 
 class SharepointServerDataSource(BaseDataSource):
     """SharePoint Server"""
