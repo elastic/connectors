@@ -484,7 +484,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/box.py"
+            - "connectors/sources/box/**"
             - "tests/sources/fixtures/box/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
