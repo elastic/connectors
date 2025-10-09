@@ -85,7 +85,7 @@ steps:
         wait: false
         watch:
           - path:
-            - "connectors/sources/mysql.py"
+            - "connectors/sources/mysql/**"
             - "tests/sources/fixtures/mysql/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
@@ -218,7 +218,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/oracle.py"
+            - "connectors/sources/oracle/**"
             - "tests/sources/fixtures/oracle/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
@@ -237,7 +237,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/sharepoint_server.py"
+            - "connectors/sources/sharepoint/sharepoint_server/**"
             - "tests/sources/fixtures/sharepoint_server/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
@@ -256,7 +256,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/sharepoint_online.py"
+            - "connectors/sources/sharepoint/sharepoint_online/**"
             - "tests/sources/fixtures/sharepoint_online/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
@@ -275,7 +275,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/mssql.py"
+            - "connectors/sources/mssql/**"
             - "tests/sources/fixtures/mssql/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"

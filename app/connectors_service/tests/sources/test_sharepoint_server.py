@@ -16,7 +16,7 @@ from connectors_sdk.logger import logger
 from connectors_sdk.source import ConfigurableFieldValueError
 from httpx import ByteStream
 
-from connectors.sources.sharepoint_server import SharepointServerDataSource
+from connectors.sources.sharepoint.sharepoint_server import SharepointServerDataSource
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
 
@@ -1021,7 +1021,9 @@ async def test_api_call_successfully():
 
 @pytest.fixture
 def patch_default_wait_multiplier():
-    with mock.patch("connectors.sources.sharepoint_server.RETRY_INTERVAL", 0):
+    with mock.patch(
+        "connectors.sources.sharepoint.sharepoint_server.client.RETRY_INTERVAL", 0
+    ):
         yield
 
 
