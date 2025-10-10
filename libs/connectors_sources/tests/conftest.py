@@ -8,6 +8,7 @@ import sys
 
 import pytest
 
+
 @pytest.fixture
 def catch_stdout():
     old = sys.stdout
