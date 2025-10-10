@@ -541,7 +541,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/redis.py"
+            - "connectors/sources/redis/**"
             - "tests/sources/fixtures/redis/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
