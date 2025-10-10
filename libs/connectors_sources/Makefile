@@ -6,6 +6,7 @@ SLOW_TEST_THRESHOLD = 1
 	$(PYTHON) -m venv .venv
 	$(VENV_DIR)/pip install --upgrade pip
 	$(VENV_DIR)/python -m pip install build
+	$(VENV_DIR)/pip install -e ../connectors_sdk
 	$(VENV_DIR)/pip install -e .
 
 install: .venv/bin/python
@@ -15,10 +16,12 @@ clean:
 
 
 .venv/bin/pytest: .venv/bin/python
-	.venv/bin/pip install ".[tests]"
+	.venv/bin/pip install -e ../connectors_sdk
+	.venv/bin/pip install -e ".[tests]"
 
 .venv/bin/ruff: .venv/bin/python
-	.venv/bin/pip install ".[tests]"
+	.venv/bin/pip install -e ../connectors_sdk
+	.venv/bin/pip install -e ".[tests]"
 
 .venv/bin/pip-licenses: .venv/bin/python
 	.venv/bin/pip install pip-licenses
