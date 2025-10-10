@@ -199,11 +199,10 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/directory/**"
-            - "tests/sources/fixtures/dir/**"
-            - "tests/sources/fixtures/fixture.py"
-            - "${DOCKERFILE_FTEST_PATH}"
-            - "pyproject.toml"
+            - "libs/connectors_sources/connectors_sources/directory/**"
+            - "libs/connectors_sources/ftests/dir/**"
+            - "libs/connectors_sources/ftests/fixture.py"
+            - "libs/connectors_sources/pyproject.toml"
             config:
               label: "🔨 System Directory"
               <<: *test-agents

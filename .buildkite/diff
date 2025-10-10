@@ -8,7 +8,7 @@
 
 COMMIT=$1
 
-if [ -n $BUILDKITE_PULL_REQUEST_BASE_BRANCH ]; then
+if [[ -n $BUILDKITE_PULL_REQUEST_BASE_BRANCH ]]; then
   HEAD_BRANCH="origin/$BUILDKITE_PULL_REQUEST_BASE_BRANCH"
   MERGE_BASE=$(git merge-base "$HEAD_BRANCH" "$COMMIT")
   echo "Checking against a base branch: $BUILDKITE_PULL_REQUEST_BASE_BRANCH with merge base at $MERGE_BASE"
