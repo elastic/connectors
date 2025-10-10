@@ -19,6 +19,8 @@ from connectors.sources.gitlab.models import (
     GitLabCommit,
     GitLabDiscussion,
     GitLabGroup,
+    GitLabIssue,
+    GitLabLabel,
     GitLabMergeRequest,
     GitLabMilestone,
     GitLabNote,
@@ -1886,6 +1888,399 @@ class TestGitLabDataSourceIntegration:
         # Should still have project doc
         assert len(docs) >= 1
         assert docs[0]["type"] == "Project"
+
+
+    @pytest.mark.asyncio
+    async def test_get_docs_with_merge_requests_and_pagination(self):
+        """Test get_docs handles MRs with paginated reviewers and approved_by."""
+        project = GitLabProject(
+            id="gid://gitlab/Project/123",
+            name="project1",
+            path="project1",
+            fullPath="group/project1",
+            visibility="public",
+            starCount=0,
+            forksCount=0,
+            createdAt="2023-01-01T00:00:00Z",
+            webUrl="https://gitlab.com/group/project1",
+            repository=GitLabRepository(rootRef="main"),
+        )
+
+        mr = GitLabMergeRequest(
+            iid=1,
+            title="Test MR",
+            state="opened",
+            createdAt="2023-01-01T00:00:00Z",
+            updatedAt="2023-01-01T00:00:00Z",
+            webUrl="https://gitlab.com/group/project1/merge_requests/1",
+            sourceBranch="feature",
+            targetBranch="main",
+            assignees=PaginatedList(
+                nodes=[GitLabUser(username="assignee1")],
+                page_info=PageInfo(has_next_page=True, end_cursor="cursor1"),
+            ),
+            reviewers=PaginatedList(
+                nodes=[GitLabUser(username="reviewer1")],
+                page_info=PageInfo(has_next_page=True, end_cursor="cursor2"),
+            ),
+            labels=PaginatedList(nodes=[], page_info=PageInfo(has_next_page=False)),
+            discussions=PaginatedList(nodes=[], page_info=PageInfo(has_next_page=False)),
+            approved_by=PaginatedList(
+                nodes=[GitLabUser(username="approver1")],
+                page_info=PageInfo(has_next_page=True, end_cursor="cursor3"),
+            ),
+        )
+
+        config = GitLabDataSource.get_default_configuration()
+        config["token"]["value"] = "test-token-123"
+        config["projects"]["value"] = ["group/project1"]
+        source = GitLabDataSource(configuration=DataSourceConfiguration(config))
+
+        async def mock_get_projects():
+            yield project
+
+        async def mock_get_mrs(*args, **kwargs):
+            yield mr
+
+        async def mock_remaining_field(project_path, iid, field_name, issuable_type, cursor):
+            if field_name == "assignees":
+                yield {"username": "assignee2", "name": "Assignee 2"}
+            elif field_name == "reviewers":
+                yield {"username": "reviewer2", "name": "Reviewer 2"}
+            elif field_name == "approvedBy":
+                yield {"username": "approver2", "name": "Approver 2"}
+
+        source.gitlab_client.get_projects = mock_get_projects
+        source.gitlab_client.get_work_items_project = lambda *a, **k: async_gen_empty()
+        source.gitlab_client.get_merge_requests = mock_get_mrs
+        source.gitlab_client.get_releases = lambda *a, **k: async_gen_empty()
+        source.gitlab_client.fetch_remaining_field = mock_remaining_field
+        source.gitlab_client._get_rest = AsyncMock(return_value=[])
+
+        docs = []
+        async for doc, _ in source.get_docs():
+            docs.append(doc)
+
+        # Find the MR doc
+        mr_doc = [d for d in docs if d["type"] == "Merge Request"][0]
+        # Should have fetched paginated fields
+        assert len(mr_doc["assignees"]) == 2  # assignee1 + assignee2
+        assert len(mr_doc["reviewers"]) == 2  # reviewer1 + reviewer2
+        assert len(mr_doc["approved_by"]) == 2  # approver1 + approver2
+
+    @pytest.mark.asyncio
+    async def test_get_docs_with_releases(self):
+        """Test get_docs yields release documents."""
+        project = GitLabProject(
+            id="gid://gitlab/Project/123",
+            name="project1",
+            path="project1",
+            fullPath="group/project1",
+            visibility="public",
+            starCount=0,
+            forksCount=0,
+            createdAt="2023-01-01T00:00:00Z",
+            webUrl="https://gitlab.com/group/project1",
+            repository=GitLabRepository(rootRef="main"),
+        )
+
+        release = GitLabRelease(
+            tagName="v1.0.0",
+            name="Release 1.0.0",
+            createdAt="2023-01-01T00:00:00Z",
+            milestones=PaginatedList(nodes=[], page_info=PageInfo(has_next_page=False)),
+            assets=GitLabAssets(
+                count=0,
+                links=PaginatedList(nodes=[], page_info=PageInfo(has_next_page=False)),
+            ),
+        )
+
+        config = GitLabDataSource.get_default_configuration()
+        config["token"]["value"] = "test-token-123"
+        config["projects"]["value"] = ["group/project1"]
+        source = GitLabDataSource(configuration=DataSourceConfiguration(config))
+
+        async def mock_get_projects():
+            yield project
+
+        async def mock_get_releases(*args, **kwargs):
+            yield release
+
+        source.gitlab_client.get_projects = mock_get_projects
+        source.gitlab_client.get_work_items_project = lambda *a, **k: async_gen_empty()
+        source.gitlab_client.get_merge_requests = lambda *a, **k: async_gen_empty()
+        source.gitlab_client.get_releases = mock_get_releases
+        source.gitlab_client._get_rest = AsyncMock(return_value=[])
+
+        docs = []
+        async for doc, _ in source.get_docs():
+            docs.append(doc)
+
+        # Should have project + release
+        assert len(docs) >= 2
+        release_doc = [d for d in docs if d["type"] == "Release"][0]
+        assert release_doc["tag_name"] == "v1.0.0"
+
+    @pytest.mark.asyncio
+    async def test_fetch_remaining_issue_fields(self, mock_configuration):
+        """Test _fetch_remaining_issue_fields calls all pagination methods."""
+        source = GitLabDataSource(configuration=mock_configuration)
+
+        issue = GitLabIssue(
+            iid=1,
+            title="Test Issue",
+            state="opened",
+            webUrl="https://gitlab.com/test",
+            createdAt="2023-01-01T00:00:00Z",
+            updatedAt="2023-01-01T00:00:00Z",
+            assignees=PaginatedList(
+                nodes=[GitLabUser(username="user1")],
+                page_info=PageInfo(has_next_page=True, end_cursor="cursor1"),
+            ),
+            labels=PaginatedList(
+                nodes=[GitLabLabel(title="label1")],
+                page_info=PageInfo(has_next_page=True, end_cursor="cursor2"),
+            ),
+            discussions=PaginatedList(
+                nodes=[],
+                page_info=PageInfo(has_next_page=True, end_cursor="cursor3"),
+            ),
+        )
+
+        async def mock_fetch_remaining(project_path, iid, field_name, issuable_type, cursor):
+            if field_name == "assignees":
+                yield {"username": "user2"}
+            elif field_name == "labels":
+                yield {"title": "label2"}
+            elif field_name == "discussions":
+                yield {"id": "disc1", "notes": {"nodes": [], "pageInfo": {"hasNextPage": False}}}
+
+        source.gitlab_client.fetch_remaining_field = mock_fetch_remaining
+
+        await source._fetch_remaining_issue_fields(issue, "group/project")
+
+        # Should have appended paginated items
+        assert len(issue.assignees.nodes) == 2
+        assert len(issue.labels.nodes) == 2
+        assert len(issue.discussions.nodes) == 1
+
+
+
+# Tests for error handling in client
+class TestGitLabClientErrorHandling:
+    """Test suite for GitLabClient error handling."""
+
+    @pytest.mark.asyncio
+    async def test_execute_graphql_rate_limit_in_response(self):
+        """Test _execute_graphql detects and handles rate limit in GraphQL response."""
+        from unittest.mock import MagicMock
+        import aiohttp
+
+        client = GitLabClient(token="test-token")
+
+        # Create mock response
+        mock_response = MagicMock()
+        mock_response.status = 200
+        mock_response.json = AsyncMock(
+            return_value={
+                "errors": [
+                    {"message": "You have exceeded the rate limit"}
+                ]
+            }
+        )
+        mock_response.__aenter__ = AsyncMock(return_value=mock_response)
+        mock_response.__aexit__ = AsyncMock(return_value=None)
+
+        # Mock session
+        mock_session = MagicMock()
+        mock_session.post = MagicMock(return_value=mock_response)
+        mock_session.closed = False
+
+        client._session = mock_session
+
+        # Should raise on rate limit error
+        with patch("asyncio.sleep", new_callable=AsyncMock):
+            with pytest.raises(Exception, match="rate limit"):
+                await client._execute_graphql("query", {})
+
+    @pytest.mark.asyncio
+    async def test_execute_graphql_general_error(self):
+        """Test _execute_graphql raises on general GraphQL errors."""
+        from unittest.mock import MagicMock
+
+        client = GitLabClient(token="test-token")
+
+        # Create mock response with non-rate-limit error
+        mock_response = MagicMock()
+        mock_response.status = 200
+        mock_response.json = AsyncMock(
+            return_value={
+                "errors": [
+                    {"message": "Field 'invalid' doesn't exist"}
+                ]
+            }
+        )
+        mock_response.__aenter__ = AsyncMock(return_value=mock_response)
+        mock_response.__aexit__ = AsyncMock(return_value=None)
+
+        mock_session = MagicMock()
+        mock_session.post = MagicMock(return_value=mock_response)
+        mock_session.closed = False
+
+        client._session = mock_session
+
+        # Should raise on general GraphQL error
+        with pytest.raises(Exception, match="GraphQL errors"):
+            await client._execute_graphql("query", {})
+
+    @pytest.mark.asyncio
+    async def test_execute_graphql_http_rate_limit(self):
+        """Test _execute_graphql handles HTTP 429 rate limit."""
+        from unittest.mock import MagicMock
+
+        client = GitLabClient(token="test-token")
+
+        # Create mock response with 429 status
+        mock_response = MagicMock()
+        mock_response.status = 429
+        mock_response.headers = {"Retry-After": "1"}
+        mock_response.__aenter__ = AsyncMock(return_value=mock_response)
+        mock_response.__aexit__ = AsyncMock(return_value=None)
+
+        mock_session = MagicMock()
+        mock_session.post = MagicMock(return_value=mock_response)
+        mock_session.closed = False
+
+        client._session = mock_session
+
+        # Should handle rate limit and raise
+        with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+            with pytest.raises(Exception, match="Rate limit exceeded"):
+                await client._execute_graphql("query", {})
+
+            # Should have slept before raising
+            mock_sleep.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_execute_graphql_http_error(self):
+        """Test _execute_graphql handles HTTP errors (non-200 status)."""
+        from unittest.mock import MagicMock
+        import aiohttp
+
+        client = GitLabClient(token="test-token")
+
+        # Create mock response with 500 error
+        mock_response = MagicMock()
+        mock_response.status = 500
+        mock_response.raise_for_status = Mock(side_effect=aiohttp.ClientResponseError(
+            request_info=Mock(),
+            history=(),
+            status=500,
+            message="Internal Server Error"
+        ))
+        mock_response.__aenter__ = AsyncMock(return_value=mock_response)
+        mock_response.__aexit__ = AsyncMock(return_value=None)
+
+        mock_session = MagicMock()
+        mock_session.post = MagicMock(return_value=mock_response)
+        mock_session.closed = False
+
+        client._session = mock_session
+
+        # Should raise HTTP error
+        with pytest.raises(aiohttp.ClientResponseError):
+            await client._execute_graphql("query", {})
+
+    @pytest.mark.asyncio
+    async def test_get_rest_rate_limit(self):
+        """Test _get_rest handles rate limit."""
+        from unittest.mock import MagicMock
+
+        client = GitLabClient(token="test-token")
+
+        # Create mock response with 429 status
+        mock_response = MagicMock()
+        mock_response.status = 429
+        mock_response.headers = {"Retry-After": "1"}
+        mock_response.__aenter__ = AsyncMock(return_value=mock_response)
+        mock_response.__aexit__ = AsyncMock(return_value=None)
+
+        mock_session = MagicMock()
+        mock_session.get = MagicMock(return_value=mock_response)
+        mock_session.closed = False
+
+        client._session = mock_session
+
+        # Should handle rate limit and raise
+        with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+            with pytest.raises(Exception, match="Rate limit exceeded"):
+                await client._get_rest("projects")
+
+            mock_sleep.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_get_rest_http_error(self):
+        """Test _get_rest handles HTTP errors."""
+        from unittest.mock import MagicMock
+        import aiohttp
+
+        client = GitLabClient(token="test-token")
+
+        # Create mock response with 404 error
+        mock_response = MagicMock()
+        mock_response.status = 404
+        mock_response.raise_for_status = Mock(side_effect=aiohttp.ClientResponseError(
+            request_info=Mock(),
+            history=(),
+            status=404,
+            message="Not Found"
+        ))
+        mock_response.__aenter__ = AsyncMock(return_value=mock_response)
+        mock_response.__aexit__ = AsyncMock(return_value=None)
+
+        mock_session = MagicMock()
+        mock_session.get = MagicMock(return_value=mock_response)
+        mock_session.closed = False
+
+        client._session = mock_session
+
+        # Should raise HTTP error
+        with pytest.raises(aiohttp.ClientResponseError):
+            await client._get_rest("invalid/endpoint")
+
+    @pytest.mark.asyncio
+    async def test_handle_rate_limit_with_ratelimit_reset_header(self):
+        """Test _handle_rate_limit uses RateLimit-Reset header when no Retry-After."""
+        client = GitLabClient(token="test-token")
+
+        mock_response = Mock()
+        mock_response.status = 429
+        mock_response.headers = {"RateLimit-Reset": "1234567890"}  # No Retry-After
+
+        with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+            with patch("time.time", return_value=1234567880):  # 10 seconds before reset
+                result = await client._handle_rate_limit(mock_response)
+
+                assert result is True
+                # Should sleep for the time difference
+                assert mock_sleep.called
+
+    @pytest.mark.asyncio
+    async def test_handle_rate_limit_default_sleep(self):
+        """Test _handle_rate_limit uses default 60s when no headers."""
+        client = GitLabClient(token="test-token")
+
+        mock_response = Mock()
+        mock_response.status = 429
+        mock_response.headers = {}  # No rate limit headers
+
+        with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+            result = await client._handle_rate_limit(mock_response)
+
+            assert result is True
+            # Should sleep for default 60 seconds
+            assert mock_sleep.call_count == 1
+            assert mock_sleep.call_args[0][0] == 60  # First positional arg
 
 
 # Helper for empty async generators
