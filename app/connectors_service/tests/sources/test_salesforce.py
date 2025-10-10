@@ -21,11 +21,6 @@ from connectors.sources.salesforce import (
     SalesforceAdvancedRulesValidator,
     SalesforceDataSource,
 )
-from connectors.sources.salesforce.datasource import (
-    _prefix_email,
-    _prefix_user,
-    _prefix_user_id,
-)
 from connectors.sources.salesforce.client import (
     ConnectorRequestError,
     InvalidCredentialsException,
@@ -38,6 +33,11 @@ from connectors.sources.salesforce.client import (
 from connectors.sources.salesforce.constants import (
     API_VERSION,
     RELEVANT_SOBJECT_FIELDS,
+)
+from connectors.sources.salesforce.datasource import (
+    _prefix_email,
+    _prefix_user,
+    _prefix_user_id,
 )
 from tests.sources.support import create_source
 

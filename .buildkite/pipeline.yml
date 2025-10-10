@@ -579,7 +579,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/sandfly.py"
+            - "connectors/sources/sandfly/**"
             - "tests/sources/fixtures/sandfly/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
