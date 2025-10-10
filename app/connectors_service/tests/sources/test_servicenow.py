@@ -15,12 +15,11 @@ from connectors_sdk.filtering.validation import Filter, SyncRuleValidationResult
 from connectors_sdk.source import ConfigurableFieldValueError
 
 from connectors.access_control import DLS_QUERY
-from connectors.sources.servicenow import (
-    InvalidResponse,
-    ServiceNowAdvancedRulesValidator,
-    ServiceNowClient,
+from connectors.sources.service_now.datasource import (
     ServiceNowDataSource,
 )
+from connectors.sources.service_now.client import InvalidResponse, ServiceNowClient
+from connectors.sources.service_now.validator import ServiceNowAdvancedRulesValidator
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
 
