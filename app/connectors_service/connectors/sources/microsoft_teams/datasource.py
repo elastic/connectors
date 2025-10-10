@@ -13,10 +13,6 @@ from functools import cached_property, partial
 import aiofiles
 from aiofiles.os import remove
 from aiofiles.tempfile import NamedTemporaryFile
-
-from connectors.sources.microsoft_teams.client import UserEndpointName, TeamEndpointName, EndSignal, Schema, \
-    MicrosoftTeamsClient
-from connectors.sources.microsoft_teams.formatter import MicrosoftTeamsFormatter
 from connectors_sdk.content_extraction import (
     TIKA_SUPPORTED_FILETYPES,
 )
@@ -25,6 +21,14 @@ from connectors_sdk.utils import (
     convert_to_b64,
 )
 
+from connectors.sources.microsoft_teams.client import (
+    EndSignal,
+    MicrosoftTeamsClient,
+    Schema,
+    TeamEndpointName,
+    UserEndpointName,
+)
+from connectors.sources.microsoft_teams.formatter import MicrosoftTeamsFormatter
 from connectors.utils import (
     ConcurrentTasks,
     MemQueue,
@@ -34,6 +38,7 @@ from connectors.utils import (
 QUEUE_MEM_SIZE = 5 * 1024 * 1024  # Size in Megabytes
 MAX_CONCURRENCY = 80
 MAX_FILE_SIZE = 10485760
+
 
 class MicrosoftTeamsDataSource(BaseDataSource):
     """Microsoft Teams"""

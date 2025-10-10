@@ -10,10 +10,6 @@ from enum import Enum
 from functools import partial
 
 import dateutil.parser as parser
-
-from connectors.sources.service_now.client import ServiceNowClient, MAX_CONCURRENT_CLIENT_SUPPORT, TABLE_BATCH_SIZE, \
-    RETRIES, ENDPOINTS
-from connectors.sources.service_now.validator import ServiceNowAdvancedRulesValidator
 from connectors_sdk.source import BaseDataSource, ConfigurableFieldValueError
 from connectors_sdk.utils import (
     iso_utc,
@@ -24,6 +20,14 @@ from connectors.access_control import (
     es_access_control_query,
     prefix_identity,
 )
+from connectors.sources.service_now.client import (
+    ENDPOINTS,
+    MAX_CONCURRENT_CLIENT_SUPPORT,
+    RETRIES,
+    TABLE_BATCH_SIZE,
+    ServiceNowClient,
+)
+from connectors.sources.service_now.validator import ServiceNowAdvancedRulesValidator
 from connectors.utils import (
     ConcurrentTasks,
     MemQueue,

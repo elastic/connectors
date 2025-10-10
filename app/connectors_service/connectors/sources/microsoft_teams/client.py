@@ -9,11 +9,16 @@ from enum import Enum
 
 import aiohttp
 from aiohttp import ClientResponseError
-
+from connectors_sdk.logger import logger
 from msal import ConfidentialClientApplication
 
-from connectors.utils import CacheWithTimeout, retryable, RetryStrategy, CancellableSleeps, url_encode
-from connectors_sdk.logger import logger
+from connectors.utils import (
+    CacheWithTimeout,
+    CancellableSleeps,
+    RetryStrategy,
+    retryable,
+    url_encode,
+)
 
 SCOPE = [
     "User.Read.All",

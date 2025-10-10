@@ -7,13 +7,20 @@ from functools import cached_property
 
 import aiohttp
 from aiohttp import ClientResponseError
-from graphql import Visitor, VariableNode, parse, visit
-
-from connectors.sources.graphql.constants import PING_QUERY, RETRIES, RETRY_INTERVAL, BASIC, BEARER, CURSOR_PAGINATION, \
-    GET
-from connectors.utils import CancellableSleeps, retryable, RetryStrategy
 from connectors_sdk.logger import logger
 from connectors_sdk.source import ConfigurableFieldValueError
+from graphql import VariableNode, Visitor, parse, visit
+
+from connectors.sources.graphql.constants import (
+    BASIC,
+    BEARER,
+    CURSOR_PAGINATION,
+    GET,
+    PING_QUERY,
+    RETRIES,
+    RETRY_INTERVAL,
+)
+from connectors.utils import CancellableSleeps, RetryStrategy, retryable
 
 
 class FieldVisitor(Visitor):

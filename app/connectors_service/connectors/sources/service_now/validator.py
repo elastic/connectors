@@ -4,8 +4,10 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import fastjsonschema
-
-from connectors_sdk.filtering.validation import AdvancedRulesValidator, SyncRuleValidationResult
+from connectors_sdk.filtering.validation import (
+    AdvancedRulesValidator,
+    SyncRuleValidationResult,
+)
 
 
 class ServiceNowAdvancedRulesValidator(AdvancedRulesValidator):

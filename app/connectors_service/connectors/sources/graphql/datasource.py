@@ -9,13 +9,22 @@ import json
 import re
 from copy import deepcopy
 
-from connectors.sources.graphql.client import GraphQLClient
-from connectors.sources.graphql.constants import BASIC, BEARER, CURSOR_PAGINATION, GET, NO_PAGINATION, POST, URL_REGEX
 from connectors_sdk.source import BaseDataSource, ConfigurableFieldValueError
 from connectors_sdk.utils import (
     iso_utc,
 )
 from graphql import parse
+
+from connectors.sources.graphql.client import GraphQLClient
+from connectors.sources.graphql.constants import (
+    BASIC,
+    BEARER,
+    CURSOR_PAGINATION,
+    GET,
+    NO_PAGINATION,
+    POST,
+    URL_REGEX,
+)
 
 
 class GraphQLDataSource(BaseDataSource):

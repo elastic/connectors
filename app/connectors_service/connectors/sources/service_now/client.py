@@ -11,10 +11,9 @@ from functools import cached_property
 from urllib.parse import urlencode
 
 import aiohttp
-
-from connectors.utils import CancellableSleeps, retryable, RetryStrategy
 from connectors_sdk.logger import logger
 
+from connectors.utils import CancellableSleeps, RetryStrategy, retryable
 
 MAX_CONCURRENT_CLIENT_SUPPORT = 10
 TABLE_FETCH_SIZE = 50
