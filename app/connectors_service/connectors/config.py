@@ -114,7 +114,7 @@ def _default_config():
             "azure_blob_storage": "connectors.sources.azure_blob_storage:AzureBlobStorageDataSource",
             "box": "connectors.sources.box:BoxDataSource",
             "confluence": "connectors.sources.atlassian.confluence:ConfluenceDataSource",
-            "dir": "connectors.sources.directory:DirectoryDataSource",
+            "dir": "connectors_sources.core.directory:DirectoryDataSource",
             "dropbox": "connectors.sources.dropbox:DropboxDataSource",
             "github": "connectors.sources.github:GitHubDataSource",
             "gmail": "connectors.sources.gmail:GMailDataSource",

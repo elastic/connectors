@@ -1,5 +1,6 @@
 app_dir := app/connectors_service
 connectors_sdk_dir := libs/connectors_sdk
+connectors_source_dir := libs/connectors_sources
 
 VERSION=$(shell cat app/connectors_service/connectors/VERSION)
 
@@ -9,10 +10,12 @@ DOCKERFILE_FTEST_PATH?=app/connectors_service/tests/Dockerfile.ftest
 
 install:
 	cd $(connectors_sdk_dir); make install
+	cd $(connectors_source_dir); make install
 	cd $(app_dir); make install
 
 test: install
 	cd $(connectors_sdk_dir); make test
+	cd $(connectors_source_dir); make test
 	cd $(app_dir); make test
 
 ftest: install $(DOCKERFILE_FTEST_PATH) build-connectors-base-image
@@ -23,18 +26,22 @@ ftrace:
 
 notice: install
 	cd $(connectors_sdk_dir); make notice
+	cd $(connectors_source_dir); make notice
 	cd $(app_dir); make notice
 
 lint: install
 	cd $(connectors_sdk_dir); make lint
+	cd $(connectors_source_dir); make lint
 	cd $(app_dir); make lint
 
 autoformat: install
 	cd $(connectors_sdk_dir); make autoformat
+	cd $(connectors_source_dir); make autoformat
 	cd $(app_dir); make autoformat
 
 clean:
 	cd $(connectors_sdk_dir); make clean
+	cd $(connectors_source_dir); make clean
 	cd $(app_dir); make clean
 
 run:

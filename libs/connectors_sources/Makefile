@@ -6,37 +6,40 @@ SLOW_TEST_THRESHOLD = 1
 	$(PYTHON) -m venv .venv
 	$(VENV_DIR)/pip install --upgrade pip
 	$(VENV_DIR)/python -m pip install build
+	$(VENV_DIR)/pip install -e ../connectors_sdk
 	$(VENV_DIR)/pip install -e .
 
 install: .venv/bin/python
 
 clean:
-	rm -rf bin lib .venv include elasticsearch_connectors_sdk.egg-info .coverage site-packages pyvenv.cfg include.site.python*.greenlet dist
+	rm -rf bin lib .venv include elasticsearch_connectors_sources.egg-info .coverage site-packages pyvenv.cfg include.site.python*.greenlet dist
 
 
 .venv/bin/pytest: .venv/bin/python
-	.venv/bin/pip install ".[tests]"
+	.venv/bin/pip install -e ../connectors_sdk
+	.venv/bin/pip install -e ".[tests]"
 
 .venv/bin/ruff: .venv/bin/python
-	.venv/bin/pip install ".[tests]"
+	.venv/bin/pip install -e ../connectors_sdk
+	.venv/bin/pip install -e ".[tests]"
 
 .venv/bin/pip-licenses: .venv/bin/python
 	.venv/bin/pip install pip-licenses
 
 lint: install .venv/bin/ruff
-	.venv/bin/ruff check connectors_sdk
-	.venv/bin/ruff format connectors_sdk --check
+	.venv/bin/ruff check connectors_sources
+	.venv/bin/ruff format connectors_sources --check
 	.venv/bin/ruff check tests
 	.venv/bin/ruff format tests --check
-	.venv/bin/pyright connectors_sdk
+	.venv/bin/pyright connectors_sources
 	.venv/bin/pyright tests
 
 test: .venv/bin/pytest
-	$(VENV_DIR)/pytest --cov-report term-missing --cov-fail-under 80 --cov-report html --cov=connectors_sdk --fail-slow=$(SLOW_TEST_THRESHOLD) -sv tests
+	$(VENV_DIR)/pytest --cov-report term-missing --cov-fail-under 80 --cov-report html --cov=connectors_sources --fail-slow=$(SLOW_TEST_THRESHOLD) -sv tests
 
 autoformat: install .venv/bin/ruff
-	.venv/bin/ruff check connectors_sdk --fix
-	.venv/bin/ruff format connectors_sdk
+	.venv/bin/ruff check connectors_sources --fix
+	.venv/bin/ruff format connectors_sources
 	.venv/bin/ruff check tests --fix
 	.venv/bin/ruff format tests
 

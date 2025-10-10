@@ -5,28 +5,19 @@ set -o pipefail
 NAME=$1
 PERF8=$2
 
-# If a connector has been migrated to connectors_sources, run the ftest.sh from there instead
-MIGRATED_SOURCES=("dir")
-for source in "${MIGRATED_SOURCES[@]}"; do
-    if [[ "$source" == "$NAME" ]]; then
-        echo "Running ftest for migrated source '$NAME' from connectors_sources..."
-        SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
-        CONNECTORS_SOURCES_DIR="$SCRIPT_DIR/../../../libs/connectors_sources"
-        cd "$CONNECTORS_SOURCES_DIR"
-        exec ./ftests/ftest.sh "$NAME" "$PERF8"
-    fi
-done
-
 SERVICE_TYPE=${NAME%"_serverless"}
 INDEX_NAME=search-${NAME%"_serverless"}
 
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 ROOT_DIR="$SCRIPT_DIR/.."
-VIRTUAL_ENV="$ROOT_DIR/.venv"
+# Use the main connectors_service venv which has all dependencies
+# Path from libs/connectors_sources -> ../../app/connectors_service
+CONNECTORS_SERVICE_DIR="$ROOT_DIR/../../app/connectors_service"
+VIRTUAL_ENV="$CONNECTORS_SERVICE_DIR/.venv"
 PLATFORM='unknown'
 MAX_RSS="200M"
 MAX_DURATION=600
-CONNECTORS_VERSION=$(cat "$ROOT_DIR/connectors/VERSION")
+CONNECTORS_SOURCE_VERSION=$(cat "$ROOT_DIR/connectors_sources/VERSION")
 ARTIFACT_BASE_URL="https://artifacts-snapshot.elastic.co"
 # Retry configuration
 CURL_MAX_RETRIES=3
@@ -37,7 +28,7 @@ export PERF8_TRACE=${PERF8_TRACE:-False}
 export REFRESH_RATE="${REFRESH_RATE:-5}"
 export DATA_SIZE="${DATA_SIZE:-medium}"
 export RUNNING_FTEST=True
-export VERSION="${CONNECTORS_VERSION}-SNAPSHOT"
+export VERSION="${CONNECTORS_SOURCE_VERSION}-SNAPSHOT"
 
 
 
@@ -292,7 +283,7 @@ elif [[ "$unamestr" == 'Darwin' ]]; then
 fi
 
 
-cd $ROOT_DIR/tests/sources/fixtures
+cd $ROOT_DIR/ftests
 
 # Add project root to PYTHONPATH so tests module can be imported
 export PYTHONPATH="$ROOT_DIR${PYTHONPATH:+:$PYTHONPATH}"
@@ -336,7 +327,7 @@ $PYTHON fixture.py --name $NAME --action monitor --pid $PID_2
 
 
 NUM_DOCS=`$PYTHON fixture.py --name $NAME --action get_num_docs`
-$PYTHON $ROOT_DIR/scripts/verify.py --index-name $INDEX_NAME --service-type $NAME --size $NUM_DOCS
+$PYTHON "$CONNECTORS_SERVICE_DIR"/scripts/verify.py --index-name $INDEX_NAME --service-type $NAME --size $NUM_DOCS
 $PYTHON fixture.py --name $NAME --action teardown
 
 # stopping the stack as a final step once everything else is done.
