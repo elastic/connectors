@@ -346,12 +346,11 @@ class GitLabAPI:
                         "createdAt": "2023-06-01T00:00:00Z",
                         "updatedAt": datetime.now(timezone.utc).isoformat(),
                         "workItemType": {"name": "ISSUE"},
-                        "webUrl": f"https://gitlab.com/{project_path}/-/work_items/{iid_match}",
                         "author": {
                             "username": "test-user",
                             "name": "Test User",
                         },
-                        "webUrl": f"https://gitlab.com/test-group/test-project/-/work_items/{iid_match}",
+                        "webUrl": f"https://gitlab.com/{project_path}/-/work_items/{iid_match}",
                         "widgets": [
                             {
                                 "__typename": "WorkItemWidgetDescription",

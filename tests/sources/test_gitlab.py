@@ -49,9 +49,11 @@ from connectors.sources.gitlab.models import (
 @asynccontextmanager
 async def create_gitlab_source(
     token="test-token-123",
-    projects=["group/project1", "group/project2"],
+    projects=None,
 ):
     """Create a GitLab source with test configuration."""
+    if projects is None:
+        projects = ["group/project1", "group/project2"]
     async with create_source(
         GitLabDataSource,
         token=token,
@@ -1381,7 +1383,7 @@ class TestGitLabDataSourceIntegration:
         )
 
         readme_docs = []
-        async for doc, download_func in source._fetch_readme_files(123, mock_gitlab_project):
+        async for doc, _download_func in source._fetch_readme_files(123, mock_gitlab_project):
             readme_docs.append(doc)
 
         # Should yield 2 READMEs (md and rst), skip other.py and tree
@@ -1563,3 +1565,221 @@ class TestGitLabDataSourceIntegration:
         assert len(docs) >= 2
         assert docs[0]["type"] == "Project"
         assert docs[1]["type"] == "Issue"
+
+    @pytest.mark.asyncio
+    async def test_get_docs_with_paginated_work_item_fields(self, mock_gitlab_project):
+        """Test get_docs handles paginated assignees/labels/discussions in work items."""
+        # Create work item with paginated assignees
+        work_item = GitLabWorkItem.model_validate({
+            "id": "gid://gitlab/WorkItem/1",
+            "iid": 1,
+            "title": "Issue with many assignees",
+            "state": "opened",
+            "createdAt": "2023-01-01T00:00:00Z",
+            "updatedAt": "2023-01-01T00:00:00Z",
+            "webUrl": "https://gitlab.com/group/project1/issues/1",
+            "workItemType": {"name": "Issue"},
+            "widgets": [
+                {
+                    "__typename": "WorkItemWidgetAssignees",
+                    "assignees": {
+                        "nodes": [{"username": "user1", "name": "User 1"}],
+                        "pageInfo": {"hasNextPage": True, "endCursor": "cursor1"},
+                    }
+                },
+                {
+                    "__typename": "WorkItemWidgetLabels",
+                    "labels": {
+                        "nodes": [{"title": "label1"}],
+                        "pageInfo": {"hasNextPage": True, "endCursor": "cursor2"},
+                    }
+                },
+                {
+                    "__typename": "WorkItemWidgetNotes",
+                    "discussions": {
+                        "nodes": [],
+                        "pageInfo": {"hasNextPage": True, "endCursor": "cursor3"},
+                    }
+                },
+            ],
+        })
+
+        config = GitLabDataSource.get_default_configuration()
+        config["token"]["value"] = "test-token-123"
+        config["projects"]["value"] = ["group/test-project"]
+        source = GitLabDataSource(configuration=DataSourceConfiguration(config))
+
+        async def mock_get_projects():
+            yield mock_gitlab_project
+
+        async def mock_get_work_items(*args, **kwargs):
+            yield work_item
+
+        async def mock_remaining_assignees(*args, **kwargs):
+            yield {"username": "user2", "name": "User 2"}
+
+        async def mock_remaining_labels(*args, **kwargs):
+            yield {"title": "label2"}
+
+        async def mock_remaining_discussions(*args, **kwargs):
+            yield {"id": "disc1", "notes": {"nodes": [], "pageInfo": {"hasNextPage": False}}}
+
+        source.gitlab_client.get_projects = mock_get_projects
+        source.gitlab_client.get_work_items_project = mock_get_work_items
+        source.gitlab_client.get_merge_requests = lambda *a, **k: async_gen_empty()
+        source.gitlab_client.get_releases = lambda *a, **k: async_gen_empty()
+        source.gitlab_client.fetch_remaining_work_item_assignees = mock_remaining_assignees
+        source.gitlab_client.fetch_remaining_work_item_labels = mock_remaining_labels
+        source.gitlab_client.fetch_remaining_work_item_discussions = mock_remaining_discussions
+        source.gitlab_client._get_rest = AsyncMock(return_value=[])
+
+        docs = []
+        async for doc, _ in source.get_docs():
+            docs.append(doc)
+
+        # Should have project + work item
+        issue_doc = [d for d in docs if d["type"] == "Issue"][0]
+        # Should have fetched paginated assignees and labels
+        assert len(issue_doc["assignees"]) == 2  # user1 + user2
+        assert len(issue_doc["labels"]) == 2  # label1 + label2
+
+    @pytest.mark.asyncio
+    async def test_get_docs_with_epics_and_pagination(self):
+        """Test get_docs handles epics with paginated fields."""
+        project = GitLabProject(
+            id="gid://gitlab/Project/123",
+            name="project1",
+            path="project1",
+            fullPath="group/project1",
+            visibility="public",
+            starCount=0,
+            forksCount=0,
+            createdAt="2023-01-01T00:00:00Z",
+            webUrl="https://gitlab.com/group/project1",
+            repository=GitLabRepository(rootRef="main"),
+            group=GitLabGroup(id="gid://gitlab/Group/456", fullPath="group"),
+        )
+
+        epic = GitLabWorkItem.model_validate({
+            "id": "gid://gitlab/WorkItem/999",
+            "iid": 1,
+            "title": "Epic with pagination",
+            "state": "opened",
+            "createdAt": "2023-01-01T00:00:00Z",
+            "updatedAt": "2023-01-01T00:00:00Z",
+            "webUrl": "https://gitlab.com/groups/group/-/epics/1",
+            "workItemType": {"name": "Epic"},
+            "widgets": [
+                {
+                    "__typename": "WorkItemWidgetAssignees",
+                    "assignees": {
+                        "nodes": [{"username": "epicuser1"}],
+                        "pageInfo": {"hasNextPage": True, "endCursor": "epiccursor1"},
+                    }
+                },
+                {
+                    "__typename": "WorkItemWidgetLabels",
+                    "labels": {
+                        "nodes": [{"title": "epiclabel1"}],
+                        "pageInfo": {"hasNextPage": True, "endCursor": "epiccursor2"},
+                    }
+                },
+                {
+                    "__typename": "WorkItemWidgetNotes",
+                    "discussions": {
+                        "nodes": [],
+                        "pageInfo": {"hasNextPage": False},
+                    }
+                },
+            ],
+        })
+
+        config = GitLabDataSource.get_default_configuration()
+        config["token"]["value"] = "test-token-123"
+        config["projects"]["value"] = ["group/project1"]
+        source = GitLabDataSource(configuration=DataSourceConfiguration(config))
+
+        async def mock_get_projects():
+            yield project
+
+        async def mock_get_epics(*args, **kwargs):
+            yield epic
+
+        async def mock_remaining_epic_assignees(*args, **kwargs):
+            yield {"username": "epicuser2", "name": "Epic User 2"}
+
+        async def mock_remaining_epic_labels(*args, **kwargs):
+            yield {"title": "epiclabel2"}
+
+        source.gitlab_client.get_projects = mock_get_projects
+        source.gitlab_client.get_work_items_project = lambda *a, **k: async_gen_empty()
+        source.gitlab_client.get_work_items_group = mock_get_epics
+        source.gitlab_client.get_merge_requests = lambda *a, **k: async_gen_empty()
+        source.gitlab_client.get_releases = lambda *a, **k: async_gen_empty()
+        source.gitlab_client.fetch_remaining_work_item_assignees_group = mock_remaining_epic_assignees
+        source.gitlab_client.fetch_remaining_work_item_labels_group = mock_remaining_epic_labels
+        source.gitlab_client.fetch_remaining_work_item_group_discussions = lambda *a, **k: async_gen_empty()
+        source.gitlab_client._get_rest = AsyncMock(return_value=[])
+
+        docs = []
+        async for doc, _ in source.get_docs():
+            docs.append(doc)
+
+        # Should have project + epic
+        epic_doc = [d for d in docs if d["type"] == "Epic"][0]
+        # Should have fetched paginated assignees and labels
+        assert len(epic_doc["assignees"]) == 2  # epicuser1 + epicuser2
+        assert len(epic_doc["labels"]) == 2  # epiclabel1 + epiclabel2
+
+    @pytest.mark.asyncio
+    async def test_get_docs_epic_fetch_failure_graceful(self):
+        """Test get_docs handles epic fetch failures gracefully (Free tier)."""
+        project = GitLabProject(
+            id="gid://gitlab/Project/123",
+            name="project1",
+            path="project1",
+            fullPath="group/project1",
+            visibility="public",
+            starCount=0,
+            forksCount=0,
+            createdAt="2023-01-01T00:00:00Z",
+            webUrl="https://gitlab.com/group/project1",
+            repository=GitLabRepository(rootRef="main"),
+            group=GitLabGroup(id="gid://gitlab/Group/456", fullPath="group"),
+        )
+
+        config = GitLabDataSource.get_default_configuration()
+        config["token"]["value"] = "test-token-123"
+        config["projects"]["value"] = ["group/project1"]
+        source = GitLabDataSource(configuration=DataSourceConfiguration(config))
+
+        async def mock_get_projects():
+            yield project
+
+        async def mock_get_epics(*args, **kwargs):
+            # Simulate Premium/Ultimate tier error
+            raise Exception("Epics require Premium tier")
+            yield  # Never reached
+
+        source.gitlab_client.get_projects = mock_get_projects
+        source.gitlab_client.get_work_items_project = lambda *a, **k: async_gen_empty()
+        source.gitlab_client.get_work_items_group = mock_get_epics
+        source.gitlab_client.get_merge_requests = lambda *a, **k: async_gen_empty()
+        source.gitlab_client.get_releases = lambda *a, **k: async_gen_empty()
+        source.gitlab_client._get_rest = AsyncMock(return_value=[])
+
+        docs = []
+        # Should not crash, just skip epics
+        async for doc, _ in source.get_docs():
+            docs.append(doc)
+
+        # Should still have project doc
+        assert len(docs) >= 1
+        assert docs[0]["type"] == "Project"
+
+
+# Helper for empty async generators
+async def async_gen_empty():
+    """Empty async generator."""
+    return
+    yield  # Never reached
