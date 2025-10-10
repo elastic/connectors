@@ -370,7 +370,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/github.py"
+            - "connectors/sources/github/**"
             - "tests/sources/fixtures/github/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
