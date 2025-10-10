@@ -10,10 +10,12 @@ DOCKERFILE_FTEST_PATH?=app/connectors_service/tests/Dockerfile.ftest
 
 install:
 	cd $(connectors_sdk_dir); make install
+	cd $(connectors_source_dir); make install
 	cd $(app_dir); make install
 
 test: install
 	cd $(connectors_sdk_dir); make test
+	cd $(connectors_source_dir); make test
 	cd $(app_dir); make test
 
 ftest: install $(DOCKERFILE_FTEST_PATH) build-connectors-base-image
@@ -39,6 +41,7 @@ autoformat: install
 
 clean:
 	cd $(connectors_sdk_dir); make clean
+	cd $(connectors_source_dir); make clean
 	cd $(app_dir); make clean
 
 run:
