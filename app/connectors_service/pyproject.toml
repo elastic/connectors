@@ -74,7 +74,6 @@ dependencies = [
     "uvloop==0.20.0; sys_platform != 'win32'",
     "wcmatch==8.4.1",
     "elasticsearch-connectors-sdk",
-    "elasticsearch-connectors-sources",
 ]
 
 [project.optional-dependencies]
