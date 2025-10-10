@@ -42,12 +42,13 @@ class GitLabAPI:
         self.mrs_per_project = MRS_PER_PROJECT
         self.app.route("/api/graphql", methods=["POST"])(self.mock_graphql_response)
         self.app.route("/api/v4/user", methods=["GET"])(self.get_user)
-        self.app.route("/api/v4/projects/<int:project_id>/repository/tree", methods=["GET"])(
-            self.get_repository_tree
-        )
-        self.app.route("/api/v4/projects/<path:project_path>/repository/files/<path:file_path>", methods=["GET"])(
-            self.get_file_content
-        )
+        self.app.route(
+            "/api/v4/projects/<int:project_id>/repository/tree", methods=["GET"]
+        )(self.get_repository_tree)
+        self.app.route(
+            "/api/v4/projects/<path:project_path>/repository/files/<path:file_path>",
+            methods=["GET"],
+        )(self.get_file_content)
 
     def encode_cursor(self, value):
         """Encode cursor for pagination."""
@@ -106,7 +107,10 @@ class GitLabAPI:
             return self.mock_projects(variables)
 
         # Issues query (legacy API, not used anymore but kept for reference)
-        if "project(fullPath:$projectPath)" in query_normalized and "issues(" in query_normalized:
+        if (
+            "project(fullPath:$projectPath)" in query_normalized
+            and "issues(" in query_normalized
+        ):
             return self.mock_issues(variables)
 
         # Merge requests query
@@ -118,7 +122,10 @@ class GitLabAPI:
             return self.mock_work_items_project(variables)
 
         # Work item full query (project-level)
-        if "workItem(id:" in query_normalized and "project(fullPath:" in query_normalized:
+        if (
+            "workItem(id:" in query_normalized
+            and "project(fullPath:" in query_normalized
+        ):
             return self.mock_work_item_full(variables)
 
         # Work items group query
@@ -143,7 +150,7 @@ class GitLabAPI:
         if "notes(" in query_normalized:
             return self.mock_remaining_notes(variables)
 
-        return {"errors": [{"message": f"Unknown query type"}]}
+        return {"errors": [{"message": "Unknown query type"}]}
 
     def mock_projects(self, variables):
         """Mock projects list."""
@@ -162,15 +169,14 @@ class GitLabAPI:
                 "archived": False,
                 "webUrl": f"https://gitlab.com/test-group/test-project-{i}",
                 "repository": {"rootRef": "main"},
-                "group": {
-                    "id": "gid://gitlab/Group/1",
-                    "fullPath": "test-group"
-                }
+                "group": {"id": "gid://gitlab/Group/1", "fullPath": "test-group"},
             }
             for i in range(1, self.project_count + 1)
         ]
 
-        subset, has_next, end_cursor = self.get_page(projects, variables.get("cursor"), 100)
+        subset, has_next, end_cursor = self.get_page(
+            projects, variables.get("cursor"), 100
+        )
 
         return {
             "data": {
@@ -217,7 +223,9 @@ class GitLabAPI:
             for i in range(1, self.issues_per_project + 1)
         ]
 
-        subset, has_next, end_cursor = self.get_page(issues, variables.get("cursor"), 100)
+        subset, has_next, end_cursor = self.get_page(
+            issues, variables.get("cursor"), 100
+        )
 
         return {
             "data": {
@@ -355,14 +363,19 @@ class GitLabAPI:
                             {
                                 "__typename": "WorkItemWidgetDescription",
                                 "type": "DESCRIPTION",
-                                "description": fake_provider.fake.text(max_nb_chars=500),
+                                "description": fake_provider.fake.text(
+                                    max_nb_chars=500
+                                ),
                             },
                             {
                                 "__typename": "WorkItemWidgetAssignees",
                                 "type": "ASSIGNEES",
                                 "assignees": {
                                     "nodes": [],
-                                    "pageInfo": {"hasNextPage": False, "endCursor": None},
+                                    "pageInfo": {
+                                        "hasNextPage": False,
+                                        "endCursor": None,
+                                    },
                                 },
                             },
                             {
@@ -370,7 +383,10 @@ class GitLabAPI:
                                 "type": "LABELS",
                                 "labels": {
                                     "nodes": [],
-                                    "pageInfo": {"hasNextPage": False, "endCursor": None},
+                                    "pageInfo": {
+                                        "hasNextPage": False,
+                                        "endCursor": None,
+                                    },
                                 },
                             },
                             {
@@ -378,7 +394,10 @@ class GitLabAPI:
                                 "type": "NOTES",
                                 "discussions": {
                                     "nodes": [],
-                                    "pageInfo": {"hasNextPage": False, "endCursor": None},
+                                    "pageInfo": {
+                                        "hasNextPage": False,
+                                        "endCursor": None,
+                                    },
                                 },
                             },
                         ],
@@ -451,14 +470,19 @@ class GitLabAPI:
                             {
                                 "__typename": "WorkItemWidgetDescription",
                                 "type": "DESCRIPTION",
-                                "description": fake_provider.fake.text(max_nb_chars=500),
+                                "description": fake_provider.fake.text(
+                                    max_nb_chars=500
+                                ),
                             },
                             {
                                 "__typename": "WorkItemWidgetAssignees",
                                 "type": "ASSIGNEES",
                                 "assignees": {
                                     "nodes": [],
-                                    "pageInfo": {"hasNextPage": False, "endCursor": None},
+                                    "pageInfo": {
+                                        "hasNextPage": False,
+                                        "endCursor": None,
+                                    },
                                 },
                             },
                             {
@@ -466,7 +490,10 @@ class GitLabAPI:
                                 "type": "LABELS",
                                 "labels": {
                                     "nodes": [],
-                                    "pageInfo": {"hasNextPage": False, "endCursor": None},
+                                    "pageInfo": {
+                                        "hasNextPage": False,
+                                        "endCursor": None,
+                                    },
                                 },
                             },
                             {
@@ -474,7 +501,10 @@ class GitLabAPI:
                                 "type": "NOTES",
                                 "discussions": {
                                     "nodes": [],
-                                    "pageInfo": {"hasNextPage": False, "endCursor": None},
+                                    "pageInfo": {
+                                        "hasNextPage": False,
+                                        "endCursor": None,
+                                    },
                                 },
                             },
                         ],
@@ -514,7 +544,9 @@ class GitLabAPI:
             for i in range(1, 6)  # Small number of releases
         ]
 
-        subset, has_next, end_cursor = self.get_page(releases, variables.get("cursor"), 100)
+        subset, has_next, end_cursor = self.get_page(
+            releases, variables.get("cursor"), 100
+        )
 
         return {
             "data": {
@@ -605,7 +637,9 @@ def get_num_docs():
     releases_per_project = 5
     readme_per_project = 1
 
-    docs_per_project = ISSUES_PER_PROJECT + MRS_PER_PROJECT + releases_per_project + readme_per_project
+    docs_per_project = (
+        ISSUES_PER_PROJECT + MRS_PER_PROJECT + releases_per_project + readme_per_project
+    )
     total = PROJECT_COUNT + (PROJECT_COUNT * docs_per_project) + epics_count
 
     print(total)

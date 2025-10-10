@@ -156,7 +156,9 @@ class WorkItemWidgetHierarchy(BaseModel):
 
     type_name: Literal["WorkItemWidgetHierarchy"] = Field(alias="__typename")
     parent: WorkItemReference | None = None
-    children: PaginatedList[WorkItemReference] = Field(default_factory=lambda: PaginatedList(nodes=[]))
+    children: PaginatedList[WorkItemReference] = Field(
+        default_factory=lambda: PaginatedList(nodes=[])
+    )
 
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
@@ -177,7 +179,9 @@ class WorkItemWidgetLinkedItems(BaseModel):
     """Work item linked items widget (for related/blocking items)."""
 
     type_name: Literal["WorkItemWidgetLinkedItems"] = Field(alias="__typename")
-    linked_items: PaginatedList[LinkedItemNode] = Field(default_factory=lambda: PaginatedList(nodes=[]))
+    linked_items: PaginatedList[LinkedItemNode] = Field(
+        default_factory=lambda: PaginatedList(nodes=[])
+    )
 
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
@@ -289,8 +293,12 @@ _TAG_ASSIGNEES = get_args(WorkItemWidgetAssignees.model_fields["type_name"].anno
 ]
 _TAG_LABELS = get_args(WorkItemWidgetLabels.model_fields["type_name"].annotation)[0]
 _TAG_NOTES = get_args(WorkItemWidgetNotes.model_fields["type_name"].annotation)[0]
-_TAG_HIERARCHY = get_args(WorkItemWidgetHierarchy.model_fields["type_name"].annotation)[0]
-_TAG_LINKED_ITEMS = get_args(WorkItemWidgetLinkedItems.model_fields["type_name"].annotation)[0]
+_TAG_HIERARCHY = get_args(WorkItemWidgetHierarchy.model_fields["type_name"].annotation)[
+    0
+]
+_TAG_LINKED_ITEMS = get_args(
+    WorkItemWidgetLinkedItems.model_fields["type_name"].annotation
+)[0]
 
 # Build discriminator lookup set from extracted tags
 _KNOWN_WIDGET_TAGS = {

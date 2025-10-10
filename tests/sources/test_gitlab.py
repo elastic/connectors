@@ -5,44 +5,36 @@
 #
 """Unit tests for GitLab connector."""
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
-from functools import partial
 from contextlib import asynccontextmanager
+from unittest.mock import AsyncMock, Mock, patch
+
+import pytest
 
 from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
-from connectors.sources.gitlab.datasource import GitLabDataSource
 from connectors.sources.gitlab.client import GitLabClient
-from tests.sources.support import create_source
+from connectors.sources.gitlab.datasource import GitLabDataSource
 from connectors.sources.gitlab.models import (
-    GitLabProject,
-    GitLabUser,
-    GitLabLabel,
-    GitLabNote,
-    GitLabDiscussion,
-    GitLabIssue,
-    GitLabMergeRequest,
-    GitLabWorkItem,
-    GitLabRelease,
-    GitLabRepository,
-    GitLabGroup,
-    GitLabCommit,
-    GitLabMilestone,
     GitLabAssetLink,
     GitLabAssets,
+    GitLabCommit,
+    GitLabDiscussion,
+    GitLabGroup,
+    GitLabMergeRequest,
+    GitLabMilestone,
+    GitLabNote,
+    GitLabProject,
+    GitLabRelease,
+    GitLabRepository,
+    GitLabUser,
+    GitLabWorkItem,
     PageInfo,
     PaginatedList,
     WorkItemType,
     WorkItemTypeInfo,
-    WorkItemWidgetDescription,
     WorkItemWidgetAssignees,
-    WorkItemWidgetLabels,
-    WorkItemWidgetNotes,
-    WorkItemWidgetHierarchy,
-    WorkItemWidgetLinkedItems,
-    WorkItemReference,
-    LinkedItemNode,
+    WorkItemWidgetDescription,
 )
+from tests.sources.support import create_source
 
 
 # Helper function to create GitLab source
@@ -120,45 +112,47 @@ def mock_gitlab_project():
 @pytest.fixture
 def mock_gitlab_work_item():
     """Mock GitLab work item (issue)."""
-    return GitLabWorkItem.model_validate({
-        "id": "gid://gitlab/WorkItem/789",
-        "iid": 1,
-        "title": "Test Issue",
-        "state": "opened",
-        "createdAt": "2023-01-01T00:00:00Z",
-        "updatedAt": "2023-12-01T00:00:00Z",
-        "closedAt": None,
-        "webUrl": "https://gitlab.com/group/project/issues/1",
-        "author": {"username": "testuser", "name": "Test User"},
-        "workItemType": {"name": "Issue"},
-        "widgets": [
-            {
-                "__typename": "WorkItemWidgetDescription",
-                "description": "Issue description"
-            },
-            {
-                "__typename": "WorkItemWidgetAssignees",
-                "assignees": {
-                    "nodes": [{"username": "assignee1", "name": "Assignee One"}],
-                    "pageInfo": {"hasNextPage": False, "endCursor": None},
-                }
-            },
-            {
-                "__typename": "WorkItemWidgetLabels",
-                "labels": {
-                    "nodes": [{"title": "bug"}],
-                    "pageInfo": {"hasNextPage": False, "endCursor": None},
-                }
-            },
-            {
-                "__typename": "WorkItemWidgetNotes",
-                "discussions": {
-                    "nodes": [],
-                    "pageInfo": {"hasNextPage": False, "endCursor": None},
-                }
-            },
-        ],
-    })
+    return GitLabWorkItem.model_validate(
+        {
+            "id": "gid://gitlab/WorkItem/789",
+            "iid": 1,
+            "title": "Test Issue",
+            "state": "opened",
+            "createdAt": "2023-01-01T00:00:00Z",
+            "updatedAt": "2023-12-01T00:00:00Z",
+            "closedAt": None,
+            "webUrl": "https://gitlab.com/group/project/issues/1",
+            "author": {"username": "testuser", "name": "Test User"},
+            "workItemType": {"name": "Issue"},
+            "widgets": [
+                {
+                    "__typename": "WorkItemWidgetDescription",
+                    "description": "Issue description",
+                },
+                {
+                    "__typename": "WorkItemWidgetAssignees",
+                    "assignees": {
+                        "nodes": [{"username": "assignee1", "name": "Assignee One"}],
+                        "pageInfo": {"hasNextPage": False, "endCursor": None},
+                    },
+                },
+                {
+                    "__typename": "WorkItemWidgetLabels",
+                    "labels": {
+                        "nodes": [{"title": "bug"}],
+                        "pageInfo": {"hasNextPage": False, "endCursor": None},
+                    },
+                },
+                {
+                    "__typename": "WorkItemWidgetNotes",
+                    "discussions": {
+                        "nodes": [],
+                        "pageInfo": {"hasNextPage": False, "endCursor": None},
+                    },
+                },
+            ],
+        }
+    )
 
 
 @pytest.fixture
@@ -197,7 +191,9 @@ def mock_gitlab_release(mock_gitlab_user):
         created_at="2023-01-01T00:00:00Z",
         released_at="2023-01-01T00:00:00Z",
         author=mock_gitlab_user,
-        commit=GitLabCommit(sha="abc123", title="Release commit", message="Release commit message"),
+        commit=GitLabCommit(
+            sha="abc123", title="Release commit", message="Release commit message"
+        ),
         milestones=PaginatedList(
             nodes=[GitLabMilestone(id="gid://gitlab/Milestone/1", title="v1.0")],
             page_info=PageInfo(has_next_page=False),
@@ -205,7 +201,13 @@ def mock_gitlab_release(mock_gitlab_user):
         assets=GitLabAssets(
             count=1,
             links=PaginatedList(
-                nodes=[GitLabAssetLink(name="binary", url="https://example.com/binary", link_type="other")],
+                nodes=[
+                    GitLabAssetLink(
+                        name="binary",
+                        url="https://example.com/binary",
+                        link_type="other",
+                    )
+                ],
                 page_info=PageInfo(has_next_page=False),
             ),
         ),
@@ -252,7 +254,9 @@ class TestGitLabDataSource:
     async def test_ping_failure(self, mock_configuration):
         """Test ping failure raises exception."""
         source = GitLabDataSource(configuration=mock_configuration)
-        source.gitlab_client.ping = AsyncMock(side_effect=Exception("Connection failed"))
+        source.gitlab_client.ping = AsyncMock(
+            side_effect=Exception("Connection failed")
+        )
 
         with pytest.raises(Exception, match="Connection failed"):
             await source.ping()
@@ -311,7 +315,9 @@ class TestGitLabDataSource:
         source.gitlab_client._execute_graphql.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_validate_config_empty_projects(self, mock_configuration_empty_projects):
+    async def test_validate_config_empty_projects(
+        self, mock_configuration_empty_projects
+    ):
         """Test validation fails with empty projects list."""
         source = GitLabDataSource(configuration=mock_configuration_empty_projects)
         source.gitlab_client.ping = AsyncMock()
@@ -358,7 +364,9 @@ class TestGitLabDataSource:
                 },
                 {
                     "projects": {
-                        "nodes": [{"fullPath": f"group/project{i}"} for i in range(50, 60)]
+                        "nodes": [
+                            {"fullPath": f"group/project{i}"} for i in range(50, 60)
+                        ]
                     }
                 },
             ]
@@ -390,7 +398,9 @@ class TestGitLabDataSource:
         assert source._should_sync_project("group/project2") is True
         assert source._should_sync_project("other/project") is False
 
-    def test_extract_widget_description(self, mock_configuration, mock_gitlab_work_item):
+    def test_extract_widget_description(
+        self, mock_configuration, mock_gitlab_work_item
+    ):
         """Test extracting description from work item widgets."""
         source = GitLabDataSource(configuration=mock_configuration)
 
@@ -456,7 +466,9 @@ class TestGitLabDataSource:
         assert len(labels.nodes) == 1
         assert labels.nodes[0].title == "bug"
 
-    def test_extract_widget_discussions(self, mock_configuration, mock_gitlab_work_item):
+    def test_extract_widget_discussions(
+        self, mock_configuration, mock_gitlab_work_item
+    ):
         """Test extracting discussions from work item widgets."""
         source = GitLabDataSource(configuration=mock_configuration)
 
@@ -507,7 +519,9 @@ class TestGitLabDataSource:
         """Test formatting merge request document."""
         source = GitLabDataSource(configuration=mock_configuration)
 
-        doc = source._format_merge_request_doc(mock_gitlab_merge_request, mock_gitlab_project)
+        doc = source._format_merge_request_doc(
+            mock_gitlab_merge_request, mock_gitlab_project
+        )
 
         assert doc["_id"] == "mr_123_1"
         assert doc["type"] == "Merge Request"
@@ -537,7 +551,11 @@ class TestGitLabDataSource:
         source = GitLabDataSource(configuration=mock_configuration)
 
         result = await source.get_content(
-            attachment={"project_id": 123, "file_path": "README.md", "file_name": "README.md"},
+            attachment={
+                "project_id": 123,
+                "file_path": "README.md",
+                "file_name": "README.md",
+            },
             doit=False,
         )
 
@@ -594,7 +612,6 @@ class TestGitLabClient:
         result = await client._handle_rate_limit(mock_response)
 
         assert result is False
-
 
     def test_set_logger(self):
         """Test setting logger."""
@@ -777,7 +794,9 @@ class TestGitLabClientAsyncGenerators:
         client = GitLabClient(token="test-token")
 
         # Mock GraphQL responses for 2 pages
-        with patch.object(client, "_execute_graphql", new_callable=AsyncMock) as mock_graphql:
+        with patch.object(
+            client, "_execute_graphql", new_callable=AsyncMock
+        ) as mock_graphql:
             mock_graphql.side_effect = [
                 {
                     "projects": {
@@ -831,7 +850,9 @@ class TestGitLabClientAsyncGenerators:
         """Test get_projects handles GraphQL errors gracefully."""
         client = GitLabClient(token="test-token")
 
-        with patch.object(client, "_execute_graphql", new_callable=AsyncMock) as mock_graphql:
+        with patch.object(
+            client, "_execute_graphql", new_callable=AsyncMock
+        ) as mock_graphql:
             mock_graphql.side_effect = Exception("GraphQL error")
 
             with pytest.raises(Exception, match="GraphQL error"):
@@ -843,7 +864,9 @@ class TestGitLabClientAsyncGenerators:
         """Test get_merge_requests fetches MRs for a project."""
         client = GitLabClient(token="test-token")
 
-        with patch.object(client, "_execute_graphql", new_callable=AsyncMock) as mock_graphql:
+        with patch.object(
+            client, "_execute_graphql", new_callable=AsyncMock
+        ) as mock_graphql:
             mock_graphql.return_value = {
                 "project": {
                     "mergeRequests": {
@@ -857,11 +880,26 @@ class TestGitLabClientAsyncGenerators:
                                 "webUrl": "https://gitlab.com/group/project/merge_requests/1",
                                 "sourceBranch": "feature",
                                 "targetBranch": "main",
-                                "assignees": {"nodes": [], "pageInfo": {"hasNextPage": False}},
-                                "reviewers": {"nodes": [], "pageInfo": {"hasNextPage": False}},
-                                "labels": {"nodes": [], "pageInfo": {"hasNextPage": False}},
-                                "discussions": {"nodes": [], "pageInfo": {"hasNextPage": False}},
-                                "approvedBy": {"nodes": [], "pageInfo": {"hasNextPage": False}},
+                                "assignees": {
+                                    "nodes": [],
+                                    "pageInfo": {"hasNextPage": False},
+                                },
+                                "reviewers": {
+                                    "nodes": [],
+                                    "pageInfo": {"hasNextPage": False},
+                                },
+                                "labels": {
+                                    "nodes": [],
+                                    "pageInfo": {"hasNextPage": False},
+                                },
+                                "discussions": {
+                                    "nodes": [],
+                                    "pageInfo": {"hasNextPage": False},
+                                },
+                                "approvedBy": {
+                                    "nodes": [],
+                                    "pageInfo": {"hasNextPage": False},
+                                },
                             }
                         ],
                         "pageInfo": {"hasNextPage": False},
@@ -881,7 +919,9 @@ class TestGitLabClientAsyncGenerators:
         """Test get_merge_requests handles missing project."""
         client = GitLabClient(token="test-token")
 
-        with patch.object(client, "_execute_graphql", new_callable=AsyncMock) as mock_graphql:
+        with patch.object(
+            client, "_execute_graphql", new_callable=AsyncMock
+        ) as mock_graphql:
             mock_graphql.return_value = {}
 
             mrs = []
@@ -895,7 +935,9 @@ class TestGitLabClientAsyncGenerators:
         """Test get_work_items_project fetches work items."""
         client = GitLabClient(token="test-token")
 
-        with patch.object(client, "_execute_graphql", new_callable=AsyncMock) as mock_graphql:
+        with patch.object(
+            client, "_execute_graphql", new_callable=AsyncMock
+        ) as mock_graphql:
             mock_graphql.return_value = {
                 "project": {
                     "workItems": {
@@ -918,7 +960,9 @@ class TestGitLabClientAsyncGenerators:
             }
 
             work_items = []
-            async for work_item in client.get_work_items_project("group/project", [WorkItemType.ISSUE]):
+            async for work_item in client.get_work_items_project(
+                "group/project", [WorkItemType.ISSUE]
+            ):
                 work_items.append(work_item)
 
             assert len(work_items) == 1
@@ -929,7 +973,9 @@ class TestGitLabClientAsyncGenerators:
         """Test get_releases fetches releases for a project."""
         client = GitLabClient(token="test-token")
 
-        with patch.object(client, "_execute_graphql", new_callable=AsyncMock) as mock_graphql:
+        with patch.object(
+            client, "_execute_graphql", new_callable=AsyncMock
+        ) as mock_graphql:
             mock_graphql.return_value = {
                 "project": {
                     "releases": {
@@ -990,14 +1036,19 @@ class TestGitLabClientAsyncGenerators:
         """Test fetch_remaining_field for assignees."""
         client = GitLabClient(token="test-token")
 
-        with patch.object(client, "_execute_graphql", new_callable=AsyncMock) as mock_graphql:
+        with patch.object(
+            client, "_execute_graphql", new_callable=AsyncMock
+        ) as mock_graphql:
             mock_graphql.side_effect = [
                 {
                     "project": {
                         "issue": {
                             "assignees": {
                                 "nodes": [{"username": "user1", "name": "User 1"}],
-                                "pageInfo": {"hasNextPage": True, "endCursor": "cursor2"},
+                                "pageInfo": {
+                                    "hasNextPage": True,
+                                    "endCursor": "cursor2",
+                                },
                             }
                         }
                     }
@@ -1042,7 +1093,9 @@ class TestGitLabClientAsyncGenerators:
         """Test fetch_remaining_notes for discussion."""
         client = GitLabClient(token="test-token")
 
-        with patch.object(client, "_execute_graphql", new_callable=AsyncMock) as mock_graphql:
+        with patch.object(
+            client, "_execute_graphql", new_callable=AsyncMock
+        ) as mock_graphql:
             # First page with notes
             mock_graphql.side_effect = [
                 {
@@ -1061,7 +1114,10 @@ class TestGitLabClientAsyncGenerators:
                                                     "system": False,
                                                 }
                                             ],
-                                            "pageInfo": {"hasNextPage": True, "endCursor": "cursor2"},
+                                            "pageInfo": {
+                                                "hasNextPage": True,
+                                                "endCursor": "cursor2",
+                                            },
                                         }
                                     }
                                 ]
@@ -1086,7 +1142,10 @@ class TestGitLabClientAsyncGenerators:
                                                     "system": False,
                                                 }
                                             ],
-                                            "pageInfo": {"hasNextPage": False, "endCursor": None},
+                                            "pageInfo": {
+                                                "hasNextPage": False,
+                                                "endCursor": None,
+                                            },
                                         }
                                     }
                                 ]
@@ -1111,7 +1170,9 @@ class TestGitLabClientAsyncGenerators:
         """Test fetch_remaining_work_item_assignees."""
         client = GitLabClient(token="test-token")
 
-        with patch.object(client, "_execute_graphql", new_callable=AsyncMock) as mock_graphql:
+        with patch.object(
+            client, "_execute_graphql", new_callable=AsyncMock
+        ) as mock_graphql:
             mock_graphql.side_effect = [
                 {
                     "project": {
@@ -1122,7 +1183,12 @@ class TestGitLabClientAsyncGenerators:
                                         {
                                             "__typename": "WorkItemWidgetAssignees",
                                             "assignees": {
-                                                "nodes": [{"username": "user1", "name": "User 1"}],
+                                                "nodes": [
+                                                    {
+                                                        "username": "user1",
+                                                        "name": "User 1",
+                                                    }
+                                                ],
                                                 "pageInfo": {"hasNextPage": False},
                                             },
                                         }
@@ -1148,7 +1214,9 @@ class TestGitLabClientAsyncGenerators:
         """Test fetch_remaining_work_item_labels."""
         client = GitLabClient(token="test-token")
 
-        with patch.object(client, "_execute_graphql", new_callable=AsyncMock) as mock_graphql:
+        with patch.object(
+            client, "_execute_graphql", new_callable=AsyncMock
+        ) as mock_graphql:
             mock_graphql.return_value = {
                 "project": {
                     "workItems": {
@@ -1183,7 +1251,9 @@ class TestGitLabClientAsyncGenerators:
         """Test fetch_remaining_work_item_discussions."""
         client = GitLabClient(token="test-token")
 
-        with patch.object(client, "_execute_graphql", new_callable=AsyncMock) as mock_graphql:
+        with patch.object(
+            client, "_execute_graphql", new_callable=AsyncMock
+        ) as mock_graphql:
             mock_graphql.return_value = {
                 "project": {
                     "workItems": {
@@ -1218,7 +1288,9 @@ class TestGitLabClientAsyncGenerators:
         """Test fetch_remaining_work_item_group_discussions."""
         client = GitLabClient(token="test-token")
 
-        with patch.object(client, "_execute_graphql", new_callable=AsyncMock) as mock_graphql:
+        with patch.object(
+            client, "_execute_graphql", new_callable=AsyncMock
+        ) as mock_graphql:
             mock_graphql.return_value = {
                 "group": {
                     "workItems": {
@@ -1253,7 +1325,9 @@ class TestGitLabClientAsyncGenerators:
         """Test get_work_items_group for epics."""
         client = GitLabClient(token="test-token")
 
-        with patch.object(client, "_execute_graphql", new_callable=AsyncMock) as mock_graphql:
+        with patch.object(
+            client, "_execute_graphql", new_callable=AsyncMock
+        ) as mock_graphql:
             mock_graphql.return_value = {
                 "group": {
                     "workItems": {
@@ -1294,21 +1368,21 @@ class TestGitLabDataSourceIntegration:
 
         discussions = PaginatedList[GitLabDiscussion](
             nodes=[
-            GitLabDiscussion(
-                id="disc1",
-                notes=PaginatedList[GitLabNote](
-                nodes=[
-                    GitLabNote(
-                    id="note1",
-                    body="Note body",
-                    created_at="2023-01-01T00:00:00Z",
-                    updated_at="2023-01-01T00:00:00Z",
-                    system=False,
-                    )
-                ],
-                page_info=PageInfo(has_next_page=False),
-                ),
-            )
+                GitLabDiscussion(
+                    id="disc1",
+                    notes=PaginatedList[GitLabNote](
+                        nodes=[
+                            GitLabNote(
+                                id="note1",
+                                body="Note body",
+                                created_at="2023-01-01T00:00:00Z",
+                                updated_at="2023-01-01T00:00:00Z",
+                                system=False,
+                            )
+                        ],
+                        page_info=PageInfo(has_next_page=False),
+                    ),
+                )
             ],
             page_info=PageInfo(has_next_page=False),
         )
@@ -1322,7 +1396,9 @@ class TestGitLabDataSourceIntegration:
         assert notes[0]["id"] == "note1"
 
     @pytest.mark.asyncio
-    async def test_extract_notes_from_discussions_with_pagination(self, mock_configuration):
+    async def test_extract_notes_from_discussions_with_pagination(
+        self, mock_configuration
+    ):
         """Test _extract_notes_from_discussions handles paginated notes."""
         source = GitLabDataSource(configuration=mock_configuration)
 
@@ -1383,7 +1459,9 @@ class TestGitLabDataSourceIntegration:
         )
 
         readme_docs = []
-        async for doc, _download_func in source._fetch_readme_files(123, mock_gitlab_project):
+        async for doc, _download_func in source._fetch_readme_files(
+            123, mock_gitlab_project
+        ):
             readme_docs.append(doc)
 
         # Should yield 2 READMEs (md and rst), skip other.py and tree
@@ -1416,7 +1494,9 @@ class TestGitLabDataSourceIntegration:
         assert len(readme_docs) == 0
 
     @pytest.mark.asyncio
-    async def test_fetch_readme_files_unsupported_extensions(self, mock_configuration, mock_gitlab_project):
+    async def test_fetch_readme_files_unsupported_extensions(
+        self, mock_configuration, mock_gitlab_project
+    ):
         """Test _fetch_readme_files skips unsupported extensions."""
         source = GitLabDataSource(configuration=mock_configuration)
 
@@ -1552,9 +1632,15 @@ class TestGitLabDataSourceIntegration:
         source.gitlab_client.get_work_items_project = mock_get_work_items
         source.gitlab_client.get_merge_requests = mock_get_merge_requests
         source.gitlab_client.get_releases = mock_get_releases
-        source.gitlab_client.fetch_remaining_work_item_assignees = mock_fetch_remaining_assignees
-        source.gitlab_client.fetch_remaining_work_item_labels = mock_fetch_remaining_labels
-        source.gitlab_client.fetch_remaining_work_item_discussions = mock_fetch_remaining_discussions
+        source.gitlab_client.fetch_remaining_work_item_assignees = (
+            mock_fetch_remaining_assignees
+        )
+        source.gitlab_client.fetch_remaining_work_item_labels = (
+            mock_fetch_remaining_labels
+        )
+        source.gitlab_client.fetch_remaining_work_item_discussions = (
+            mock_fetch_remaining_discussions
+        )
         source.gitlab_client._get_rest = AsyncMock(return_value=[])  # No README files
 
         docs = []
@@ -1570,39 +1656,41 @@ class TestGitLabDataSourceIntegration:
     async def test_get_docs_with_paginated_work_item_fields(self, mock_gitlab_project):
         """Test get_docs handles paginated assignees/labels/discussions in work items."""
         # Create work item with paginated assignees
-        work_item = GitLabWorkItem.model_validate({
-            "id": "gid://gitlab/WorkItem/1",
-            "iid": 1,
-            "title": "Issue with many assignees",
-            "state": "opened",
-            "createdAt": "2023-01-01T00:00:00Z",
-            "updatedAt": "2023-01-01T00:00:00Z",
-            "webUrl": "https://gitlab.com/group/project1/issues/1",
-            "workItemType": {"name": "Issue"},
-            "widgets": [
-                {
-                    "__typename": "WorkItemWidgetAssignees",
-                    "assignees": {
-                        "nodes": [{"username": "user1", "name": "User 1"}],
-                        "pageInfo": {"hasNextPage": True, "endCursor": "cursor1"},
-                    }
-                },
-                {
-                    "__typename": "WorkItemWidgetLabels",
-                    "labels": {
-                        "nodes": [{"title": "label1"}],
-                        "pageInfo": {"hasNextPage": True, "endCursor": "cursor2"},
-                    }
-                },
-                {
-                    "__typename": "WorkItemWidgetNotes",
-                    "discussions": {
-                        "nodes": [],
-                        "pageInfo": {"hasNextPage": True, "endCursor": "cursor3"},
-                    }
-                },
-            ],
-        })
+        work_item = GitLabWorkItem.model_validate(
+            {
+                "id": "gid://gitlab/WorkItem/1",
+                "iid": 1,
+                "title": "Issue with many assignees",
+                "state": "opened",
+                "createdAt": "2023-01-01T00:00:00Z",
+                "updatedAt": "2023-01-01T00:00:00Z",
+                "webUrl": "https://gitlab.com/group/project1/issues/1",
+                "workItemType": {"name": "Issue"},
+                "widgets": [
+                    {
+                        "__typename": "WorkItemWidgetAssignees",
+                        "assignees": {
+                            "nodes": [{"username": "user1", "name": "User 1"}],
+                            "pageInfo": {"hasNextPage": True, "endCursor": "cursor1"},
+                        },
+                    },
+                    {
+                        "__typename": "WorkItemWidgetLabels",
+                        "labels": {
+                            "nodes": [{"title": "label1"}],
+                            "pageInfo": {"hasNextPage": True, "endCursor": "cursor2"},
+                        },
+                    },
+                    {
+                        "__typename": "WorkItemWidgetNotes",
+                        "discussions": {
+                            "nodes": [],
+                            "pageInfo": {"hasNextPage": True, "endCursor": "cursor3"},
+                        },
+                    },
+                ],
+            }
+        )
 
         config = GitLabDataSource.get_default_configuration()
         config["token"]["value"] = "test-token-123"
@@ -1622,15 +1710,22 @@ class TestGitLabDataSourceIntegration:
             yield {"title": "label2"}
 
         async def mock_remaining_discussions(*args, **kwargs):
-            yield {"id": "disc1", "notes": {"nodes": [], "pageInfo": {"hasNextPage": False}}}
+            yield {
+                "id": "disc1",
+                "notes": {"nodes": [], "pageInfo": {"hasNextPage": False}},
+            }
 
         source.gitlab_client.get_projects = mock_get_projects
         source.gitlab_client.get_work_items_project = mock_get_work_items
         source.gitlab_client.get_merge_requests = lambda *a, **k: async_gen_empty()
         source.gitlab_client.get_releases = lambda *a, **k: async_gen_empty()
-        source.gitlab_client.fetch_remaining_work_item_assignees = mock_remaining_assignees
+        source.gitlab_client.fetch_remaining_work_item_assignees = (
+            mock_remaining_assignees
+        )
         source.gitlab_client.fetch_remaining_work_item_labels = mock_remaining_labels
-        source.gitlab_client.fetch_remaining_work_item_discussions = mock_remaining_discussions
+        source.gitlab_client.fetch_remaining_work_item_discussions = (
+            mock_remaining_discussions
+        )
         source.gitlab_client._get_rest = AsyncMock(return_value=[])
 
         docs = []
@@ -1660,39 +1755,47 @@ class TestGitLabDataSourceIntegration:
             group=GitLabGroup(id="gid://gitlab/Group/456", fullPath="group"),
         )
 
-        epic = GitLabWorkItem.model_validate({
-            "id": "gid://gitlab/WorkItem/999",
-            "iid": 1,
-            "title": "Epic with pagination",
-            "state": "opened",
-            "createdAt": "2023-01-01T00:00:00Z",
-            "updatedAt": "2023-01-01T00:00:00Z",
-            "webUrl": "https://gitlab.com/groups/group/-/epics/1",
-            "workItemType": {"name": "Epic"},
-            "widgets": [
-                {
-                    "__typename": "WorkItemWidgetAssignees",
-                    "assignees": {
-                        "nodes": [{"username": "epicuser1"}],
-                        "pageInfo": {"hasNextPage": True, "endCursor": "epiccursor1"},
-                    }
-                },
-                {
-                    "__typename": "WorkItemWidgetLabels",
-                    "labels": {
-                        "nodes": [{"title": "epiclabel1"}],
-                        "pageInfo": {"hasNextPage": True, "endCursor": "epiccursor2"},
-                    }
-                },
-                {
-                    "__typename": "WorkItemWidgetNotes",
-                    "discussions": {
-                        "nodes": [],
-                        "pageInfo": {"hasNextPage": False},
-                    }
-                },
-            ],
-        })
+        epic = GitLabWorkItem.model_validate(
+            {
+                "id": "gid://gitlab/WorkItem/999",
+                "iid": 1,
+                "title": "Epic with pagination",
+                "state": "opened",
+                "createdAt": "2023-01-01T00:00:00Z",
+                "updatedAt": "2023-01-01T00:00:00Z",
+                "webUrl": "https://gitlab.com/groups/group/-/epics/1",
+                "workItemType": {"name": "Epic"},
+                "widgets": [
+                    {
+                        "__typename": "WorkItemWidgetAssignees",
+                        "assignees": {
+                            "nodes": [{"username": "epicuser1"}],
+                            "pageInfo": {
+                                "hasNextPage": True,
+                                "endCursor": "epiccursor1",
+                            },
+                        },
+                    },
+                    {
+                        "__typename": "WorkItemWidgetLabels",
+                        "labels": {
+                            "nodes": [{"title": "epiclabel1"}],
+                            "pageInfo": {
+                                "hasNextPage": True,
+                                "endCursor": "epiccursor2",
+                            },
+                        },
+                    },
+                    {
+                        "__typename": "WorkItemWidgetNotes",
+                        "discussions": {
+                            "nodes": [],
+                            "pageInfo": {"hasNextPage": False},
+                        },
+                    },
+                ],
+            }
+        )
 
         config = GitLabDataSource.get_default_configuration()
         config["token"]["value"] = "test-token-123"
@@ -1716,9 +1819,15 @@ class TestGitLabDataSourceIntegration:
         source.gitlab_client.get_work_items_group = mock_get_epics
         source.gitlab_client.get_merge_requests = lambda *a, **k: async_gen_empty()
         source.gitlab_client.get_releases = lambda *a, **k: async_gen_empty()
-        source.gitlab_client.fetch_remaining_work_item_assignees_group = mock_remaining_epic_assignees
-        source.gitlab_client.fetch_remaining_work_item_labels_group = mock_remaining_epic_labels
-        source.gitlab_client.fetch_remaining_work_item_group_discussions = lambda *a, **k: async_gen_empty()
+        source.gitlab_client.fetch_remaining_work_item_assignees_group = (
+            mock_remaining_epic_assignees
+        )
+        source.gitlab_client.fetch_remaining_work_item_labels_group = (
+            mock_remaining_epic_labels
+        )
+        source.gitlab_client.fetch_remaining_work_item_group_discussions = (
+            lambda *a, **k: async_gen_empty()
+        )
         source.gitlab_client._get_rest = AsyncMock(return_value=[])
 
         docs = []
@@ -1758,7 +1867,8 @@ class TestGitLabDataSourceIntegration:
 
         async def mock_get_epics(*args, **kwargs):
             # Simulate Premium/Ultimate tier error
-            raise Exception("Epics require Premium tier")
+            msg = "Epics require Premium tier"
+            raise Exception(msg)
             yield  # Never reached
 
         source.gitlab_client.get_projects = mock_get_projects

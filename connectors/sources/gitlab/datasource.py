@@ -148,12 +148,11 @@ class GitLabDataSource(BaseDataSource):
 
         # Batch validate projects
         for i in range(0, len(valid_project_paths), BATCH_SIZE):
-            batch = valid_project_paths[i:i + BATCH_SIZE]
+            batch = valid_project_paths[i : i + BATCH_SIZE]
 
             try:
                 result = await self.gitlab_client._execute_graphql(
-                    VALIDATE_PROJECTS_QUERY,
-                    {"projectPaths": batch}
+                    VALIDATE_PROJECTS_QUERY, {"projectPaths": batch}
                 )
 
                 # Extract accessible project paths from response
@@ -167,9 +166,7 @@ class GitLabDataSource(BaseDataSource):
                         self._logger.debug(f"✓ Project '{full_path}' is accessible")
 
             except Exception as e:
-                self._logger.warning(
-                    f"Failed to validate project batch {batch}: {e}"
-                )
+                self._logger.warning(f"Failed to validate project batch {batch}: {e}")
                 # If batch query fails, we can't determine which specific projects are invalid
                 # so we skip this batch and continue
 
@@ -302,7 +299,12 @@ class GitLabDataSource(BaseDataSource):
     ) -> None:
         """Fetch remaining assignees for an issue or MR."""
         await self._fetch_remaining_paginated_field(
-            issuable.assignees, project_path, issuable.iid, "assignees", issuable_type, GitLabUser
+            issuable.assignees,
+            project_path,
+            issuable.iid,
+            "assignees",
+            issuable_type,
+            GitLabUser,
         )
 
     async def _fetch_remaining_labels(
@@ -313,7 +315,12 @@ class GitLabDataSource(BaseDataSource):
     ) -> None:
         """Fetch remaining labels for an issue or MR."""
         await self._fetch_remaining_paginated_field(
-            issuable.labels, project_path, issuable.iid, "labels", issuable_type, GitLabLabel
+            issuable.labels,
+            project_path,
+            issuable.iid,
+            "labels",
+            issuable_type,
+            GitLabLabel,
         )
 
     async def _fetch_remaining_discussions(
@@ -324,7 +331,12 @@ class GitLabDataSource(BaseDataSource):
     ) -> None:
         """Fetch remaining discussions for an issue or MR."""
         await self._fetch_remaining_paginated_field(
-            issuable.discussions, project_path, issuable.iid, "discussions", issuable_type, GitLabDiscussion
+            issuable.discussions,
+            project_path,
+            issuable.iid,
+            "discussions",
+            issuable_type,
+            GitLabDiscussion,
         )
 
     async def _fetch_remaining_issue_fields(
@@ -362,7 +374,12 @@ class GitLabDataSource(BaseDataSource):
             mr.reviewers, project_path, mr.iid, "reviewers", "mergeRequest", GitLabUser
         )
         await self._fetch_remaining_paginated_field(
-            mr.approved_by, project_path, mr.iid, "approvedBy", "mergeRequest", GitLabUser
+            mr.approved_by,
+            project_path,
+            mr.iid,
+            "approvedBy",
+            "mergeRequest",
+            GitLabUser,
         )
 
     async def get_docs(self, filtering=None):
@@ -503,7 +520,9 @@ class GitLabDataSource(BaseDataSource):
                                 async for assignee in self.gitlab_client.fetch_remaining_work_item_assignees_group(
                                     group_path, epic.iid, WorkItemType.EPIC, cursor
                                 ):
-                                    assignees_data.nodes.append(GitLabUser.model_validate(assignee))
+                                    assignees_data.nodes.append(
+                                        GitLabUser.model_validate(assignee)
+                                    )
 
                             # Fetch remaining labels if paginated
                             if labels_data.page_info.has_next_page:
@@ -511,11 +530,16 @@ class GitLabDataSource(BaseDataSource):
                                 async for label in self.gitlab_client.fetch_remaining_work_item_labels_group(
                                     group_path, epic.iid, WorkItemType.EPIC, cursor
                                 ):
-                                    labels_data.nodes.append(GitLabLabel.model_validate(label))
+                                    labels_data.nodes.append(
+                                        GitLabLabel.model_validate(label)
+                                    )
 
                             # Format epic document
                             epic_doc = self._format_work_item_doc(
-                                epic, group_path=group_path, assignees_data=assignees_data, labels_data=labels_data
+                                epic,
+                                group_path=group_path,
+                                assignees_data=assignees_data,
+                                labels_data=labels_data,
                             )
 
                             # Extract notes from epic widgets
