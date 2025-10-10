@@ -15,12 +15,14 @@ from connectors_sdk.filtering.validation import Filter, SyncRuleValidationResult
 from connectors_sdk.source import ConfigurableFieldValueError, DataSourceConfiguration
 
 from connectors.sources.onedrive import (
-    AccessToken,
-    InternalServerError,
-    NotFound,
     OneDriveAdvancedRulesValidator,
     OneDriveClient,
     OneDriveDataSource,
+)
+from connectors.sources.onedrive.client import (
+    AccessToken,
+    InternalServerError,
+    NotFound,
     TokenRetrievalError,
 )
 from tests.commons import AsyncIterator
@@ -695,7 +697,7 @@ async def test_get_with_429_status_without_retry_after_header():
     payload = {"value": "Test rate limit"}
 
     retried_response.__aenter__ = AsyncMock(return_value=JSONAsyncMock(payload))
-    with patch("connectors.sources.onedrive.DEFAULT_RETRY_SECONDS", 0.3):
+    with patch("connectors.sources.onedrive.client.DEFAULT_RETRY_SECONDS", 0.3):
         async with create_onedrive_source() as source:
             with patch.object(AccessToken, "get", return_value="abc"):
                 with patch(
@@ -784,7 +786,7 @@ async def test_post_with_429_status_without_retry_after_header():
     payload = {"value": "Test rate limit"}
 
     retried_response.__aenter__ = AsyncMock(return_value=JSONAsyncMock(payload))
-    with patch("connectors.sources.onedrive.DEFAULT_RETRY_SECONDS", 0.3):
+    with patch("connectors.sources.onedrive.client.DEFAULT_RETRY_SECONDS", 0.3):
         async with create_onedrive_source() as source:
             with patch.object(AccessToken, "get", return_value="abc"):
                 with patch(
