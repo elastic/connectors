@@ -18,20 +18,24 @@ from connectors_sdk.source import ConfigurableFieldValueError, DataSourceConfigu
 
 from connectors.access_control import DLS_QUERY
 from connectors.sources.salesforce import (
-    API_VERSION,
-    RELEVANT_SOBJECT_FIELDS,
+    SalesforceAdvancedRulesValidator,
+    SalesforceDataSource,
+)
+from connectors.sources.salesforce.client import (
     ConnectorRequestError,
     InvalidCredentialsException,
     InvalidQueryException,
     RateLimitedException,
-    SalesforceAdvancedRulesValidator,
-    SalesforceDataSource,
     SalesforceServerError,
     SalesforceSoqlBuilder,
     TokenFetchException,
     _prefix_email,
     _prefix_user,
     _prefix_user_id,
+)
+from connectors.sources.salesforce.constants import (
+    API_VERSION,
+    RELEVANT_SOBJECT_FIELDS,
 )
 from tests.sources.support import create_source
 
