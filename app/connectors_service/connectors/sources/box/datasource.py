@@ -3,229 +3,31 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-"""Box source module responsible to fetch documents from Box"""
 
 import asyncio
-import logging
-import os
-from datetime import datetime, timedelta
 from functools import cached_property, partial
 
 import aiofiles
-import aiohttp
 from aiofiles.os import remove
 from aiofiles.tempfile import NamedTemporaryFile
-from aiohttp.client_exceptions import ClientResponseError
-from connectors_sdk.content_extraction import (
-    TIKA_SUPPORTED_FILETYPES,
-)
-from connectors_sdk.logger import logger
+from connectors_sdk.content_extraction import TIKA_SUPPORTED_FILETYPES
 from connectors_sdk.source import BaseDataSource
-from connectors_sdk.utils import (
-    convert_to_b64,
+from connectors_sdk.utils import convert_to_b64
+
+from connectors.sources.box.client import BoxClient
+from connectors.sources.box.constants import (
+    BOX_ENTERPRISE,
+    BOX_FREE,
+    CHUNK_SIZE,
+    ENDPOINTS,
+    FIELDS,
+    FILE,
+    FINISHED,
+    MAX_CONCURRENCY,
+    MAX_CONCURRENT_DOWNLOADS,
+    QUEUE_MEM_SIZE,
 )
-
-from connectors.utils import (
-    CacheWithTimeout,
-    CancellableSleeps,
-    ConcurrentTasks,
-    MemQueue,
-    RetryStrategy,
-    retryable,
-)
-
-FINISHED = "FINISHED"
-
-ENDPOINTS = {
-    "TOKEN": "/oauth2/token",
-    "PING": "/2.0/users/me",
-    "FOLDER": "/2.0/folders/{folder_id}/items",
-    "CONTENT": "/2.0/files/{file_id}/content",
-    "USERS": "/2.0/users",
-}
-RETRIES = 3
-RETRY_INTERVAL = 2
-CHUNK_SIZE = 1024
-FETCH_LIMIT = 1000
-QUEUE_MEM_SIZE = 5 * 1024 * 1024  # ~ 5 MB
-MAX_CONCURRENCY = 2000
-MAX_CONCURRENT_DOWNLOADS = 15
-FIELDS = "name,modified_at,size,type,sequence_id,etag,created_at,modified_at,content_created_at,content_modified_at,description,created_by,modified_by,owned_by,parent,item_status"
-FILE = "file"
-BOX_FREE = "box_free"
-BOX_ENTERPRISE = "box_enterprise"
-
-refresh_token = None
-
-if "BOX_BASE_URL" in os.environ:
-    BASE_URL = os.environ.get("BOX_BASE_URL")
-else:
-    BASE_URL = "https://api.box.com"
-
-
-class TokenError(Exception):
-    pass
-
-
-class NotFound(Exception):
-    pass
-
-
-class AccessToken:
-    def __init__(self, configuration, http_session):
-        global refresh_token
-        self.client_id = configuration["client_id"]
-        self.client_secret = configuration["client_secret"]
-        self._http_session = http_session
-        if refresh_token is None:
-            refresh_token = configuration["refresh_token"]
-        self._token_cache = CacheWithTimeout()
-        self.is_enterprise = configuration["is_enterprise"]
-        self.enterprise_id = configuration["enterprise_id"]
-
-    async def get(self):
-        if cached_value := self._token_cache.get_value():
-            return cached_value
-        logger.debug("No token cache found; fetching new token")
-        await self._set_access_token()
-        return self.access_token
-
-    async def _set_access_token(self):
-        logger.debug("Generating an access token")
-        try:
-            if self.is_enterprise == BOX_FREE:
-                global refresh_token
-                data = {
-                    "grant_type": "refresh_token",
-                    "refresh_token": refresh_token,
-                    "client_id": self.client_id,
-                    "client_secret": self.client_secret,
-                }
-                async with self._http_session.post(
-                    url=ENDPOINTS["TOKEN"],
-                    data=data,
-                ) as response:
-                    tokens = await response.json()
-                    self.access_token = tokens.get("access_token")
-                    refresh_token = tokens.get("refresh_token")
-                    self.expired_at = datetime.utcnow() + timedelta(
-                        seconds=int(tokens.get("expires_in", 3599))
-                    )
-                    self._token_cache.set_value(
-                        value=self.access_token, expiration_date=self.expired_at
-                    )
-            else:
-                data = {
-                    "client_id": self.client_id,
-                    "client_secret": self.client_secret,
-                    "grant_type": "client_credentials",
-                    "box_subject_type": "enterprise",
-                    "box_subject_id": self.enterprise_id,
-                }
-                async with self._http_session.post(
-                    url=ENDPOINTS["TOKEN"],
-                    data=data,
-                ) as response:
-                    tokens = await response.json()
-                    self.access_token = tokens.get("access_token")
-                    self.expired_at = datetime.utcnow() + timedelta(
-                        seconds=int(tokens.get("expires_in", 3599))
-                    )
-                    self._token_cache.set_value(
-                        value=self.access_token, expiration_date=self.expired_at
-                    )
-        except Exception as exception:
-            msg = f"Error while generating access token. Please verify that provided configurations are correct. Exception {exception}."
-            raise TokenError(msg) from exception
-
-
-class BoxClient:
-    def __init__(self, configuration):
-        self._sleeps = CancellableSleeps()
-        self.configuration = configuration
-        self._logger = logger
-        self.is_enterprise = configuration["is_enterprise"]
-        self._http_session = aiohttp.ClientSession(
-            base_url=BASE_URL, raise_for_status=True
-        )
-        self.token = AccessToken(
-            configuration=configuration, http_session=self._http_session
-        )
-
-    def set_logger(self, logger_):
-        self._logger = logger_
-
-    async def _put_to_sleep(self, retry_after):
-        self._logger.debug(
-            f"Connector will attempt to retry after {retry_after} seconds."
-        )
-        await self._sleeps.sleep(retry_after)
-        msg = "Rate limit exceeded."
-        raise Exception(msg)
-
-    def debug_query_string(self, params):
-        if self._logger.isEnabledFor(logging.DEBUG):
-            return (
-                "&".join(f"{key}={value}" for key, value in params.items())
-                if params
-                else ""
-            )
-
-    async def _handle_client_errors(self, exception):
-        match exception.status:
-            case 401:
-                await self.token._set_access_token()
-                raise
-            case 429:
-                retry_after = int(exception.headers.get("retry-after", 5))
-                await self._put_to_sleep(retry_after=retry_after)
-            case 404:
-                msg = f"Resource Not Found. Error: {exception}"
-                raise NotFound(msg)
-            case _:
-                raise
-
-    @retryable(
-        retries=RETRIES,
-        interval=RETRY_INTERVAL,
-        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
-        skipped_exceptions=NotFound,
-    )
-    async def get(self, url, headers, params=None):
-        self._logger.debug(
-            f"Calling GET {url}?{self.debug_query_string(params=params)}"
-        )
-        try:
-            access_token = await self.token.get()
-            headers.update({"Authorization": f"Bearer {access_token}"})
-            return await self._http_session.get(url=url, headers=headers, params=params)
-        except ClientResponseError as exception:
-            await self._handle_client_errors(exception=exception)
-        except Exception:
-            raise
-
-    async def paginated_call(self, url, params, headers):
-        try:
-            offset = 0
-            while True:
-                params.update({"offset": offset, "limit": FETCH_LIMIT})
-                response = await self.get(url=url, headers=headers, params=params)
-                json_response = await response.json()
-                total_count = json_response.get("total_count")
-                for doc in json_response.get("entries"):
-                    yield doc
-                if offset >= total_count:
-                    break
-                offset += FETCH_LIMIT
-        except Exception:
-            raise
-
-    async def ping(self):
-        await self.get(url=ENDPOINTS["PING"], headers={})
-
-    async def close(self):
-        self._sleeps.cancel()
-        await self._http_session.close()
+from connectors.utils import ConcurrentTasks, MemQueue
 
 
 class BoxDataSource(BaseDataSource):
