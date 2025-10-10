@@ -89,7 +89,7 @@ steps:
             - "tests/sources/fixtures/mysql/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
-            - "pyproject.toml"
+            - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 MySQL"
               <<: *test-agents
@@ -108,7 +108,7 @@ steps:
             - "tests/sources/fixtures/network_drive/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
-            - "pyproject.toml"
+            - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 Network Drive"
               <<: *test-agents
@@ -127,7 +127,7 @@ steps:
             - "tests/sources/fixtures/s3/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
-            - "pyproject.toml"
+            - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 Amazon S3"
               <<: *test-agents
@@ -146,7 +146,7 @@ steps:
             - "tests/sources/fixtures/google_cloud_storage/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
-            - "pyproject.toml"
+            - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 Google Cloud Storage"
               <<: *test-agents
@@ -165,7 +165,7 @@ steps:
             - "tests/sources/fixtures/azure_blob_storage/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
-            - "pyproject.toml"
+            - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 Azure Blob Storage"
               <<: *test-agents
@@ -184,7 +184,7 @@ steps:
             - "tests/sources/fixtures/postgresql/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
-            - "pyproject.toml"
+            - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 Postgresql"
               <<: *test-agents
@@ -221,7 +221,7 @@ steps:
             - "tests/sources/fixtures/oracle/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
-            - "pyproject.toml"
+            - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 Oracle Database"
               <<: *test-agents
@@ -240,7 +240,7 @@ steps:
             - "tests/sources/fixtures/sharepoint_server/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
-            - "pyproject.toml"
+            - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 Sharepoint Server"
               <<: *test-agents
@@ -259,7 +259,7 @@ steps:
             - "tests/sources/fixtures/sharepoint_online/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
-            - "pyproject.toml"
+            - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 Sharepoint Online"
               <<: *test-agents
@@ -278,7 +278,7 @@ steps:
             - "tests/sources/fixtures/mssql/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
-            - "pyproject.toml"
+            - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 Microsoft SQL"
               <<: *test-agents
@@ -297,7 +297,7 @@ steps:
             - "tests/sources/fixtures/jira/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
-            - "pyproject.toml"
+            - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 Jira"
               <<: *test-agents
@@ -316,7 +316,7 @@ steps:
             - "tests/sources/fixtures/confluence/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
-            - "pyproject.toml"
+            - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 Confluence"
               <<: *test-agents
@@ -335,7 +335,7 @@ steps:
             - "tests/sources/fixtures/servicenow/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
-            - "pyproject.toml"
+            - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 ServiceNow"
               <<: *test-agents
@@ -354,7 +354,7 @@ steps:
             - "tests/sources/fixtures/mongodb/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
-            - "pyproject.toml"
+            - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 MongoDB"
               <<: *test-agents
@@ -373,7 +373,7 @@ steps:
             - "tests/sources/fixtures/github/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
-            - "pyproject.toml"
+            - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 GitHub"
               <<: *test-agents
@@ -392,7 +392,7 @@ steps:
             - "tests/sources/fixtures/google_drive/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
-            - "pyproject.toml"
+            - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 Google Drive"
               <<: *test-agents
@@ -411,7 +411,7 @@ steps:
             - "tests/sources/fixtures/dropbox/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
-            - "pyproject.toml"
+            - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 Dropbox"
               <<: *test-agents
@@ -430,7 +430,7 @@ steps:
             - "tests/sources/fixtures/onedrive/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
-            - "pyproject.toml"
+            - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 OneDrive"
               <<: *test-agents
@@ -449,7 +449,7 @@ steps:
             - "tests/sources/fixtures/salesforce/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
-            - "pyproject.toml"
+            - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 Salesforce"
               <<: *test-agents
@@ -468,7 +468,7 @@ steps:
             - "tests/sources/fixtures/zoom/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
-            - "pyproject.toml"
+            - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 Zoom"
               <<: *test-agents
@@ -487,7 +487,7 @@ steps:
             - "tests/sources/fixtures/box/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
-            - "pyproject.toml"
+            - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 Box"
               <<: *test-agents
@@ -506,7 +506,7 @@ steps:
             - "tests/sources/fixtures/microsoft_teams/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
-            - "pyproject.toml"
+            - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 Microsoft Teams"
               <<: *test-agents
@@ -525,7 +525,7 @@ steps:
             - "tests/sources/fixtures/notion/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
-            - "pyproject.toml"
+            - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 Notion"
               <<: *test-agents
@@ -544,7 +544,7 @@ steps:
             - "tests/sources/fixtures/redis/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
-            - "pyproject.toml"
+            - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 Redis"
               <<: *test-agents
@@ -563,7 +563,7 @@ steps:
             - "tests/sources/fixtures/graphql/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
-            - "pyproject.toml"
+            - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 GraphQL"
               <<: *test-agents
@@ -582,7 +582,7 @@ steps:
             - "tests/sources/fixtures/sandfly/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
-            - "requirements/**"
+            - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 Sandfly"
               <<: *test-agents
