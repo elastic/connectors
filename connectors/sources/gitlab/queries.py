@@ -360,7 +360,7 @@ NOTES_QUERY = f"""
 query($projectPath: ID!, $iid: String!, $discussionId: ID!, $cursor: String) {{{{
   project(fullPath: $projectPath) {{{{
     {{issuable_type}}(iid: $iid) {{{{
-      discussions(filter: {{discussionIds: [$discussionId]}}) {{{{
+      discussions(filter: {{{{discussionIds: [$discussionId]}}}}) {{{{
         nodes {{{{
           notes(first: {NESTED_FIELD_SIZE}, after: $cursor) {{{{
             pageInfo {{{{

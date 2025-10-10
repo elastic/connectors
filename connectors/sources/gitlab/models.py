@@ -9,6 +9,8 @@ from enum import Enum
 from typing import Annotated, Any, Generic, Literal, TypeVar, Union, get_args
 
 from pydantic import BaseModel, Discriminator, Field, Tag
+from pydantic.alias_generators import to_camel
+from pydantic.config import ConfigDict
 
 
 class WorkItemType(str, Enum):
@@ -23,10 +25,10 @@ class WorkItemType(str, Enum):
 class PageInfo(BaseModel):
     """GraphQL pagination info."""
 
-    has_next_page: bool = Field(alias="hasNextPage")
-    end_cursor: str | None = Field(alias="endCursor", default=None)
+    has_next_page: bool = False
+    end_cursor: str | None = None
 
-    model_config = {"populate_by_name": True}
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
 
 # Generic type variable for paginated lists
@@ -42,12 +44,9 @@ class PaginatedList(BaseModel, Generic[T]):
     """Generic paginated list with nodes and pageInfo."""
 
     nodes: list[T] = []
-    page_info: PageInfo = Field(
-        alias="pageInfo",
-        default_factory=_default_page_info,
-    )
+    page_info: PageInfo = Field(default_factory=_default_page_info)
 
-    model_config = {"populate_by_name": True}
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
 
 class GitLabUser(BaseModel):
@@ -66,13 +65,13 @@ class GitLabLabel(BaseModel):
 class GitLabPosition(BaseModel):
     """GitLab note position for diff/inline comments."""
 
-    new_line: int | None = Field(alias="newLine", default=None)
-    old_line: int | None = Field(alias="oldLine", default=None)
-    new_path: str | None = Field(alias="newPath", default=None)
-    old_path: str | None = Field(alias="oldPath", default=None)
-    position_type: str | None = Field(alias="positionType", default=None)
+    new_line: int | None = None
+    old_line: int | None = None
+    new_path: str | None = None
+    old_path: str | None = None
+    position_type: str | None = None
 
-    model_config = {"populate_by_name": True}
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
 
 class GitLabNote(BaseModel):
@@ -80,13 +79,13 @@ class GitLabNote(BaseModel):
 
     id: str
     body: str
-    created_at: str = Field(alias="createdAt")
-    updated_at: str = Field(alias="updatedAt")
+    created_at: str
+    updated_at: str
     author: GitLabUser | None = None
     system: bool = False  # System-generated notes (status changes, etc.)
     position: GitLabPosition | None = None  # For diff/inline comments
 
-    model_config = {"populate_by_name": True}
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
 
 class GitLabDiscussion(BaseModel):
@@ -95,7 +94,7 @@ class GitLabDiscussion(BaseModel):
     id: str
     notes: PaginatedList[GitLabNote]
 
-    model_config = {"populate_by_name": True}
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
 
 class GitLabIssue(BaseModel):
@@ -106,16 +105,16 @@ class GitLabIssue(BaseModel):
     title: str
     description: str | None = None
     state: str
-    web_url: str = Field(alias="webUrl")
-    created_at: str = Field(alias="createdAt")
-    updated_at: str = Field(alias="updatedAt")
-    closed_at: str | None = Field(alias="closedAt", default=None)
+    web_url: str
+    created_at: str
+    updated_at: str
+    closed_at: str | None = None
     author: GitLabUser | None = None
     assignees: PaginatedList[GitLabUser]
     labels: PaginatedList[GitLabLabel]
     discussions: PaginatedList[GitLabDiscussion]
 
-    model_config = {"populate_by_name": True}
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
 
 class GitLabMergeRequest(BaseModel):
@@ -126,22 +125,22 @@ class GitLabMergeRequest(BaseModel):
     title: str
     description: str | None = None
     state: str
-    web_url: str = Field(alias="webUrl")
-    created_at: str = Field(alias="createdAt")
-    updated_at: str = Field(alias="updatedAt")
-    merged_at: str | None = Field(alias="mergedAt", default=None)
-    closed_at: str | None = Field(alias="closedAt", default=None)
-    source_branch: str = Field(alias="sourceBranch")
-    target_branch: str = Field(alias="targetBranch")
+    web_url: str
+    created_at: str
+    updated_at: str
+    merged_at: str | None = None
+    closed_at: str | None = None
+    source_branch: str
+    target_branch: str
     author: GitLabUser | None = None
     assignees: PaginatedList[GitLabUser]
     reviewers: PaginatedList[GitLabUser]
     labels: PaginatedList[GitLabLabel]
     discussions: PaginatedList[GitLabDiscussion]
-    approved_by: PaginatedList[GitLabUser] = Field(alias="approvedBy")
-    merged_by: GitLabUser | None = Field(alias="mergedBy", default=None)
+    approved_by: PaginatedList[GitLabUser]
+    merged_by: GitLabUser | None = None
 
-    model_config = {"populate_by_name": True}
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
 
 class WorkItemReference(BaseModel):
@@ -159,28 +158,28 @@ class WorkItemWidgetHierarchy(BaseModel):
     parent: WorkItemReference | None = None
     children: PaginatedList[WorkItemReference] = Field(default_factory=lambda: PaginatedList(nodes=[]))
 
-    model_config = {"populate_by_name": True}
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
 
 class LinkedItemNode(BaseModel):
     """A linked work item with link metadata."""
 
-    link_id: str = Field(alias="linkId")
-    link_type: str = Field(alias="linkType")
-    link_created_at: str = Field(alias="linkCreatedAt")
-    link_updated_at: str = Field(alias="linkUpdatedAt")
-    work_item: WorkItemReference = Field(alias="workItem")
+    link_id: str
+    link_type: str
+    link_created_at: str
+    link_updated_at: str
+    work_item: WorkItemReference
 
-    model_config = {"populate_by_name": True}
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
 
 class WorkItemWidgetLinkedItems(BaseModel):
     """Work item linked items widget (for related/blocking items)."""
 
     type_name: Literal["WorkItemWidgetLinkedItems"] = Field(alias="__typename")
-    linked_items: PaginatedList[LinkedItemNode] = Field(alias="linkedItems", default_factory=lambda: PaginatedList(nodes=[]))
+    linked_items: PaginatedList[LinkedItemNode] = Field(default_factory=lambda: PaginatedList(nodes=[]))
 
-    model_config = {"populate_by_name": True}
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
 
 class WorkItemWidgetDescription(BaseModel):
@@ -189,7 +188,7 @@ class WorkItemWidgetDescription(BaseModel):
     type_name: Literal["WorkItemWidgetDescription"] = Field(alias="__typename")
     description: str | None = None
 
-    model_config = {"populate_by_name": True}
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
 
 class WorkItemWidgetAssignees(BaseModel):
@@ -198,7 +197,7 @@ class WorkItemWidgetAssignees(BaseModel):
     type_name: Literal["WorkItemWidgetAssignees"] = Field(alias="__typename")
     assignees: PaginatedList[GitLabUser]
 
-    model_config = {"populate_by_name": True}
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
 
 class WorkItemWidgetLabels(BaseModel):
@@ -207,7 +206,7 @@ class WorkItemWidgetLabels(BaseModel):
     type_name: Literal["WorkItemWidgetLabels"] = Field(alias="__typename")
     labels: PaginatedList[GitLabLabel]
 
-    model_config = {"populate_by_name": True}
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
 
 class WorkItemWidgetNotes(BaseModel):
@@ -216,7 +215,7 @@ class WorkItemWidgetNotes(BaseModel):
     type_name: Literal["WorkItemWidgetNotes"] = Field(alias="__typename")
     discussions: PaginatedList[GitLabDiscussion]
 
-    model_config = {"populate_by_name": True}
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
 
 class WorkItemWidgetUnknown(BaseModel):
@@ -228,27 +227,28 @@ class WorkItemWidgetUnknown(BaseModel):
 
     type_name: str = Field(alias="__typename")
 
-    model_config = {
-        "populate_by_name": True,
-        "extra": "allow",  # Allow any extra fields
-    }
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        populate_by_name=True,
+        extra="allow",  # Allow any extra fields
+    )
 
 
 class GitLabRepository(BaseModel):
     """GitLab repository model for projects."""
 
-    root_ref: str | None = Field(alias="rootRef", default=None)
+    root_ref: str | None = None
 
-    model_config = {"populate_by_name": True}
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
 
 class GitLabGroup(BaseModel):
     """GitLab group model for projects."""
 
     id: str
-    full_path: str = Field(alias="fullPath")
+    full_path: str
 
-    model_config = {"populate_by_name": True}
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
 
 class GitLabProject(BaseModel):
@@ -257,15 +257,15 @@ class GitLabProject(BaseModel):
     id: str
     name: str
     path: str
-    full_path: str = Field(alias="fullPath")
+    full_path: str
     description: str | None = None
     visibility: str
-    star_count: int = Field(alias="starCount")
-    forks_count: int = Field(alias="forksCount")
-    created_at: str = Field(alias="createdAt")
-    last_activity_at: str | None = Field(alias="lastActivityAt", default=None)
+    star_count: int
+    forks_count: int
+    created_at: str
+    last_activity_at: str | None = None
     archived: bool | None = None
-    web_url: str = Field(alias="webUrl")
+    web_url: str
     repository: GitLabRepository | None = None
     group: GitLabGroup | None = None
 
@@ -276,7 +276,7 @@ class GitLabProject(BaseModel):
             return self.repository.root_ref
         return None
 
-    model_config = {"populate_by_name": True}
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
 
 # Extract tag values from Literal type annotations
@@ -342,12 +342,12 @@ class GitLabWorkItem(BaseModel):
     iid: int
     title: str
     state: str
-    created_at: str = Field(alias="createdAt")
-    updated_at: str = Field(alias="updatedAt")
-    closed_at: str | None = Field(alias="closedAt", default=None)
-    web_url: str = Field(alias="webUrl")
+    created_at: str
+    updated_at: str
+    closed_at: str | None = None
+    web_url: str
     author: GitLabUser | None = None
-    work_item_type: WorkItemTypeInfo = Field(alias="workItemType")
+    work_item_type: WorkItemTypeInfo
     widgets: list[
         WorkItemWidget
     ] = []  # Typed widgets, fetched separately in two-phase approach
@@ -357,7 +357,7 @@ class GitLabWorkItem(BaseModel):
         """Get the work item type name (Issue, Task, Epic, etc)."""
         return self.work_item_type.name
 
-    model_config = {"populate_by_name": True}
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
 
 class GitLabCommit(BaseModel):
@@ -380,9 +380,9 @@ class GitLabAssetLink(BaseModel):
 
     name: str
     url: str
-    link_type: str | None = Field(alias="linkType", default=None)
+    link_type: str | None = None
 
-    model_config = {"populate_by_name": True}
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
 
 class GitLabAssets(BaseModel):
@@ -395,14 +395,14 @@ class GitLabAssets(BaseModel):
 class GitLabRelease(BaseModel):
     """GitLab release model."""
 
-    tag_name: str = Field(alias="tagName")
+    tag_name: str
     name: str | None = None
     description: str | None = None
-    created_at: str = Field(alias="createdAt")
-    released_at: str | None = Field(alias="releasedAt", default=None)
+    created_at: str
+    released_at: str | None = None
     author: GitLabUser | None = None
     commit: GitLabCommit | None = None
     milestones: PaginatedList[GitLabMilestone]
     assets: GitLabAssets
 
-    model_config = {"populate_by_name": True}
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)

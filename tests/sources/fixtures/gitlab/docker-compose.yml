@@ -34,6 +34,8 @@ services:
     volumes:
       - .:/python-flask
     restart: always
+    networks:
+      - esnet
 
 volumes:
   esdata:
