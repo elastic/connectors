@@ -20,13 +20,15 @@ from gidgethub.abc import BadGraphQLRequest, GraphQLAuthorizationFailure, QueryE
 
 from connectors.access_control import DLS_QUERY
 from connectors.sources.github import (
+    GitHubAdvancedRulesValidator,
+    GitHubClient,
+    GitHubDataSource,
+)
+from connectors.sources.github.utils import (
     GITHUB_APP,
     PERSONAL_ACCESS_TOKEN,
     REPOSITORY_OBJECT,
     ForbiddenException,
-    GitHubAdvancedRulesValidator,
-    GitHubClient,
-    GitHubDataSource,
     UnauthorizedException,
 )
 from tests.commons import AsyncIterator
@@ -1431,7 +1433,7 @@ async def test_fetch_repos_github_app(repo_type, repos, expected_repos):
         )
         jwt_response = {"token": "changeme"}
         with patch(
-            "connectors.sources.github.get_installation_access_token",
+            "connectors.sources.github.client.get_installation_access_token",
             return_value=jwt_response,
         ):
             actual_repos = [repo async for repo in source._fetch_repos()]
@@ -2058,7 +2060,7 @@ async def test_get_access_control_github_app():
         actual_response = []
         jwt_response = {"token": "changeme"}
         with patch(
-            "connectors.sources.github.get_installation_access_token",
+            "connectors.sources.github.client.get_installation_access_token",
             return_value=jwt_response,
         ):
             async for access_control in source.get_access_control():
@@ -2164,7 +2166,7 @@ async def test_github_client_get_installations():
         source.github_client._get_client._make_request = AsyncMock(
             return_value=(mock_response, None)
         )
-        with patch("connectors.sources.github.get_jwt", return_value="changeme"):
+        with patch("connectors.sources.github.client.get_jwt", return_value="changeme"):
             expected_installations = [
                 installation
                 async for installation in source.github_client.get_installations()
@@ -2185,7 +2187,7 @@ async def test_github_app_paginated_get():
         source.github_client._get_client._make_request = AsyncMock(
             side_effect=[([item_1, item_2], "fake_url_2"), ([item_3], None)]
         )
-        with patch("connectors.sources.github.get_jwt", return_value="changeme"):
+        with patch("connectors.sources.github.client.get_jwt", return_value="changeme"):
             expected_results = [
                 item
                 async for item in source.github_client._github_app_paginated_get(
@@ -2203,7 +2205,7 @@ async def test_update_installation_id():
         jwt_response = {"token": "changeme"}
         installation_id = 123
         with patch(
-            "connectors.sources.github.get_installation_access_token",
+            "connectors.sources.github.client.get_installation_access_token",
             return_value=jwt_response,
         ) as get_installation_access_token:
             assert source.github_client._installation_id is None
@@ -2299,7 +2301,7 @@ async def test_get_owners(auth_method, repo_type, expected_owners):
         )
         jwt_response = {"token": "changeme"}
         with patch(
-            "connectors.sources.github.get_installation_access_token",
+            "connectors.sources.github.client.get_installation_access_token",
             return_value=jwt_response,
         ):
             actual_owners = [owner async for owner in source._get_owners()]
