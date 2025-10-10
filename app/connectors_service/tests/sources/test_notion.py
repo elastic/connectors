@@ -13,11 +13,11 @@ from httpx import Response
 from notion_client import APIResponseError
 
 from connectors.sources.notion import (
-    NotFound,
     NotionAdvancedRulesValidator,
     NotionClient,
     NotionDataSource,
 )
+from connectors.sources.notion.client import NotFound
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
 
@@ -206,7 +206,7 @@ URL = "https://some_example_file_url"
 
 
 @pytest.mark.asyncio
-@patch("connectors.sources.notion.NotionClient", autospec=True)
+@patch("connectors.sources.notion.datasource.NotionClient", autospec=True)
 async def test_ping(mock_notion_client):
     mock_notion_client.return_value.fetch_owner.return_value = None
     async with create_source(
@@ -218,7 +218,7 @@ async def test_ping(mock_notion_client):
 
 
 @pytest.mark.asyncio
-@patch("connectors.sources.notion.NotionClient", autospec=True)
+@patch("connectors.sources.notion.datasource.NotionClient", autospec=True)
 async def test_ping_negative(mock_notion_client):
     mock_notion_client.return_value.fetch_owner.side_effect = APIResponseError(
         message="Invalid API key",
@@ -265,7 +265,7 @@ async def test_close_with_client():
         ),
     ],
 )
-@patch("connectors.sources.notion.NotionClient", autospec=True)
+@patch("connectors.sources.notion.datasource.NotionClient", autospec=True)
 async def test_get_entities(
     mock_notion_client, entity_type, entity_titles, mock_search_results
 ):
@@ -287,7 +287,7 @@ async def test_get_entities(
         ("page", ["Missing Page"], "pages"),
     ],
 )
-@patch("connectors.sources.notion.NotionClient")
+@patch("connectors.sources.notion.datasource.NotionClient")
 async def test_get_entities_entity_not_found(
     mock_notion_client, entity_type, entity_titles, configuration_key
 ):
@@ -824,7 +824,7 @@ async def test_fetch_results_rate_limit_exceeded():
     async with create_source(
         NotionDataSource, notion_secret_key="secret_key"
     ) as source:
-        with patch("connectors.sources.notion.DEFAULT_RETRY_SECONDS", 0.3):
+        with patch("connectors.sources.notion.client.DEFAULT_RETRY_SECONDS", 0.3):
             mock_function_with_429.call_count = 0
             result = await source.notion_client.fetch_results(mock_function_with_429)
 

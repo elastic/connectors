@@ -465,7 +465,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/zoom.py"
+            - "connectors/sources/zoom/**"
             - "tests/sources/fixtures/zoom/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
@@ -522,7 +522,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/notion.py"
+            - "connectors/sources/notion/**"
             - "tests/sources/fixtures/notion/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
