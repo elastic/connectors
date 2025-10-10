@@ -18,10 +18,8 @@ from connectors.access_control import (
     es_access_control_query,
     prefix_identity,
 )
-from connectors.sources.salesforce import (
-    SalesforceAdvancedRulesValidator,
-    SalesforceClient,
-)
+from connectors.sources.salesforce.validator import SalesforceAdvancedRulesValidator
+from connectors.sources.salesforce.client import SalesforceClient
 from connectors.sources.salesforce.constants import (
     BASE_URL,
     RUNNING_FTEST,

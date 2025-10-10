@@ -21,6 +21,11 @@ from connectors.sources.salesforce import (
     SalesforceAdvancedRulesValidator,
     SalesforceDataSource,
 )
+from connectors.sources.salesforce.datasource import (
+    _prefix_email,
+    _prefix_user,
+    _prefix_user_id,
+)
 from connectors.sources.salesforce.client import (
     ConnectorRequestError,
     InvalidCredentialsException,
@@ -29,9 +34,6 @@ from connectors.sources.salesforce.client import (
     SalesforceServerError,
     SalesforceSoqlBuilder,
     TokenFetchException,
-    _prefix_email,
-    _prefix_user,
-    _prefix_user_id,
 )
 from connectors.sources.salesforce.constants import (
     API_VERSION,
@@ -914,7 +916,7 @@ async def test_generate_token_with_unexpected_error_retries(
     ],
 )
 @mock.patch(
-    "connectors.sources.salesforce.RELEVANT_SOBJECTS",
+    "connectors.sources.salesforce.client.RELEVANT_SOBJECTS",
     ["FooField", "BarField", "ArghField"],
 )
 async def test_get_queryable_sobjects(mock_responses, sobject, expected_result):
@@ -943,9 +945,9 @@ async def test_get_queryable_sobjects(mock_responses, sobject, expected_result):
 
 
 @pytest.mark.asyncio
-@mock.patch("connectors.sources.salesforce.RELEVANT_SOBJECTS", ["Account"])
+@mock.patch("connectors.sources.salesforce.client.RELEVANT_SOBJECTS", ["Account"])
 @mock.patch(
-    "connectors.sources.salesforce.RELEVANT_SOBJECT_FIELDS",
+    "connectors.sources.salesforce.client.RELEVANT_SOBJECT_FIELDS",
     ["FooField", "BarField", "ArghField"],
 )
 async def test_get_queryable_fields(mock_responses):
@@ -2188,7 +2190,7 @@ async def test_queryable_sobject_fields_performance_optimization(mock_responses)
     - Performance improvement: ~85% reduction in API calls
     """
     async with create_salesforce_source(mock_queryables=False) as source:
-        from connectors.sources.salesforce import RELEVANT_SOBJECTS
+        from connectors.sources.salesforce.constants import RELEVANT_SOBJECTS
 
         # Mock responses for all RELEVANT_SOBJECTS
         mock_fields = [{"name": "Id"}, {"name": "Name"}, {"name": "Description"}]
