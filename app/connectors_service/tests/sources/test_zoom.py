@@ -15,7 +15,8 @@ from aiohttp.client_exceptions import ClientResponseError
 from connectors_sdk.source import ConfigurableFieldValueError
 from freezegun import freeze_time
 
-from connectors.sources.zoom import TokenError, ZoomDataSource
+from connectors.sources.zoom import ZoomDataSource
+from connectors.sources.zoom.client import TokenError
 from tests.sources.support import create_source
 
 # Access token document
