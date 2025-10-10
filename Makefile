@@ -1,5 +1,6 @@
 app_dir := app/connectors_service
 connectors_sdk_dir := libs/connectors_sdk
+connectors_source_dir := libs/connectors_sources
 
 VERSION=$(shell cat app/connectors_service/connectors/VERSION)
 
@@ -23,6 +24,7 @@ ftrace:
 
 notice: install
 	cd $(connectors_sdk_dir); make notice
+	cd $(connectors_source_dir); make notice
 	cd $(app_dir); make notice
 
 lint: install
