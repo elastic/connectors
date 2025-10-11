@@ -852,14 +852,15 @@ class TestGitLabClientAsyncGenerators:
         """Test get_projects handles GraphQL errors gracefully."""
         client = GitLabClient(token="test-token")
 
-        with patch.object(
-            client, "_execute_graphql", new_callable=AsyncMock
-        ) as mock_graphql:
-            mock_graphql.side_effect = Exception("GraphQL error")
+        with patch("asyncio.sleep", new_callable=AsyncMock):
+            with patch.object(
+                client, "_execute_graphql", new_callable=AsyncMock
+            ) as mock_graphql:
+                mock_graphql.side_effect = Exception("GraphQL error")
 
-            with pytest.raises(Exception, match="GraphQL error"):
-                async for _ in client.get_projects():
-                    pass
+                with pytest.raises(Exception, match="GraphQL error"):
+                    async for _ in client.get_projects():
+                        pass
 
     @pytest.mark.asyncio
     async def test_get_merge_requests(self):
@@ -1889,6 +1890,187 @@ class TestGitLabDataSourceIntegration:
         assert len(docs) >= 1
         assert docs[0]["type"] == "Project"
 
+    @pytest.mark.asyncio
+    async def test_get_docs_epic_with_discussions_pagination(self):
+        """Test get_docs handles epic discussions pagination."""
+        project = GitLabProject(
+            id="gid://gitlab/Project/123",
+            name="project1",
+            path="project1",
+            full_path="group/project1",
+            visibility="public",
+            star_count=0,
+            forks_count=0,
+            created_at="2023-01-01T00:00:00Z",
+            web_url="https://gitlab.com/group/project1",
+            repository=GitLabRepository(root_ref="main"),
+            group=GitLabGroup(id="gid://gitlab/Group/456", full_path="group"),
+        )
+
+        epic = GitLabWorkItem.model_validate(
+            {
+                "id": "gid://gitlab/WorkItem/999",
+                "iid": 1,
+                "title": "Epic with paginated discussions",
+                "state": "opened",
+                "createdAt": "2023-01-01T00:00:00Z",
+                "updatedAt": "2023-01-01T00:00:00Z",
+                "webUrl": "https://gitlab.com/groups/group/-/epics/1",
+                "workItemType": {"name": "Epic"},
+                "widgets": [
+                    {
+                        "__typename": "WorkItemWidgetNotes",
+                        "discussions": {
+                            "nodes": [
+                                {
+                                    "id": "gid://gitlab/Discussion/1",
+                                    "notes": {
+                                        "nodes": [
+                                            {
+                                                "id": "gid://gitlab/Note/1",
+                                                "body": "First note",
+                                                "createdAt": "2023-01-01T00:00:00Z",
+                                                "updatedAt": "2023-01-01T00:00:00Z",
+                                                "author": {"username": "user1"},
+                                            }
+                                        ]
+                                    },
+                                }
+                            ],
+                            "pageInfo": {
+                                "hasNextPage": True,
+                                "endCursor": "disccursor1",
+                            },
+                        },
+                    },
+                ],
+            }
+        )
+
+        config = GitLabDataSource.get_default_configuration()
+        config["token"]["value"] = "test-token-123"
+        config["projects"]["value"] = ["group/project1"]
+        source = GitLabDataSource(configuration=DataSourceConfiguration(config))
+
+        async def mock_get_projects():
+            yield project
+
+        async def mock_get_epics(*args, **kwargs):
+            yield epic
+
+        async def mock_remaining_discussions(*args, **kwargs):
+            yield {
+                "id": "gid://gitlab/Discussion/2",
+                "notes": {
+                    "nodes": [
+                        {
+                            "id": "gid://gitlab/Note/2",
+                            "body": "Second note",
+                            "createdAt": "2023-01-02T00:00:00Z",
+                            "updatedAt": "2023-01-02T00:00:00Z",
+                            "author": {"username": "user2"},
+                        }
+                    ]
+                },
+            }
+
+        source.gitlab_client.get_projects = mock_get_projects
+        source.gitlab_client.get_work_items_project = lambda *a, **k: async_gen_empty()
+        source.gitlab_client.get_work_items_group = mock_get_epics
+        source.gitlab_client.get_merge_requests = lambda *a, **k: async_gen_empty()
+        source.gitlab_client.get_releases = lambda *a, **k: async_gen_empty()
+        source.gitlab_client.fetch_remaining_work_item_group_discussions = (
+            mock_remaining_discussions
+        )
+        source.gitlab_client._get_rest = AsyncMock(return_value=[])
+
+        docs = []
+        async for doc, _ in source.get_docs():
+            docs.append(doc)
+
+        epic_doc = [d for d in docs if d["type"] == "Epic"][0]
+        # Should have 2 discussions (1 initial + 1 paginated)
+        assert len(epic_doc["notes"]) == 2
+
+    @pytest.mark.asyncio
+    async def test_get_docs_epic_with_parent_hierarchy(self):
+        """Test get_docs formats epic with parent hierarchy correctly."""
+        project = GitLabProject(
+            id="gid://gitlab/Project/123",
+            name="project1",
+            path="project1",
+            full_path="group/project1",
+            visibility="public",
+            star_count=0,
+            forks_count=0,
+            created_at="2023-01-01T00:00:00Z",
+            web_url="https://gitlab.com/group/project1",
+            repository=GitLabRepository(root_ref="main"),
+            group=GitLabGroup(id="gid://gitlab/Group/456", full_path="group"),
+        )
+
+        epic_with_parent = GitLabWorkItem.model_validate(
+            {
+                "id": "gid://gitlab/WorkItem/999",
+                "iid": 2,
+                "title": "Child Epic",
+                "state": "opened",
+                "createdAt": "2023-01-01T00:00:00Z",
+                "updatedAt": "2023-01-01T00:00:00Z",
+                "webUrl": "https://gitlab.com/groups/group/-/epics/2",
+                "workItemType": {"name": "Epic"},
+                "widgets": [
+                    {
+                        "__typename": "WorkItemWidgetHierarchy",
+                        "parent": {
+                            "id": "gid://gitlab/WorkItem/888",
+                            "iid": 1,
+                            "title": "Parent Epic",
+                        },
+                        "children": {
+                            "nodes": [
+                                {
+                                    "id": "gid://gitlab/WorkItem/777",
+                                    "iid": 3,
+                                    "title": "Sub-epic",
+                                }
+                            ]
+                        },
+                    },
+                ],
+            }
+        )
+
+        config = GitLabDataSource.get_default_configuration()
+        config["token"]["value"] = "test-token-123"
+        config["projects"]["value"] = ["group/project1"]
+        source = GitLabDataSource(configuration=DataSourceConfiguration(config))
+
+        async def mock_get_projects():
+            yield project
+
+        async def mock_get_epics(*args, **kwargs):
+            yield epic_with_parent
+
+        source.gitlab_client.get_projects = mock_get_projects
+        source.gitlab_client.get_work_items_project = lambda *a, **k: async_gen_empty()
+        source.gitlab_client.get_work_items_group = mock_get_epics
+        source.gitlab_client.get_merge_requests = lambda *a, **k: async_gen_empty()
+        source.gitlab_client.get_releases = lambda *a, **k: async_gen_empty()
+        source.gitlab_client._get_rest = AsyncMock(return_value=[])
+
+        docs = []
+        async for doc, _ in source.get_docs():
+            docs.append(doc)
+
+        epic_doc = [d for d in docs if d["type"] == "Epic"][0]
+        # Should have parent info
+        assert epic_doc["parent_epic_iid"] == 1
+        assert epic_doc["parent_epic_title"] == "Parent Epic"
+        # Should have children info
+        assert epic_doc["children_count"] == 1
+        assert len(epic_doc["children"]) == 1
+        assert epic_doc["children"][0]["iid"] == 3
 
     @pytest.mark.asyncio
     async def test_get_docs_with_merge_requests_and_pagination(self):
@@ -2288,6 +2470,78 @@ class TestGitLabClientAsyncGeneratorErrors:
     """Test suite for error handling in async generator methods."""
 
     @pytest.mark.asyncio
+    async def test_get_issues_with_pagination(self):
+        """Test get_issues handles pagination correctly."""
+        client = GitLabClient(token="test-token")
+
+        with patch.object(client, "_execute_graphql", new_callable=AsyncMock) as mock_graphql:
+            mock_graphql.side_effect = [
+                # First page
+                {
+                    "project": {
+                        "issues": {
+                            "pageInfo": {
+                                "hasNextPage": True,
+                                "endCursor": "cursor2",
+                            },
+                            "nodes": [
+                                {
+                                    "id": "gid://gitlab/Issue/1",
+                                    "iid": 1,
+                                    "title": "Issue 1",
+                                    "state": "opened",
+                                    "createdAt": "2023-01-01T00:00:00Z",
+                                    "updatedAt": "2023-01-01T00:00:00Z",
+                                    "webUrl": "https://gitlab.com/issue/1",
+                                    "author": {"username": "user1", "name": "User 1"},
+                                    "assignees": {"nodes": [], "pageInfo": {"hasNextPage": False}},
+                                    "labels": {"nodes": [], "pageInfo": {"hasNextPage": False}},
+                                    "discussions": {"nodes": [], "pageInfo": {"hasNextPage": False}},
+                                },
+                            ],
+                        }
+                    }
+                },
+                # Second page (last)
+                {
+                    "project": {
+                        "issues": {
+                            "pageInfo": {
+                                "hasNextPage": False,
+                                "endCursor": None,
+                            },
+                            "nodes": [
+                                {
+                                    "id": "gid://gitlab/Issue/2",
+                                    "iid": 2,
+                                    "title": "Issue 2",
+                                    "state": "opened",
+                                    "createdAt": "2023-01-02T00:00:00Z",
+                                    "updatedAt": "2023-01-02T00:00:00Z",
+                                    "webUrl": "https://gitlab.com/issue/2",
+                                    "author": {"username": "user2", "name": "User 2"},
+                                    "assignees": {"nodes": [], "pageInfo": {"hasNextPage": False}},
+                                    "labels": {"nodes": [], "pageInfo": {"hasNextPage": False}},
+                                    "discussions": {"nodes": [], "pageInfo": {"hasNextPage": False}},
+                                },
+                            ],
+                        }
+                    }
+                },
+            ]
+
+            issues = []
+            async for issue in client.get_issues("group/project"):
+                issues.append(issue)
+
+            assert len(issues) == 2
+            assert issues[0].iid == 1
+            assert issues[1].iid == 2
+            # Verify cursor was passed in second call
+            assert mock_graphql.call_count == 2
+            assert mock_graphql.call_args_list[1][0][1]["cursor"] == "cursor2"
+
+    @pytest.mark.asyncio
     async def test_get_issues_exception_handling(self):
         """Test get_issues handles exceptions gracefully."""
         client = GitLabClient(token="test-token")
@@ -2594,6 +2848,181 @@ class TestGitLabClientAsyncGeneratorErrors:
                 discussions.append(discussion)
 
             assert len(discussions) == 0
+
+    @pytest.mark.asyncio
+    async def test_fetch_remaining_work_item_assignees_group(self):
+        """Test fetch_remaining_work_item_assignees_group pagination."""
+        client = GitLabClient(token="test-token")
+
+        # Mock two pages of assignees
+        with patch.object(client, "_execute_graphql", new_callable=AsyncMock) as mock_graphql:
+            mock_graphql.side_effect = [
+                # First page
+                {
+                    "group": {
+                        "workItems": {
+                            "nodes": [
+                                {
+                                    "widgets": [
+                                        {
+                                            "__typename": "WorkItemWidgetAssignees",
+                                            "assignees": {
+                                                "pageInfo": {
+                                                    "hasNextPage": True,
+                                                    "endCursor": "cursor2",
+                                                },
+                                                "nodes": [
+                                                    {"username": "user1", "name": "User 1"},
+                                                    {"username": "user2", "name": "User 2"},
+                                                ],
+                                            },
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    }
+                },
+                # Second page
+                {
+                    "group": {
+                        "workItems": {
+                            "nodes": [
+                                {
+                                    "widgets": [
+                                        {
+                                            "__typename": "WorkItemWidgetAssignees",
+                                            "assignees": {
+                                                "pageInfo": {
+                                                    "hasNextPage": False,
+                                                    "endCursor": None,
+                                                },
+                                                "nodes": [
+                                                    {"username": "user3", "name": "User 3"},
+                                                ],
+                                            },
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    }
+                },
+            ]
+
+            assignees = []
+            async for assignee in client.fetch_remaining_work_item_assignees_group(
+                "mygroup", 1, "EPIC", "cursor1"
+            ):
+                assignees.append(assignee)
+
+            assert len(assignees) == 3
+            assert assignees[0]["username"] == "user1"
+            assert assignees[1]["username"] == "user2"
+            assert assignees[2]["username"] == "user3"
+
+    @pytest.mark.asyncio
+    async def test_fetch_remaining_work_item_labels_group(self):
+        """Test fetch_remaining_work_item_labels_group pagination."""
+        client = GitLabClient(token="test-token")
+
+        with patch.object(client, "_execute_graphql", new_callable=AsyncMock) as mock_graphql:
+            mock_graphql.side_effect = [
+                # First page
+                {
+                    "group": {
+                        "workItems": {
+                            "nodes": [
+                                {
+                                    "widgets": [
+                                        {
+                                            "__typename": "WorkItemWidgetLabels",
+                                            "labels": {
+                                                "pageInfo": {
+                                                    "hasNextPage": True,
+                                                    "endCursor": "cursor2",
+                                                },
+                                                "nodes": [
+                                                    {"title": "bug"},
+                                                    {"title": "critical"},
+                                                ],
+                                            },
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    }
+                },
+                # Second page (no more)
+                {
+                    "group": {
+                        "workItems": {
+                            "nodes": [
+                                {
+                                    "widgets": [
+                                        {
+                                            "__typename": "WorkItemWidgetLabels",
+                                            "labels": {
+                                                "pageInfo": {
+                                                    "hasNextPage": False,
+                                                    "endCursor": None,
+                                                },
+                                                "nodes": [
+                                                    {"title": "feature"},
+                                                ],
+                                            },
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    }
+                },
+            ]
+
+            labels = []
+            async for label in client.fetch_remaining_work_item_labels_group(
+                "mygroup", 1, "EPIC", "cursor1"
+            ):
+                labels.append(label)
+
+            assert len(labels) == 3
+            assert labels[0]["title"] == "bug"
+            assert labels[1]["title"] == "critical"
+            assert labels[2]["title"] == "feature"
+
+    @pytest.mark.asyncio
+    async def test_fetch_remaining_work_item_assignees_group_missing_group(self):
+        """Test fetch_remaining_work_item_assignees_group handles missing group."""
+        client = GitLabClient(token="test-token")
+
+        with patch.object(client, "_execute_graphql", new_callable=AsyncMock) as mock_graphql:
+            mock_graphql.return_value = {}
+
+            assignees = []
+            async for assignee in client.fetch_remaining_work_item_assignees_group(
+                "mygroup", 1, "EPIC", "cursor1"
+            ):
+                assignees.append(assignee)
+
+            assert len(assignees) == 0
+
+    @pytest.mark.asyncio
+    async def test_fetch_remaining_work_item_labels_group_missing_group(self):
+        """Test fetch_remaining_work_item_labels_group handles missing group."""
+        client = GitLabClient(token="test-token")
+
+        with patch.object(client, "_execute_graphql", new_callable=AsyncMock) as mock_graphql:
+            mock_graphql.return_value = {}
+
+            labels = []
+            async for label in client.fetch_remaining_work_item_labels_group(
+                "mygroup", 1, "EPIC", "cursor1"
+            ):
+                labels.append(label)
+
+            assert len(labels) == 0
 
 
 # Helper for empty async generators
