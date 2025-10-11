@@ -1480,12 +1480,12 @@ class TestGitLabDataSourceIntegration:
             id="gid://gitlab/Project/123",
             name="Test",
             path="test",
-            fullPath="group/test",
+            full_path="group/test",
             visibility="public",
-            starCount=0,
-            forksCount=0,
-            createdAt="2023-01-01T00:00:00Z",
-            webUrl="https://gitlab.com/test",
+            star_count=0,
+            forks_count=0,
+            created_at="2023-01-01T00:00:00Z",
+            web_url="https://gitlab.com/test",
             repository=None,  # No repository means no default branch
         )
 
@@ -1747,14 +1747,14 @@ class TestGitLabDataSourceIntegration:
             id="gid://gitlab/Project/123",
             name="project1",
             path="project1",
-            fullPath="group/project1",
+            full_path="group/project1",
             visibility="public",
-            starCount=0,
-            forksCount=0,
-            createdAt="2023-01-01T00:00:00Z",
-            webUrl="https://gitlab.com/group/project1",
-            repository=GitLabRepository(rootRef="main"),
-            group=GitLabGroup(id="gid://gitlab/Group/456", fullPath="group"),
+            star_count=0,
+            forks_count=0,
+            created_at="2023-01-01T00:00:00Z",
+            web_url="https://gitlab.com/group/project1",
+            repository=GitLabRepository(root_ref="main"),
+            group=GitLabGroup(id="gid://gitlab/Group/456", full_path="group"),
         )
 
         epic = GitLabWorkItem.model_validate(
@@ -1849,14 +1849,14 @@ class TestGitLabDataSourceIntegration:
             id="gid://gitlab/Project/123",
             name="project1",
             path="project1",
-            fullPath="group/project1",
+            full_path="group/project1",
             visibility="public",
-            starCount=0,
-            forksCount=0,
-            createdAt="2023-01-01T00:00:00Z",
-            webUrl="https://gitlab.com/group/project1",
-            repository=GitLabRepository(rootRef="main"),
-            group=GitLabGroup(id="gid://gitlab/Group/456", fullPath="group"),
+            star_count=0,
+            forks_count=0,
+            created_at="2023-01-01T00:00:00Z",
+            web_url="https://gitlab.com/group/project1",
+            repository=GitLabRepository(root_ref="main"),
+            group=GitLabGroup(id="gid://gitlab/Group/456", full_path="group"),
         )
 
         config = GitLabDataSource.get_default_configuration()
@@ -1897,24 +1897,24 @@ class TestGitLabDataSourceIntegration:
             id="gid://gitlab/Project/123",
             name="project1",
             path="project1",
-            fullPath="group/project1",
+            full_path="group/project1",
             visibility="public",
-            starCount=0,
-            forksCount=0,
-            createdAt="2023-01-01T00:00:00Z",
-            webUrl="https://gitlab.com/group/project1",
-            repository=GitLabRepository(rootRef="main"),
+            star_count=0,
+            forks_count=0,
+            created_at="2023-01-01T00:00:00Z",
+            web_url="https://gitlab.com/group/project1",
+            repository=GitLabRepository(root_ref="main"),
         )
 
         mr = GitLabMergeRequest(
             iid=1,
             title="Test MR",
             state="opened",
-            createdAt="2023-01-01T00:00:00Z",
-            updatedAt="2023-01-01T00:00:00Z",
-            webUrl="https://gitlab.com/group/project1/merge_requests/1",
-            sourceBranch="feature",
-            targetBranch="main",
+            web_url="https://gitlab.com/group/project1/merge_requests/1",
+            created_at="2023-01-01T00:00:00Z",
+            updated_at="2023-01-01T00:00:00Z",
+            source_branch="feature",
+            target_branch="main",
             assignees=PaginatedList(
                 nodes=[GitLabUser(username="assignee1")],
                 page_info=PageInfo(has_next_page=True, end_cursor="cursor1"),
@@ -1975,19 +1975,19 @@ class TestGitLabDataSourceIntegration:
             id="gid://gitlab/Project/123",
             name="project1",
             path="project1",
-            fullPath="group/project1",
+            full_path="group/project1",
             visibility="public",
-            starCount=0,
-            forksCount=0,
-            createdAt="2023-01-01T00:00:00Z",
-            webUrl="https://gitlab.com/group/project1",
-            repository=GitLabRepository(rootRef="main"),
+            star_count=0,
+            forks_count=0,
+            created_at="2023-01-01T00:00:00Z",
+            web_url="https://gitlab.com/group/project1",
+            repository=GitLabRepository(root_ref="main"),
         )
 
         release = GitLabRelease(
-            tagName="v1.0.0",
+            tag_name="v1.0.0",
             name="Release 1.0.0",
-            createdAt="2023-01-01T00:00:00Z",
+            created_at="2023-01-01T00:00:00Z",
             milestones=PaginatedList(nodes=[], page_info=PageInfo(has_next_page=False)),
             assets=GitLabAssets(
                 count=0,
@@ -2030,9 +2030,9 @@ class TestGitLabDataSourceIntegration:
             iid=1,
             title="Test Issue",
             state="opened",
-            webUrl="https://gitlab.com/test",
-            createdAt="2023-01-01T00:00:00Z",
-            updatedAt="2023-01-01T00:00:00Z",
+            web_url="https://gitlab.com/test",
+            created_at="2023-01-01T00:00:00Z",
+            updated_at="2023-01-01T00:00:00Z",
             assignees=PaginatedList(
                 nodes=[GitLabUser(username="user1")],
                 page_info=PageInfo(has_next_page=True, end_cursor="cursor1"),
@@ -2281,6 +2281,319 @@ class TestGitLabClientErrorHandling:
             # Should sleep for default 60 seconds
             assert mock_sleep.call_count == 1
             assert mock_sleep.call_args[0][0] == 60  # First positional arg
+
+
+# Tests for error handling in async generators
+class TestGitLabClientAsyncGeneratorErrors:
+    """Test suite for error handling in async generator methods."""
+
+    @pytest.mark.asyncio
+    async def test_get_issues_exception_handling(self):
+        """Test get_issues handles exceptions gracefully."""
+        client = GitLabClient(token="test-token")
+
+        # Mock _execute_graphql to raise exception
+        with patch.object(client, "_execute_graphql", new_callable=AsyncMock) as mock_graphql:
+            mock_graphql.side_effect = Exception("GraphQL failed")
+
+            issues = []
+            async for issue in client.get_issues("group/project"):
+                issues.append(issue)
+
+            # Should return empty (caught exception)
+            assert len(issues) == 0
+
+    @pytest.mark.asyncio
+    async def test_get_issues_missing_project(self):
+        """Test get_issues handles missing project data."""
+        client = GitLabClient(token="test-token")
+
+        # Mock response with no project data
+        with patch.object(client, "_execute_graphql", new_callable=AsyncMock) as mock_graphql:
+            mock_graphql.return_value = {}  # No "project" key
+
+            issues = []
+            async for issue in client.get_issues("nonexistent/project"):
+                issues.append(issue)
+
+            assert len(issues) == 0
+
+    @pytest.mark.asyncio
+    async def test_get_merge_requests_exception(self):
+        """Test get_merge_requests handles exceptions."""
+        client = GitLabClient(token="test-token")
+
+        with patch.object(client, "_execute_graphql", new_callable=AsyncMock) as mock_graphql:
+            mock_graphql.side_effect = Exception("Network error")
+
+            mrs = []
+            async for mr in client.get_merge_requests("group/project"):
+                mrs.append(mr)
+
+            assert len(mrs) == 0
+
+    @pytest.mark.asyncio
+    async def test_get_merge_requests_missing_project(self):
+        """Test get_merge_requests handles missing project."""
+        client = GitLabClient(token="test-token")
+
+        with patch.object(client, "_execute_graphql", new_callable=AsyncMock) as mock_graphql:
+            mock_graphql.return_value = {"project": None}
+
+            mrs = []
+            async for mr in client.get_merge_requests("group/project"):
+                mrs.append(mr)
+
+            assert len(mrs) == 0
+
+    @pytest.mark.asyncio
+    async def test_get_releases_exception(self):
+        """Test get_releases handles exceptions."""
+        client = GitLabClient(token="test-token")
+
+        with patch.object(client, "_execute_graphql", new_callable=AsyncMock) as mock_graphql:
+            mock_graphql.side_effect = Exception("Permission denied")
+
+            releases = []
+            async for release in client.get_releases("group/project"):
+                releases.append(release)
+
+            assert len(releases) == 0
+
+    @pytest.mark.asyncio
+    async def test_get_work_items_project_exception(self):
+        """Test get_work_items_project handles exceptions."""
+        client = GitLabClient(token="test-token")
+
+        with patch.object(client, "_execute_graphql", new_callable=AsyncMock) as mock_graphql:
+            mock_graphql.side_effect = Exception("Query failed")
+
+            items = []
+            async for item in client.get_work_items_project("group/project", [WorkItemType.ISSUE]):
+                items.append(item)
+
+            assert len(items) == 0
+
+    @pytest.mark.asyncio
+    async def test_get_work_items_group_exception(self):
+        """Test get_work_items_group handles exceptions."""
+        client = GitLabClient(token="test-token")
+
+        with patch.object(client, "_execute_graphql", new_callable=AsyncMock) as mock_graphql:
+            mock_graphql.side_effect = Exception("Group not found")
+
+            items = []
+            async for item in client.get_work_items_group("group", [WorkItemType.EPIC]):
+                items.append(item)
+
+            assert len(items) == 0
+
+    @pytest.mark.asyncio
+    async def test_fetch_work_item_widgets_exception(self):
+        """Test fetch_work_item_widgets handles exceptions."""
+        client = GitLabClient(token="test-token")
+
+        with patch.object(client, "_execute_graphql", new_callable=AsyncMock) as mock_graphql:
+            mock_graphql.side_effect = Exception("Failed to fetch")
+
+            widgets = await client.fetch_work_item_widgets("group/project", 1, "ISSUE")
+
+            # Should return empty list on error
+            assert widgets == []
+
+    @pytest.mark.asyncio
+    async def test_fetch_work_item_widgets_missing_project(self):
+        """Test fetch_work_item_widgets handles missing project."""
+        client = GitLabClient(token="test-token")
+
+        with patch.object(client, "_execute_graphql", new_callable=AsyncMock) as mock_graphql:
+            mock_graphql.return_value = {}
+
+            widgets = await client.fetch_work_item_widgets("group/project", 1, "ISSUE")
+
+            assert widgets == []
+
+    @pytest.mark.asyncio
+    async def test_fetch_work_item_widgets_missing_work_items(self):
+        """Test fetch_work_item_widgets handles missing work items."""
+        client = GitLabClient(token="test-token")
+
+        with patch.object(client, "_execute_graphql", new_callable=AsyncMock) as mock_graphql:
+            mock_graphql.return_value = {"project": {"workItems": {"nodes": []}}}
+
+            widgets = await client.fetch_work_item_widgets("group/project", 1, "ISSUE")
+
+            assert widgets == []
+
+    @pytest.mark.asyncio
+    async def test_fetch_work_item_widgets_group_exception(self):
+        """Test fetch_work_item_widgets_group handles exceptions."""
+        client = GitLabClient(token="test-token")
+
+        with patch.object(client, "_execute_graphql", new_callable=AsyncMock) as mock_graphql:
+            mock_graphql.side_effect = Exception("Group error")
+
+            widgets = await client.fetch_work_item_widgets_group("group", 1, "EPIC")
+
+            assert widgets == []
+
+    @pytest.mark.asyncio
+    async def test_fetch_remaining_field_exception(self):
+        """Test fetch_remaining_field handles exceptions."""
+        client = GitLabClient(token="test-token")
+
+        with patch.object(client, "_execute_graphql", new_callable=AsyncMock) as mock_graphql:
+            mock_graphql.side_effect = Exception("Fetch failed")
+
+            items = []
+            async for item in client.fetch_remaining_field(
+                "group/project", 1, "assignees", "issue", "cursor1"
+            ):
+                items.append(item)
+
+            assert len(items) == 0
+
+    @pytest.mark.asyncio
+    async def test_fetch_remaining_field_missing_project(self):
+        """Test fetch_remaining_field handles missing project."""
+        client = GitLabClient(token="test-token")
+
+        with patch.object(client, "_execute_graphql", new_callable=AsyncMock) as mock_graphql:
+            mock_graphql.return_value = {}
+
+            items = []
+            async for item in client.fetch_remaining_field(
+                "group/project", 1, "assignees", "issue", "cursor1"
+            ):
+                items.append(item)
+
+            assert len(items) == 0
+
+    @pytest.mark.asyncio
+    async def test_fetch_remaining_field_missing_issuable(self):
+        """Test fetch_remaining_field handles missing issuable."""
+        client = GitLabClient(token="test-token")
+
+        with patch.object(client, "_execute_graphql", new_callable=AsyncMock) as mock_graphql:
+            mock_graphql.return_value = {"project": {"issue": None}}
+
+            items = []
+            async for item in client.fetch_remaining_field(
+                "group/project", 1, "assignees", "issue", "cursor1"
+            ):
+                items.append(item)
+
+            assert len(items) == 0
+
+    @pytest.mark.asyncio
+    async def test_fetch_remaining_notes_missing_discussion(self):
+        """Test fetch_remaining_notes handles missing discussion."""
+        client = GitLabClient(token="test-token")
+
+        with patch.object(client, "_execute_graphql", new_callable=AsyncMock) as mock_graphql:
+            # Return empty discussions
+            mock_graphql.return_value = {
+                "project": {"issue": {"discussions": {"nodes": []}}}
+            }
+
+            notes = []
+            async for note in client.fetch_remaining_notes(
+                "group/project", 1, "disc123", "issue", "cursor1"
+            ):
+                notes.append(note)
+
+            assert len(notes) == 0
+
+    @pytest.mark.asyncio
+    async def test_fetch_remaining_work_item_assignees_exception(self):
+        """Test fetch_remaining_work_item_assignees handles aiohttp exceptions."""
+        import aiohttp
+        client = GitLabClient(token="test-token")
+
+        with patch.object(client, "_execute_graphql", new_callable=AsyncMock) as mock_graphql:
+            # Use aiohttp.ClientError which is caught by the code
+            mock_graphql.side_effect = aiohttp.ClientError("Fetch error")
+
+            assignees = []
+            async for assignee in client.fetch_remaining_work_item_assignees(
+                "group/project", 1, "ISSUE", "cursor1"
+            ):
+                assignees.append(assignee)
+
+            assert len(assignees) == 0
+
+    @pytest.mark.asyncio
+    async def test_fetch_remaining_work_item_assignees_missing_widget(self):
+        """Test fetch_remaining_work_item_assignees handles missing widget."""
+        client = GitLabClient(token="test-token")
+
+        with patch.object(client, "_execute_graphql", new_callable=AsyncMock) as mock_graphql:
+            # Return work item with no assignees widget
+            mock_graphql.return_value = {
+                "project": {"workItems": {"nodes": [{"widgets": []}]}}
+            }
+
+            assignees = []
+            async for assignee in client.fetch_remaining_work_item_assignees(
+                "group/project", 1, "ISSUE", "cursor1"
+            ):
+                assignees.append(assignee)
+
+            assert len(assignees) == 0
+
+    @pytest.mark.asyncio
+    async def test_fetch_remaining_work_item_labels_missing_widget(self):
+        """Test fetch_remaining_work_item_labels handles missing widget."""
+        client = GitLabClient(token="test-token")
+
+        with patch.object(client, "_execute_graphql", new_callable=AsyncMock) as mock_graphql:
+            mock_graphql.return_value = {
+                "project": {"workItems": {"nodes": [{"widgets": []}]}}
+            }
+
+            labels = []
+            async for label in client.fetch_remaining_work_item_labels(
+                "group/project", 1, "ISSUE", "cursor1"
+            ):
+                labels.append(label)
+
+            assert len(labels) == 0
+
+    @pytest.mark.asyncio
+    async def test_fetch_remaining_work_item_discussions_missing_widget(self):
+        """Test fetch_remaining_work_item_discussions handles missing widget."""
+        client = GitLabClient(token="test-token")
+
+        with patch.object(client, "_execute_graphql", new_callable=AsyncMock) as mock_graphql:
+            mock_graphql.return_value = {
+                "project": {"workItems": {"nodes": [{"widgets": []}]}}
+            }
+
+            discussions = []
+            async for discussion in client.fetch_remaining_work_item_discussions(
+                "group/project", 1, "ISSUE", "cursor1"
+            ):
+                discussions.append(discussion)
+
+            assert len(discussions) == 0
+
+    @pytest.mark.asyncio
+    async def test_fetch_remaining_work_item_group_discussions_missing_widget(self):
+        """Test fetch_remaining_work_item_group_discussions handles missing widget."""
+        client = GitLabClient(token="test-token")
+
+        with patch.object(client, "_execute_graphql", new_callable=AsyncMock) as mock_graphql:
+            mock_graphql.return_value = {
+                "group": {"workItems": {"nodes": [{"widgets": []}]}}
+            }
+
+            discussions = []
+            async for discussion in client.fetch_remaining_work_item_group_discussions(
+                "group", 1, "EPIC", "cursor1"
+            ):
+                discussions.append(discussion)
+
+            assert len(discussions) == 0
 
 
 # Helper for empty async generators

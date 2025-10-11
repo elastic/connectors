@@ -858,6 +858,53 @@ query($groupPath: ID!, $iid: String!, $workItemType: IssueType!, $cursor: String
 }}
 """
 
+# GraphQL query to fetch remaining assignees for a group work item (Epic)
+WORK_ITEM_GROUP_ASSIGNEES_QUERY = f"""
+query($groupPath: ID!, $iid: String!, $workItemType: IssueType!, $cursor: String) {{
+  group(fullPath: $groupPath) {{
+    workItems(iid: $iid, types: [$workItemType]) {{
+      nodes {{
+        widgets {{
+          __typename
+          ... on WorkItemWidgetAssignees {{
+            assignees(first: {NESTED_FIELD_SIZE}, after: $cursor) {{
+              pageInfo {{ hasNextPage endCursor }}
+              nodes {{
+                username
+                name
+              }}
+            }}
+          }}
+        }}
+      }}
+    }}
+  }}
+}}
+"""
+
+# GraphQL query to fetch remaining labels for a group work item (Epic)
+WORK_ITEM_GROUP_LABELS_QUERY = f"""
+query($groupPath: ID!, $iid: String!, $workItemType: IssueType!, $cursor: String) {{
+  group(fullPath: $groupPath) {{
+    workItems(iid: $iid, types: [$workItemType]) {{
+      nodes {{
+        widgets {{
+          __typename
+          ... on WorkItemWidgetLabels {{
+            labels(first: {NESTED_FIELD_SIZE}, after: $cursor) {{
+              pageInfo {{ hasNextPage endCursor }}
+              nodes {{
+                title
+              }}
+            }}
+          }}
+        }}
+      }}
+    }}
+  }}
+}}
+"""
+
 # GraphQL query to fetch releases for a project
 RELEASES_QUERY = f"""
 query($projectPath: ID!, $cursor: String) {{

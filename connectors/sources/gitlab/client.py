@@ -34,8 +34,10 @@ from connectors.sources.gitlab.queries import (
     WORK_ITEM_ASSIGNEES_QUERY,
     WORK_ITEM_DISCUSSIONS_QUERY,
     WORK_ITEM_FULL_QUERY,
+    WORK_ITEM_GROUP_ASSIGNEES_QUERY,
     WORK_ITEM_GROUP_DISCUSSIONS_QUERY,
     WORK_ITEM_GROUP_FULL_QUERY,
+    WORK_ITEM_GROUP_LABELS_QUERY,
     WORK_ITEM_LABELS_QUERY,
     WORK_ITEMS_GROUP_QUERY,
     WORK_ITEMS_PROJECT_QUERY,
@@ -987,6 +989,146 @@ class GitLabClient:
 
             # Check pagination
             page_info = discussions_data.get("pageInfo", {})
+            if not page_info.get("hasNextPage"):
+                break
+
+            cursor = page_info.get("endCursor")
+
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    )
+    async def fetch_remaining_work_item_assignees_group(
+        self, group_path, iid, work_item_type, cursor
+    ):
+        """Fetch remaining assignees for a group-level work item (Epic).
+
+        Args:
+            group_path (str): Full path of the group
+            iid (int): Work item internal ID
+            work_item_type (str): Work item type (e.g., 'EPIC')
+            cursor (str): Pagination cursor
+
+        Yields:
+            dict: Assignee data
+        """
+        while cursor:
+            variables = {
+                "groupPath": group_path,
+                "iid": str(iid),
+                "workItemType": work_item_type,
+                "cursor": cursor,
+            }
+
+            try:
+                result = await self._execute_graphql(
+                    WORK_ITEM_GROUP_ASSIGNEES_QUERY, variables
+                )
+            except (aiohttp.ClientError, TimeoutError) as e:
+                self._logger.warning(
+                    f"Failed to fetch remaining assignees for group work item {iid}: {e}"
+                )
+                return
+
+            group_data = result.get("group")
+            if not group_data:
+                return
+
+            work_items = group_data.get("workItems", {}).get("nodes", [])
+            if not work_items:
+                return
+
+            # Should only be one work item (filtered by iid)
+            work_item = work_items[0]
+            widgets = work_item.get("widgets", [])
+
+            # Find the Assignees widget
+            assignees_data = None
+            for widget in widgets:
+                if widget.get("__typename") == "WorkItemWidgetAssignees":
+                    assignees_data = widget.get("assignees", {})
+                    break
+
+            if not assignees_data:
+                return
+
+            assignees = assignees_data.get("nodes", [])
+            for assignee in assignees:
+                yield assignee
+
+            # Check pagination
+            page_info = assignees_data.get("pageInfo", {})
+            if not page_info.get("hasNextPage"):
+                break
+
+            cursor = page_info.get("endCursor")
+
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    )
+    async def fetch_remaining_work_item_labels_group(
+        self, group_path, iid, work_item_type, cursor
+    ):
+        """Fetch remaining labels for a group-level work item (Epic).
+
+        Args:
+            group_path (str): Full path of the group
+            iid (int): Work item internal ID
+            work_item_type (str): Work item type (e.g., 'EPIC')
+            cursor (str): Pagination cursor
+
+        Yields:
+            dict: Label data
+        """
+        while cursor:
+            variables = {
+                "groupPath": group_path,
+                "iid": str(iid),
+                "workItemType": work_item_type,
+                "cursor": cursor,
+            }
+
+            try:
+                result = await self._execute_graphql(
+                    WORK_ITEM_GROUP_LABELS_QUERY, variables
+                )
+            except (aiohttp.ClientError, TimeoutError) as e:
+                self._logger.warning(
+                    f"Failed to fetch remaining labels for group work item {iid}: {e}"
+                )
+                return
+
+            group_data = result.get("group")
+            if not group_data:
+                return
+
+            work_items = group_data.get("workItems", {}).get("nodes", [])
+            if not work_items:
+                return
+
+            # Should only be one work item (filtered by iid)
+            work_item = work_items[0]
+            widgets = work_item.get("widgets", [])
+
+            # Find the Labels widget
+            labels_data = None
+            for widget in widgets:
+                if widget.get("__typename") == "WorkItemWidgetLabels":
+                    labels_data = widget.get("labels", {})
+                    break
+
+            if not labels_data:
+                return
+
+            labels = labels_data.get("nodes", [])
+            for label in labels:
+                yield label
+
+            # Check pagination
+            page_info = labels_data.get("pageInfo", {})
             if not page_info.get("hasNextPage"):
                 break
 
