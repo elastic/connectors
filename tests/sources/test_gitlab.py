@@ -2106,7 +2106,9 @@ class TestGitLabDataSourceIntegration:
                 page_info=PageInfo(has_next_page=True, end_cursor="cursor2"),
             ),
             labels=PaginatedList(nodes=[], page_info=PageInfo(has_next_page=False)),
-            discussions=PaginatedList(nodes=[], page_info=PageInfo(has_next_page=False)),
+            discussions=PaginatedList(
+                nodes=[], page_info=PageInfo(has_next_page=False)
+            ),
             approved_by=PaginatedList(
                 nodes=[GitLabUser(username="approver1")],
                 page_info=PageInfo(has_next_page=True, end_cursor="cursor3"),
@@ -2124,7 +2126,9 @@ class TestGitLabDataSourceIntegration:
         async def mock_get_mrs(*args, **kwargs):
             yield mr
 
-        async def mock_remaining_field(project_path, iid, field_name, issuable_type, cursor):
+        async def mock_remaining_field(
+            project_path, iid, field_name, issuable_type, cursor
+        ):
             if field_name == "assignees":
                 yield {"username": "assignee2", "name": "Assignee 2"}
             elif field_name == "reviewers":
@@ -2229,13 +2233,18 @@ class TestGitLabDataSourceIntegration:
             ),
         )
 
-        async def mock_fetch_remaining(project_path, iid, field_name, issuable_type, cursor):
+        async def mock_fetch_remaining(
+            project_path, iid, field_name, issuable_type, cursor
+        ):
             if field_name == "assignees":
                 yield {"username": "user2"}
             elif field_name == "labels":
                 yield {"title": "label2"}
             elif field_name == "discussions":
-                yield {"id": "disc1", "notes": {"nodes": [], "pageInfo": {"hasNextPage": False}}}
+                yield {
+                    "id": "disc1",
+                    "notes": {"nodes": [], "pageInfo": {"hasNextPage": False}},
+                }
 
         source.gitlab_client.fetch_remaining_field = mock_fetch_remaining
 
@@ -2247,7 +2256,6 @@ class TestGitLabDataSourceIntegration:
         assert len(issue.discussions.nodes) == 1
 
 
-
 # Tests for error handling in client
 class TestGitLabClientErrorHandling:
     """Test suite for GitLabClient error handling."""
@@ -2256,7 +2264,6 @@ class TestGitLabClientErrorHandling:
     async def test_execute_graphql_rate_limit_in_response(self):
         """Test _execute_graphql detects and handles rate limit in GraphQL response."""
         from unittest.mock import MagicMock
-        import aiohttp
 
         client = GitLabClient(token="test-token")
 
@@ -2264,11 +2271,7 @@ class TestGitLabClientErrorHandling:
         mock_response = MagicMock()
         mock_response.status = 200
         mock_response.json = AsyncMock(
-            return_value={
-                "errors": [
-                    {"message": "You have exceeded the rate limit"}
-                ]
-            }
+            return_value={"errors": [{"message": "You have exceeded the rate limit"}]}
         )
         mock_response.__aenter__ = AsyncMock(return_value=mock_response)
         mock_response.__aexit__ = AsyncMock(return_value=None)
@@ -2296,11 +2299,7 @@ class TestGitLabClientErrorHandling:
         mock_response = MagicMock()
         mock_response.status = 200
         mock_response.json = AsyncMock(
-            return_value={
-                "errors": [
-                    {"message": "Field 'invalid' doesn't exist"}
-                ]
-            }
+            return_value={"errors": [{"message": "Field 'invalid' doesn't exist"}]}
         )
         mock_response.__aenter__ = AsyncMock(return_value=mock_response)
         mock_response.__aexit__ = AsyncMock(return_value=None)
@@ -2347,6 +2346,7 @@ class TestGitLabClientErrorHandling:
     async def test_execute_graphql_http_error(self):
         """Test _execute_graphql handles HTTP errors (non-200 status)."""
         from unittest.mock import MagicMock
+
         import aiohttp
 
         client = GitLabClient(token="test-token")
@@ -2354,12 +2354,14 @@ class TestGitLabClientErrorHandling:
         # Create mock response with 500 error
         mock_response = MagicMock()
         mock_response.status = 500
-        mock_response.raise_for_status = Mock(side_effect=aiohttp.ClientResponseError(
-            request_info=Mock(),
-            history=(),
-            status=500,
-            message="Internal Server Error"
-        ))
+        mock_response.raise_for_status = Mock(
+            side_effect=aiohttp.ClientResponseError(
+                request_info=Mock(),
+                history=(),
+                status=500,
+                message="Internal Server Error",
+            )
+        )
         mock_response.__aenter__ = AsyncMock(return_value=mock_response)
         mock_response.__aexit__ = AsyncMock(return_value=None)
 
@@ -2404,6 +2406,7 @@ class TestGitLabClientErrorHandling:
     async def test_get_rest_http_error(self):
         """Test _get_rest handles HTTP errors."""
         from unittest.mock import MagicMock
+
         import aiohttp
 
         client = GitLabClient(token="test-token")
@@ -2411,12 +2414,11 @@ class TestGitLabClientErrorHandling:
         # Create mock response with 404 error
         mock_response = MagicMock()
         mock_response.status = 404
-        mock_response.raise_for_status = Mock(side_effect=aiohttp.ClientResponseError(
-            request_info=Mock(),
-            history=(),
-            status=404,
-            message="Not Found"
-        ))
+        mock_response.raise_for_status = Mock(
+            side_effect=aiohttp.ClientResponseError(
+                request_info=Mock(), history=(), status=404, message="Not Found"
+            )
+        )
         mock_response.__aenter__ = AsyncMock(return_value=mock_response)
         mock_response.__aexit__ = AsyncMock(return_value=None)
 
@@ -2474,7 +2476,9 @@ class TestGitLabClientAsyncGeneratorErrors:
         """Test get_issues handles pagination correctly."""
         client = GitLabClient(token="test-token")
 
-        with patch.object(client, "_execute_graphql", new_callable=AsyncMock) as mock_graphql:
+        with patch.object(
+            client, "_execute_graphql", new_callable=AsyncMock
+        ) as mock_graphql:
             mock_graphql.side_effect = [
                 # First page
                 {
@@ -2494,9 +2498,18 @@ class TestGitLabClientAsyncGeneratorErrors:
                                     "updatedAt": "2023-01-01T00:00:00Z",
                                     "webUrl": "https://gitlab.com/issue/1",
                                     "author": {"username": "user1", "name": "User 1"},
-                                    "assignees": {"nodes": [], "pageInfo": {"hasNextPage": False}},
-                                    "labels": {"nodes": [], "pageInfo": {"hasNextPage": False}},
-                                    "discussions": {"nodes": [], "pageInfo": {"hasNextPage": False}},
+                                    "assignees": {
+                                        "nodes": [],
+                                        "pageInfo": {"hasNextPage": False},
+                                    },
+                                    "labels": {
+                                        "nodes": [],
+                                        "pageInfo": {"hasNextPage": False},
+                                    },
+                                    "discussions": {
+                                        "nodes": [],
+                                        "pageInfo": {"hasNextPage": False},
+                                    },
                                 },
                             ],
                         }
@@ -2520,9 +2533,18 @@ class TestGitLabClientAsyncGeneratorErrors:
                                     "updatedAt": "2023-01-02T00:00:00Z",
                                     "webUrl": "https://gitlab.com/issue/2",
                                     "author": {"username": "user2", "name": "User 2"},
-                                    "assignees": {"nodes": [], "pageInfo": {"hasNextPage": False}},
-                                    "labels": {"nodes": [], "pageInfo": {"hasNextPage": False}},
-                                    "discussions": {"nodes": [], "pageInfo": {"hasNextPage": False}},
+                                    "assignees": {
+                                        "nodes": [],
+                                        "pageInfo": {"hasNextPage": False},
+                                    },
+                                    "labels": {
+                                        "nodes": [],
+                                        "pageInfo": {"hasNextPage": False},
+                                    },
+                                    "discussions": {
+                                        "nodes": [],
+                                        "pageInfo": {"hasNextPage": False},
+                                    },
                                 },
                             ],
                         }
@@ -2547,7 +2569,9 @@ class TestGitLabClientAsyncGeneratorErrors:
         client = GitLabClient(token="test-token")
 
         # Mock _execute_graphql to raise exception
-        with patch.object(client, "_execute_graphql", new_callable=AsyncMock) as mock_graphql:
+        with patch.object(
+            client, "_execute_graphql", new_callable=AsyncMock
+        ) as mock_graphql:
             mock_graphql.side_effect = Exception("GraphQL failed")
 
             issues = []
@@ -2563,7 +2587,9 @@ class TestGitLabClientAsyncGeneratorErrors:
         client = GitLabClient(token="test-token")
 
         # Mock response with no project data
-        with patch.object(client, "_execute_graphql", new_callable=AsyncMock) as mock_graphql:
+        with patch.object(
+            client, "_execute_graphql", new_callable=AsyncMock
+        ) as mock_graphql:
             mock_graphql.return_value = {}  # No "project" key
 
             issues = []
@@ -2577,7 +2603,9 @@ class TestGitLabClientAsyncGeneratorErrors:
         """Test get_merge_requests handles exceptions."""
         client = GitLabClient(token="test-token")
 
-        with patch.object(client, "_execute_graphql", new_callable=AsyncMock) as mock_graphql:
+        with patch.object(
+            client, "_execute_graphql", new_callable=AsyncMock
+        ) as mock_graphql:
             mock_graphql.side_effect = Exception("Network error")
 
             mrs = []
@@ -2591,7 +2619,9 @@ class TestGitLabClientAsyncGeneratorErrors:
         """Test get_merge_requests handles missing project."""
         client = GitLabClient(token="test-token")
 
-        with patch.object(client, "_execute_graphql", new_callable=AsyncMock) as mock_graphql:
+        with patch.object(
+            client, "_execute_graphql", new_callable=AsyncMock
+        ) as mock_graphql:
             mock_graphql.return_value = {"project": None}
 
             mrs = []
@@ -2605,7 +2635,9 @@ class TestGitLabClientAsyncGeneratorErrors:
         """Test get_releases handles exceptions."""
         client = GitLabClient(token="test-token")
 
-        with patch.object(client, "_execute_graphql", new_callable=AsyncMock) as mock_graphql:
+        with patch.object(
+            client, "_execute_graphql", new_callable=AsyncMock
+        ) as mock_graphql:
             mock_graphql.side_effect = Exception("Permission denied")
 
             releases = []
@@ -2619,11 +2651,15 @@ class TestGitLabClientAsyncGeneratorErrors:
         """Test get_work_items_project handles exceptions."""
         client = GitLabClient(token="test-token")
 
-        with patch.object(client, "_execute_graphql", new_callable=AsyncMock) as mock_graphql:
+        with patch.object(
+            client, "_execute_graphql", new_callable=AsyncMock
+        ) as mock_graphql:
             mock_graphql.side_effect = Exception("Query failed")
 
             items = []
-            async for item in client.get_work_items_project("group/project", [WorkItemType.ISSUE]):
+            async for item in client.get_work_items_project(
+                "group/project", [WorkItemType.ISSUE]
+            ):
                 items.append(item)
 
             assert len(items) == 0
@@ -2633,7 +2669,9 @@ class TestGitLabClientAsyncGeneratorErrors:
         """Test get_work_items_group handles exceptions."""
         client = GitLabClient(token="test-token")
 
-        with patch.object(client, "_execute_graphql", new_callable=AsyncMock) as mock_graphql:
+        with patch.object(
+            client, "_execute_graphql", new_callable=AsyncMock
+        ) as mock_graphql:
             mock_graphql.side_effect = Exception("Group not found")
 
             items = []
@@ -2647,7 +2685,9 @@ class TestGitLabClientAsyncGeneratorErrors:
         """Test fetch_work_item_widgets handles exceptions."""
         client = GitLabClient(token="test-token")
 
-        with patch.object(client, "_execute_graphql", new_callable=AsyncMock) as mock_graphql:
+        with patch.object(
+            client, "_execute_graphql", new_callable=AsyncMock
+        ) as mock_graphql:
             mock_graphql.side_effect = Exception("Failed to fetch")
 
             widgets = await client.fetch_work_item_widgets("group/project", 1, "ISSUE")
@@ -2660,7 +2700,9 @@ class TestGitLabClientAsyncGeneratorErrors:
         """Test fetch_work_item_widgets handles missing project."""
         client = GitLabClient(token="test-token")
 
-        with patch.object(client, "_execute_graphql", new_callable=AsyncMock) as mock_graphql:
+        with patch.object(
+            client, "_execute_graphql", new_callable=AsyncMock
+        ) as mock_graphql:
             mock_graphql.return_value = {}
 
             widgets = await client.fetch_work_item_widgets("group/project", 1, "ISSUE")
@@ -2672,7 +2714,9 @@ class TestGitLabClientAsyncGeneratorErrors:
         """Test fetch_work_item_widgets handles missing work items."""
         client = GitLabClient(token="test-token")
 
-        with patch.object(client, "_execute_graphql", new_callable=AsyncMock) as mock_graphql:
+        with patch.object(
+            client, "_execute_graphql", new_callable=AsyncMock
+        ) as mock_graphql:
             mock_graphql.return_value = {"project": {"workItems": {"nodes": []}}}
 
             widgets = await client.fetch_work_item_widgets("group/project", 1, "ISSUE")
@@ -2684,7 +2728,9 @@ class TestGitLabClientAsyncGeneratorErrors:
         """Test fetch_work_item_widgets_group handles exceptions."""
         client = GitLabClient(token="test-token")
 
-        with patch.object(client, "_execute_graphql", new_callable=AsyncMock) as mock_graphql:
+        with patch.object(
+            client, "_execute_graphql", new_callable=AsyncMock
+        ) as mock_graphql:
             mock_graphql.side_effect = Exception("Group error")
 
             widgets = await client.fetch_work_item_widgets_group("group", 1, "EPIC")
@@ -2696,7 +2742,9 @@ class TestGitLabClientAsyncGeneratorErrors:
         """Test fetch_remaining_field handles exceptions."""
         client = GitLabClient(token="test-token")
 
-        with patch.object(client, "_execute_graphql", new_callable=AsyncMock) as mock_graphql:
+        with patch.object(
+            client, "_execute_graphql", new_callable=AsyncMock
+        ) as mock_graphql:
             mock_graphql.side_effect = Exception("Fetch failed")
 
             items = []
@@ -2712,7 +2760,9 @@ class TestGitLabClientAsyncGeneratorErrors:
         """Test fetch_remaining_field handles missing project."""
         client = GitLabClient(token="test-token")
 
-        with patch.object(client, "_execute_graphql", new_callable=AsyncMock) as mock_graphql:
+        with patch.object(
+            client, "_execute_graphql", new_callable=AsyncMock
+        ) as mock_graphql:
             mock_graphql.return_value = {}
 
             items = []
@@ -2728,7 +2778,9 @@ class TestGitLabClientAsyncGeneratorErrors:
         """Test fetch_remaining_field handles missing issuable."""
         client = GitLabClient(token="test-token")
 
-        with patch.object(client, "_execute_graphql", new_callable=AsyncMock) as mock_graphql:
+        with patch.object(
+            client, "_execute_graphql", new_callable=AsyncMock
+        ) as mock_graphql:
             mock_graphql.return_value = {"project": {"issue": None}}
 
             items = []
@@ -2744,7 +2796,9 @@ class TestGitLabClientAsyncGeneratorErrors:
         """Test fetch_remaining_notes handles missing discussion."""
         client = GitLabClient(token="test-token")
 
-        with patch.object(client, "_execute_graphql", new_callable=AsyncMock) as mock_graphql:
+        with patch.object(
+            client, "_execute_graphql", new_callable=AsyncMock
+        ) as mock_graphql:
             # Return empty discussions
             mock_graphql.return_value = {
                 "project": {"issue": {"discussions": {"nodes": []}}}
@@ -2762,9 +2816,12 @@ class TestGitLabClientAsyncGeneratorErrors:
     async def test_fetch_remaining_work_item_assignees_exception(self):
         """Test fetch_remaining_work_item_assignees handles aiohttp exceptions."""
         import aiohttp
+
         client = GitLabClient(token="test-token")
 
-        with patch.object(client, "_execute_graphql", new_callable=AsyncMock) as mock_graphql:
+        with patch.object(
+            client, "_execute_graphql", new_callable=AsyncMock
+        ) as mock_graphql:
             # Use aiohttp.ClientError which is caught by the code
             mock_graphql.side_effect = aiohttp.ClientError("Fetch error")
 
@@ -2781,7 +2838,9 @@ class TestGitLabClientAsyncGeneratorErrors:
         """Test fetch_remaining_work_item_assignees handles missing widget."""
         client = GitLabClient(token="test-token")
 
-        with patch.object(client, "_execute_graphql", new_callable=AsyncMock) as mock_graphql:
+        with patch.object(
+            client, "_execute_graphql", new_callable=AsyncMock
+        ) as mock_graphql:
             # Return work item with no assignees widget
             mock_graphql.return_value = {
                 "project": {"workItems": {"nodes": [{"widgets": []}]}}
@@ -2800,7 +2859,9 @@ class TestGitLabClientAsyncGeneratorErrors:
         """Test fetch_remaining_work_item_labels handles missing widget."""
         client = GitLabClient(token="test-token")
 
-        with patch.object(client, "_execute_graphql", new_callable=AsyncMock) as mock_graphql:
+        with patch.object(
+            client, "_execute_graphql", new_callable=AsyncMock
+        ) as mock_graphql:
             mock_graphql.return_value = {
                 "project": {"workItems": {"nodes": [{"widgets": []}]}}
             }
@@ -2818,7 +2879,9 @@ class TestGitLabClientAsyncGeneratorErrors:
         """Test fetch_remaining_work_item_discussions handles missing widget."""
         client = GitLabClient(token="test-token")
 
-        with patch.object(client, "_execute_graphql", new_callable=AsyncMock) as mock_graphql:
+        with patch.object(
+            client, "_execute_graphql", new_callable=AsyncMock
+        ) as mock_graphql:
             mock_graphql.return_value = {
                 "project": {"workItems": {"nodes": [{"widgets": []}]}}
             }
@@ -2836,7 +2899,9 @@ class TestGitLabClientAsyncGeneratorErrors:
         """Test fetch_remaining_work_item_group_discussions handles missing widget."""
         client = GitLabClient(token="test-token")
 
-        with patch.object(client, "_execute_graphql", new_callable=AsyncMock) as mock_graphql:
+        with patch.object(
+            client, "_execute_graphql", new_callable=AsyncMock
+        ) as mock_graphql:
             mock_graphql.return_value = {
                 "group": {"workItems": {"nodes": [{"widgets": []}]}}
             }
@@ -2855,7 +2920,9 @@ class TestGitLabClientAsyncGeneratorErrors:
         client = GitLabClient(token="test-token")
 
         # Mock two pages of assignees
-        with patch.object(client, "_execute_graphql", new_callable=AsyncMock) as mock_graphql:
+        with patch.object(
+            client, "_execute_graphql", new_callable=AsyncMock
+        ) as mock_graphql:
             mock_graphql.side_effect = [
                 # First page
                 {
@@ -2872,8 +2939,14 @@ class TestGitLabClientAsyncGeneratorErrors:
                                                     "endCursor": "cursor2",
                                                 },
                                                 "nodes": [
-                                                    {"username": "user1", "name": "User 1"},
-                                                    {"username": "user2", "name": "User 2"},
+                                                    {
+                                                        "username": "user1",
+                                                        "name": "User 1",
+                                                    },
+                                                    {
+                                                        "username": "user2",
+                                                        "name": "User 2",
+                                                    },
                                                 ],
                                             },
                                         }
@@ -2898,7 +2971,10 @@ class TestGitLabClientAsyncGeneratorErrors:
                                                     "endCursor": None,
                                                 },
                                                 "nodes": [
-                                                    {"username": "user3", "name": "User 3"},
+                                                    {
+                                                        "username": "user3",
+                                                        "name": "User 3",
+                                                    },
                                                 ],
                                             },
                                         }
@@ -2926,7 +3002,9 @@ class TestGitLabClientAsyncGeneratorErrors:
         """Test fetch_remaining_work_item_labels_group pagination."""
         client = GitLabClient(token="test-token")
 
-        with patch.object(client, "_execute_graphql", new_callable=AsyncMock) as mock_graphql:
+        with patch.object(
+            client, "_execute_graphql", new_callable=AsyncMock
+        ) as mock_graphql:
             mock_graphql.side_effect = [
                 # First page
                 {
@@ -2997,7 +3075,9 @@ class TestGitLabClientAsyncGeneratorErrors:
         """Test fetch_remaining_work_item_assignees_group handles missing group."""
         client = GitLabClient(token="test-token")
 
-        with patch.object(client, "_execute_graphql", new_callable=AsyncMock) as mock_graphql:
+        with patch.object(
+            client, "_execute_graphql", new_callable=AsyncMock
+        ) as mock_graphql:
             mock_graphql.return_value = {}
 
             assignees = []
@@ -3013,7 +3093,9 @@ class TestGitLabClientAsyncGeneratorErrors:
         """Test fetch_remaining_work_item_labels_group handles missing group."""
         client = GitLabClient(token="test-token")
 
-        with patch.object(client, "_execute_graphql", new_callable=AsyncMock) as mock_graphql:
+        with patch.object(
+            client, "_execute_graphql", new_callable=AsyncMock
+        ) as mock_graphql:
             mock_graphql.return_value = {}
 
             labels = []
