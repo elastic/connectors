@@ -17,6 +17,7 @@ python-dateutil==2.8.2
 aiogoogle==5.3.0
 uvloop==0.20.0; sys_platform != 'win32'
 fastjsonschema==2.16.2
+pydantic==2.10.6
 base64io==1.0.3
 azure-storage-blob==12.19.1
 SQLAlchemy==2.0.1

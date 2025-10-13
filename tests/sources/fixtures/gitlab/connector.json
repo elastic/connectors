@@ -1,0 +1,20 @@
+{
+    "configuration": {
+        "token": {
+            "label": "Personal Access Token",
+            "order": 1,
+            "sensitive": true,
+            "type": "str",
+            "tooltip": "GitLab Personal Access Token with api, read_api, and read_repository scopes.",
+            "value": "test-token-changeme"
+        },
+        "projects": {
+            "display": "textarea",
+            "label": "List of projects",
+            "order": 2,
+            "tooltip": "List of project paths (e.g., 'group/project'). Use '*' to sync all accessible projects.",
+            "type": "list",
+            "value": "*"
+        }
+    }
+}

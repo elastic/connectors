@@ -599,6 +599,25 @@ steps:
               artifact_paths:
                 - "perf8-report-*/**/*"
 
+          - path:
+            - "connectors/sources/gitlab/**"
+            - "tests/sources/fixtures/gitlab/**"
+            - "tests/sources/fixtures/fixture.py"
+            - "${DOCKERFILE_FTEST_PATH}"
+            - "requirements/**"
+            config:
+              label: "🔨 GitLab"
+              <<: *test-agents
+              <<: *retries
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=gitlab
+              command:
+                - ".buildkite/run_functional_test.sh"
+              artifact_paths:
+                - "perf8-report-*/**/*"
+
   # ----
   # DRA publishing
   # ----
