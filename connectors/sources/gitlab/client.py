@@ -33,10 +33,8 @@ from connectors.sources.gitlab.queries import (
     REVIEWERS_QUERY,
     WORK_ITEM_ASSIGNEES_QUERY,
     WORK_ITEM_DISCUSSIONS_QUERY,
-    WORK_ITEM_FULL_QUERY,
     WORK_ITEM_GROUP_ASSIGNEES_QUERY,
     WORK_ITEM_GROUP_DISCUSSIONS_QUERY,
-    WORK_ITEM_GROUP_FULL_QUERY,
     WORK_ITEM_GROUP_LABELS_QUERY,
     WORK_ITEM_LABELS_QUERY,
     WORK_ITEMS_GROUP_QUERY,
@@ -387,96 +385,6 @@ class GitLabClient:
                 break
 
             cursor = page_info.end_cursor
-
-    @retryable(
-        retries=RETRIES,
-        interval=RETRY_INTERVAL,
-        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
-    )
-    async def fetch_work_item_widgets(self, project_path, iid, work_item_type):
-        """Fetch full widget data for a single work item.
-
-        This method is used to get all widget data (description, assignees, labels,
-        discussions/notes) for a work item after fetching the basic list.
-
-        Args:
-            project_path (str): Full path of the project (e.g., 'namespace/project')
-            iid (int): Work item internal ID
-            work_item_type (str): Work item type (e.g., 'ISSUE', 'TASK')
-
-        Returns:
-            list[dict]: List of widgets for the work item, or empty list if not found
-        """
-        variables = {
-            "projectPath": project_path,
-            "iid": str(iid),
-            "workItemType": work_item_type,
-        }
-
-        try:
-            result = await self._execute_graphql(WORK_ITEM_FULL_QUERY, variables)
-        except Exception as e:
-            self._logger.warning(
-                f"Failed to fetch widgets for work item {iid} in {project_path}: {e}"
-            )
-            return []
-
-        project_data = result.get("project")
-        if not project_data:
-            return []
-
-        work_items = project_data.get("workItems", {}).get("nodes", [])
-        if not work_items:
-            return []
-
-        # Should only be one work item (filtered by iid)
-        work_item = work_items[0]
-        return work_item.get("widgets", [])
-
-    @retryable(
-        retries=RETRIES,
-        interval=RETRY_INTERVAL,
-        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
-    )
-    async def fetch_work_item_widgets_group(self, group_path, iid, work_item_type):
-        """Fetch full widget data for a single group-level work item (e.g., Epic).
-
-        This method is used to get all widget data (description, assignees, labels,
-        discussions/notes, hierarchy) for a group-level work item after fetching the basic list.
-
-        Args:
-            group_path (str): Full path of the group (e.g., 'namespace/group')
-            iid (int): Work item internal ID
-            work_item_type (str): Work item type (e.g., 'EPIC')
-
-        Returns:
-            list[dict]: List of widgets for the work item, or empty list if not found
-        """
-        variables = {
-            "groupPath": group_path,
-            "iid": str(iid),
-            "workItemType": work_item_type,
-        }
-
-        try:
-            result = await self._execute_graphql(WORK_ITEM_GROUP_FULL_QUERY, variables)
-        except Exception as e:
-            self._logger.warning(
-                f"Failed to fetch widgets for group work item {iid} in {group_path}: {e}"
-            )
-            return []
-
-        group_data = result.get("group")
-        if not group_data:
-            return []
-
-        work_items = group_data.get("workItems", {}).get("nodes", [])
-        if not work_items:
-            return []
-
-        # Should only be one work item (filtered by iid)
-        work_item = work_items[0]
-        return work_item.get("widgets", [])
 
     @retryable(
         retries=RETRIES,

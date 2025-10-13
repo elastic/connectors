@@ -2641,63 +2641,6 @@ class TestGitLabClientAsyncGeneratorErrors:
             assert len(items) == 0
 
     @pytest.mark.asyncio
-    async def test_fetch_work_item_widgets_exception(self):
-        """Test fetch_work_item_widgets handles exceptions."""
-        client = GitLabClient(token="test-token")
-
-        with patch.object(
-            client, "_execute_graphql", new_callable=AsyncMock
-        ) as mock_graphql:
-            mock_graphql.side_effect = Exception("Failed to fetch")
-
-            widgets = await client.fetch_work_item_widgets("group/project", 1, "ISSUE")
-
-            # Should return empty list on error
-            assert widgets == []
-
-    @pytest.mark.asyncio
-    async def test_fetch_work_item_widgets_missing_project(self):
-        """Test fetch_work_item_widgets handles missing project."""
-        client = GitLabClient(token="test-token")
-
-        with patch.object(
-            client, "_execute_graphql", new_callable=AsyncMock
-        ) as mock_graphql:
-            mock_graphql.return_value = {}
-
-            widgets = await client.fetch_work_item_widgets("group/project", 1, "ISSUE")
-
-            assert widgets == []
-
-    @pytest.mark.asyncio
-    async def test_fetch_work_item_widgets_missing_work_items(self):
-        """Test fetch_work_item_widgets handles missing work items."""
-        client = GitLabClient(token="test-token")
-
-        with patch.object(
-            client, "_execute_graphql", new_callable=AsyncMock
-        ) as mock_graphql:
-            mock_graphql.return_value = {"project": {"workItems": {"nodes": []}}}
-
-            widgets = await client.fetch_work_item_widgets("group/project", 1, "ISSUE")
-
-            assert widgets == []
-
-    @pytest.mark.asyncio
-    async def test_fetch_work_item_widgets_group_exception(self):
-        """Test fetch_work_item_widgets_group handles exceptions."""
-        client = GitLabClient(token="test-token")
-
-        with patch.object(
-            client, "_execute_graphql", new_callable=AsyncMock
-        ) as mock_graphql:
-            mock_graphql.side_effect = Exception("Group error")
-
-            widgets = await client.fetch_work_item_widgets_group("group", 1, "EPIC")
-
-            assert widgets == []
-
-    @pytest.mark.asyncio
     async def test_fetch_remaining_field_exception(self):
         """Test fetch_remaining_field handles exceptions."""
         client = GitLabClient(token="test-token")
