@@ -471,7 +471,7 @@ class ServiceNowDataSource(BaseDataSource):
         for batched_apis_index in range(0, len(record_apis), TABLE_BATCH_SIZE):
             batched_apis = record_apis[
                 batched_apis_index : (
-                        batched_apis_index + TABLE_BATCH_SIZE
+                    batched_apis_index + TABLE_BATCH_SIZE
                 )  # noqa
             ]
             yield batched_apis
@@ -543,7 +543,7 @@ class ServiceNowDataSource(BaseDataSource):
             for advanced_rules_index in range(0, len(advanced_rules), TABLE_BATCH_SIZE):
                 batched_advanced_rules = advanced_rules[
                     advanced_rules_index : (
-                            advanced_rules_index + TABLE_BATCH_SIZE
+                        advanced_rules_index + TABLE_BATCH_SIZE
                     )  # noqa
                 ]
                 filter_apis = await self.servicenow_client.get_filter_apis(
