@@ -6,7 +6,7 @@
 from connectors_sdk.source import BaseDataSource
 
 
-class {{source_name|capitalize}}DataSource(BaseDataSource):
+class {% from 'text_processing.jinja' import pascalcase %}{{ pascalcase(source_name) }}DataSource(BaseDataSource):
     def __init__(self, configuration):
         super().__init__(configuration)
 

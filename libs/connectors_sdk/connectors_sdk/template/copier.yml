@@ -1,3 +1,18 @@
+_exclude:
+    - text_processing
+    - copier.yml
+
+_message_after_copy: |
+    Scaffolding for new data source "{{ source_name }}" has been created successfully!
+
+    Next steps:
+
+    1. Change directory to the source implementation:
+
+       $ cd {{ _copier_conf.dst_path }}
+
+    2. Read "CONTRIBUTING.md" and start coding.
+
 # questions
 source_name:
     type: str

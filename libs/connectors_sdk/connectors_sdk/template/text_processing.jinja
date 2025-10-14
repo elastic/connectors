@@ -1,0 +1,11 @@
+{% macro pascalcase(value) -%}
+{{ value|replace('_', ' ')|title|replace(' ', '') }}
+{%- endmacro %}
+
+{% macro slugify(value) -%}
+{{ value|lower|replace(' ', '-')|replace('_', '-') }}
+{%- endmacro %}
+
+{% macro snakecase(value) -%}
+{{ value|lower|replace(' ', '_')|replace('-', '_') }}
+{%- endmacro %}
