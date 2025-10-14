@@ -22,3 +22,6 @@ app/connectors_service/config.yml
 scripts/stack/connectors-config
 
 .python-version
+
+.copier-answers.yml
+trello
