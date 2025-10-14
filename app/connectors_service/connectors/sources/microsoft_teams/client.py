@@ -36,10 +36,6 @@ RETRY_INTERVAL = 2
 RUNNING_FTEST = (
     "RUNNING_FTEST" in os.environ
 )  # Flag to check if a connector is run for ftest or not.
-override_url = os.environ["OVERRIDE_URL"]
-BASE_URL = override_url
-GRAPH_API_AUTH_URL = override_url
-GRAPH_ACQUIRE_TOKEN_URL = override_url
 
 if "OVERRIDE_URL" in os.environ:
     logger.warning("x" * 50)
@@ -48,6 +44,10 @@ if "OVERRIDE_URL" in os.environ:
     )
     logger.warning("IT'S SUPPOSED TO BE USED ONLY FOR TESTING")
     logger.warning("x" * 50)
+    override_url = os.environ["OVERRIDE_URL"]
+    BASE_URL = override_url
+    GRAPH_API_AUTH_URL = override_url
+    GRAPH_ACQUIRE_TOKEN_URL = override_url
 else:
     GRAPH_API_AUTH_URL = "https://login.microsoftonline.com"
     GRAPH_ACQUIRE_TOKEN_URL = "https://graph.microsoft.com/.default"  # noqa S105
