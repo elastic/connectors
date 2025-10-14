@@ -48,87 +48,6 @@ query($cursor: String) {{
 }}
 """
 
-# GraphQL query to fetch issues for a project
-ISSUES_QUERY = f"""
-query($projectPath: ID!, $cursor: String) {{
-  project(fullPath: $projectPath) {{
-    issues(first: {NODE_SIZE}, after: $cursor) {{
-      pageInfo {{
-        hasNextPage
-        endCursor
-      }}
-      nodes {{
-        iid
-        title
-        description
-        state
-        createdAt
-        updatedAt
-        closedAt
-        webUrl
-        author {{
-          username
-          name
-        }}
-        assignees(first: {NESTED_FIELD_SIZE}) {{
-          pageInfo {{
-            hasNextPage
-            endCursor
-          }}
-          nodes {{
-            username
-            name
-          }}
-        }}
-        labels(first: {NESTED_FIELD_SIZE}) {{
-          pageInfo {{
-            hasNextPage
-            endCursor
-          }}
-          nodes {{
-            title
-          }}
-        }}
-        userNotesCount
-        discussions(first: {NESTED_FIELD_SIZE}) {{
-          pageInfo {{
-            hasNextPage
-            endCursor
-          }}
-          nodes {{
-            id
-            notes(first: {NESTED_FIELD_SIZE}) {{
-              pageInfo {{
-                hasNextPage
-                endCursor
-              }}
-              nodes {{
-                id
-                body
-                createdAt
-                updatedAt
-                system
-                position {{
-                  newLine
-                  oldLine
-                  newPath
-                  oldPath
-                  positionType
-                }}
-                author {{
-                  username
-                  name
-                }}
-              }}
-            }}
-          }}
-        }}
-      }}
-    }}
-  }}
-}}
-"""
-
 # GraphQL query to fetch merge requests for a project
 MERGE_REQUESTS_QUERY = f"""
 query($projectPath: ID!, $cursor: String) {{
@@ -319,6 +238,44 @@ query($projectPath: ID!, $iid: String!, $cursor: String) {{{{
 }}}}
 """
 
+# GraphQL query to fetch remaining notes for a specific discussion
+NOTES_QUERY = f"""
+query($projectPath: ID!, $iid: String!, $discussionId: ID!, $cursor: String) {{{{
+  project(fullPath: $projectPath) {{{{
+    {{issuable_type}}(iid: $iid) {{{{
+      discussions(filter: {{{{discussionIds: [$discussionId]}}}}) {{{{
+        nodes {{{{
+          notes(first: {NESTED_FIELD_SIZE}, after: $cursor) {{{{
+            pageInfo {{{{
+              hasNextPage
+              endCursor
+            }}}}
+            nodes {{{{
+              id
+              body
+              createdAt
+              updatedAt
+              system
+              position {{{{
+                newLine
+                oldLine
+                newPath
+                oldPath
+                positionType
+              }}}}
+              author {{{{
+                username
+                name
+              }}}}
+            }}}}
+          }}}}
+        }}}}
+      }}}}
+    }}}}
+  }}}}
+}}}}
+"""
+
 # GraphQL query to fetch remaining reviewers for a merge request
 REVIEWERS_QUERY = f"""
 query($projectPath: ID!, $iid: String!, $cursor: String) {{{{
@@ -352,44 +309,6 @@ query($projectPath: ID!, $iid: String!, $cursor: String) {{{{
         nodes {{{{
           username
           name
-        }}}}
-      }}}}
-    }}}}
-  }}}}
-}}}}
-"""
-
-# GraphQL query to fetch remaining notes for a specific discussion
-NOTES_QUERY = f"""
-query($projectPath: ID!, $iid: String!, $discussionId: ID!, $cursor: String) {{{{
-  project(fullPath: $projectPath) {{{{
-    {{issuable_type}}(iid: $iid) {{{{
-      discussions(filter: {{{{discussionIds: [$discussionId]}}}}) {{{{
-        nodes {{{{
-          notes(first: {NESTED_FIELD_SIZE}, after: $cursor) {{{{
-            pageInfo {{{{
-              hasNextPage
-              endCursor
-            }}}}
-            nodes {{{{
-              id
-              body
-              createdAt
-              updatedAt
-              system
-              position {{{{
-                newLine
-                oldLine
-                newPath
-                oldPath
-                positionType
-              }}}}
-              author {{{{
-                username
-                name
-              }}}}
-            }}}}
-          }}}}
         }}}}
       }}}}
     }}}}

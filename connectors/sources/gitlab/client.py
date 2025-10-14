@@ -13,7 +13,6 @@ import aiohttp
 from connectors.logger import logger
 from connectors.source import ConfigurableFieldValueError
 from connectors.sources.gitlab.models import (
-    GitLabIssue,
     GitLabMergeRequest,
     GitLabProject,
     GitLabRelease,
@@ -24,7 +23,6 @@ from connectors.sources.gitlab.queries import (
     APPROVEDBY_QUERY,
     ASSIGNEES_QUERY,
     DISCUSSIONS_QUERY,
-    ISSUES_QUERY,
     LABELS_QUERY,
     MERGE_REQUESTS_QUERY,
     NOTES_QUERY,
@@ -235,52 +233,6 @@ class GitLabClient:
 
             # Check pagination
             page_info_data = projects_data.get("pageInfo", {})
-            page_info = PageInfo.model_validate(page_info_data)
-            if not page_info.has_next_page:
-                break
-
-            cursor = page_info.end_cursor
-
-    @retryable(
-        retries=RETRIES,
-        interval=RETRY_INTERVAL,
-        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
-    )
-    async def get_issues(self, project_path):
-        """Fetch issues for a project using GraphQL.
-
-        Args:
-            project_path (str): Full path of the project (e.g., 'namespace/project')
-
-        Yields:
-            GitLabIssue: Validated issue data
-        """
-        cursor = None
-
-        while True:
-            variables = {"projectPath": project_path}
-            if cursor:
-                variables["cursor"] = cursor
-
-            try:
-                result = await self._execute_graphql(ISSUES_QUERY, variables)
-            except Exception as e:
-                self._logger.warning(f"Failed to fetch issues for {project_path}: {e}")
-                return
-
-            project_data = result.get("project")
-            if not project_data:
-                return
-
-            issues_data = project_data.get("issues", {})
-            issues = issues_data.get("nodes", [])
-
-            for issue_data in issues:
-                issue = GitLabIssue.model_validate(issue_data)
-                yield issue
-
-            # Check pagination
-            page_info_data = issues_data.get("pageInfo", {})
             page_info = PageInfo.model_validate(page_info_data)
             if not page_info.has_next_page:
                 break
