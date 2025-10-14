@@ -1,0 +1,9 @@
+# questions
+source_name:
+    type: str
+    help: What is your source Python module name?
+
+source_type:
+    type: str
+    choices: ['core', 'experimental', 'plugin']
+    help: What type of connector are you building?
