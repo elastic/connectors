@@ -2378,7 +2378,7 @@ Apache Software License
 
 
 pydantic
-2.12.1
+2.12.2
 UNKNOWN
 The MIT License (MIT)
 
@@ -2404,7 +2404,7 @@ SOFTWARE.
 
 
 pydantic_core
-2.41.3
+2.41.4
 UNKNOWN
 The MIT License (MIT)
 
