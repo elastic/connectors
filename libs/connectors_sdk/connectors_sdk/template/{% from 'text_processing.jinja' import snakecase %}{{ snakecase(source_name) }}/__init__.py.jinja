@@ -6,5 +6,6 @@
 {% from 'text_processing.jinja' import pascalcase %}
 from .client import {{ pascalcase(source_name) }}Client
 from .datasource import {{ pascalcase(source_name) }}DataSource
+from .validator import {{ pascalcase(source_name) }}AdvancedRulesValidator
 
-__all__ = ["{{ pascalcase(source_name) }}Client", "{{ pascalcase(source_name) }}DataSource"]
+__all__ = ["{{ pascalcase(source_name) }}Client", "{{ pascalcase(source_name) }}DataSource", "{{ pascalcase(source_name) }}AdvancedRulesValidator"]

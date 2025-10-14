@@ -13,3 +13,14 @@ class {% from 'text_processing.jinja' import pascalcase %}{{ pascalcase(source_n
     def ping(self):
         """Check the connection to the 3rd party data source."""
         raise NotImplementedError("ping method not implemented")
+
+    def close(self):
+        """Close the client connection."""
+        raise NotImplementedError("close method not implemented")
+
+    def _api_call(self, *args, **kwargs):
+        raise NotImplementedError("_api_call method not implemented")
+
+    def api_call_paginated(self, *args, **kwargs):
+        """Make a paginated API call to the 3rd party data source."""
+        raise NotImplementedError("api_call_paginated method not implemented")
