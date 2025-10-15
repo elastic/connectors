@@ -426,7 +426,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/onedrive.py"
+            - "connectors/sources/onedrive/**"
             - "tests/sources/fixtures/onedrive/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
@@ -464,7 +464,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/zoom.py"
+            - "connectors/sources/zoom/**"
             - "tests/sources/fixtures/zoom/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
@@ -483,7 +483,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/box.py"
+            - "connectors/sources/box/**"
             - "tests/sources/fixtures/box/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
@@ -521,7 +521,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/notion.py"
+            - "connectors/sources/notion/**"
             - "tests/sources/fixtures/notion/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
@@ -540,7 +540,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/redis.py"
+            - "connectors/sources/redis/**"
             - "tests/sources/fixtures/redis/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"

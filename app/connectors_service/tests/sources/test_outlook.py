@@ -13,14 +13,16 @@ import pytest
 from aiohttp import StreamReader
 from connectors_sdk.source import ConfigurableFieldValueError
 
-from connectors.sources.outlook import (
-    OUTLOOK_CLOUD,
-    OUTLOOK_SERVER,
+from connectors.sources.outlook import OutlookDataSource
+from connectors.sources.outlook.client import (
     Forbidden,
     NotFound,
-    OutlookDataSource,
     UnauthorizedException,
     UsersFetchFailed,
+)
+from connectors.sources.outlook.constants import (
+    OUTLOOK_CLOUD,
+    OUTLOOK_SERVER,
 )
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
@@ -512,7 +514,7 @@ async def test_validate_config_with_valid_dependency_fields_does_not_raise_error
 
 
 @pytest.mark.asyncio
-@patch("connectors.sources.outlook.Connection")
+@patch("connectors.sources.outlook.client.Connection")
 async def test_ping_for_server(mock_connection):
     mock_connection_instance = mock_connection.return_value
     mock_connection_instance.search.return_value = (
@@ -528,7 +530,7 @@ async def test_ping_for_server(mock_connection):
 
 
 @pytest.mark.asyncio
-@patch("connectors.sources.outlook.Connection")
+@patch("connectors.sources.outlook.client.Connection")
 async def test_ping_for_server_for_failed_connection(mock_connection):
     mock_connection_instance = mock_connection.return_value
     mock_connection_instance.search.return_value = (
@@ -609,7 +611,7 @@ async def test_get_users_for_cloud():
 
 
 @pytest.mark.asyncio
-@patch("connectors.sources.outlook.Connection")
+@patch("connectors.sources.outlook.client.Connection")
 async def test_fetch_admin_users_negative(mock_connection):
     async with create_outlook_source() as source:
         mock_connection_instance = mock_connection.return_value
@@ -628,7 +630,7 @@ async def test_fetch_admin_users_negative(mock_connection):
 
 
 @pytest.mark.asyncio
-@patch("connectors.sources.outlook.Connection")
+@patch("connectors.sources.outlook.client.Connection")
 async def test_fetch_admin_users(mock_connection):
     async with create_outlook_source() as source:
         users = []
@@ -697,7 +699,7 @@ async def test_get_content_with_extraction_service():
         (False, {"type": "user", "attributes": {"mail": "account"}}),
     ],
 )
-@patch("connectors.sources.outlook.Account", return_value="account")
+@patch("connectors.sources.outlook.client.Account", return_value="account")
 async def test_get_user_accounts_for_cloud(account, is_cloud, user_response):
     async with create_outlook_source() as source:
         source.client.is_cloud = is_cloud

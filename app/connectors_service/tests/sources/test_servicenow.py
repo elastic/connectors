@@ -15,12 +15,11 @@ from connectors_sdk.filtering.validation import Filter, SyncRuleValidationResult
 from connectors_sdk.source import ConfigurableFieldValueError
 
 from connectors.access_control import DLS_QUERY
-from connectors.sources.servicenow import (
-    InvalidResponse,
-    ServiceNowAdvancedRulesValidator,
-    ServiceNowClient,
+from connectors.sources.servicenow.client import InvalidResponse, ServiceNowClient
+from connectors.sources.servicenow.datasource import (
     ServiceNowDataSource,
 )
+from connectors.sources.servicenow.validator import ServiceNowAdvancedRulesValidator
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
 
@@ -312,7 +311,7 @@ async def test_get_docs_with_skipping_table_data():
         )
         response_list = []
         with mock.patch(
-            "connectors.sources.servicenow.DEFAULT_SERVICE_NAMES",
+            "connectors.sources.servicenow.datasource.DEFAULT_SERVICE_NAMES",
             {"incident": ["sn_incident_read"]},
         ):
             with mock.patch.object(
@@ -374,7 +373,7 @@ async def test_get_docs_with_skipping_attachment_data(dls_enabled, expected_resp
 
         response_list = []
         with mock.patch(
-            "connectors.sources.servicenow.DEFAULT_SERVICE_NAMES",
+            "connectors.sources.servicenow.datasource.DEFAULT_SERVICE_NAMES",
             {"incident": ["sn_incident_read"]},
         ):
             with mock.patch.object(
@@ -894,7 +893,7 @@ async def test_get_docs_with_advanced_rules_pagination(filtering):
         },
     ]
 
-    with patch("connectors.sources.servicenow.TABLE_FETCH_SIZE", 2):
+    with patch("connectors.sources.servicenow.client.TABLE_FETCH_SIZE", 2):
         async with create_service_now_source() as source:
             source.servicenow_client._api_call = mock.AsyncMock(
                 return_value=MockResponse(
