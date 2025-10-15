@@ -14,10 +14,12 @@ from connectors_sdk.logger import logger
 from connectors_sdk.source import ConfigurableFieldValueError, DataSourceConfiguration
 
 from connectors.sources.microsoft_teams import (
-    GraphAPIToken,
-    InternalServerError,
     MicrosoftTeamsClient,
     MicrosoftTeamsDataSource,
+)
+from connectors.sources.microsoft_teams.client import (
+    GraphAPIToken,
+    InternalServerError,
     NotFound,
     PermissionsMissing,
 )
@@ -1097,7 +1099,7 @@ async def test_call_api_with_429(
     payload = {"value": "Test rate limit"}
 
     retried_response.__aenter__ = AsyncMock(return_value=JSONAsyncMock(payload))
-    with patch("connectors.sources.microsoft_teams.RETRY_SECONDS", 0.3):
+    with patch("connectors.sources.microsoft_teams.client.RETRY_SECONDS", 0.3):
         with patch.object(
             GraphAPIToken, "get_with_username_password", return_value="abc"
         ):
@@ -1126,7 +1128,7 @@ async def test_call_api_with_429_with_retry_after(
     payload = {"value": "Test rate limit"}
 
     retried_response.__aenter__ = AsyncMock(return_value=JSONAsyncMock(payload))
-    with patch("connectors.sources.microsoft_teams.RETRY_SECONDS", 0.3):
+    with patch("connectors.sources.microsoft_teams.client.RETRY_SECONDS", 0.3):
         with patch.object(
             GraphAPIToken, "get_with_username_password", return_value="abc"
         ):
