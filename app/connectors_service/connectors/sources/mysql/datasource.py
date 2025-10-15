@@ -4,6 +4,8 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import aiomysql
+from tenacity import retry, stop_after_attempt, wait_exponential
+
 from connectors_sdk.source import BaseDataSource, ConfigurableFieldValueError
 
 from connectors.sources.mysql.client import MySQLClient, row2doc
@@ -20,8 +22,6 @@ from connectors.sources.shared.database.generic_database import (
 )
 from connectors.utils import (
     CancellableSleeps,
-    RetryStrategy,
-    retryable,
 )
 
 
@@ -141,10 +141,10 @@ class MySqlDataSource(BaseDataSource):
         await super().validate_config()
         await self._remote_validation()
 
-    @retryable(
-        retries=RETRIES,
-        interval=RETRY_INTERVAL,
-        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    @retry(
+        stop=stop_after_attempt(RETRIES),
+        wait=wait_exponential(multiplier=1, exp_base=RETRY_INTERVAL),
+        reraise=True,
     )
     async def _remote_validation(self):
         async with self.mysql_client() as client:

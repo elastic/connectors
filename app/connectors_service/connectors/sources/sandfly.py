@@ -20,6 +20,8 @@ import aiohttp
 from aiohttp.client_exceptions import (
     ClientResponseError,
 )
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_unless_exception_type
+
 from connectors_sdk.logger import logger
 from connectors_sdk.source import CURSOR_SYNC_TIMESTAMP, BaseDataSource
 from connectors_sdk.utils import (
@@ -31,8 +33,6 @@ from connectors.es.sink import OP_INDEX
 from connectors.utils import (
     CacheWithTimeout,
     CancellableSleeps,
-    RetryStrategy,
-    retryable,
 )
 
 RETRIES = 3
@@ -101,10 +101,10 @@ class SandflyAccessToken:
 
         return access_token
 
-    @retryable(
-        retries=RETRIES,
-        interval=RETRY_INTERVAL,
-        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    @retry(
+        stop=stop_after_attempt(RETRIES),
+        wait=wait_exponential(multiplier=1, exp_base=RETRY_INTERVAL),
+        reraise=True,
     )
     async def _fetch_token(self):
         url = f"{self.server_url}/auth/login"
@@ -156,11 +156,11 @@ class SandflySession:
             raise
 
     @asynccontextmanager
-    @retryable(
-        retries=RETRIES,
-        interval=RETRY_INTERVAL,
-        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
-        skipped_exceptions=[ResourceNotFound, FetchTokenError],
+    @retry(
+        stop=stop_after_attempt(RETRIES),
+        wait=wait_exponential(multiplier=1, exp_base=RETRY_INTERVAL),
+        reraise=True,
+        retry=retry_unless_exception_type((ResourceNotFound, FetchTokenError)),
     )
     async def _get(self, absolute_url):
         try:
@@ -190,11 +190,11 @@ class SandflySession:
             raise
 
     @asynccontextmanager
-    @retryable(
-        retries=RETRIES,
-        interval=RETRY_INTERVAL,
-        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
-        skipped_exceptions=[ResourceNotFound, FetchTokenError],
+    @retry(
+        stop=stop_after_attempt(RETRIES),
+        wait=wait_exponential(multiplier=1, exp_base=RETRY_INTERVAL),
+        reraise=True,
+        retry=retry_unless_exception_type((ResourceNotFound, FetchTokenError)),
     )
     async def _post(self, absolute_url, payload):
         try:

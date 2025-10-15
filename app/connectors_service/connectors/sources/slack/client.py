@@ -9,9 +9,11 @@ from datetime import datetime
 
 import aiohttp
 from aiohttp import ClientResponseError
+from tenacity import retry, stop_after_attempt, wait_chain, wait_fixed
+
 from connectors_sdk.logger import logger
 
-from connectors.utils import CancellableSleeps, retryable
+from connectors.utils import CancellableSleeps
 
 BASE_URL = "https://slack.com/api"
 CURSOR = "cursor"
@@ -153,7 +155,12 @@ class SlackClient:
             return json_content
 
     @asynccontextmanager
-    @retryable(retries=3)
+    @retry(
+        stop=stop_after_attempt(3),
+        # linear backoff
+        wait=wait_chain(*[wait_fixed(1 * i) for i in range(1, 4)]),
+        reraise=True,
+    )
     async def _call_api(self, absolute_url):
         try:
             async with self._http_session.get(

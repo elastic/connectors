@@ -12,6 +12,8 @@ from functools import cached_property
 
 import aiohttp
 from aiohttp.client_exceptions import ClientResponseError
+from tenacity import retry, stop_after_attempt, wait_exponential
+
 from connectors_sdk.logger import logger
 from connectors_sdk.source import BaseDataSource, ConfigurableFieldValueError
 from connectors_sdk.utils import (
@@ -23,8 +25,6 @@ from graphql.language.visitor import Visitor
 
 from connectors.utils import (
     CancellableSleeps,
-    RetryStrategy,
-    retryable,
 )
 
 RETRIES = 3
@@ -225,10 +225,10 @@ class GraphQLClient:
                 if not has_new_page:
                     return
 
-    @retryable(
-        retries=RETRIES,
-        interval=RETRY_INTERVAL,
-        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    @retry(
+        stop=stop_after_attempt(RETRIES),
+        wait=wait_exponential(multiplier=1, exp_base=RETRY_INTERVAL),
+        reraise=True,
     )
     async def make_request(self, graphql_query):
         try:

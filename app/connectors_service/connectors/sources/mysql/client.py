@@ -6,6 +6,8 @@
 import re
 
 import aiomysql
+from tenacity import retry, stop_after_attempt, wait_exponential
+
 from connectors_sdk.utils import iso_utc
 
 from connectors.sources.mysql.common import (
@@ -16,8 +18,6 @@ from connectors.sources.mysql.common import (
 )
 from connectors.utils import (
     CancellableSleeps,
-    RetryStrategy,
-    retryable,
     ssl_context,
 )
 
@@ -75,10 +75,10 @@ class MySQLClient:
         self.connection_pool.close()
         await self.connection_pool.wait_closed()
 
-    @retryable(
-        retries=RETRIES,
-        interval=RETRY_INTERVAL,
-        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    @retry(
+        stop=stop_after_attempt(RETRIES),
+        wait=wait_exponential(multiplier=1, exp_base=RETRY_INTERVAL),
+        reraise=True,
     )
     async def get_all_table_names(self):
         async with self.connection.cursor(aiomysql.cursors.SSCursor) as cursor:
@@ -95,10 +95,10 @@ class MySQLClient:
             self._logger.exception("Error while connecting to the MySQL Server.")
             raise
 
-    @retryable(
-        retries=RETRIES,
-        interval=RETRY_INTERVAL,
-        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    @retry(
+        stop=stop_after_attempt(RETRIES),
+        wait=wait_exponential(multiplier=1, exp_base=RETRY_INTERVAL),
+        reraise=True,
     )
     async def get_column_names_for_query(self, query):
         async with self.connection.cursor(aiomysql.cursors.SSCursor) as cursor:
@@ -111,10 +111,10 @@ class MySQLClient:
             f"SELECT * FROM `{self.database}`.`{table}`"
         )
 
-    @retryable(
-        retries=RETRIES,
-        interval=RETRY_INTERVAL,
-        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    @retry(
+        stop=stop_after_attempt(RETRIES),
+        wait=wait_exponential(multiplier=1, exp_base=RETRY_INTERVAL),
+        reraise=True,
     )
     async def get_primary_key_column_names(self, table):
         async with self.connection.cursor(aiomysql.cursors.SSCursor) as cursor:
@@ -124,10 +124,10 @@ class MySQLClient:
 
             return [f"{column[0]}" for column in await cursor.fetchall()]
 
-    @retryable(
-        retries=RETRIES,
-        interval=RETRY_INTERVAL,
-        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    @retry(
+        stop=stop_after_attempt(RETRIES),
+        wait=wait_exponential(multiplier=1, exp_base=RETRY_INTERVAL),
+        reraise=True,
     )
     async def get_last_update_time(self, table):
         async with self.connection.cursor(aiomysql.cursors.SSCursor) as cursor:
@@ -142,10 +142,10 @@ class MySQLClient:
 
             return None
 
-    @retryable(
-        retries=RETRIES,
-        interval=RETRY_INTERVAL,
-        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    @retry(
+        stop=stop_after_attempt(RETRIES),
+        wait=wait_exponential(multiplier=1, exp_base=RETRY_INTERVAL),
+        reraise=True,
     )
     async def yield_rows_for_table(self, table, primary_keys):
         last_primary_key_values = None
@@ -232,10 +232,10 @@ class MySQLClient:
 
         return updated_query
 
-    @retryable(
-        retries=RETRIES,
-        interval=RETRY_INTERVAL,
-        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    @retry(
+        stop=stop_after_attempt(RETRIES),
+        wait=wait_exponential(multiplier=1, exp_base=RETRY_INTERVAL),
+        reraise=True,
     )
     async def yield_rows_for_query(self, query, primary_key_columns):
         table_row_count_for_query = await self._get_table_row_count_for_query(

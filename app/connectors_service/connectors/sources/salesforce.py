@@ -14,6 +14,8 @@ from itertools import groupby
 import aiohttp
 import fastjsonschema
 from aiohttp.client_exceptions import ClientResponseError
+from tenacity import wait_fixed, stop_after_attempt, retry, retry_unless_exception_type, wait_chain, wait_exponential
+
 from connectors_sdk.content_extraction import (
     TIKA_SUPPORTED_FILETYPES,
 )
@@ -32,11 +34,7 @@ from connectors.access_control import (
     es_access_control_query,
     prefix_identity,
 )
-from connectors.utils import (
-    CancellableSleeps,
-    RetryStrategy,
-    retryable,
-)
+from connectors.utils import CancellableSleeps
 
 SALESFORCE_EMULATOR_HOST = os.environ.get("SALESFORCE_EMULATOR_HOST")
 RUNNING_FTEST = (
@@ -642,10 +640,11 @@ class SalesforceClient:
         token = await self.api_token.token()
         return {"authorization": f"Bearer {token}"}
 
-    @retryable(
-        retries=RETRIES,
-        interval=RETRY_INTERVAL,
-        skipped_exceptions=[RateLimitedException, InvalidQueryException],
+    @retry(
+        stop=stop_after_attempt(RETRIES),
+        # linear backoff
+        wait=wait_chain(*[wait_fixed(RETRY_INTERVAL * i) for i in range(1, RETRIES + 1)]),
+        retry=retry_unless_exception_type((RateLimitedException, InvalidQueryException)),
     )
     async def _get_json(self, url, params=None):
         response_body = None
@@ -1113,10 +1112,11 @@ class SalesforceAPIToken:
             "client_secret": client_secret,
         }
 
-    @retryable(
-        retries=RETRIES,
-        interval=RETRY_INTERVAL,
-        skipped_exceptions=[InvalidCredentialsException],
+    @retry(
+        stop=stop_after_attempt(RETRIES),
+        # linear backoff
+        wait=wait_chain(*[wait_fixed(RETRY_INTERVAL * i) for i in range(1, RETRIES + 1)]),
+        retry=retry_unless_exception_type(InvalidCredentialsException),
     )
     async def token(self):
         if self._token:
@@ -1268,10 +1268,9 @@ class SalesforceAdvancedRulesValidator(AdvancedRulesValidator):
     async def validate(self, advanced_rules):
         return await self._remote_validation(advanced_rules)
 
-    @retryable(
-        retries=3,
-        interval=RETRY_INTERVAL,
-        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, exp_base=RETRY_INTERVAL)
     )
     async def _remote_validation(self, advanced_rules):
         try:

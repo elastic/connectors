@@ -9,9 +9,9 @@ import os
 
 from aiogoogle import Aiogoogle
 from aiogoogle.auth.creds import ServiceAccountCreds
-from connectors_sdk.logger import logger
+from tenacity import retry, stop_after_attempt, wait_exponential
 
-from connectors.utils import RetryStrategy, retryable
+from connectors_sdk.logger import logger
 
 CLOUD_STORAGE_READ_ONLY_SCOPE = "https://www.googleapis.com/auth/devstorage.read_only"
 CLOUD_STORAGE_BASE_URL = "https://console.cloud.google.com/storage/browser/_details/"
@@ -45,10 +45,10 @@ class GoogleCloudStorageClient:
     def set_logger(self, logger_):
         self._logger = logger_
 
-    @retryable(
-        retries=RETRY_COUNT,
-        interval=RETRY_INTERVAL,
-        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    @retry(
+        stop=stop_after_attempt(RETRY_COUNT),
+        wait=wait_exponential(multiplier=1, exp_base=RETRY_INTERVAL),
+        reraise=True,
     )
     async def api_call(
         self,
@@ -67,7 +67,7 @@ class GoogleCloudStorageClient:
             full_response (bool, optional): Specifies whether the response is paginated or not. Defaults to False.
 
         Raises:
-            exception: A instance of an exception class.
+            exception: An instance of an exception class.
 
         Yields:
             Dictionary: Response returned by the resource method.

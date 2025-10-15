@@ -9,14 +9,14 @@ from datetime import datetime, timedelta
 
 import aiohttp
 from aiohttp import ClientResponseError
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_unless_exception_type
+
 from connectors_sdk.logger import logger
 
 from connectors.utils import (
     CacheWithTimeout,
     CancellableSleeps,
-    RetryStrategy,
     get_base64_value,
-    retryable,
 )
 
 RETRIES = 3
@@ -86,10 +86,10 @@ class ZoomAPIToken:
 
         return access_token
 
-    @retryable(
-        retries=RETRIES,
-        interval=RETRY_INTERVAL,
-        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    @retry(
+        stop=stop_after_attempt(RETRIES),
+        wait=wait_exponential(multiplier=1, exp_base=RETRY_INTERVAL),
+        reraise=True,
     )
     async def _fetch_token(self):
         self._logger.debug("Generating access token.")
@@ -129,11 +129,11 @@ class ZoomAPISession:
         self._sleeps.cancel()
 
     @asynccontextmanager
-    @retryable(
-        retries=RETRIES,
-        interval=RETRY_INTERVAL,
-        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
-        skipped_exceptions=ZoomResourceNotFound,
+    @retry(
+        stop=stop_after_attempt(RETRIES),
+        wait=wait_exponential(multiplier=1, exp_base=RETRY_INTERVAL),
+        reraise=True,
+        retry=retry_unless_exception_type(ZoomResourceNotFound),
     )
     async def _get(self, absolute_url):
         try:

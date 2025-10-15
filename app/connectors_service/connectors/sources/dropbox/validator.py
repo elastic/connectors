@@ -5,6 +5,8 @@
 #
 
 import fastjsonschema
+from tenacity import retry, stop_after_attempt, wait_exponential
+
 from connectors_sdk.filtering.validation import (
     AdvancedRulesValidator,
     SyncRuleValidationResult,
@@ -76,10 +78,10 @@ class DropBoxAdvancedRulesValidator(AdvancedRulesValidator):
 
         return await self._remote_validation(advanced_rules)
 
-    @retryable(
-        retries=RETRY_COUNT,
-        interval=RETRY_INTERVAL,
-        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    @retry(
+        stop=stop_after_attempt(RETRY_COUNT),
+        wait=wait_exponential(multiplier=1, exp_base=RETRY_INTERVAL),
+        reraise=True,
     )
     async def _remote_validation(self, advanced_rules):
         try:

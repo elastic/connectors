@@ -4,6 +4,8 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import fastjsonschema
+from tenacity import retry, stop_after_attempt, wait_exponential
+
 from connectors_sdk.filtering.validation import (
     AdvancedRulesValidator,
     SyncRuleValidationResult,
@@ -11,10 +13,6 @@ from connectors_sdk.filtering.validation import (
 from fastjsonschema import JsonSchemaValueException
 
 from connectors.sources.mysql.common import RETRIES, RETRY_INTERVAL, format_list
-from connectors.utils import (
-    RetryStrategy,
-    retryable,
-)
 
 
 class MySQLAdvancedRulesValidator(AdvancedRulesValidator):
@@ -44,10 +42,10 @@ class MySQLAdvancedRulesValidator(AdvancedRulesValidator):
 
         return await self._remote_validation(advanced_rules)
 
-    @retryable(
-        retries=RETRIES,
-        interval=RETRY_INTERVAL,
-        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    @retry(
+        stop=stop_after_attempt(RETRIES),
+        wait=wait_exponential(multiplier=1, exp_base=RETRY_INTERVAL),
+        reraise=True,
     )
     async def _remote_validation(self, advanced_rules):
         try:

@@ -5,7 +5,7 @@
 #
 import abc
 
-from connectors_sdk.retry import retryable
+from tenacity import retry, stop_after_attempt, wait_chain, wait_fixed
 
 
 class BaseClient(abc.ABC):
@@ -22,7 +22,12 @@ class BaseClient(abc.ABC):
         """Close the client connection."""
         raise NotImplementedError("close method not implemented")
 
-    @retryable
+    @retry(
+        stop=stop_after_attempt(3),
+        # linear backoff
+        wait=wait_chain(*[wait_fixed(1 * i) for i in range(1, 4)]),
+        reraise=True,
+    )
     async def api_call(self, *args, **kwargs):
         """Make an API call to the 3rd party data source."""
         self._api_call(*args, **kwargs)

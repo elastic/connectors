@@ -17,6 +17,8 @@ import aiohttp
 from aiofiles.os import remove
 from aiofiles.tempfile import NamedTemporaryFile
 from aiohttp.client_exceptions import ClientResponseError
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_unless_exception_type
+
 from connectors_sdk.content_extraction import (
     TIKA_SUPPORTED_FILETYPES,
 )
@@ -32,9 +34,7 @@ from connectors.utils import (
     CancellableSleeps,
     ConcurrentTasks,
     MemQueue,
-    RetryStrategy,
     html_to_text,
-    retryable,
     url_encode,
 )
 
@@ -325,10 +325,10 @@ class GraphAPIToken:
 
         return access_token
 
-    @retryable(
-        retries=RETRY_COUNT,
-        interval=RETRY_INTERVAL,
-        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    @retry(
+        stop=stop_after_attempt(RETRY_COUNT),
+        wait=wait_exponential(multiplier=1, exp_base=RETRY_INTERVAL),
+        reraise=True,
     )
     async def _fetch_token(self, is_acquire_for_client=False):
         """Generate API token for usage with Graph API
@@ -424,11 +424,11 @@ class MicrosoftTeamsClient:
                 f"Data for {absolute_url} is being skipped. Error: {exception}."
             )
 
-    @retryable(
-        retries=RETRY_COUNT,
-        interval=RETRY_INTERVAL,
-        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
-        skipped_exceptions=[NotFound, PermissionsMissing],
+    @retry(
+        stop=stop_after_attempt(RETRY_COUNT),
+        wait=wait_exponential(multiplier=1, exp_base=RETRY_INTERVAL),
+        reraise=True,
+        retry=retry_unless_exception_type((NotFound, PermissionsMissing)),
     )
     async def _get(self, absolute_url, use_token=True):
         try:

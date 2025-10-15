@@ -7,6 +7,8 @@ from urllib import parse
 
 import aiohttp
 from aiohttp import ClientResponseError, ServerConnectionError
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_unless_exception_type
+
 from connectors_sdk.logger import logger
 
 from connectors.sources.atlassian.jira.constants import (
@@ -35,7 +37,7 @@ from connectors.sources.atlassian.utils import (
     prefix_account_name,
     prefix_group_id,
 )
-from connectors.utils import CancellableSleeps, RetryStrategy, retryable, ssl_context
+from connectors.utils import CancellableSleeps, ssl_context
 
 
 class ThrottledError(Exception):
@@ -170,11 +172,11 @@ class JiraClient:
         else:
             raise
 
-    @retryable(
-        retries=RETRIES,
-        interval=RETRY_INTERVAL,
-        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
-        skipped_exceptions=NotFound,
+    @retry(
+        stop=stop_after_attempt(RETRIES),
+        wait=wait_exponential(multiplier=1, exp_base=RETRY_INTERVAL),
+        reraise=True,
+        retry=retry_unless_exception_type(NotFound),
     )
     async def api_call(self, url_name=None, **url_kwargs):
         """Make a GET call for Atlassian API using the passed url_name with retry for the failed API calls.

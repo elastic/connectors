@@ -8,6 +8,8 @@ from urllib.parse import urljoin
 
 import aiohttp
 from aiohttp import ClientResponseError, ServerDisconnectedError
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_unless_exception_type
+
 from connectors_sdk.logger import logger
 
 from connectors.sources.atlassian.confluence.constants import (
@@ -35,7 +37,7 @@ from connectors.sources.atlassian.confluence.constants import (
     USERS_FOR_SERVER,
     WILDCARD,
 )
-from connectors.utils import CancellableSleeps, RetryStrategy, retryable, ssl_context
+from connectors.utils import CancellableSleeps, ssl_context
 
 
 class InvalidConfluenceDataSourceTypeError(ValueError):
@@ -187,11 +189,11 @@ class ConfluenceClient:
             )
             raise
 
-    @retryable(
-        retries=RETRIES,
-        interval=RETRY_INTERVAL,
-        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
-        skipped_exceptions=NotFound,
+    @retry(
+        stop=stop_after_attempt(RETRIES),
+        wait=wait_exponential(multiplier=1, exp_base=RETRY_INTERVAL),
+        reraise=True,
+        retry=retry_unless_exception_type(NotFound),
     )
     async def api_call(self, url):
         """Make a GET call for Atlassian API using the passed url with retry for the failed API calls.

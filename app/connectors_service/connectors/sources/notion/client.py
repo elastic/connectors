@@ -10,10 +10,12 @@ from typing import Any, Awaitable, Callable
 
 import aiohttp
 from aiohttp import ClientResponseError
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_unless_exception_type
+
 from connectors_sdk.logger import logger
 from notion_client import APIResponseError, AsyncClient
 
-from connectors.utils import CancellableSleeps, RetryStrategy, retryable
+from connectors.utils import CancellableSleeps
 
 RETRIES = 3
 RETRY_INTERVAL = 2
@@ -63,11 +65,11 @@ class NotionClient:
             raise_for_status=True,
         )
 
-    @retryable(
-        retries=RETRIES,
-        interval=RETRY_INTERVAL,
-        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
-        skipped_exceptions=NotFound,
+    @retry(
+        stop=stop_after_attempt(RETRIES),
+        wait=wait_exponential(multiplier=1, exp_base=RETRY_INTERVAL),
+        reraise=True,
+        retry=retry_unless_exception_type(NotFound),
     )
     async def get_via_session(self, url):
         self._logger.debug(f"Fetching data from url {url}")
@@ -87,11 +89,11 @@ class NotionClient:
             else:
                 raise
 
-    @retryable(
-        retries=RETRIES,
-        interval=RETRY_INTERVAL,
-        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
-        skipped_exceptions=NotFound,
+    @retry(
+        stop=stop_after_attempt(RETRIES),
+        wait=wait_exponential(multiplier=1, exp_base=RETRY_INTERVAL),
+        reraise=True,
+        retry=retry_unless_exception_type(NotFound),
     )
     async def fetch_results(
         self, function: Callable[..., Awaitable[Any]], next_cursor=None, **kwargs: Any

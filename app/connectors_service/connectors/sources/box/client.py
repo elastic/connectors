@@ -9,6 +9,8 @@ from datetime import datetime, timedelta
 
 import aiohttp
 from aiohttp.client_exceptions import ClientResponseError
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_unless_exception_type
+
 from connectors_sdk.logger import logger
 
 from connectors.sources.box.constants import (
@@ -18,13 +20,10 @@ from connectors.sources.box.constants import (
     FETCH_LIMIT,
     RETRIES,
     RETRY_INTERVAL,
-    refresh_token,
 )
 from connectors.utils import (
     CacheWithTimeout,
     CancellableSleeps,
-    RetryStrategy,
-    retryable,
 )
 
 
@@ -150,11 +149,11 @@ class BoxClient:
             case _:
                 raise
 
-    @retryable(
-        retries=RETRIES,
-        interval=RETRY_INTERVAL,
-        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
-        skipped_exceptions=NotFound,
+    @retry(
+        stop=stop_after_attempt(RETRIES),
+        wait=wait_exponential(multiplier=1, exp_base=RETRY_INTERVAL),
+        reraise=True,
+        retry=retry_unless_exception_type(NotFound),
     )
     async def get(self, url, headers, params=None):
         self._logger.debug(

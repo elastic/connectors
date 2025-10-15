@@ -8,8 +8,7 @@ from abc import ABC, abstractmethod
 
 from asyncpg.exceptions._base import InternalClientError
 from sqlalchemy.exc import ProgrammingError
-
-from connectors.utils import RetryStrategy, retryable
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_unless_exception_type
 
 WILDCARD = "*"
 
@@ -80,11 +79,11 @@ async def fetch(
     fetch_size=DEFAULT_FETCH_SIZE,
     retry_count=DEFAULT_RETRY_COUNT,
 ):
-    @retryable(
-        retries=retry_count,
-        interval=DEFAULT_WAIT_MULTIPLIER,
-        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
-        skipped_exceptions=[InternalClientError, ProgrammingError],
+    @retry(
+        stop=stop_after_attempt(retry_count),
+        wait=wait_exponential(multiplier=1, exp_base=DEFAULT_WAIT_MULTIPLIER),
+        reraise=True,
+        retry=retry_unless_exception_type((InternalClientError, ProgrammingError)),
     )
     async def _execute():
         cursor = await cursor_func()
