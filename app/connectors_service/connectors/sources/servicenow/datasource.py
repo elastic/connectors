@@ -20,14 +20,14 @@ from connectors.access_control import (
     es_access_control_query,
     prefix_identity,
 )
-from connectors.sources.service_now.client import (
+from connectors.sources.servicenow.client import (
     ENDPOINTS,
     MAX_CONCURRENT_CLIENT_SUPPORT,
     RETRIES,
     TABLE_BATCH_SIZE,
     ServiceNowClient,
 )
-from connectors.sources.service_now.validator import ServiceNowAdvancedRulesValidator
+from connectors.sources.servicenow.validator import ServiceNowAdvancedRulesValidator
 from connectors.utils import (
     ConcurrentTasks,
     MemQueue,
