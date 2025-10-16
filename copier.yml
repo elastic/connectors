@@ -1,8 +1,8 @@
 _subdirectory: libs/connectors_sdk/connectors_sdk/template
 
-_exclude:
-    - text_processing
-    - copier.yml
+#_exclude:
+#    - text_processing
+#    - copier.yml
 
 _message_after_copy: |
     Scaffolding for new data source "{{ source_name }}" has been created successfully!
