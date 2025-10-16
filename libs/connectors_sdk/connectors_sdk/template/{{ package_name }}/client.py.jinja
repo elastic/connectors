@@ -6,7 +6,7 @@
 from connectors_sdk.client import BaseClient
 
 
-class {% from 'text_processing.jinja' import pascalcase %}{{ pascalcase(source_name) }}Client(BaseClient):
+class {{ class_name }}Client(BaseClient):
     def __init__(self, configuration):
         super().__init__(configuration)
 

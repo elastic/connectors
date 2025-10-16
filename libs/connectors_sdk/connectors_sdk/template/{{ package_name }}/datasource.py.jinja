@@ -3,16 +3,15 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-{% from 'text_processing.jinja' import pascalcase %}
 from connectors_sdk.source import BaseDataSource
 
-from .client import {{ pascalcase(source_name) }}Client  # TODO: change from relative import
+from .client import {{ class_name }}Client  # TODO: change from relative import
 
 
-class {{ pascalcase(source_name) }}DataSource(BaseDataSource):
+class {{ class_name }}DataSource(BaseDataSource):
     def __init__(self, configuration):
         super().__init__(configuration)
-        self.client = {{ pascalcase(source_name) }}Client(configuration)
+        self.client = {{ class_name }}Client(configuration)
 
     def ping(self):
         """Check the connection to the data source."""
