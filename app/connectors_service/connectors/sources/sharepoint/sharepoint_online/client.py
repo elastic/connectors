@@ -15,6 +15,8 @@ import aiohttp
 from aiohttp.client_exceptions import ClientPayloadError, ClientResponseError
 from aiohttp.client_reqrep import RequestInfo
 from azure.identity.aio import CertificateCredential
+
+from connectors.sources.sharepoint.sharepoint_online.utils import _is_excluded_sharepoint_url
 from connectors_sdk.logger import logger
 from connectors_sdk.utils import nested_get_from_dict
 
@@ -735,6 +737,11 @@ class SharepointOnlineClient:
         if allowed_root_sites == [WILDCARD] or enumerate_all_sites:
             self._logger.debug(f"Looking up all sites to fetch: {allowed_root_sites}")
             async for site in self._all_sites(sharepoint_host, allowed_root_sites):
+                if _is_excluded_sharepoint_url(site.get("webUrl", "")):
+                    self._logger.debug(
+                        f"Skipping excluded SharePoint site: {site.get('webUrl', site.get('id', 'unknown'))}"
+                    )
+                    continue
                 yield site
         else:
             self._logger.debug(f"Looking up individual sites: {allowed_root_sites}")
@@ -744,9 +751,20 @@ class SharepointOnlineClient:
                         async for site in self._fetch_site_and_subsites_by_path(
                             sharepoint_host, allowed_site
                         ):
+                            if _is_excluded_sharepoint_url(site.get("webUrl", "")):
+                                self._logger.debug(
+                                    f"Skipping excluded SharePoint site: {site.get('webUrl', site.get('id', 'unknown'))}"
+                                )
+                                continue
                             yield site
                     else:
-                        yield await self._fetch_site(sharepoint_host, allowed_site)
+                        site_obj = await self._fetch_site(sharepoint_host, allowed_site)
+                        if _is_excluded_sharepoint_url(site_obj.get("webUrl", "")):
+                            self._logger.debug(
+                                f"Skipping excluded SharePoint site: {site_obj.get('webUrl', site_obj.get('id', 'unknown'))}"
+                            )
+                            continue
+                        yield site_obj
 
                 except NotFound:
                     self._logger.warning(
@@ -803,8 +821,17 @@ class SharepointOnlineClient:
     async def _recurse_sites(self, site_with_subsites):
         subsites = site_with_subsites.pop("sites", [])
         site_with_subsites.pop("sites@odata.context", None)  # remove unnecessary field
-        yield site_with_subsites
-        if subsites:
+
+        is_excluded = _is_excluded_sharepoint_url(site_with_subsites.get("webUrl", ""))
+
+        if is_excluded:
+            self._logger.debug(
+                f"Skipping excluded SharePoint site: {site_with_subsites.get('webUrl', site_with_subsites.get('id', 'unknown'))}"
+            )
+        else:
+            yield site_with_subsites
+
+        if subsites and not is_excluded:
             async for site in self._scroll_subsites_by_parent_id(
                 site_with_subsites["id"]
             ):
@@ -1062,6 +1089,12 @@ class SharepointOnlineClient:
     def _validate_sharepoint_rest_url(self, url):
         # TODO: make it better suitable for ftest
         if "OVERRIDE_URL" in os.environ:
+            return
+
+        # Exclude SharePoint Content Storage endpoints entirely
+        # These URLs are internal and should not be crawled by the connector
+        if _is_excluded_sharepoint_url(url):
+            # Silently return to let callers that explicitly skip excluded URLs proceed
             return
 
         # I haven't found a better way to validate tenant name for now.
