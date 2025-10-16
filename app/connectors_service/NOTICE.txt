@@ -1906,7 +1906,7 @@ SOFTWARE.
 
 
 azure-core
-1.35.1
+1.36.0
 MIT License
 Copyright (c) Microsoft Corporation.
 
