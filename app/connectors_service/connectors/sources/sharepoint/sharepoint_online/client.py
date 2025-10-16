@@ -15,8 +15,6 @@ import aiohttp
 from aiohttp.client_exceptions import ClientPayloadError, ClientResponseError
 from aiohttp.client_reqrep import RequestInfo
 from azure.identity.aio import CertificateCredential
-
-from connectors.sources.sharepoint.sharepoint_online.utils import _is_excluded_sharepoint_url
 from connectors_sdk.logger import logger
 from connectors_sdk.utils import nested_get_from_dict
 
@@ -33,6 +31,9 @@ from connectors.sources.sharepoint.sharepoint_online.constants import (
     GRAPH_API_URL,
     REST_API_AUTH_URL,
     WILDCARD,
+)
+from connectors.sources.sharepoint.sharepoint_online.utils import (
+    _is_excluded_sharepoint_url,
 )
 from connectors.utils import (
     CacheWithTimeout,

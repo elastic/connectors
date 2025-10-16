@@ -7,7 +7,10 @@
 from datetime import datetime
 
 from connectors.access_control import prefix_identity
-from connectors.sources.sharepoint.sharepoint_online.constants import TIMESTAMP_FORMAT, EXCLUDED_SHAREPOINT_PATH_SEGMENTS
+from connectors.sources.sharepoint.sharepoint_online.constants import (
+    EXCLUDED_SHAREPOINT_PATH_SEGMENTS,
+    TIMESTAMP_FORMAT,
+)
 
 
 class SyncCursorEmpty(Exception):
@@ -61,4 +64,3 @@ def _is_excluded_sharepoint_url(url: str) -> bool:
         )
     except Exception:
         return False
-
