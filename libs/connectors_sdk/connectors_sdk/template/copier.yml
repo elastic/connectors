@@ -1,4 +1,4 @@
-_subdirectory: libs/connectors_sdk/connectors_sdk/template
+#_subdirectory: libs/connectors_sdk/connectors_sdk/template
 
 #_exclude:
 #    - text_processing
@@ -21,12 +21,12 @@ source_name:
     help: What is your source Python module name?
 
 package_name:
-    type: int
+    type: str
     default: "{{ value|lower|replace(' ', '_')|replace('-', '_') }}" # This computes the value
     when: false # This makes sure it isn't asked nor stored
 
 class_name:
-    type: int
+    type: str
     default: "{{ source_name|replace('_', ' ')|title|replace(' ', '') }}" # This computes the value
     when: false # This makes sure it isn't asked nor stored
 
