@@ -65,4 +65,5 @@ async def remove():
 
 
 async def teardown():
-    shutil.rmtree(SYSTEM_DIR)
+    if os.path.exists(SYSTEM_DIR):
+        shutil.rmtree(SYSTEM_DIR)

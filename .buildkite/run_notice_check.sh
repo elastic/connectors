@@ -23,6 +23,7 @@ if is_pr && ! is_fork; then
 
     git status --porcelain | grep app/connectors_service/NOTICE.txt && git add app/connectors_service/NOTICE.txt
     git status --porcelain | grep libs/connectors_sdk/NOTICE.txt && git add libs/connectors_sdk/NOTICE.txt
+    git status --porcelain | grep libs/connectors_sources/NOTICE.txt && git add libs/connectors_sources/NOTICE.txt
     git commit -m "Update NOTICE.txt"
     git push
 
