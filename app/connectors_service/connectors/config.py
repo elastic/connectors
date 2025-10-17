@@ -5,6 +5,8 @@
 #
 
 import os
+from importlib.metadata import entry_points
+from typing import Dict
 
 from connectors_sdk.logger import logger
 from envyaml import EnvYAML
@@ -54,6 +56,17 @@ log_level_mappings = {
     "fatal": "CRITICAL",
     "unknown": "NOTSET",
 }
+
+def external_sources() -> Dict[str, str]:  # entry point for plugins
+    return {}
+
+
+def update_with_external_sources() -> Dict[str, str]:
+    external_sources_eps = entry_points(group="connectors_service.external_sources")
+    print(external_sources_eps)
+    external_source = external_sources_eps[0].load() if external_sources_eps else lambda x: {}
+    print(external_source)
+    return {**_default_config()["sources"], **external_source()}
 
 
 def _default_config():

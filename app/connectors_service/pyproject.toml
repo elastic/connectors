@@ -108,6 +108,8 @@ ftest= [
     "yattag==1.16.0",
 ]
 
+[project.entry-points."connectors_service.external_sources"]
+
 [project.scripts]
 elastic-ingest = "connectors.service_cli:main"
 fake-kibana = "connectors.kibana:main"

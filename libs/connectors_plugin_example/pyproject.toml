@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "elasticsearch-connectors-plugin-example"
+description = "Example Plugin for Elasticsearch Connectors Service"
+dynamic = ["version"]
+readme = "README.md"
+authors = [
+    { name = "Search Extract and Transform Team", email = "enterprise-search-ingestion-team@elastic.co" }
+]
+classifiers = [
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3 :: Only",
+]
+requires-python = ">=3.10,<3.12"
+dependencies = [
+    "aiofiles",
+    "elasticsearch-connectors-sdk",
+]
+
+[project.entry-points."connectors_service.external_sources"]
+example_plugin = "connectors_plugin_example:external_sources"
+
+[tool.setuptools]
+packages = ["connectors_plugin_example"]
+
+[tool.setuptools.dynamic]
+version = {file = "connectors_plugin_example/VERSION"}
