@@ -73,6 +73,7 @@ dependencies = [
     "tzcron==1.0.0",
     "uvloop==0.20.0; sys_platform != 'win32'",
     "wcmatch==8.4.1",
+    "tenacity==9.1.2",
     "elasticsearch-connectors-sdk"
 ]
 

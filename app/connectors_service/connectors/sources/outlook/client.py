@@ -12,6 +12,8 @@ import aiofiles
 import aiohttp
 import requests.adapters
 from aiofiles.os import remove
+from tenacity import stop_after_attempt, wait_exponential, retry_unless_exception_type, retry
+
 from connectors_sdk.logger import logger
 from exchangelib import (
     IMPERSONATION,
@@ -44,9 +46,7 @@ from connectors.sources.outlook.constants import (
 )
 from connectors.utils import (
     CancellableSleeps,
-    RetryStrategy,
     get_pem_format,
-    retryable,
     url_encode,
 )
 
@@ -250,11 +250,11 @@ class Office365Users:
             case _:
                 raise
 
-    @retryable(
-        retries=RETRIES,
-        interval=RETRY_INTERVAL,
-        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
-        skipped_exceptions=UnauthorizedException,
+    @retry(
+        stop=stop_after_attempt(RETRIES),
+        wait=wait_exponential(multiplier=1, exp_base=RETRY_INTERVAL),
+        reraise=True,
+        retry=retry_unless_exception_type(UnauthorizedException),
     )
     async def _fetch_token(self):
         try:
@@ -272,10 +272,10 @@ class Office365Users:
         except Exception as exception:
             self._check_errors(response=exception)
 
-    @retryable(
-        retries=RETRIES,
-        interval=RETRY_INTERVAL,
-        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    @retry(
+        stop=stop_after_attempt(RETRIES),
+        wait=wait_exponential(multiplier=1, exp_base=RETRY_INTERVAL),
+        reraise=True,
     )
     async def get_users(self):
         access_token = await self._fetch_token()

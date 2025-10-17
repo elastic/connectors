@@ -17,6 +17,8 @@ from urllib.parse import urlencode
 import aiohttp
 import dateutil.parser as parser
 import fastjsonschema
+from tenacity import retry, stop_after_attempt, wait_exponential
+
 from connectors_sdk.filtering.validation import (
     AdvancedRulesValidator,
     SyncRuleValidationResult,
@@ -36,8 +38,6 @@ from connectors.utils import (
     CancellableSleeps,
     ConcurrentTasks,
     MemQueue,
-    RetryStrategy,
-    retryable,
 )
 
 RETRIES = 3
@@ -159,10 +159,10 @@ class ServiceNowClient:
             raise InvalidResponse(msg)
         return fetched_response
 
-    @retryable(
-        retries=RETRIES,
-        interval=RETRY_INTERVAL,
-        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    @retry(
+        stop=stop_after_attempt(RETRIES),
+        wait=wait_exponential(multiplier=1, exp_base=RETRY_INTERVAL),
+        reraise=True,
     )
     async def get_table_length(self, table_name):
         try:
@@ -264,10 +264,10 @@ class ServiceNowClient:
     def _prepare_batch(self, requests):
         return {"batch_request_id": str(uuid.uuid4()), "rest_requests": requests}
 
-    @retryable(
-        retries=RETRIES,
-        interval=RETRY_INTERVAL,
-        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    @retry(
+        stop=stop_after_attempt(RETRIES),
+        wait=wait_exponential(multiplier=1, exp_base=RETRY_INTERVAL),
+        reraise=True,
     )
     async def _batch_api_call(self, batch_data):
         response = await self._api_call(

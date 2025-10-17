@@ -14,6 +14,8 @@ from functools import cached_property, partial
 import aiohttp
 import fastjsonschema
 import gidgethub
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_unless_exception_type
+
 from connectors_sdk.filtering.validation import (
     AdvancedRulesValidator,
     SyncRuleValidationResult,
@@ -37,9 +39,7 @@ from connectors.access_control import (
 from connectors.utils import (
     HTTPS_URL_PATTERN,
     CancellableSleeps,
-    RetryStrategy,
     decode_base64_value,
-    retryable,
     ssl_context,
 )
 
@@ -727,10 +727,10 @@ class GitHubClient:
         self._installation_id = installation_id
         await self._update_installation_access_token()
 
-    @retryable(
-        retries=RETRIES,
-        interval=RETRY_INTERVAL,
-        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    @retry(
+        stop=stop_after_attempt(RETRIES),
+        wait=wait_exponential(multiplier=1, exp_base=RETRY_INTERVAL),
+        reraise=True,
     )
     async def _update_installation_access_token(self):
         try:
@@ -768,11 +768,11 @@ class GitHubClient:
             base_url=self.base_url,
         )
 
-    @retryable(
-        retries=RETRIES,
-        interval=RETRY_INTERVAL,
-        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
-        skipped_exceptions=UnauthorizedException,
+    @retry(
+        stop=stop_after_attempt(RETRIES),
+        wait=wait_exponential(multiplier=1, exp_base=RETRY_INTERVAL),
+        reraise=True,
+        retry=retry_unless_exception_type(UnauthorizedException),
     )
     async def graphql(
         self,
@@ -847,11 +847,11 @@ class GitHubClient:
             )
             raise
 
-    @retryable(
-        retries=RETRIES,
-        interval=RETRY_INTERVAL,
-        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
-        skipped_exceptions=UnauthorizedException,
+    @retry(
+        stop=stop_after_attempt(RETRIES),
+        wait=wait_exponential(multiplier=1, exp_base=RETRY_INTERVAL),
+        reraise=True,
+        retry=retry_unless_exception_type(UnauthorizedException),
     )
     async def get_github_item(self, resource):
         """Execute request using getitem method of GitHubAPI which is using REST API.
@@ -914,11 +914,11 @@ class GitHubClient:
     def get_repo_details(self, repo_name):
         return repo_name.split("/")
 
-    @retryable(
-        retries=RETRIES,
-        interval=RETRY_INTERVAL,
-        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
-        skipped_exceptions=UnauthorizedException,
+    @retry(
+        stop=stop_after_attempt(RETRIES),
+        wait=wait_exponential(multiplier=1, exp_base=RETRY_INTERVAL),
+        reraise=True,
+        retry=retry_unless_exception_type(UnauthorizedException),
     )
     async def get_personal_access_token_scopes(self):
         try:
@@ -948,10 +948,10 @@ class GitHubClient:
             else:
                 raise
 
-    @retryable(
-        retries=RETRIES,
-        interval=RETRY_INTERVAL,
-        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    @retry(
+        stop=stop_after_attempt(RETRIES),
+        wait=wait_exponential(multiplier=1, exp_base=RETRY_INTERVAL),
+        reraise=True,
     )
     async def _github_app_get(self, url):
         self._logger.debug(f"Making a get request to GitHub: {url}")

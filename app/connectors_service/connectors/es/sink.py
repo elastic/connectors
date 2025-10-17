@@ -23,6 +23,7 @@ import copy
 import functools
 import logging
 import time
+from tenacity import retry, stop_after_attempt, wait_fixed
 
 from connectors_sdk.filtering.basic_rule import BasicRuleEngine, parse
 from connectors_sdk.filtering.validation import Filter
@@ -57,7 +58,6 @@ from connectors.utils import (
     MemQueue,
     aenumerate,
     get_size,
-    retryable,
     sanitize,
 )
 
@@ -185,7 +185,7 @@ class Sink:
     @tracer.start_as_current_span("_bulk API call", slow_log=1.0)
     async def _batch_bulk(self, operations, stats):
         # TODO: make this retry policy work with unified retry strategy
-        @retryable(retries=self.max_retires, interval=self.retry_interval)
+        @retry(stop=stop_after_attempt(self.max_retires), wait=wait_fixed(self.retry_interval), reraise=True)
         async def _bulk_api_call():
             return await self.client.client.bulk(
                 operations=operations, pipeline=self.pipeline["name"]

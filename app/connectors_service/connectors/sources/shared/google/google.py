@@ -10,10 +10,10 @@ from enum import Enum
 from aiogoogle import Aiogoogle, AuthError, HTTPError
 from aiogoogle.auth.creds import ServiceAccountCreds
 from aiogoogle.sessions.aiohttp_session import AiohttpSession
+from tenacity import retry, stop_after_attempt, wait_exponential
+
 from connectors_sdk.logger import logger
 from connectors_sdk.source import ConfigurableFieldValueError
-
-from connectors.utils import RetryStrategy, retryable
 
 # Google Service Account JSON includes "universe_domain" key. That argument is not
 # supported in aiogoogle library in version 5.3.0. The "universe_domain" key is allowed in
@@ -52,10 +52,10 @@ class RetryableAiohttpSession(AiohttpSession):
     with exponential backoff before failing the request.
     """
 
-    @retryable(
-        retries=RETRIES,
-        interval=RETRY_INTERVAL,
-        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    @retry(
+        stop=stop_after_attempt(RETRIES),
+        wait=wait_exponential(multiplier=1, exp_base=RETRY_INTERVAL),
+        reraise=True,
     )
     async def send(self, *args, **kwargs):
         return await super().send(*args, **kwargs)

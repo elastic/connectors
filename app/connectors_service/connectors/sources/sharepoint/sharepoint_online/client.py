@@ -15,6 +15,8 @@ import aiohttp
 from aiohttp.client_exceptions import ClientPayloadError, ClientResponseError
 from aiohttp.client_reqrep import RequestInfo
 from azure.identity.aio import CertificateCredential
+from tenacity import retry, stop_after_attempt, wait_chain, wait_fixed
+
 from connectors_sdk.logger import logger
 from connectors_sdk.utils import nested_get_from_dict
 
@@ -35,7 +37,6 @@ from connectors.sources.sharepoint.sharepoint_online.constants import (
 from connectors.utils import (
     CacheWithTimeout,
     CancellableSleeps,
-    retryable,
     url_encode,
 )
 
@@ -189,7 +190,12 @@ class SecretAPIToken(MicrosoftSecurityToken):
 class GraphAPIToken(SecretAPIToken):
     """Token to connect to Microsoft Graph API endpoints."""
 
-    @retryable(retries=3)
+    @retry(
+        stop=stop_after_attempt(3),
+        # linear backoff
+        wait=wait_chain(*[wait_fixed(1 * i) for i in range(1, 4)]),
+        reraise=True,
+    )
     async def _fetch_token(self):
         """Fetch API token for usage with Graph API
 
@@ -214,7 +220,12 @@ class GraphAPIToken(SecretAPIToken):
 class SharepointRestAPIToken(SecretAPIToken):
     """Token to connect to Sharepoint REST API endpoints."""
 
-    @retryable(retries=DEFAULT_RETRY_COUNT)
+    @retry(
+        stop=stop_after_attempt(DEFAULT_RETRY_COUNT),
+        # linear backoff
+        wait=wait_chain(*[wait_fixed(1 * i) for i in range(1, DEFAULT_RETRY_COUNT + 1)]),
+        reraise=True,
+    )
     async def _fetch_token(self):
         """Fetch API token for usage with Sharepoint REST API
 
@@ -260,7 +271,12 @@ class EntraAPIToken(MicrosoftSecurityToken):
         self._private_key = private_key
         self._scope = scope
 
-    @retryable(retries=3)
+    @retry(
+        stop=stop_after_attempt(3),
+        # linear backoff
+        wait=wait_chain(*[wait_fixed(1 * i) for i in range(1, 4)]),
+        reraise=True,
+    )
     async def _fetch_token(self):
         """Fetch API token for usage with Graph API
 

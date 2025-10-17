@@ -23,9 +23,7 @@ from connectors.utils import (
     InvalidIndexNameError,
     MemQueue,
     NonBlockingBoundedSemaphore,
-    RetryStrategy,
     TooManyErrors,
-    UnknownRetryStrategyError,
     base64url_to_base64,
     decode_base64_value,
     deep_merge_dicts,
@@ -42,9 +40,7 @@ from connectors.utils import (
     iterable_batches_generator,
     next_run,
     parse_datetime_string,
-    retryable,
     ssl_context,
-    time_to_sleep_between_retries,
     truncate_id,
     url_encode,
     validate_email_address,
@@ -609,196 +605,6 @@ async def test_concurrent_tasks_join_raise_on_error():
     assert results[0] == 1
 
 
-class CustomException(Exception):
-    pass
-
-
-class CustomGeneratorException(Exception):
-    pass
-
-
-@pytest.mark.fail_slow(1)
-@pytest.mark.asyncio
-async def test_exponential_backoff_retry_async_generator():
-    mock_gen = Mock()
-    num_retries = 10
-
-    @retryable(
-        retries=num_retries,
-        interval=0,
-        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
-    )
-    async def raises_async_generator():
-        for _ in range(3):
-            mock_gen()
-            raise CustomGeneratorException()
-            yield 1
-
-    with pytest.raises(CustomGeneratorException):
-        async for _ in raises_async_generator():
-            pass
-
-    # retried 10 times
-    assert mock_gen.call_count == num_retries
-
-    # would lead to roughly ~ 50 seconds of retrying
-    @retryable(retries=10, interval=5, strategy=RetryStrategy.LINEAR_BACKOFF)
-    async def does_not_raise_async_generator():
-        for _ in range(3):
-            yield 1
-
-    # would fail, if retried once (retry_interval = 5 seconds). Explicit time boundary for this test: 1 second
-    items = []
-    async for item in does_not_raise_async_generator():
-        items.append(item)
-
-    assert items == [1, 1, 1]
-
-
-@pytest.mark.fail_slow(1)
-def test_exponential_backoff_retry_sync_function():
-    mock_func = Mock()
-    num_retries = 10
-
-    @retryable(
-        retries=num_retries,
-        interval=0,
-        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
-    )
-    def raises_function():
-        for _ in range(3):
-            mock_func()
-            raise CustomException()
-
-    with pytest.raises(CustomException):
-        for _ in raises_function():
-            pass
-
-    # retried 10 times
-    assert mock_func.call_count == num_retries
-
-    # would lead to roughly ~ 50 seconds of retrying
-    @retryable(retries=10, interval=5, strategy=RetryStrategy.LINEAR_BACKOFF)
-    def does_not_raise_function():
-        for _ in range(3):
-            yield 1
-
-    # would fail, if retried once (retry_interval = 5 seconds). Explicit time boundary for this test: 1 second
-    items = []
-    for item in does_not_raise_function():
-        items.append(item)
-
-    assert items == [1, 1, 1]
-
-
-@pytest.mark.fail_slow(1)
-@pytest.mark.asyncio
-async def test_exponential_backoff_retry_async_function():
-    mock_func = Mock()
-    num_retries = 10
-
-    @retryable(
-        retries=num_retries,
-        interval=0,
-        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
-    )
-    async def raises():
-        mock_func()
-        raise CustomException()
-
-    with pytest.raises(CustomException):
-        await raises()
-
-        # retried 10 times
-        assert mock_func.call_count == num_retries
-
-    # would lead to roughly ~ 50 seconds of retrying
-    @retryable(retries=10, interval=5, strategy=RetryStrategy.LINEAR_BACKOFF)
-    async def does_not_raise():
-        pass
-
-    # would fail, if retried once (retry_interval = 5 seconds). Explicit time boundary for this test: 1 second
-    await does_not_raise()
-
-
-@pytest.mark.parametrize(
-    "skipped_exceptions",
-    [CustomGeneratorException, [CustomGeneratorException, RuntimeError]],
-)
-@pytest.mark.asyncio
-async def test_skipped_exceptions_retry_async_generator(skipped_exceptions):
-    mock_gen = Mock()
-    num_retries = 10
-
-    @retryable(
-        retries=num_retries,
-        skipped_exceptions=skipped_exceptions,
-    )
-    async def raises_async_generator():
-        for _ in range(3):
-            mock_gen()
-            raise CustomGeneratorException()
-            yield 1
-
-    with pytest.raises(CustomGeneratorException):
-        async for _ in raises_async_generator():
-            pass
-
-    assert mock_gen.call_count == 1
-
-
-@pytest.mark.parametrize(
-    "skipped_exceptions", [CustomException, [CustomException, RuntimeError]]
-)
-@pytest.mark.asyncio
-async def test_skipped_exceptions_retry_async_function(skipped_exceptions):
-    mock_func = Mock()
-    num_retries = 10
-
-    @retryable(
-        retries=num_retries,
-        skipped_exceptions=skipped_exceptions,
-    )
-    async def raises():
-        mock_func()
-        raise CustomException()
-
-    with pytest.raises(CustomException):
-        await raises()
-
-        assert mock_func.call_count == 1
-
-
-@pytest.mark.parametrize(
-    "skipped_exceptions", [CustomException, [CustomException, RuntimeError]]
-)
-@pytest.mark.asyncio
-async def test_skipped_exceptions_retry_sync_function(skipped_exceptions):
-    mock_func = Mock()
-    num_retries = 10
-
-    @retryable(
-        retries=num_retries,
-        skipped_exceptions=skipped_exceptions,
-    )
-    def raises():
-        mock_func()
-        raise CustomException()
-
-    with pytest.raises(CustomException):
-        await raises()
-
-        assert mock_func.call_count == 1
-
-
-def test_retryable_not_implemented_error():
-    with pytest.raises(NotImplementedError):
-
-        @retryable()
-        class NotSupported:
-            pass
-
-
 class MockSSL:
     """This class contains methods which returns dummy ssl context"""
 
@@ -1063,29 +869,6 @@ def test_base64url_to_base64(base64url_encoded_value, base64_expected_value):
 )
 def test_validate_email_address(email_address, is_valid):
     assert validate_email_address(email_address) == is_valid
-
-
-@pytest.mark.parametrize(
-    "strategy, interval, retry, expected_sleep",
-    [
-        (RetryStrategy.CONSTANT, 10, 2, 10),  # Constant 10 seconds
-        (RetryStrategy.LINEAR_BACKOFF, 10, 0, 0),  # 10 * 0 = 0
-        (RetryStrategy.LINEAR_BACKOFF, 10, 1, 10),  # 10 * 1 = 10
-        (RetryStrategy.LINEAR_BACKOFF, 10, 2, 20),  # 10 * 2 = 20
-        (RetryStrategy.EXPONENTIAL_BACKOFF, 10, 0, 1),  # 10 ^ 0 = 1
-        (RetryStrategy.EXPONENTIAL_BACKOFF, 10, 1, 10),  # 10 ^ 1 = 10
-        (RetryStrategy.EXPONENTIAL_BACKOFF, 10, 2, 100),  # 10 ^ 2 = 100
-    ],
-)
-async def test_time_to_sleep_between_retries(strategy, interval, retry, expected_sleep):
-    assert time_to_sleep_between_retries(strategy, interval, retry) == expected_sleep
-
-
-async def test_time_to_sleep_between_retries_invalid_strategy():
-    with pytest.raises(UnknownRetryStrategyError) as e:
-        time_to_sleep_between_retries("lalala", 1, 1)
-
-    assert e is not None
 
 
 @pytest.mark.parametrize(

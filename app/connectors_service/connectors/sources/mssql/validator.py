@@ -5,6 +5,8 @@
 #
 
 import fastjsonschema
+from tenacity import retry, stop_after_attempt, wait_exponential
+
 from connectors_sdk.filtering.validation import (
     AdvancedRulesValidator,
     SyncRuleValidationResult,
@@ -14,7 +16,6 @@ from connectors.sources.shared.database.generic_database import (
     DEFAULT_RETRY_COUNT,
     DEFAULT_WAIT_MULTIPLIER,
 )
-from connectors.utils import RetryStrategy, retryable
 
 
 class MSSQLAdvancedRulesValidator(AdvancedRulesValidator):
@@ -44,10 +45,10 @@ class MSSQLAdvancedRulesValidator(AdvancedRulesValidator):
 
         return await self._remote_validation(advanced_rules)
 
-    @retryable(
-        retries=DEFAULT_RETRY_COUNT,
-        interval=DEFAULT_WAIT_MULTIPLIER,
-        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    @retry(
+        stop=stop_after_attempt(DEFAULT_RETRY_COUNT),
+        wait=wait_exponential(multiplier=1, exp_base=DEFAULT_WAIT_MULTIPLIER),
+        reraise=True,
     )
     async def _remote_validation(self, advanced_rules):
         try:

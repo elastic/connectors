@@ -9,6 +9,8 @@ from collections import deque
 from functools import cached_property, partial
 
 import requests.exceptions
+from tenacity import stop_after_attempt, wait_exponential, retry, retry_unless_exception_type
+
 from connectors_sdk.source import BaseDataSource, ConfigurableFieldValueError
 from connectors_sdk.utils import iso_utc
 from smbprotocol.exceptions import (
@@ -33,10 +35,6 @@ from connectors.sources.network_drive.netdrive import (
     SecurityInfo,
     SMBSession,
     smbclient,
-)
-from connectors.utils import (
-    RetryStrategy,
-    retryable,
 )
 
 ACCESS_ALLOWED_TYPE = 0
@@ -176,11 +174,11 @@ class NASDataSource(BaseDataSource):
         }
         return document
 
-    @retryable(
-        retries=RETRIES,
-        interval=RETRY_INTERVAL,
-        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
-        skipped_exceptions=[SMBOSError, SMBException],
+    @retry(
+        stop=stop_after_attempt(RETRIES),
+        wait=wait_exponential(multiplier=1, exp_base=RETRY_INTERVAL),
+        reraise=True,
+        retry=retry_unless_exception_type((SMBOSError, SMBException)),
     )
     async def traverse_diretory(self, path):
         self._logger.debug(
@@ -235,11 +233,11 @@ class NASDataSource(BaseDataSource):
                     break
         return match_with_previous_rules
 
-    @retryable(
-        retries=RETRIES,
-        interval=RETRY_INTERVAL,
-        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
-        skipped_exceptions=[SMBOSError, SMBException],
+    @retry(
+        stop=stop_after_attempt(RETRIES),
+        wait=wait_exponential(multiplier=1, exp_base=RETRY_INTERVAL),
+        reraise=True,
+        retry=retry_unless_exception_type((SMBOSError, SMBException)),
     )
     async def traverse_directory_for_syncrule(self, path, glob_pattern, indexed_rules):
         self._logger.debug(

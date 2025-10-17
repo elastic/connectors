@@ -16,6 +16,8 @@ from aiohttp.client_exceptions import (
     ClientResponseError,
     ServerConnectionError,
 )
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_unless_exception_type
+
 from connectors_sdk.logger import logger
 from wcmatch import glob
 
@@ -38,8 +40,6 @@ from connectors.sources.onedrive.constants import (
 from connectors.utils import (
     CacheWithTimeout,
     CancellableSleeps,
-    RetryStrategy,
-    retryable,
 )
 
 
@@ -99,10 +99,10 @@ class AccessToken:
                     raise TokenRetrievalError(msg) from e
         return self.access_token
 
-    @retryable(
-        retries=RETRIES,
-        interval=RETRY_INTERVAL,
-        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    @retry(
+        stop=stop_after_attempt(RETRIES),
+        wait=wait_exponential(multiplier=1, exp_base=RETRY_INTERVAL),
+        reraise=True,
     )
     async def _set_access_token(self):
         """Generate access token with configuration fields and stores it in the cache"""
@@ -161,11 +161,11 @@ class OneDriveClient:
         await self.session.close()
         del self.session
 
-    @retryable(
-        retries=RETRIES,
-        interval=RETRY_INTERVAL,
-        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
-        skipped_exceptions=NotFound,
+    @retry(
+        stop=stop_after_attempt(RETRIES),
+        wait=wait_exponential(multiplier=1, exp_base=RETRY_INTERVAL),
+        reraise=True,
+        retry=retry_unless_exception_type(NotFound),
     )
     async def get(self, url, header=None):
         access_token = await self.token.get()
@@ -181,11 +181,11 @@ class OneDriveClient:
         except ClientResponseError as e:
             await self._handle_client_side_errors(e)
 
-    @retryable(
-        retries=RETRIES,
-        interval=RETRY_INTERVAL,
-        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
-        skipped_exceptions=NotFound,
+    @retry(
+        stop=stop_after_attempt(RETRIES),
+        wait=wait_exponential(multiplier=1, exp_base=RETRY_INTERVAL),
+        reraise=True,
+        retry=retry_unless_exception_type(NotFound),
     )
     async def post(self, url, payload=None):
         access_token = await self.token.get()

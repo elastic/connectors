@@ -13,6 +13,8 @@ from urllib import parse
 
 import aiohttp
 from aiohttp.client_exceptions import ClientResponseError, ServerDisconnectedError
+from tenacity import retry, stop_after_attempt, wait_exponential
+
 from connectors_sdk.logger import logger
 
 from connectors.sources.dropbox.common import (
@@ -35,10 +37,8 @@ from connectors.sources.dropbox.common import (
 )
 from connectors.utils import (
     CancellableSleeps,
-    RetryStrategy,
     evaluate_timedelta,
     is_expired,
-    retryable,
 )
 
 if "RUNNING_FTEST" in os.environ:
@@ -83,10 +83,10 @@ class DropboxClient:
     def set_logger(self, logger_):
         self._logger = logger_
 
-    @retryable(
-        retries=RETRY_COUNT,
-        interval=RETRY_INTERVAL,
-        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    @retry(
+        stop=stop_after_attempt(RETRY_COUNT),
+        wait=wait_exponential(multiplier=1, exp_base=RETRY_INTERVAL),
+        reraise=True,
     )
     async def _set_access_token(self):
         if self.token_expiration_time and (

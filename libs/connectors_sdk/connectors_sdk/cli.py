@@ -4,10 +4,10 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 from pathlib import Path
-from typing_extensions import Annotated
 
-from copier import run_copy, run_update
 import typer
+from copier import run_copy, run_update
+from typing_extensions import Annotated
 
 app = typer.Typer(
     no_args_is_help=True,
@@ -15,10 +15,12 @@ app = typer.Typer(
     epilog="Made with :heart: at [blue]Elastic[/blue]",
 )
 
+
 @app.command()
 def docs():
    print("Opening documentation...")
    typer.launch("https://www.elastic.co/docs/reference/search-connectors")
+
 
 @app.command()
 def create(
@@ -30,6 +32,7 @@ def create(
     run_copy(src_path=str(src_path), dst_path=dest_path)
     print(f"Data source created at: {dest_path}")
 
+
 @app.command()
 def update(
     source_name: Annotated[str, typer.Argument(help="Name of the data source")],
@@ -37,7 +40,8 @@ def update(
 ):
     print("Updating data source")
     dest_path = (path or Path.cwd()) / source_name
-    run_update(dst_path=dest_path, src_path = str(Path(__file__).parent / "template"))
+    run_update(dst_path=dest_path, src_path=str(Path(__file__).parent / "template"))
+
 
 if __name__ == "__main__":
     app()
