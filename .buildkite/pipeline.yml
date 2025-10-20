@@ -370,7 +370,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/github.py"
+            - "connectors/sources/github/**"
             - "tests/sources/fixtures/github/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
@@ -446,7 +446,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/salesforce.py"
+            - "connectors/sources/salesforce/**"
             - "tests/sources/fixtures/salesforce/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
@@ -579,7 +579,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/sandfly.py"
+            - "connectors/sources/sandfly/**"
             - "tests/sources/fixtures/sandfly/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
