@@ -962,7 +962,7 @@ async def test_validate_config_with_extra_scopes_token(patch_logger):
         )
         await source.validate_config()
         patch_logger.assert_present(
-            "The provided token has higher privileges than required. It is advisable to run the connector with least privielged token. Required scopes are 'repo', 'user', and 'read:org'."
+            "The provided token has higher privileges than required. It is advisable to run the connector with least privileged token. Required scopes are 'repo', 'user', and 'read:org'."
         )
 
 
