@@ -33,7 +33,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 MarkupSafe
 3.0.3
-UNKNOWN
+BSD-3-Clause
 Copyright 2010 Pallets
 
 Redistribution and use in source and binary forms, with or without
@@ -862,7 +862,7 @@ SOFTWARE.
 
 attrs
 25.4.0
-UNKNOWN
+MIT
 The MIT License (MIT)
 
 Copyright (c) 2015 Hynek Schlawack and the attrs contributors
@@ -1095,7 +1095,7 @@ Apache Software License
 
 build
 1.3.0
-UNKNOWN
+MIT
 Copyright © 2019 Filipe Laíns <filipe.lains@gmail.com>
 
 Permission is hereby granted, free of charge, to any person obtaining a
@@ -1120,7 +1120,7 @@ DEALINGS IN THE SOFTWARE.
 
 click
 8.3.0
-UNKNOWN
+BSD-3-Clause
 Copyright 2014 Pallets
 
 Redistribution and use in source and binary forms, with or without
@@ -1517,7 +1517,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 idna
 3.11
-UNKNOWN
+BSD-3-Clause
 BSD 3-Clause License
 
 Copyright (c) 2013-2025, Kim Davies and contributors.
@@ -2090,7 +2090,7 @@ Exhibit B - "Incompatible With Secondary Licenses" Notice
 
 platformdirs
 4.5.0
-MIT License
+MIT
 MIT License
 
 Copyright (c) 2010-202x The platformdirs developers
@@ -2378,8 +2378,8 @@ Apache Software License
 
 
 pydantic
-2.12.2
-UNKNOWN
+2.12.3
+MIT
 The MIT License (MIT)
 
 Copyright (c) 2017 to present Pydantic Services Inc. and individual contributors.
@@ -2405,7 +2405,7 @@ SOFTWARE.
 
 pydantic_core
 2.41.4
-UNKNOWN
+MIT
 The MIT License (MIT)
 
 Copyright (c) 2022 Samuel Colvin
@@ -2549,7 +2549,7 @@ THE SOFTWARE.
 
 typing-inspection
 0.4.2
-UNKNOWN
+MIT
 MIT License
 
 Copyright (c) Pydantic Services Inc. 2025 to present
@@ -2575,7 +2575,7 @@ SOFTWARE.
 
 typing_extensions
 4.15.0
-UNKNOWN
+PSF-2.0
 A. HISTORY OF THE SOFTWARE
 ==========================
 
