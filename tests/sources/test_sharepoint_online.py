@@ -3106,13 +3106,14 @@ class TestSharepointOnlineDataSource:
             patch_sharepoint_client.site_collections.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_correct_tokens_are_set_when_certificates_are_used(
-        self
-    ):
+    async def test_correct_tokens_are_set_when_certificates_are_used(self):
         private_key = "opens_all_locks"
         certificate = "its_certified"
         async with create_spo_source(
-            auth_method="certificate", secret_value=None, private_key=private_key, certificate=certificate
+            auth_method="certificate",
+            secret_value=None,
+            private_key=private_key,
+            certificate=certificate,
         ) as source:
             client = source.client
 
