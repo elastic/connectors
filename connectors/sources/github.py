@@ -1645,7 +1645,7 @@ class GitHubDataSource(BaseDataSource):
             extra_scopes = scopes - required_scopes
             if extra_scopes:
                 self._logger.warning(
-                    "The provided token has higher privileges than required. It is advisable to run the connector with least privielged token. Required scopes are 'repo', 'user', and 'read:org'."
+                    "The provided token has higher privileges than required. It is advisable to run the connector with least privileged token. Required scopes are 'repo', 'user', and 'read:org'."
                 )
         else:
             msg = "Configured token does not have required rights to fetch the content. Required scopes are 'repo', 'user', and 'read:org'."
