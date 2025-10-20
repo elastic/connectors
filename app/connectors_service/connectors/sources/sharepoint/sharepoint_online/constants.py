@@ -72,3 +72,6 @@ VIEW_ROLE_TYPES = [
 
 # $expand param has a max of 20: see: https://developer.microsoft.com/en-us/graph/known-issues/?search=expand
 SPO_MAX_EXPAND_SIZE = 20
+
+# Exclude specific SharePoint paths entirely at the connector level (pre sync-rules)
+EXCLUDED_SHAREPOINT_PATH_SEGMENTS = ["/contentstorage/"]

@@ -7,7 +7,10 @@
 from datetime import datetime
 
 from connectors.access_control import prefix_identity
-from connectors.sources.sharepoint.sharepoint_online.constants import TIMESTAMP_FORMAT
+from connectors.sources.sharepoint.sharepoint_online.constants import (
+    EXCLUDED_SHAREPOINT_PATH_SEGMENTS,
+    TIMESTAMP_FORMAT,
+)
 
 
 class SyncCursorEmpty(Exception):
@@ -52,3 +55,12 @@ def _parse_created_date_time(created_date_time):
     if created_date_time is None:
         return None
     return datetime.strptime(created_date_time, TIMESTAMP_FORMAT)
+
+
+def _is_excluded_sharepoint_url(url: str) -> bool:
+    try:
+        return any(
+            segment in url.lower() for segment in EXCLUDED_SHAREPOINT_PATH_SEGMENTS
+        )
+    except Exception:
+        return False
