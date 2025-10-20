@@ -20,7 +20,7 @@ dependencies = [
 ]
 
 [project.entry-points."connectors_service.external_sources"]
-example_plugin = "{{ package_name }}:external_sources"
+{{ package_name }}_plugin = "{{ package_name }}:external_sources"
 
 [tool.setuptools]
 packages = ["{{ package_name }}"]

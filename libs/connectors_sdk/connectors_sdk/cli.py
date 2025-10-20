@@ -28,7 +28,6 @@ def create(
     src_path = Path(__file__).parent / "template"
     dest_path = path or Path.cwd()
     run_copy(src_path=str(src_path), dst_path=dest_path)
-    print(f"Data source created at: {dest_path}")
 
 @app.command()
 def update(

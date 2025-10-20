@@ -1,0 +1,2 @@
+include connectors_sdk/template
+include connectors_sdk/template/**
