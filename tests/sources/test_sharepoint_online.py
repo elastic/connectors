@@ -49,7 +49,7 @@ from connectors.sources.sharepoint_online import (
     _prefix_user,
     _prefix_user_id,
 )
-from connectors.utils import iso_utc
+from connectors.utils import ISO_ZULU_TIMESTAMP_FORMAT, iso_utc
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
 
@@ -234,6 +234,8 @@ async def create_spo_source(
     tenant_name="test",
     client_id="2",
     secret_value="3",
+    certificate=None,
+    private_key=None,
     auth_method="secret",
     site_collections=WILDCARD,
     use_document_level_security=False,
@@ -248,6 +250,8 @@ async def create_spo_source(
         tenant_id=tenant_id,
         client_id=client_id,
         secret_value=secret_value,
+        certificate=certificate,
+        private_key=private_key,
         tenant_name=tenant_name,
         site_collections=site_collections,
         use_document_level_security=use_document_level_security,
@@ -2991,15 +2995,63 @@ class TestSharepointOnlineDataSource:
         async with create_spo_source() as source:
             max_drive_item_age = 15
             drive_item = {
-                "name": "test",
-                "lastModifiedDateTime": str(
+                "name": "test.txt",
+                "@microsoft.graph.downloadUrl": "http://localhost/filename",
+                "lastModifiedDateTime": (
                     datetime.utcnow() - timedelta(days=max_drive_item_age + 1)
-                ),
+                ).strftime(ISO_ZULU_TIMESTAMP_FORMAT),
             }
 
             download_result = source.download_function(drive_item, max_drive_item_age)
 
             assert download_result is None
+
+    @pytest.mark.asyncio
+    async def test_download_function_for_file_with_no_lastModifiedDatetTime(self):
+        async with create_spo_source() as source:
+            max_drive_item_age = 15
+            drive_item = {
+                "name": "test.txt",
+                "@microsoft.graph.downloadUrl": "http://localhost/filename",
+            }
+
+            download_result = source.download_function(drive_item, max_drive_item_age)
+
+            assert download_result is None
+
+    @pytest.mark.asyncio
+    async def test_download_function_for_too_large_file(self):
+        async with create_spo_source() as source:
+            max_drive_item_age = 15
+            drive_item = {
+                "name": "test.txt",
+                "@microsoft.graph.downloadUrl": "http://localhost/filename",
+                "size": 5 * 1024 * 1024 * 1024,
+                "lastModifiedDateTime": (
+                    datetime.now(timezone.utc) - timedelta(days=max_drive_item_age - 5)
+                ).strftime(ISO_ZULU_TIMESTAMP_FORMAT),
+            }
+
+            download_result = source.download_function(drive_item, max_drive_item_age)
+
+            assert download_result is None
+
+    @pytest.mark.asyncio
+    async def test_download_function_for_recently_changed_file(self):
+        async with create_spo_source() as source:
+            max_drive_item_age = 15
+            drive_item = {
+                "name": "test.txt",
+                "@microsoft.graph.downloadUrl": "http://localhost/filename",
+                "size": 5000,
+                "lastModifiedDateTime": (
+                    datetime.now(timezone.utc) - timedelta(days=max_drive_item_age - 5)
+                ).strftime(ISO_ZULU_TIMESTAMP_FORMAT),
+            }
+
+            download_result = source.download_function(drive_item, max_drive_item_age)
+
+            assert download_result is not None
 
     def test_get_default_configuration(self):
         config = SharepointOnlineDataSource.get_default_configuration()
@@ -3052,6 +3104,20 @@ class TestSharepointOnlineDataSource:
             patch_sharepoint_client.graph_api_token.get.assert_awaited()
             patch_sharepoint_client.rest_api_token.get.assert_awaited()
             patch_sharepoint_client.site_collections.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_correct_tokens_are_set_when_certificates_are_used(
+        self
+    ):
+        private_key = "opens_all_locks"
+        certificate = "its_certified"
+        async with create_spo_source(
+            auth_method="certificate", secret_value=None, private_key=private_key, certificate=certificate
+        ) as source:
+            client = source.client
+
+            assert isinstance(client.graph_api_token, EntraAPIToken)
+            assert isinstance(client.rest_api_token, EntraAPIToken)
 
     @pytest.mark.asyncio
     async def test_validate_config_when_invalid_tenant(self, patch_sharepoint_client):
