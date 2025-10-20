@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "{{ package_name }}"
+version = "0.1.0"
+description = "Example Plugin {{ package_name }} for Elasticsearch Connectors Service"
+readme = "README.md"
+classifiers = [
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3 :: Only",
+]
+requires-python = ">=3.10,<3.12"
+dependencies = [
+    "elasticsearch-connectors-sdk",
+]
+
+[project.entry-points."connectors_service.external_sources"]
+example_plugin = "{{ package_name }}:external_sources"
+
+[tool.setuptools]
+packages = ["{{ package_name }}"]

@@ -5,6 +5,7 @@
 #
 
 import os
+from importlib.metadata import entry_points
 
 from connectors_sdk.logger import logger
 from envyaml import EnvYAML
@@ -13,6 +14,18 @@ DEFAULT_ELASTICSEARCH_MAX_RETRIES = 5
 DEFAULT_ELASTICSEARCH_RETRY_INTERVAL = 10
 
 DEFAULT_MAX_FILE_SIZE = 10485760  # 10MB
+
+
+def external_sources() -> dict[str, str]:  # entry point for plugins
+    return {}
+
+
+def get_all_sources() -> dict[str, str]:
+    external_sources_eps = entry_points(group="connectors_service.external_sources")
+    print(external_sources_eps)
+    external_source = external_sources_eps[0].load() if external_sources_eps else lambda x: {}
+    print(external_source)
+    return {**_default_config()["sources"], **external_source()}
 
 
 def load_config(config_file):

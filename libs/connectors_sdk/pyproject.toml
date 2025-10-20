@@ -44,6 +44,9 @@ tests = [
     "requests==2.32.4",
 ]
 
+[project.scripts]
+conn = "connectors_sdk.cli:app"
+
 [tool.setuptools]
 packages = ["connectors_sdk"]
 

@@ -20,17 +20,18 @@ source_name:
     type: str
     help: What is your source Python module name?
 
+source_type:
+    type: str
+    choices: ['core', 'experimental', 'plugin']
+    help: What type of connector are you building?
+
+# computed values
 package_name:
     type: str
-    default: "{{ value|lower|replace(' ', '_')|replace('-', '_') }}" # This computes the value
+    default: "{{ source_name|lower|replace(' ', '_')|replace('-', '_') }}" # This computes the value
     when: false # This makes sure it isn't asked nor stored
 
 class_name:
     type: str
     default: "{{ source_name|replace('_', ' ')|title|replace(' ', '') }}" # This computes the value
     when: false # This makes sure it isn't asked nor stored
-
-source_type:
-    type: str
-    choices: ['core', 'experimental', 'plugin']
-    help: What type of connector are you building?

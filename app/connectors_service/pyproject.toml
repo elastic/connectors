@@ -114,6 +114,8 @@ connectors = "connectors.connectors_cli:main"
 elastic-agent-connectors = "connectors.agent.cli:main"
 test-connectors = "scripts.testing.cli:main"
 
+[project.entry-points."connectors_service.external_sources"]
+
 [tool.setuptools]
 packages = ["connectors", "scripts"]
 
