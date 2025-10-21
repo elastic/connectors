@@ -3552,7 +3552,7 @@ UNKNOWN
 
 elasticsearch-connectors-sdk
 9.3.0
-Apache Software License
+UNKNOWN
 UNKNOWN
 
 envyaml
