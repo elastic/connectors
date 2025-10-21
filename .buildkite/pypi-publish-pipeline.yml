@@ -53,14 +53,11 @@ steps:
           image: family/enterprise-search-ubuntu-2204-connectors-py
         matrix:
           setup:
-            python_version:
-              - "3.10"
-              - "3.11"
             package_path:
               - "${SERVICE_PACKAGE_PATH}"
               - "${SDK_PACKAGE_PATH}"
         env:
-          PYTHON_VERSION: "{{ matrix.python_version }}"
+          PYTHON_VERSION: "3.11"
           PACKAGE_PATH: "{{ matrix.package_path }}"
         commands: "TEST_PYPI=1 ./buildkite/publish_to_pypi.sh"
 
@@ -84,13 +81,10 @@ steps:
           image: family/enterprise-search-ubuntu-2204-connectors-py
         matrix:
           setup:
-            python_version:
-              - "3.10"
-              - "3.11"
             package_path:
               - "${SERVICE_PACKAGE_PATH}"
               - "${SDK_PACKAGE_PATH}"
         env:
-          PYTHON_VERSION: "{{ matrix.python_version }}"
+          PYTHON_VERSION: "3.11"
           PACKAGE_PATH: "{{ matrix.package_path }}"
         commands: ".buildkite/publish_to_pypi.sh"
