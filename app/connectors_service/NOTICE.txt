@@ -3551,8 +3551,8 @@ UNKNOWN
 UNKNOWN
 
 elasticsearch-connectors-sdk
-9.2.0
-UNKNOWN
+9.3.0
+Apache Software License
 UNKNOWN
 
 envyaml

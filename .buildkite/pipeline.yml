@@ -85,7 +85,7 @@ steps:
         wait: false
         watch:
           - path:
-            - "connectors/sources/mysql.py"
+            - "connectors/sources/mysql/**"
             - "tests/sources/fixtures/mysql/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
@@ -104,7 +104,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/network_drive.py"
+            - "connectors/sources/network_drive/**"
             - "tests/sources/fixtures/network_drive/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
@@ -123,7 +123,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/s3.py"
+            - "connectors/sources/s3/**"
             - "tests/sources/fixtures/s3/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
@@ -142,7 +142,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/google_cloud_storage.py"
+            - "connectors/sources/google_cloud_storage/**"
             - "tests/sources/fixtures/google_cloud_storage/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
@@ -161,7 +161,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/azure_blob_storage.py"
+            - "connectors/sources/azure_blob_storage/**"
             - "tests/sources/fixtures/azure_blob_storage/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
@@ -180,7 +180,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/postgresql.py"
+            - "connectors/sources/postgresql/**"
             - "tests/sources/fixtures/postgresql/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
@@ -199,7 +199,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/directory.py"
+            - "connectors/sources/directory/**"
             - "tests/sources/fixtures/dir/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
@@ -218,7 +218,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/oracle.py"
+            - "connectors/sources/oracle/**"
             - "tests/sources/fixtures/oracle/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
@@ -237,7 +237,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/sharepoint_server.py"
+            - "connectors/sources/sharepoint/sharepoint_server/**"
             - "tests/sources/fixtures/sharepoint_server/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
@@ -256,7 +256,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/sharepoint_online.py"
+            - "connectors/sources/sharepoint/sharepoint_online/**"
             - "tests/sources/fixtures/sharepoint_online/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
@@ -275,7 +275,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/mssql.py"
+            - "connectors/sources/mssql/**"
             - "tests/sources/fixtures/mssql/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
@@ -294,8 +294,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/jira.py"
-            - "connectors/sources/atlassian.py"
+            - "connectors/sources/atlassian/**"
             - "tests/sources/fixtures/jira/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
@@ -314,8 +313,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/confluence.py"
-            - "connectors/sources/atlassian.py"
+            - "connectors/sources/atlassian/**"
             - "tests/sources/fixtures/confluence/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
@@ -353,7 +351,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/mongo.py"
+            - "connectors/sources/mongo/**"
             - "tests/sources/fixtures/mongodb/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
@@ -372,7 +370,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/github.py"
+            - "connectors/sources/github/**"
             - "tests/sources/fixtures/github/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
@@ -391,7 +389,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/google_drive.py"
+            - "connectors/sources/google_drive/**"
             - "tests/sources/fixtures/google_drive/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
@@ -429,7 +427,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/onedrive.py"
+            - "connectors/sources/onedrive/**"
             - "tests/sources/fixtures/onedrive/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
@@ -448,7 +446,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/salesforce.py"
+            - "connectors/sources/salesforce/**"
             - "tests/sources/fixtures/salesforce/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
@@ -467,7 +465,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/zoom.py"
+            - "connectors/sources/zoom/**"
             - "tests/sources/fixtures/zoom/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
@@ -486,7 +484,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/box.py"
+            - "connectors/sources/box/**"
             - "tests/sources/fixtures/box/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
@@ -524,7 +522,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/notion.py"
+            - "connectors/sources/notion/**"
             - "tests/sources/fixtures/notion/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
@@ -543,7 +541,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/redis.py"
+            - "connectors/sources/redis/**"
             - "tests/sources/fixtures/redis/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
@@ -581,7 +579,7 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/sandfly.py"
+            - "connectors/sources/sandfly/**"
             - "tests/sources/fixtures/sandfly/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
@@ -624,7 +622,7 @@ steps:
   # ----
   - group: ":truck: Packaging and DRA"
     key: "mbp_dra_group"
-    if: "(build.branch == \"main\" || build.branch == \"9.1\" || build.branch == \"9.0\" || build.branch == \"8.19\" || build.branch == \"8.18\" || build.branch == \"8.17\" || build.pull_request.labels includes \"ci:packaging\")" # Add new maintenance branches here
+    if: "(build.branch == \"main\" || build.branch == \"9.2\" || build.branch == \"9.1\" || build.branch == \"9.0\" || build.branch == \"8.19\" || build.branch == \"8.18\" || build.pull_request.labels includes \"ci:packaging\")" # Add new maintenance branches here
     depends_on:
       - "lint"
       - "unit_tests"

@@ -15,11 +15,15 @@ from connectors_sdk.source import (
 )
 
 from connectors.sources.sandfly import (
-    CURSOR_SEQUENCE_ID_KEY,
-    FetchTokenError,
-    ResourceNotFound,
     SandflyClient,
     SandflyDataSource,
+)
+from connectors.sources.sandfly.client import (
+    FetchTokenError,
+    ResourceNotFound,
+)
+from connectors.sources.sandfly.datasource import (
+    CURSOR_SEQUENCE_ID_KEY,
     SandflyLicenseExpired,
     SandflyNotLicensed,
     SyncCursorEmpty,

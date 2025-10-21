@@ -15,13 +15,9 @@ from connectors_sdk.source import ConfigurableFieldValueError
 from connectors_sdk.utils import Features, iso_utc
 from freezegun import freeze_time
 
-from connectors.sources.gmail import (
-    ACCESS_CONTROL,
-    GMailAdvancedRulesValidator,
-    GMailDataSource,
-    _message_doc,
-)
-from connectors.sources.google import MessageFields, UserFields
+from connectors.access_control import ACCESS_CONTROL
+from connectors.sources.gmail import GMailAdvancedRulesValidator, GMailDataSource
+from connectors.sources.shared.google import MessageFields, UserFields
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
 
@@ -114,37 +110,6 @@ FULL_MESSAGE = "some message"
 CREATION_DATE = "2023-01-01T13:37:00"
 
 
-@pytest.mark.parametrize(
-    "message, expected_doc",
-    [
-        (
-            {"id": MESSAGE_ID, "raw": FULL_MESSAGE, "internalDate": CREATION_DATE},
-            {
-                "_id": MESSAGE_ID,
-                "_attachment": FULL_MESSAGE,
-                "_timestamp": CREATION_DATE,
-            },
-        ),
-        (
-            {"id": None, "raw": FULL_MESSAGE, "internalDate": CREATION_DATE},
-            {"_id": None, "_attachment": FULL_MESSAGE, "_timestamp": CREATION_DATE},
-        ),
-        (
-            {"id": MESSAGE_ID, "raw": None, "internalDate": CREATION_DATE},
-            {"_id": MESSAGE_ID, "_attachment": None, "_timestamp": CREATION_DATE},
-        ),
-        (
-            # timestamp is added, if it's `None`
-            {"id": MESSAGE_ID, "raw": FULL_MESSAGE, "internalDate": None},
-            {"_id": MESSAGE_ID, "_attachment": FULL_MESSAGE, "_timestamp": DATE},
-        ),
-    ],
-)
-@freeze_time(DATE)
-def test_message_doc(message, expected_doc):
-    assert _message_doc(message) == expected_doc
-
-
 async def setup_messages_and_users_apis(
     patch_gmail_client, patch_google_directory_client, messages, users
 ):
@@ -157,7 +122,7 @@ class TestGMailDataSource:
     @pytest_asyncio.fixture
     async def patch_gmail_client(self):
         with patch(
-            "connectors.sources.gmail.GMailClient", return_value=AsyncMock()
+            "connectors.sources.gmail.datasource.GMailClient", return_value=AsyncMock()
         ) as mock:
             client = mock.return_value
             yield client
@@ -165,10 +130,42 @@ class TestGMailDataSource:
     @pytest_asyncio.fixture
     async def patch_google_directory_client(self):
         with patch(
-            "connectors.sources.gmail.GoogleDirectoryClient", return_value=AsyncMock()
+            "connectors.sources.gmail.datasource.GoogleDirectoryClient",
+            return_value=AsyncMock(),
         ) as mock:
             client = mock.return_value
             yield client
+
+    # @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "message, expected_doc",
+        [
+            (
+                {"id": MESSAGE_ID, "raw": FULL_MESSAGE, "internalDate": CREATION_DATE},
+                {
+                    "_id": MESSAGE_ID,
+                    "_attachment": FULL_MESSAGE,
+                    "_timestamp": CREATION_DATE,
+                },
+            ),
+            (
+                {"id": None, "raw": FULL_MESSAGE, "internalDate": CREATION_DATE},
+                {"_id": None, "_attachment": FULL_MESSAGE, "_timestamp": CREATION_DATE},
+            ),
+            (
+                {"id": MESSAGE_ID, "raw": None, "internalDate": CREATION_DATE},
+                {"_id": MESSAGE_ID, "_attachment": None, "_timestamp": CREATION_DATE},
+            ),
+            (
+                # timestamp is added, if it's `None`
+                {"id": MESSAGE_ID, "raw": FULL_MESSAGE, "internalDate": None},
+                {"_id": MESSAGE_ID, "_attachment": FULL_MESSAGE, "_timestamp": DATE},
+            ),
+        ],
+    )
+    @freeze_time(DATE)
+    async def test_message_doc(self, message, expected_doc):
+        assert GMailDataSource._message_doc(message) == expected_doc
 
     @pytest.mark.asyncio
     async def test_ping_successful(

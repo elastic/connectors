@@ -1,0 +1,308 @@
+#
+# Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+# or more contributor license agreements. Licensed under the Elastic License 2.0;
+# you may not use this file except in compliance with the Elastic License 2.0.
+#
+import re
+
+import aiomysql
+from connectors_sdk.utils import iso_utc
+
+from connectors.sources.mysql.common import (
+    DEFAULT_FETCH_SIZE,
+    MAX_POOL_SIZE,
+    RETRIES,
+    RETRY_INTERVAL,
+)
+from connectors.utils import (
+    CancellableSleeps,
+    RetryStrategy,
+    retryable,
+    ssl_context,
+)
+
+
+class MySQLClient:
+    def __init__(
+        self,
+        host,
+        port,
+        user,
+        password,
+        ssl_enabled,
+        ssl_certificate,
+        logger_,
+        database=None,
+        max_pool_size=MAX_POOL_SIZE,
+        fetch_size=DEFAULT_FETCH_SIZE,
+    ):
+        self.host = host
+        self.port = port
+        self.user = user
+        self.password = password
+        self.database = database
+        self.max_pool_size = max_pool_size
+        self.fetch_size = fetch_size
+        self.ssl_enabled = ssl_enabled
+        self.ssl_certificate = ssl_certificate
+        self.connection_pool = None
+        self.connection = None
+        self._logger = logger_
+
+    async def __aenter__(self):
+        connection_string = {
+            "host": self.host,
+            "port": int(self.port),
+            "user": self.user,
+            "password": self.password,
+            "db": self.database,
+            "maxsize": self.max_pool_size,
+            "ssl": ssl_context(certificate=self.ssl_certificate)
+            if self.ssl_enabled
+            else None,
+        }
+        self.connection_pool = await aiomysql.create_pool(**connection_string)
+        self.connection = await self.connection_pool.acquire()
+
+        self._sleeps = CancellableSleeps()
+
+        return self
+
+    async def __aexit__(self, exception_type, exception_value, exception_traceback):
+        self._sleeps.cancel()
+
+        self.connection_pool.release(self.connection)
+        self.connection_pool.close()
+        await self.connection_pool.wait_closed()
+
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    )
+    async def get_all_table_names(self):
+        async with self.connection.cursor(aiomysql.cursors.SSCursor) as cursor:
+            await cursor.execute(
+                f"SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '{self.database}'"
+            )
+            return [table[0] for table in await cursor.fetchall()]
+
+    async def ping(self):
+        try:
+            await self.connection.ping()
+            self._logger.info("Successfully connected to the MySQL Server.")
+        except Exception:
+            self._logger.exception("Error while connecting to the MySQL Server.")
+            raise
+
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    )
+    async def get_column_names_for_query(self, query):
+        async with self.connection.cursor(aiomysql.cursors.SSCursor) as cursor:
+            await cursor.execute(f"SELECT q.* FROM ({query}) as q LIMIT 0")
+
+            return [f"{column[0]}" for column in cursor.description]
+
+    async def get_column_names_for_table(self, table):
+        return await self.get_column_names_for_query(
+            f"SELECT * FROM `{self.database}`.`{table}`"
+        )
+
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    )
+    async def get_primary_key_column_names(self, table):
+        async with self.connection.cursor(aiomysql.cursors.SSCursor) as cursor:
+            await cursor.execute(
+                f"SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = '{self.database}' AND TABLE_NAME = '{table}' AND COLUMN_KEY = 'PRI'"
+            )
+
+            return [f"{column[0]}" for column in await cursor.fetchall()]
+
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    )
+    async def get_last_update_time(self, table):
+        async with self.connection.cursor(aiomysql.cursors.SSCursor) as cursor:
+            await cursor.execute(
+                f"SELECT UPDATE_TIME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '{self.database}' AND TABLE_NAME = '{table}'"
+            )
+
+            result = await cursor.fetchone()
+
+            if result is not None:
+                return result[0]
+
+            return None
+
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    )
+    async def yield_rows_for_table(self, table, primary_keys):
+        last_primary_key_values = None
+        primary_keys_str = ", ".join(f"`{pk}`" for pk in primary_keys)
+
+        while True:
+            # Build WHERE clause for cursor-based pagination
+            where_clause = ""
+            params = []
+
+            if last_primary_key_values:
+                # For composite keys, we need a more sophisticated WHERE clause
+                # to handle cases like (a,b) > (last_a, last_b)
+                if len(primary_keys) == 1:
+                    # Simple case: single primary key
+                    where_clause = f"WHERE `{primary_keys[0]}` > %s"
+                    params = [last_primary_key_values[0]]
+                else:
+                    # Complex case: composite primary key using tuple comparison
+                    pk_tuple = f"({primary_keys_str})"
+                    param_tuple = f"({', '.join(['%s'] * len(primary_keys))})"
+                    # (a,b) > (last_a, last_b)
+                    where_clause = f"WHERE {pk_tuple} > {param_tuple}"
+                    params = last_primary_key_values
+
+            query = f"""
+                SELECT * FROM `{self.database}`.`{table}`
+                {where_clause}
+                ORDER BY {primary_keys_str}
+                LIMIT {self.fetch_size}
+            """
+            self._logger.debug(f"Running query: {query}")
+
+            batch_count = 0
+            async with self.connection.cursor(aiomysql.cursors.SSCursor) as cursor:
+                if params:
+                    self._logger.debug(f"Params: {params}")
+                    await cursor.execute(query, params)
+                else:
+                    await cursor.execute(query)
+
+                column_names = [desc[0] for desc in cursor.description]
+                pk_positions = [column_names.index(pk) for pk in primary_keys]
+
+                async for row in cursor:
+                    yield row
+                    # Update the cursor to this row's primary key values
+                    # Since we SELECT * and order by primary keys first,
+                    # we need to find the primary key values by column position
+                    last_primary_key_values = [row[pos] for pos in pk_positions]
+                    batch_count += 1
+
+            # If we got fewer rows than fetch_size, we've reached the end
+            if batch_count < self.fetch_size:
+                self._logger.debug(
+                    f"Fetched final batch of {batch_count} rows. Fetch size: {self.fetch_size}."
+                )
+                break
+
+    async def _get_table_row_count_for_query(self, query):
+        table_row_count_query = re.sub(
+            r"SELECT\s.*?\sFROM",
+            "SELECT COUNT(*) FROM",
+            query,
+            flags=re.IGNORECASE | re.DOTALL,
+        )
+        async with self.connection.cursor(aiomysql.cursors.SSCursor) as cursor:
+            await cursor.execute(table_row_count_query)
+            table_row_count = await cursor.fetchone()
+            return int(table_row_count[0])
+
+    def _update_query_with_pagination_attributes(
+        self, query, offset, primary_key_columns
+    ):
+        updated_query = ""
+        has_orderby = bool(re.search(r"\bORDER\s+BY\b", query, flags=re.IGNORECASE))
+        # Checking if custom query has a semicolon at the end or not
+        if query.endswith(";"):
+            query = query[:-1]
+        if has_orderby:
+            updated_query = f"{query} LIMIT {self.fetch_size} OFFSET {offset};"
+        else:
+            updated_query = f"{query} ORDER BY {', '.join(primary_key_columns)} LIMIT {self.fetch_size} OFFSET {offset};"
+
+        return updated_query
+
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    )
+    async def yield_rows_for_query(self, query, primary_key_columns):
+        table_row_count_for_query = await self._get_table_row_count_for_query(
+            query=query
+        )
+        offset = 0
+        while offset < table_row_count_for_query:
+            async for row in self._fetchmany_in_batches(
+                query=self._update_query_with_pagination_attributes(
+                    query=query, offset=offset, primary_key_columns=primary_key_columns
+                )
+            ):
+                if row:
+                    yield row
+                else:
+                    break
+            offset += self.fetch_size
+
+    async def _fetchmany_in_batches(self, query):
+        async with self.connection.cursor(aiomysql.cursors.SSCursor) as cursor:
+            await cursor.execute(query)
+
+            fetched_rows = 0
+            successful_batches = 0
+
+            try:
+                rows = await cursor.fetchall()
+
+                for row in rows:
+                    yield row
+
+                fetched_rows += len(rows)
+                successful_batches += 1
+
+                await self._sleeps.sleep(0)
+            except IndexError as e:
+                self._logger.exception(
+                    f"Fetched {fetched_rows} rows in {successful_batches} batches. Encountered exception {e} in batch {successful_batches + 1}."
+                )
+
+
+def row2doc(row, column_names, primary_key_columns, table, timestamp):
+    row = dict(zip(column_names, row, strict=True))
+    row.update(
+        {
+            "_id": generate_id(table, row, primary_key_columns),
+            "_timestamp": timestamp or iso_utc(),
+            "Table": table,
+        }
+    )
+
+    return row
+
+
+def generate_id(tables, row, primary_key_columns):
+    """Generates an id using table names as prefix in sorted order and primary key values.
+
+    Example:
+        tables: table1, table2
+        primary key values: 1, 42
+        table1_table2_1_42
+    """
+
+    if not isinstance(tables, list):
+        tables = [tables]
+
+    return (
+        f"{'_'.join(sorted(tables))}_"
+        f"{'_'.join([str(pk_value) for pk in primary_key_columns if (pk_value := row.get(pk)) is not None])}"
+    )

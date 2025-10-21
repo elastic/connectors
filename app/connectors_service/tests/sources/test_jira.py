@@ -20,16 +20,20 @@ from connectors_sdk.source import ConfigurableFieldValueError
 from freezegun import freeze_time
 
 from connectors.access_control import DLS_QUERY
-from connectors.sources.jira import (
-    JIRA_CLOUD,
-    JIRA_DATA_CENTER,
-    JIRA_SERVER,
+from connectors.sources.atlassian.jira import (
+    JiraClient,
+    JiraDataSource,
+)
+from connectors.sources.atlassian.jira.client import (
     EmptyResponseError,
     InternalServerError,
     InvalidJiraDataSourceTypeError,
-    JiraClient,
-    JiraDataSource,
     NotFound,
+)
+from connectors.sources.atlassian.jira.constants import (
+    JIRA_CLOUD,
+    JIRA_DATA_CENTER,
+    JIRA_SERVER,
 )
 from connectors.utils import ssl_context
 from tests.commons import AsyncIterator
@@ -572,7 +576,7 @@ async def test_get_with_429_status_without_retry_after_header():
     payload = {"value": "Test rate limit"}
 
     retried_response.__aenter__ = AsyncMock(return_value=JSONAsyncMock(payload))
-    with patch("connectors.sources.jira.DEFAULT_RETRY_SECONDS", 0):
+    with patch("connectors.sources.atlassian.jira.client.DEFAULT_RETRY_SECONDS", 0):
         async with create_jira_source() as source:
             with patch(
                 "aiohttp.ClientSession.get",
