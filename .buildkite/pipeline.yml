@@ -615,6 +615,9 @@ steps:
           PYTHON_VERSION: "{{ matrix.python_version }}"
           PACKAGE_PATH: "{{ matrix.package_path }}"
         command: ".buildkite/test_python_packages.sh"
+        artifact_paths:
+          - "{{ matrix.package_path }}/dist/*.whl"
+          - "{{ matrix.package_path }}/dist/*.tar.gz"
         timeout_in_minutes: 10
 
   # ----
