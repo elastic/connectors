@@ -18,7 +18,7 @@ import pytest_asyncio
 from aiohttp.client_exceptions import ClientPayloadError, ClientResponseError
 from connectors_sdk.logger import logger
 from connectors_sdk.source import ConfigurableFieldValueError
-from connectors_sdk.utils import Features, iso_utc, ISO_ZULU_TIMESTAMP_FORMAT
+from connectors_sdk.utils import ISO_ZULU_TIMESTAMP_FORMAT, Features, iso_utc
 from freezegun import freeze_time
 
 from connectors.access_control import ACCESS_CONTROL
