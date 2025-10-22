@@ -88,6 +88,8 @@ steps:
             - "app/connectors_service/connectors/sources/mysql/**"
             - "app/connectors_service/tests/sources/fixtures/mysql/**"
             - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "${DOCKERFILE_PATH}"
+            - "app/connectors_service/tests/Dockerfile.ftest"
             - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 MySQL"
@@ -106,6 +108,8 @@ steps:
             - "app/connectors_service/connectors/sources/network_drive/**"
             - "app/connectors_service/tests/sources/fixtures/network_drive/**"
             - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "${DOCKERFILE_PATH}"
+            - "app/connectors_service/tests/Dockerfile.ftest"
             - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 Network Drive"
@@ -124,6 +128,8 @@ steps:
             - "app/connectors_service/connectors/sources/s3/**"
             - "app/connectors_service/tests/sources/fixtures/s3/**"
             - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "${DOCKERFILE_PATH}"
+            - "app/connectors_service/tests/Dockerfile.ftest"
             - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 Amazon S3"
@@ -142,6 +148,8 @@ steps:
             - "app/connectors_service/connectors/sources/google_cloud_storage/**"
             - "app/connectors_service/tests/sources/fixtures/google_cloud_storage/**"
             - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "${DOCKERFILE_PATH}"
+            - "app/connectors_service/tests/Dockerfile.ftest"
             - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 Google Cloud Storage"
@@ -160,6 +168,8 @@ steps:
             - "app/connectors_service/connectors/sources/azure_blob_storage/**"
             - "app/connectors_service/tests/sources/fixtures/azure_blob_storage/**"
             - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "${DOCKERFILE_PATH}"
+            - "app/connectors_service/tests/Dockerfile.ftest"
             - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 Azure Blob Storage"
@@ -178,6 +188,8 @@ steps:
             - "app/connectors_service/connectors/sources/postgresql/**"
             - "app/connectors_service/tests/sources/fixtures/postgresql/**"
             - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "${DOCKERFILE_PATH}"
+            - "app/connectors_service/tests/Dockerfile.ftest"
             - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 Postgresql"
@@ -196,6 +208,8 @@ steps:
             - "app/connectors_service/connectors/sources/directory/**"
             - "app/connectors_service/tests/sources/fixtures/dir/**"
             - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "${DOCKERFILE_PATH}"
+            - "app/connectors_service/tests/Dockerfile.ftest"
             - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 System Directory"
@@ -214,6 +228,8 @@ steps:
             - "app/connectors_service/connectors/sources/oracle/**"
             - "app/connectors_service/tests/sources/fixtures/oracle/**"
             - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "${DOCKERFILE_PATH}"
+            - "app/connectors_service/tests/Dockerfile.ftest"
             - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 Oracle Database"
@@ -232,6 +248,8 @@ steps:
             - "app/connectors_service/connectors/sources/sharepoint/sharepoint_server/**"
             - "app/connectors_service/tests/sources/fixtures/sharepoint_server/**"
             - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "${DOCKERFILE_PATH}"
+            - "app/connectors_service/tests/Dockerfile.ftest"
             - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 Sharepoint Server"
@@ -250,6 +268,8 @@ steps:
             - "app/connectors_service/connectors/sources/sharepoint/sharepoint_online/**"
             - "app/connectors_service/tests/sources/fixtures/sharepoint_online/**"
             - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "${DOCKERFILE_PATH}"
+            - "app/connectors_service/tests/Dockerfile.ftest"
             - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 Sharepoint Online"
@@ -268,6 +288,8 @@ steps:
             - "app/connectors_service/connectors/sources/mssql/**"
             - "app/connectors_service/tests/sources/fixtures/mssql/**"
             - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "${DOCKERFILE_PATH}"
+            - "app/connectors_service/tests/Dockerfile.ftest"
             - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 Microsoft SQL"
@@ -286,6 +308,8 @@ steps:
             - "app/connectors_service/connectors/sources/atlassian/**"
             - "app/connectors_service/tests/sources/fixtures/jira/**"
             - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "${DOCKERFILE_PATH}"
+            - "app/connectors_service/tests/Dockerfile.ftest"
             - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 Jira"
@@ -304,6 +328,8 @@ steps:
             - "app/connectors_service/connectors/sources/atlassian/**"
             - "app/connectors_service/tests/sources/fixtures/confluence/**"
             - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "${DOCKERFILE_PATH}"
+            - "app/connectors_service/tests/Dockerfile.ftest"
             - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 Confluence"
@@ -322,6 +348,8 @@ steps:
             - "app/connectors_service/connectors/sources/servicenow.py"
             - "app/connectors_service/tests/sources/fixtures/servicenow/**"
             - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "${DOCKERFILE_PATH}"
+            - "app/connectors_service/tests/Dockerfile.ftest"
             - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 ServiceNow"
@@ -340,6 +368,8 @@ steps:
             - "app/connectors_service/connectors/sources/mongo/**"
             - "app/connectors_service/tests/sources/fixtures/mongodb/**"
             - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "${DOCKERFILE_PATH}"
+            - "app/connectors_service/tests/Dockerfile.ftest"
             - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 MongoDB"
@@ -358,6 +388,8 @@ steps:
             - "app/connectors_service/connectors/sources/github/**"
             - "app/connectors_service/tests/sources/fixtures/github/**"
             - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "${DOCKERFILE_PATH}"
+            - "app/connectors_service/tests/Dockerfile.ftest"
             - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 GitHub"
@@ -376,6 +408,8 @@ steps:
             - "app/connectors_service/connectors/sources/google_drive/**"
             - "app/connectors_service/tests/sources/fixtures/google_drive/**"
             - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "${DOCKERFILE_PATH}"
+            - "app/connectors_service/tests/Dockerfile.ftest"
             - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 Google Drive"
@@ -394,6 +428,8 @@ steps:
             - "app/connectors_service/connectors/sources/dropbox.py"
             - "app/connectors_service/tests/sources/fixtures/dropbox/**"
             - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "${DOCKERFILE_PATH}"
+            - "app/connectors_service/tests/Dockerfile.ftest"
             - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 Dropbox"
@@ -412,6 +448,8 @@ steps:
             - "app/connectors_service/connectors/sources/onedrive/**"
             - "app/connectors_service/tests/sources/fixtures/onedrive/**"
             - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "${DOCKERFILE_PATH}"
+            - "app/connectors_service/tests/Dockerfile.ftest"
             - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 OneDrive"
@@ -430,6 +468,8 @@ steps:
             - "app/connectors_service/connectors/sources/salesforce/**"
             - "app/connectors_service/tests/sources/fixtures/salesforce/**"
             - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "${DOCKERFILE_PATH}"
+            - "app/connectors_service/tests/Dockerfile.ftest"
             - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 Salesforce"
@@ -448,6 +488,8 @@ steps:
             - "app/connectors_service/connectors/sources/zoom/**"
             - "app/connectors_service/tests/sources/fixtures/zoom/**"
             - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "${DOCKERFILE_PATH}"
+            - "app/connectors_service/tests/Dockerfile.ftest"
             - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 Zoom"
@@ -466,6 +508,8 @@ steps:
             - "app/connectors_service/connectors/sources/box/**"
             - "app/connectors_service/tests/sources/fixtures/box/**"
             - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "${DOCKERFILE_PATH}"
+            - "app/connectors_service/tests/Dockerfile.ftest"
             - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 Box"
@@ -484,6 +528,8 @@ steps:
             - "app/connectors_service/connectors/sources/microsoft_teams.py"
             - "app/connectors_service/tests/sources/fixtures/microsoft_teams/**"
             - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "${DOCKERFILE_PATH}"
+            - "app/connectors_service/tests/Dockerfile.ftest"
             - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 Microsoft Teams"
@@ -502,6 +548,8 @@ steps:
             - "app/connectors_service/connectors/sources/notion/**"
             - "app/connectors_service/tests/sources/fixtures/notion/**"
             - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "${DOCKERFILE_PATH}"
+            - "app/connectors_service/tests/Dockerfile.ftest"
             - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 Notion"
@@ -520,6 +568,8 @@ steps:
             - "app/connectors_service/connectors/sources/redis/**"
             - "app/connectors_service/tests/sources/fixtures/redis/**"
             - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "${DOCKERFILE_PATH}"
+            - "app/connectors_service/tests/Dockerfile.ftest"
             - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 Redis"
@@ -538,6 +588,8 @@ steps:
             - "app/connectors_service/connectors/sources/graphql.py"
             - "app/connectors_service/tests/sources/fixtures/graphql/**"
             - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "${DOCKERFILE_PATH}"
+            - "app/connectors_service/tests/Dockerfile.ftest"
             - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 GraphQL"
@@ -556,6 +608,8 @@ steps:
             - "app/connectors_service/connectors/sources/sandfly/**"
             - "app/connectors_service/tests/sources/fixtures/sandfly/**"
             - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "${DOCKERFILE_PATH}"
+            - "app/connectors_service/tests/Dockerfile.ftest"
             - "requirements/**"
             config:
               label: "🔨 Sandfly"
