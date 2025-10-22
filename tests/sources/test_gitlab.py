@@ -2215,6 +2215,132 @@ class TestGitLabDataSourceIntegration:
         assert len(issue.labels.nodes) == 2
         assert len(issue.discussions.nodes) == 1
 
+    @pytest.mark.asyncio
+    async def test_extract_notes_with_multi_level_pagination(self, mock_configuration):
+        """Test complex nested pagination: multiple discussions each with paginated notes.
+
+        This tests the most complex scenario:
+        - Multiple discussions (Discussion 1 and Discussion 2)
+        - Each discussion has paginated notes (hasNextPage=True)
+        - Need to fetch remaining notes for EACH discussion separately
+        """
+        source = GitLabDataSource(configuration=mock_configuration)
+
+        # Create discussions with paginated notes inside
+        discussions = PaginatedList[GitLabDiscussion](
+            nodes=[
+                # Discussion 1: has 2 initial notes + more to fetch
+                GitLabDiscussion(
+                    id="gid://gitlab/Discussion/1",
+                    notes=PaginatedList[GitLabNote](
+                        nodes=[
+                            GitLabNote(
+                                id="note_1_1",
+                                body="Discussion 1, Note 1",
+                                created_at="2023-01-01T00:00:00Z",
+                                updated_at="2023-01-01T00:00:00Z",
+                                system=False,
+                                author=GitLabUser(username="user1"),
+                            ),
+                            GitLabNote(
+                                id="note_1_2",
+                                body="Discussion 1, Note 2",
+                                created_at="2023-01-01T01:00:00Z",
+                                updated_at="2023-01-01T01:00:00Z",
+                                system=False,
+                                author=GitLabUser(username="user2"),
+                            ),
+                        ],
+                        page_info=PageInfo(has_next_page=True, end_cursor="disc1_cursor"),
+                    ),
+                ),
+                # Discussion 2: has 1 initial note + more to fetch
+                GitLabDiscussion(
+                    id="gid://gitlab/Discussion/2",
+                    notes=PaginatedList[GitLabNote](
+                        nodes=[
+                            GitLabNote(
+                                id="note_2_1",
+                                body="Discussion 2, Note 1",
+                                created_at="2023-01-02T00:00:00Z",
+                                updated_at="2023-01-02T00:00:00Z",
+                                system=False,
+                                author=GitLabUser(username="user3"),
+                            ),
+                        ],
+                        page_info=PageInfo(has_next_page=True, end_cursor="disc2_cursor"),
+                    ),
+                ),
+            ],
+            page_info=PageInfo(has_next_page=False),  # No more discussions
+        )
+
+        # Mock fetch_remaining_notes to return different notes for different discussions
+        async def mock_fetch_remaining_notes(
+            project_path, iid, discussion_id, issuable_type, cursor
+        ):
+            """Mock fetching remaining notes for each discussion."""
+            if discussion_id == "gid://gitlab/Discussion/1":
+                # Discussion 1 has 2 more notes to fetch
+                yield {
+                    "id": "note_1_3",
+                    "body": "Discussion 1, Note 3 (paginated)",
+                    "createdAt": "2023-01-01T02:00:00Z",
+                    "updatedAt": "2023-01-01T02:00:00Z",
+                    "system": False,
+                    "author": {"username": "user4", "name": "User 4"},
+                }
+                yield {
+                    "id": "note_1_4",
+                    "body": "Discussion 1, Note 4 (paginated)",
+                    "createdAt": "2023-01-01T03:00:00Z",
+                    "updatedAt": "2023-01-01T03:00:00Z",
+                    "system": False,
+                    "author": {"username": "user5", "name": "User 5"},
+                }
+            elif discussion_id == "gid://gitlab/Discussion/2":
+                # Discussion 2 has 1 more note to fetch
+                yield {
+                    "id": "note_2_2",
+                    "body": "Discussion 2, Note 2 (paginated)",
+                    "createdAt": "2023-01-02T01:00:00Z",
+                    "updatedAt": "2023-01-02T01:00:00Z",
+                    "system": False,
+                    "author": {"username": "user6", "name": "User 6"},
+                }
+
+        source.gitlab_client.fetch_remaining_notes = mock_fetch_remaining_notes
+
+        # Extract notes - this should handle all pagination automatically
+        notes = await source._extract_notes_from_discussions(
+            discussions, "group/project", 1, "issue"
+        )
+
+        # Verify all notes were collected
+        assert (
+            len(notes) == 6
+        ), "Should have 6 total notes (2+2 from disc1 + 1+1 from disc2)"
+
+        # Verify notes from Discussion 1 (initial + paginated)
+        disc1_notes = [n for n in notes if "Discussion 1" in n["body"]]
+        assert len(disc1_notes) == 4, "Discussion 1 should have 4 notes total"
+        assert disc1_notes[0]["id"] == "note_1_1"
+        assert disc1_notes[1]["id"] == "note_1_2"
+        assert disc1_notes[2]["id"] == "note_1_3"
+        assert disc1_notes[3]["id"] == "note_1_4"
+
+        # Verify notes from Discussion 2 (initial + paginated)
+        disc2_notes = [n for n in notes if "Discussion 2" in n["body"]]
+        assert len(disc2_notes) == 2, "Discussion 2 should have 2 notes total"
+        assert disc2_notes[0]["id"] == "note_2_1"
+        assert disc2_notes[1]["id"] == "note_2_2"
+
+        # Verify all authors were properly extracted
+        authors = [n["author"] for n in notes if n["author"]]
+        assert len(authors) == 6
+        assert "user1" in authors
+        assert "user6" in authors
+
 
 # Tests for error handling in client
 class TestGitLabClientErrorHandling:

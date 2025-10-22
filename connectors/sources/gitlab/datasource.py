@@ -46,7 +46,6 @@ from connectors.sources.gitlab.models import (
 )
 from connectors.utils import decode_base64_value
 
-DEFAULT_PAGE_SIZE = 100
 SUPPORTED_EXTENSION = [".md", ".rst", ".txt"]
 
 
@@ -210,60 +209,62 @@ class GitLabDataSource(BaseDataSource):
         # Check if project is in the configured list
         return project_path in self.configured_projects
 
+    T = TypeVar("T", bound=BaseModel)
+
+    def _extract_widget(
+        self, work_item: GitLabWorkItem, widget_type: Type[T]
+    ) -> T | None:
+        """Generic method to extract a specific widget type from work item.
+
+        Args:
+            work_item: Work item containing widgets
+            widget_type: The widget class type to search for
+
+        Returns:
+            The widget instance if found, None otherwise
+        """
+        for widget in work_item.widgets:
+            if isinstance(widget, widget_type):
+                return widget
+        return None
+
     def _extract_widget_description(self, work_item: GitLabWorkItem) -> str | None:
         """Extract description from work item widgets."""
-        for widget in work_item.widgets:
-            if isinstance(widget, WorkItemWidgetDescription):
-                return widget.description
-        return None
+        widget = self._extract_widget(work_item, WorkItemWidgetDescription)
+        return widget.description if widget else None
 
     def _extract_widget_assignees(
         self, work_item: GitLabWorkItem
     ) -> PaginatedList[GitLabUser]:
         """Extract assignees data from work item widgets."""
-        for widget in work_item.widgets:
-            if isinstance(widget, WorkItemWidgetAssignees):
-                return widget.assignees
-        return PaginatedList[GitLabUser](nodes=[])
+        widget = self._extract_widget(work_item, WorkItemWidgetAssignees)
+        return widget.assignees if widget else PaginatedList[GitLabUser](nodes=[])
 
     def _extract_widget_labels(
         self, work_item: GitLabWorkItem
     ) -> PaginatedList[GitLabLabel]:
         """Extract labels data from work item widgets."""
-        for widget in work_item.widgets:
-            if isinstance(widget, WorkItemWidgetLabels):
-                return widget.labels
-        return PaginatedList[GitLabLabel](nodes=[])
+        widget = self._extract_widget(work_item, WorkItemWidgetLabels)
+        return widget.labels if widget else PaginatedList[GitLabLabel](nodes=[])
 
     def _extract_widget_discussions(
         self, work_item: GitLabWorkItem
     ) -> PaginatedList[GitLabDiscussion]:
         """Extract discussions from work item widgets."""
-        for widget in work_item.widgets:
-            if isinstance(widget, WorkItemWidgetNotes):
-                return widget.discussions
-        # Return empty paginated list if not found
-        return PaginatedList[GitLabDiscussion](nodes=[])
+        widget = self._extract_widget(work_item, WorkItemWidgetNotes)
+        return widget.discussions if widget else PaginatedList[GitLabDiscussion](nodes=[])
 
     def _extract_widget_hierarchy(
         self, work_item: GitLabWorkItem
     ) -> WorkItemWidgetHierarchy | None:
         """Extract hierarchy info from work item widgets (for Epics)."""
-        for widget in work_item.widgets:
-            if isinstance(widget, WorkItemWidgetHierarchy):
-                return widget
-        return None
+        return self._extract_widget(work_item, WorkItemWidgetHierarchy)
 
     def _extract_widget_linked_items(
         self, work_item: GitLabWorkItem
     ) -> WorkItemWidgetLinkedItems | None:
         """Extract linked items from work item widgets (for Epics/Issues)."""
-        for widget in work_item.widgets:
-            if isinstance(widget, WorkItemWidgetLinkedItems):
-                return widget
-        return None
-
-    T = TypeVar("T", bound=BaseModel)
+        return self._extract_widget(work_item, WorkItemWidgetLinkedItems)
 
     async def _fetch_remaining_paginated_field(
         self,
@@ -675,8 +676,8 @@ class GitLabDataSource(BaseDataSource):
                     "author": note.author.username if note.author else None,
                     "author_name": note.author.name if note.author else None,
                 }
-                if note.position:
-                    note_dict["position"] = note.position.model_dump()
+                if position := note.position:
+                    note_dict["position"] = position.model_dump()
                 notes.append(note_dict)
 
             # Check if there are more notes to fetch for this discussion
@@ -950,6 +951,8 @@ class GitLabDataSource(BaseDataSource):
             if "." in file_name:
                 file_extension = file_name[file_name.rfind(".") :]
 
+            # Skip files with unsupported extensions, but allow files without extensions
+            # (e.g., plain "README" files are allowed)
             if file_extension not in SUPPORTED_EXTENSION and file_extension != "":
                 continue
 
