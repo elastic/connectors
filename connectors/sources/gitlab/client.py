@@ -440,11 +440,6 @@ class GitLabClient:
         interval=RETRY_INTERVAL,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
-    @retryable(
-        retries=RETRIES,
-        interval=RETRY_INTERVAL,
-        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
-    )
     async def fetch_remaining_field(
         self, project_path, iid, field_type, issuable_type, cursor
     ):
