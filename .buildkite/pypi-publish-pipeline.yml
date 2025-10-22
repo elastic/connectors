@@ -61,30 +61,32 @@ steps:
           PACKAGE_PATH: "{{ matrix.package_path }}"
         commands: "TEST_PYPI=1 ./buildkite/publish_to_pypi.sh"
 
-  - block: ":rocket: Publish to Production PyPI?"
-    prompt: "Test PyPI publish succeeded. Proceed to publish to Production PyPI?"
-    key: "confirm_production_publish"
-    depends_on:
-      - publish_to_test_pypi
-
-  - group: ":truck: Publish to Production PyPI"
-    key: "publish_to_pypi"
-    depends_on:
-      - confirm_production_publish
-    steps:
-      - label: ":package: Publish to Production PyPI"
-        key: publish_pypi
-        agents:
-          provider: "gcp"
-          machineType: "n1-standard-8"
-          useVault: true
-          image: family/enterprise-search-ubuntu-2204-connectors-py
-        matrix:
-          setup:
-            package_path:
-              - "${SERVICE_PACKAGE_PATH}"
-              - "${SDK_PACKAGE_PATH}"
-        env:
-          PYTHON_VERSION: "3.11"
-          PACKAGE_PATH: "{{ matrix.package_path }}"
-        commands: ".buildkite/publish_to_pypi.sh"
+# FOR WHEN WE'RE READY TO PUBLISH TO PRODUCTION PYPI
+#
+#  - block: ":rocket: Publish to Production PyPI?"
+#    prompt: "Test PyPI publish succeeded. Proceed to publish to Production PyPI?"
+#    key: "confirm_production_publish"
+#    depends_on:
+#      - publish_to_test_pypi
+#
+#  - group: ":truck: Publish to Production PyPI"
+#    key: "publish_to_pypi"
+#    depends_on:
+#      - confirm_production_publish
+#    steps:
+#      - label: ":package: Publish to Production PyPI"
+#        key: publish_pypi
+#        agents:
+#          provider: "gcp"
+#          machineType: "n1-standard-8"
+#          useVault: true
+#          image: family/enterprise-search-ubuntu-2204-connectors-py
+#        matrix:
+#          setup:
+#            package_path:
+#              - "${SERVICE_PACKAGE_PATH}"
+#              - "${SDK_PACKAGE_PATH}"
+#        env:
+#          PYTHON_VERSION: "3.11"
+#          PACKAGE_PATH: "{{ matrix.package_path }}"
+#        commands: ".buildkite/publish_to_pypi.sh"
