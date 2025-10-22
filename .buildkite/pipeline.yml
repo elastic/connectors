@@ -85,11 +85,11 @@ steps:
         wait: false
         watch:
           - path:
-            - "connectors/sources/mysql/**"
-            - "tests/sources/fixtures/mysql/**"
-            - "tests/sources/fixtures/fixture.py"
+            - "app/connectors_service/connectors/sources/mysql/**"
+            - "app/connectors_service/tests/sources/fixtures/mysql/**"
+            - "app/connectors_service/tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
-            - "pyproject.toml"
+            - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 MySQL"
               <<: *test-agents
