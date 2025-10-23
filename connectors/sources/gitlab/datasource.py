@@ -24,7 +24,11 @@ from typing import Any, AsyncGenerator, Type, TypeVar
 
 from pydantic import BaseModel
 
-from connectors.source import BaseDataSource, ConfigurableFieldValueError
+from connectors.source import (
+    BaseDataSource,
+    ConfigurableFieldValueError,
+    DataSourceConfiguration,
+)
 from connectors.sources.gitlab.client import GitLabClient
 from connectors.sources.gitlab.document_schemas import (
     FileDocument,
@@ -66,11 +70,11 @@ class GitLabDataSource(BaseDataSource):
     dls_enabled = False
     incremental_sync_enabled = False
 
-    def __init__(self, configuration) -> None:
+    def __init__(self, configuration: DataSourceConfiguration) -> None:
         """Setup the connection to the GitLab instance.
 
         Args:
-            configuration (DataSourceConfiguration): Instance of DataSourceConfiguration class.
+            configuration: Instance of DataSourceConfiguration class.
         """
         super().__init__(configuration=configuration)
         self.gitlab_client = GitLabClient(
@@ -100,7 +104,7 @@ class GitLabDataSource(BaseDataSource):
                 "display": "textarea",
                 "label": "List of projects",
                 "order": 2,
-                "tooltip": "List of project paths (e.g., 'group/project'). Use '*' to sync all accessible projects.",
+                "tooltip": "List of project paths (e.g., 'group/project'). Use '*' to sync all projects where the token's user is a member.",
                 "type": "list",
                 "value": [],
             },

@@ -6,7 +6,8 @@
 """GraphQL queries for GitLab API."""
 
 # Pagination sizes for GraphQL queries
-NODE_SIZE = 100  # For projects, merge requests
+# These values balance performance with GitLab's complexity limits (max 250 per query)
+NODE_SIZE = 100  # For projects, merge requests (simple queries)
 WORK_ITEMS_NODE_SIZE = (
     50  # For work items (lower to avoid complexity limit with widgets)
 )
