@@ -32,11 +32,6 @@ from connectors.source import (
 from connectors.sources.gitlab.client import GitLabClient
 from connectors.sources.gitlab.document_schemas import (
     FileDocument,
-    GitLabDocument,
-    MergeRequestDocument,
-    ProjectDocument,
-    ReleaseDocument,
-    WorkItemDocument,
 )
 from connectors.sources.gitlab.models import (
     GitLabDiscussion,
@@ -280,7 +275,9 @@ class GitLabDataSource(BaseDataSource):
     ) -> PaginatedList[GitLabDiscussion]:
         """Extract discussions from work item widgets."""
         widget = self._extract_widget(work_item, WorkItemWidgetNotes)
-        return widget.discussions if widget else PaginatedList[GitLabDiscussion](nodes=[])
+        return (
+            widget.discussions if widget else PaginatedList[GitLabDiscussion](nodes=[])
+        )
 
     def _extract_widget_hierarchy(
         self, work_item: GitLabWorkItem
@@ -433,7 +430,9 @@ class GitLabDataSource(BaseDataSource):
 
             if assignees_data.page_info.has_next_page:
                 cursor = assignees_data.page_info.end_cursor
-                async for assignee in self.gitlab_client.fetch_remaining_work_item_assignees(
+                async for (
+                    assignee
+                ) in self.gitlab_client.fetch_remaining_work_item_assignees(
                     project.full_path, work_item.iid, work_item_type, cursor
                 ):
                     assignees_data.nodes.append(GitLabUser.model_validate(assignee))
@@ -449,7 +448,9 @@ class GitLabDataSource(BaseDataSource):
 
             if discussions_data.page_info.has_next_page:
                 cursor = discussions_data.page_info.end_cursor
-                async for discussion in self.gitlab_client.fetch_remaining_work_item_discussions(
+                async for (
+                    discussion
+                ) in self.gitlab_client.fetch_remaining_work_item_discussions(
                     project.full_path, work_item.iid, work_item_type, cursor
                 ):
                     discussions_data.nodes.append(
@@ -535,14 +536,18 @@ class GitLabDataSource(BaseDataSource):
 
                 if assignees_data.page_info.has_next_page:
                     cursor = assignees_data.page_info.end_cursor
-                    async for assignee in self.gitlab_client.fetch_remaining_work_item_assignees_group(
+                    async for (
+                        assignee
+                    ) in self.gitlab_client.fetch_remaining_work_item_assignees_group(
                         group_path, epic.iid, WorkItemType.EPIC, cursor
                     ):
                         assignees_data.nodes.append(GitLabUser.model_validate(assignee))
 
                 if labels_data.page_info.has_next_page:
                     cursor = labels_data.page_info.end_cursor
-                    async for label in self.gitlab_client.fetch_remaining_work_item_labels_group(
+                    async for (
+                        label
+                    ) in self.gitlab_client.fetch_remaining_work_item_labels_group(
                         group_path, epic.iid, WorkItemType.EPIC, cursor
                     ):
                         labels_data.nodes.append(GitLabLabel.model_validate(label))
@@ -551,7 +556,9 @@ class GitLabDataSource(BaseDataSource):
 
                 if discussions_data.page_info.has_next_page:
                     cursor = discussions_data.page_info.end_cursor
-                    async for discussion in self.gitlab_client.fetch_remaining_work_item_group_discussions(
+                    async for (
+                        discussion
+                    ) in self.gitlab_client.fetch_remaining_work_item_group_discussions(
                         group_path, epic.iid, WorkItemType.EPIC, cursor
                     ):
                         discussions_data.nodes.append(
@@ -599,7 +606,9 @@ class GitLabDataSource(BaseDataSource):
 
             yield self._format_project_doc(project), None
 
-            async for doc in self._fetch_work_items_for_project(project, WorkItemType.ISSUE):
+            async for doc in self._fetch_work_items_for_project(
+                project, WorkItemType.ISSUE
+            ):
                 yield doc
 
             async for doc in self._fetch_merge_requests_for_project(project):
@@ -609,10 +618,14 @@ class GitLabDataSource(BaseDataSource):
                 yield doc
 
             if project.group:
-                async for doc in self._fetch_epics_for_group(project.group.full_path, seen_groups):
+                async for doc in self._fetch_epics_for_group(
+                    project.group.full_path, seen_groups
+                ):
                     yield doc
 
-            async for readme_doc, download_func in self._fetch_readme_files(project_id, project):
+            async for readme_doc, download_func in self._fetch_readme_files(
+                project_id, project
+            ):
                 yield readme_doc, download_func
 
     def _format_project_doc(self, project: GitLabProject) -> dict[str, Any]:

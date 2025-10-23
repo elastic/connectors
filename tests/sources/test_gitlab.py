@@ -2251,7 +2251,9 @@ class TestGitLabDataSourceIntegration:
                                 author=GitLabUser(username="user2"),
                             ),
                         ],
-                        page_info=PageInfo(has_next_page=True, end_cursor="disc1_cursor"),
+                        page_info=PageInfo(
+                            has_next_page=True, end_cursor="disc1_cursor"
+                        ),
                     ),
                 ),
                 # Discussion 2: has 1 initial note + more to fetch
@@ -2268,7 +2270,9 @@ class TestGitLabDataSourceIntegration:
                                 author=GitLabUser(username="user3"),
                             ),
                         ],
-                        page_info=PageInfo(has_next_page=True, end_cursor="disc2_cursor"),
+                        page_info=PageInfo(
+                            has_next_page=True, end_cursor="disc2_cursor"
+                        ),
                     ),
                 ),
             ],

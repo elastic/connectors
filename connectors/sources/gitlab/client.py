@@ -326,7 +326,6 @@ class GitLabClient:
                 work_item = GitLabWorkItem.model_validate(work_item_data)
                 yield work_item
 
-
             page_info_data = work_items_data.get("pageInfo", {})
             page_info = PageInfo.model_validate(page_info_data)
             if not page_info.has_next_page:
@@ -375,7 +374,6 @@ class GitLabClient:
                 work_item = GitLabWorkItem.model_validate(work_item_data)
                 yield work_item
 
-
             page_info_data = work_items_data.get("pageInfo", {})
             page_info = PageInfo.model_validate(page_info_data)
             if not page_info.has_next_page:
@@ -423,7 +421,6 @@ class GitLabClient:
                 release = GitLabRelease.model_validate(release_data)
                 yield release
 
-
             page_info_data = releases_data.get("pageInfo", {})
             page_info = PageInfo.model_validate(page_info_data)
             if not page_info.has_next_page:
@@ -464,7 +461,6 @@ class GitLabClient:
             self._logger.warning(f"Unknown field type: {field_type}")
             return
 
-
         query = query_template.format(issuable_type=issuable_type)
 
         while cursor:
@@ -491,7 +487,6 @@ class GitLabClient:
 
             for item in items:
                 yield item
-
 
             page_info = field_data.get("pageInfo", {})
             if not page_info.get("hasNextPage"):
@@ -552,14 +547,12 @@ class GitLabClient:
             if not discussion_nodes:
                 return
 
-
             discussion = discussion_nodes[0]
             notes_data = discussion.get("notes", {})
             notes = notes_data.get("nodes", [])
 
             for note in notes:
                 yield note
-
 
             page_info = notes_data.get("pageInfo", {})
             if not page_info.get("hasNextPage"):
@@ -612,10 +605,8 @@ class GitLabClient:
             if not work_items:
                 return
 
-
             work_item = work_items[0]
             widgets = work_item.get("widgets", [])
-
 
             assignees_data = None
             for widget in widgets:
@@ -629,7 +620,6 @@ class GitLabClient:
             assignees = assignees_data.get("nodes", [])
             for assignee in assignees:
                 yield assignee
-
 
             page_info = assignees_data.get("pageInfo", {})
             if not page_info.get("hasNextPage"):
@@ -680,10 +670,8 @@ class GitLabClient:
             if not work_items:
                 return
 
-
             work_item = work_items[0]
             widgets = work_item.get("widgets", [])
-
 
             labels_data = None
             for widget in widgets:
@@ -697,7 +685,6 @@ class GitLabClient:
             labels = labels_data.get("nodes", [])
             for label in labels:
                 yield label
-
 
             page_info = labels_data.get("pageInfo", {})
             if not page_info.get("hasNextPage"):
@@ -750,10 +737,8 @@ class GitLabClient:
             if not work_items:
                 return
 
-
             work_item = work_items[0]
             widgets = work_item.get("widgets", [])
-
 
             discussions_data = None
             for widget in widgets:
@@ -767,7 +752,6 @@ class GitLabClient:
             discussions = discussions_data.get("nodes", [])
             for discussion in discussions:
                 yield discussion
-
 
             page_info = discussions_data.get("pageInfo", {})
             if not page_info.get("hasNextPage"):
@@ -820,10 +804,8 @@ class GitLabClient:
             if not work_items:
                 return
 
-
             work_item = work_items[0]
             widgets = work_item.get("widgets", [])
-
 
             discussions_data = None
             for widget in widgets:
@@ -837,7 +819,6 @@ class GitLabClient:
             discussions = discussions_data.get("nodes", [])
             for discussion in discussions:
                 yield discussion
-
 
             page_info = discussions_data.get("pageInfo", {})
             if not page_info.get("hasNextPage"):
@@ -890,10 +871,8 @@ class GitLabClient:
             if not work_items:
                 return
 
-
             work_item = work_items[0]
             widgets = work_item.get("widgets", [])
-
 
             assignees_data = None
             for widget in widgets:
@@ -907,7 +886,6 @@ class GitLabClient:
             assignees = assignees_data.get("nodes", [])
             for assignee in assignees:
                 yield assignee
-
 
             page_info = assignees_data.get("pageInfo", {})
             if not page_info.get("hasNextPage"):
@@ -960,10 +938,8 @@ class GitLabClient:
             if not work_items:
                 return
 
-
             work_item = work_items[0]
             widgets = work_item.get("widgets", [])
-
 
             labels_data = None
             for widget in widgets:
@@ -977,7 +953,6 @@ class GitLabClient:
             labels = labels_data.get("nodes", [])
             for label in labels:
                 yield label
-
 
             page_info = labels_data.get("pageInfo", {})
             if not page_info.get("hasNextPage"):
