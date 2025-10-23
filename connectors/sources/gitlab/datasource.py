@@ -26,6 +26,14 @@ from pydantic import BaseModel
 
 from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.sources.gitlab.client import GitLabClient
+from connectors.sources.gitlab.document_schemas import (
+    FileDocument,
+    GitLabDocument,
+    MergeRequestDocument,
+    ProjectDocument,
+    ReleaseDocument,
+    WorkItemDocument,
+)
 from connectors.sources.gitlab.models import (
     GitLabDiscussion,
     GitLabIssue,
@@ -111,14 +119,12 @@ class GitLabDataSource(BaseDataSource):
         Raises:
             ConfigurableFieldValueError: If validation fails.
         """
-        # Test authentication
         try:
             await self.gitlab_client.ping()
         except Exception as e:
             msg = f"Failed to authenticate with GitLab: {e}"
             raise ConfigurableFieldValueError(msg) from e
 
-        # If specific projects are configured, validate they exist and are accessible
         if self.configured_projects and self.configured_projects != ["*"]:
             await self._validate_configured_projects()
 
@@ -133,7 +139,6 @@ class GitLabDataSource(BaseDataSource):
         """
         from connectors.sources.gitlab.queries import VALIDATE_PROJECTS_QUERY
 
-        # Filter out empty project paths
         valid_project_paths = [
             p.strip() for p in self.configured_projects if p and p.strip()
         ]
@@ -145,7 +150,6 @@ class GitLabDataSource(BaseDataSource):
         BATCH_SIZE = 50
         accessible_projects = set()
 
-        # Batch validate projects
         for i in range(0, len(valid_project_paths), BATCH_SIZE):
             batch = valid_project_paths[i : i + BATCH_SIZE]
 
@@ -154,7 +158,6 @@ class GitLabDataSource(BaseDataSource):
                     VALIDATE_PROJECTS_QUERY, {"projectPaths": batch}
                 )
 
-                # Extract accessible project paths from response
                 projects_data = result.get("projects", {})
                 nodes = projects_data.get("nodes", [])
 
@@ -169,7 +172,6 @@ class GitLabDataSource(BaseDataSource):
                 # If batch query fails, we can't determine which specific projects are invalid
                 # so we skip this batch and continue
 
-        # Determine which projects are inaccessible
         requested_projects = set(valid_project_paths)
         invalid_projects = requested_projects - accessible_projects
 
@@ -202,11 +204,9 @@ class GitLabDataSource(BaseDataSource):
         Returns:
             bool: True if project should be synced, False otherwise
         """
-        # If no projects configured or wildcard, sync all
         if not self.configured_projects or "*" in self.configured_projects:
             return True
 
-        # Check if project is in the configured list
         return project_path in self.configured_projects
 
     def _validate_and_filter_project(self, project: GitLabProject) -> str | None:
@@ -225,7 +225,6 @@ class GitLabDataSource(BaseDataSource):
             self._logger.warning(f"Could not extract project ID from {project.id}")
             return None
 
-        # Filter projects based on configuration
         if not self._should_sync_project(project.full_path):
             self._logger.debug(
                 f"Skipping project '{project.full_path}' (not in configured projects)"
@@ -442,13 +441,6 @@ class GitLabDataSource(BaseDataSource):
                 ):
                     labels_data.nodes.append(GitLabLabel.model_validate(label))
 
-            work_item_doc = self._format_work_item_doc(
-                work_item,
-                project=project,
-                assignees_data=assignees_data,
-                labels_data=labels_data,
-            )
-
             discussions_data = self._extract_widget_discussions(work_item)
 
             if discussions_data.page_info.has_next_page:
@@ -466,7 +458,14 @@ class GitLabDataSource(BaseDataSource):
                 work_item.iid,
                 "issue",
             )
-            work_item_doc["notes"] = notes
+
+            work_item_doc = self._format_work_item_doc(
+                work_item,
+                project=project,
+                assignees_data=assignees_data,
+                labels_data=labels_data,
+                notes=notes,
+            )
 
             yield work_item_doc, None
 
@@ -481,7 +480,6 @@ class GitLabDataSource(BaseDataSource):
         """
         async for mr in self.gitlab_client.get_merge_requests(project.full_path):
             await self._fetch_remaining_mr_fields(mr, project.full_path)
-            mr_doc = self._format_merge_request_doc(mr, project)
 
             notes = await self._extract_notes_from_discussions(
                 mr.discussions,
@@ -489,7 +487,8 @@ class GitLabDataSource(BaseDataSource):
                 mr.iid,
                 "mergeRequest",
             )
-            mr_doc["notes"] = notes
+
+            mr_doc = self._format_merge_request_doc(mr, project, notes=notes)
 
             yield mr_doc, None
 
@@ -544,13 +543,6 @@ class GitLabDataSource(BaseDataSource):
                     ):
                         labels_data.nodes.append(GitLabLabel.model_validate(label))
 
-                epic_doc = self._format_work_item_doc(
-                    epic,
-                    group_path=group_path,
-                    assignees_data=assignees_data,
-                    labels_data=labels_data,
-                )
-
                 discussions_data = self._extract_widget_discussions(epic)
 
                 if discussions_data.page_info.has_next_page:
@@ -568,7 +560,15 @@ class GitLabDataSource(BaseDataSource):
                     epic.iid,
                     "epic",
                 )
-                epic_doc["notes"] = notes
+
+                epic_doc = self._format_work_item_doc(
+                    epic,
+                    group_path=group_path,
+                    assignees_data=assignees_data,
+                    labels_data=labels_data,
+                    notes=notes,
+                )
+
                 yield epic_doc, None
         except Exception as e:
             # Epics require Premium/Ultimate, may fail on Free tier
@@ -618,15 +618,15 @@ class GitLabDataSource(BaseDataSource):
             project (GitLabProject): Validated project model
 
         Returns:
-            dict: Formatted project document
+            dict: Formatted project document dict
         """
         project_id = self.gitlab_client._extract_numeric_id(project.id) or project.id
 
         return {
             "_id": f"project_{project_id}",
-            "_timestamp": project.last_activity_at,
+            "_timestamp": project.last_activity_at or project.created_at,
             "type": "Project",
-            "id": project_id,
+            "id": str(project_id),
             "name": project.name,
             "path": project.path,
             "full_path": project.full_path,
@@ -737,12 +737,18 @@ class GitLabDataSource(BaseDataSource):
 
         return notes
 
-    def _format_merge_request_doc(self, mr: GitLabMergeRequest, project: GitLabProject):
+    def _format_merge_request_doc(
+        self,
+        mr: GitLabMergeRequest,
+        project: GitLabProject,
+        notes: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
         """Format merge request data into Elasticsearch document.
 
         Args:
             mr (GitLabMergeRequest): Validated merge request model
             project (GitLabProject): Parent project model
+            notes: Pre-extracted notes from discussions or None
 
         Returns:
             dict: Formatted merge request document
@@ -753,7 +759,7 @@ class GitLabDataSource(BaseDataSource):
             "_id": f"mr_{project_id}_{mr.iid}",
             "_timestamp": mr.updated_at,
             "type": "Merge Request",
-            "project_id": project_id,
+            "project_id": str(project_id),
             "project_path": project.full_path,
             "iid": mr.iid,
             "title": mr.title,
@@ -773,6 +779,7 @@ class GitLabDataSource(BaseDataSource):
             "approved_by": [a.username for a in mr.approved_by.nodes],
             "merged_by": mr.merged_by.username if mr.merged_by else None,
             "labels": [label.title for label in mr.labels.nodes],
+            "notes": notes,
         }
 
     def _format_work_item_doc(
@@ -782,6 +789,7 @@ class GitLabDataSource(BaseDataSource):
         group_path: str | None = None,
         assignees_data: PaginatedList[GitLabUser] | None = None,
         labels_data: PaginatedList[GitLabLabel] | None = None,
+        notes: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         """Format work item data into Elasticsearch document.
 
@@ -791,9 +799,10 @@ class GitLabDataSource(BaseDataSource):
             group_path: Group path (for Epics) or None (for Issues/MRs)
             assignees_data: Pre-fetched assignees data (with pagination) or None to extract from widgets
             labels_data: Pre-fetched labels data (with pagination) or None to extract from widgets
+            notes: Pre-extracted notes from discussions or None
 
         Returns:
-            Formatted work item document
+            dict: Formatted work item document
         """
         description = self._extract_widget_description(work_item)
 
@@ -810,8 +819,6 @@ class GitLabDataSource(BaseDataSource):
             parent_path = project.full_path
             parent_type = "project"
         elif group_path:
-            # For epics, we need to extract group ID from somewhere
-            # For now, use the group_path as the ID
             parent_id = group_path.replace("/", "_")
             parent_path = group_path
             parent_type = "group"
@@ -820,12 +827,10 @@ class GitLabDataSource(BaseDataSource):
             parent_path = "unknown"
             parent_type = "unknown"
 
-        doc = {
+        kwargs = {
             "_id": f"{work_item.type_name.lower().replace(' ', '_')}_{parent_id}_{work_item.iid}",
             "_timestamp": work_item.updated_at,
             "type": work_item.type_name,
-            f"{parent_type}_id": parent_id,
-            f"{parent_type}_path": parent_path,
             "iid": work_item.iid,
             "title": work_item.title,
             "description": description,
@@ -838,17 +843,26 @@ class GitLabDataSource(BaseDataSource):
             "author_name": work_item.author.name if work_item.author else None,
             "assignees": [a.username for a in assignees_data.nodes],
             "labels": [label.title for label in labels_data.nodes],
+            "notes": notes,
         }
+
+        # Add dynamic parent fields
+        if parent_type == "project":
+            kwargs["project_id"] = parent_id
+            kwargs["project_path"] = parent_path
+        elif parent_type == "group":
+            kwargs["group_id"] = parent_id
+            kwargs["group_path"] = parent_path
 
         # Add hierarchy info for Epics (parent/child relationships)
         if hierarchy:
             if hierarchy.parent:
-                doc["parent_epic_iid"] = hierarchy.parent.iid
-                doc["parent_epic_title"] = hierarchy.parent.title
+                kwargs["parent_epic_iid"] = hierarchy.parent.iid
+                kwargs["parent_epic_title"] = hierarchy.parent.title
 
             children = hierarchy.children.nodes
-            doc["children_count"] = len(children)
-            doc["children"] = [
+            kwargs["children_count"] = len(children)
+            kwargs["children"] = [
                 {
                     "id": child.id,
                     "iid": child.iid,
@@ -860,8 +874,8 @@ class GitLabDataSource(BaseDataSource):
         # Add linked items info (related/blocking items - separate from hierarchy)
         if linked_items:
             items = linked_items.linked_items.nodes
-            doc["linked_items_count"] = len(items)
-            doc["linked_items"] = [
+            kwargs["linked_items_count"] = len(items)
+            kwargs["linked_items"] = [
                 {
                     "link_id": item.link_id,
                     "link_type": item.link_type,
@@ -874,7 +888,7 @@ class GitLabDataSource(BaseDataSource):
                 for item in items
             ]
 
-        return doc
+        return kwargs
 
     def _format_release_doc(
         self, release: GitLabRelease, project: GitLabProject
@@ -886,17 +900,17 @@ class GitLabDataSource(BaseDataSource):
             project: Parent project model
 
         Returns:
-            Formatted release document
+            dict: Formatted release document
         """
         project_id = self.gitlab_client._extract_numeric_id(project.id) or project.id
         milestone_titles = [m.title for m in release.milestones.nodes]
         asset_links = release.assets.links.nodes
 
-        doc = {
+        kwargs = {
             "_id": f"release_{project_id}_{release.tag_name}",
             "_timestamp": release.released_at or release.created_at,
             "type": "Release",
-            "project_id": project_id,
+            "project_id": str(project_id),
             "project_path": project.full_path,
             "tag_name": release.tag_name,
             "name": release.name,
@@ -910,11 +924,11 @@ class GitLabDataSource(BaseDataSource):
         }
 
         if release.commit:
-            doc["commit_sha"] = release.commit.sha
-            doc["commit_title"] = release.commit.title
+            kwargs["commit_sha"] = release.commit.sha
+            kwargs["commit_title"] = release.commit.title
 
         if asset_links:
-            doc["asset_links"] = [
+            kwargs["asset_links"] = [
                 {
                     "name": link.name,
                     "url": link.url,
@@ -923,7 +937,7 @@ class GitLabDataSource(BaseDataSource):
                 for link in asset_links
             ]
 
-        return doc
+        return kwargs
 
     async def _fetch_readme_files(
         self, project_id: int, project: GitLabProject
@@ -972,11 +986,11 @@ class GitLabDataSource(BaseDataSource):
             if file_extension not in SUPPORTED_EXTENSION and file_extension != "":
                 continue
 
-            readme_doc = {
+            readme_doc: FileDocument = {
                 "_id": f"file_{project_id}_{file_path}",
-                "_timestamp": project.last_activity_at,
+                "_timestamp": project.last_activity_at or project.created_at,
                 "type": "File",
-                "project_id": project_id,
+                "project_id": str(project_id),
                 "project_path": project.full_path,
                 "file_path": file_path,
                 "file_name": item.get("name"),

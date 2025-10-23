@@ -109,12 +109,10 @@ class GitLabClient:
             response: aiohttp response object
         """
         if response.status == 429:
-            # Check for Retry-After header (in seconds)
             retry_after = response.headers.get("Retry-After")
             if retry_after:
                 sleep_time = int(retry_after)
             else:
-                # Check for RateLimit-Reset header (Unix timestamp)
                 reset_time = response.headers.get("RateLimit-Reset")
                 if reset_time:
                     import time
