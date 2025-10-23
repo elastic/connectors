@@ -358,7 +358,7 @@ class GitLabWorkItem(BaseModel):
     work_item_type: WorkItemTypeInfo
     widgets: list[
         WorkItemWidget
-    ] = []  # Typed widgets, fetched separately in two-phase approach
+    ] = []  # Widgets fetched in initial query; paginated nested fields fetched separately
 
     @property
     def type_name(self) -> str:
