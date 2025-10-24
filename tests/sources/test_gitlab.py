@@ -468,7 +468,7 @@ class TestGitLabDataSource:
 
         assert doc["_id"] == "issue_123_1"
         assert doc["type"] == "Issue"
-        assert doc["project_id"] == 123
+        assert doc["project_id"] == "123"
         assert doc["project_path"] == "group/test-project"
         assert doc["title"] == "Test Issue"
         assert doc["description"] == "Issue description"
@@ -584,21 +584,22 @@ class TestGitLabClient:
 
         assert client._logger == mock_logger
 
-    def test_extract_numeric_id_valid(self):
-        """Test extracting numeric ID from valid global ID."""
+    def test_extract_id_valid(self):
+        """Test extracting ID from valid global ID."""
         client = GitLabClient(token="test-token")
 
-        numeric_id = client._extract_numeric_id("gid://gitlab/Project/123")
+        id_str = client._extract_id("gid://gitlab/Project/123")
 
-        assert numeric_id == 123
+        assert id_str == "123"
 
-    def test_extract_numeric_id_invalid(self):
-        """Test extracting numeric ID from invalid format returns None."""
+    def test_extract_id_invalid(self):
+        """Test extracting ID from invalid format still returns last segment."""
         client = GitLabClient(token="test-token")
 
-        numeric_id = client._extract_numeric_id("invalid-id")
+        id_str = client._extract_id("invalid-id")
 
-        assert numeric_id is None
+        # Even invalid format returns the last segment
+        assert id_str == "invalid-id"
 
     @pytest.mark.asyncio
     async def test_close(self):

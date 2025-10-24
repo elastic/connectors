@@ -64,21 +64,21 @@ class GitLabClient:
     def set_logger(self, logger_) -> None:
         self._logger = logger_
 
-    def _extract_numeric_id(self, gid: str) -> int | None:
-        """Extract numeric ID from GitLab global ID format.
+    def _extract_id(self, gid: str) -> str | None:
+        """Extract ID from GitLab global ID format.
 
         GitLab GraphQL returns global IDs like 'gid://gitlab/Project/123'.
-        This method extracts the numeric portion.
+        This method extracts the ID portion (the last segment).
 
         Args:
             gid: GitLab global ID string
 
         Returns:
-            Numeric ID or None if extraction fails
+            ID string or None if extraction fails
         """
         try:
-            return int(gid.split("/")[-1])
-        except (ValueError, AttributeError, IndexError):
+            return gid.split("/")[-1]
+        except (AttributeError, IndexError):
             self._logger.warning(f"Failed to parse GitLab ID: {gid}")
             return None
 

@@ -6,16 +6,14 @@
 """GitLab source module responsible to fetch documents from GitLab Cloud.
 
 This connector fetches:
-- Projects (repositories)
+- Projects
 - Issues (using Work Items API)
-- Merge Requests (using legacy API)
+- Merge Requests
 - Epics (using Work Items API, group-level, requires Premium/Ultimate tier)
 - Releases (project-level version releases with changelogs)
 - README files (.md, .rst, .txt)
 
-This connector uses GitLab's Work Items API for Issues and Epics. Merge Requests
-continue to use the legacy GraphQL API as they have not yet been migrated to Work Items.
-
+This connector uses GitLab's Work Items API for Issues and Epics.
 Work Items API Reference: https://docs.gitlab.com/ee/api/graphql/reference/#workitem
 """
 
@@ -217,7 +215,7 @@ class GitLabDataSource(BaseDataSource):
             Project ID if valid and should be synced, None otherwise
         """
         # Extract project ID (GraphQL returns global ID, need numeric ID)
-        project_id = self.gitlab_client._extract_numeric_id(project.id)
+        project_id = self.gitlab_client._extract_id(project.id)
 
         if not project_id:
             self._logger.warning(f"Could not extract project ID from {project.id}")
@@ -581,11 +579,7 @@ class GitLabDataSource(BaseDataSource):
 
                 yield epic_doc, None
         except Exception as e:
-            # Epics require Premium/Ultimate, may fail on Free tier
-            self._logger.warning(
-                f"Failed to fetch epics for group {group_path}: {e}. "
-                "This may be because epics require GitLab Premium or Ultimate tier."
-            )
+            self._logger.warning(f"Failed to fetch epics for group {group_path}: {e}")
 
     async def get_docs(self, filtering=None):
         """Main method to fetch documents from GitLab using Work Items API.
@@ -636,13 +630,13 @@ class GitLabDataSource(BaseDataSource):
         Returns:
             dict: Formatted project document dict
         """
-        project_id = self.gitlab_client._extract_numeric_id(project.id) or project.id
+        project_id = self.gitlab_client._extract_id(project.id) or project.id
 
         return {
             "_id": f"project_{project_id}",
             "_timestamp": project.last_activity_at or project.created_at,
             "type": "Project",
-            "id": str(project_id),
+            "id": project_id,
             "name": project.name,
             "path": project.path,
             "full_path": project.full_path,
@@ -667,7 +661,7 @@ class GitLabDataSource(BaseDataSource):
         Returns:
             dict: Formatted issue document
         """
-        project_id = self.gitlab_client._extract_numeric_id(project.id) or project.id
+        project_id = self.gitlab_client._extract_id(project.id) or project.id
 
         return {
             "_id": f"issue_{project_id}_{issue.iid}",
@@ -769,13 +763,13 @@ class GitLabDataSource(BaseDataSource):
         Returns:
             dict: Formatted merge request document
         """
-        project_id = self.gitlab_client._extract_numeric_id(project.id) or project.id
+        project_id = self.gitlab_client._extract_id(project.id) or project.id
 
         return {
             "_id": f"mr_{project_id}_{mr.iid}",
             "_timestamp": mr.updated_at,
             "type": "Merge Request",
-            "project_id": str(project_id),
+            "project_id": project_id,
             "project_path": project.full_path,
             "iid": mr.iid,
             "title": mr.title,
@@ -831,7 +825,7 @@ class GitLabDataSource(BaseDataSource):
         linked_items = self._extract_widget_linked_items(work_item)
 
         if project:
-            parent_id = self.gitlab_client._extract_numeric_id(project.id) or project.id
+            parent_id = self.gitlab_client._extract_id(project.id) or project.id
             parent_path = project.full_path
             parent_type = "project"
         elif group_path:
@@ -918,7 +912,7 @@ class GitLabDataSource(BaseDataSource):
         Returns:
             dict: Formatted release document
         """
-        project_id = self.gitlab_client._extract_numeric_id(project.id) or project.id
+        project_id = self.gitlab_client._extract_id(project.id) or project.id
         milestone_titles = [m.title for m in release.milestones.nodes]
         asset_links = release.assets.links.nodes
 
@@ -926,7 +920,7 @@ class GitLabDataSource(BaseDataSource):
             "_id": f"release_{project_id}_{release.tag_name}",
             "_timestamp": release.released_at or release.created_at,
             "type": "Release",
-            "project_id": str(project_id),
+            "project_id": project_id,
             "project_path": project.full_path,
             "tag_name": release.tag_name,
             "name": release.name,
@@ -956,8 +950,8 @@ class GitLabDataSource(BaseDataSource):
         return kwargs
 
     async def _fetch_readme_files(
-        self, project_id: int, project: GitLabProject
-    ) -> AsyncGenerator[tuple[dict[str, Any], Any], None]:
+        self, project_id: str, project: GitLabProject
+    ) -> AsyncGenerator[tuple[FileDocument, Any], None]:
         """Fetch README files from a project using REST API.
 
         Args:
@@ -1006,7 +1000,7 @@ class GitLabDataSource(BaseDataSource):
                 "_id": f"file_{project_id}_{file_path}",
                 "_timestamp": project.last_activity_at or project.created_at,
                 "type": "File",
-                "project_id": str(project_id),
+                "project_id": project_id,
                 "project_path": project.full_path,
                 "file_path": file_path,
                 "file_name": item.get("name"),
