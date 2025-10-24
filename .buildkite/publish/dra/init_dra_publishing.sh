@@ -26,6 +26,18 @@ buildkite-agent artifact download '.artifacts/*.tar.gz*' $RELEASE_DIR/dist/ --st
 buildkite-agent artifact download '.artifacts/*.tar.gz*' $RELEASE_DIR/dist/ --step build_docker_image_arm64
 cp $RELEASE_DIR/dist/.artifacts/* $DRA_ARTIFACTS_DIR
 
+# Download Python package artifacts (using Python 3.11 builds)
+buildkite-agent artifact download 'app/connectors_service/dist/*.whl' $RELEASE_DIR/ --step 'build_python_package'
+buildkite-agent artifact download 'app/connectors_service/dist/*.tar.gz' $RELEASE_DIR/ --step 'build_python_package'
+buildkite-agent artifact download 'libs/connectors_sdk/dist/*.whl' $RELEASE_DIR/ --step 'build_python_package'
+buildkite-agent artifact download 'libs/connectors_sdk/dist/*.tar.gz' $RELEASE_DIR/ --step 'build_python_package'
+
+# Copy Python packages to DRA artifacts directory
+cp $RELEASE_DIR/app/connectors_service/dist/*.whl $DRA_ARTIFACTS_DIR/connectors-service-$VERSION.whl
+cp $RELEASE_DIR/app/connectors_service/dist/*.tar.gz $DRA_ARTIFACTS_DIR/connectors-service-$VERSION.tar.gz
+cp $RELEASE_DIR/libs/connectors_sdk/dist/*.whl $DRA_ARTIFACTS_DIR/connectors-sdk-$VERSION.whl
+cp $RELEASE_DIR/libs/connectors_sdk/dist/*.tar.gz $DRA_ARTIFACTS_DIR/connectors-sdk-$VERSION.tar.gz
+
 # Rename to match DRA expectations (<name>-<version>-<classifier>-<os>-<arch>)
 cd $DRA_ARTIFACTS_DIR
 mv $DOCKER_ARTIFACT_KEY-$VERSION-amd64.tar.gz $PROJECT_NAME-$VERSION-docker-image-linux-amd64.tar.gz
@@ -139,8 +151,14 @@ if [[ "${PUBLISH_SNAPSHOT:-}" == "true" ]]; then
 
   echo "-------- Publishing SNAPSHOT DRA Artifacts"
   cp $RELEASE_DIR/dist/elasticsearch_connectors-${VERSION}.zip $DRA_ARTIFACTS_DIR/connectors-${VERSION}-SNAPSHOT.zip
+
   cp $DRA_ARTIFACTS_DIR/$PROJECT_NAME-$VERSION-docker-image-linux-amd64.tar.gz $DRA_ARTIFACTS_DIR/$PROJECT_NAME-$VERSION-SNAPSHOT-docker-image-linux-amd64.tar.gz
   cp $DRA_ARTIFACTS_DIR/$PROJECT_NAME-$VERSION-docker-image-linux-arm64.tar.gz $DRA_ARTIFACTS_DIR/$PROJECT_NAME-$VERSION-SNAPSHOT-docker-image-linux-arm64.tar.gz
+
+  cp $DRA_ARTIFACTS_DIR/connectors-service-$VERSION.whl $DRA_ARTIFACTS_DIR/connectors-service-$VERSION-SNAPSHOT.whl
+  cp $DRA_ARTIFACTS_DIR/connectors-service-$VERSION.tar.gz $DRA_ARTIFACTS_DIR/connectors-service-$VERSION-SNAPSHOT.tar.gz
+  cp $DRA_ARTIFACTS_DIR/connectors-sdk-$VERSION.whl $DRA_ARTIFACTS_DIR/connectors-sdk-$VERSION-SNAPSHOT.whl
+  cp $DRA_ARTIFACTS_DIR/connectors-sdk-$VERSION.tar.gz $DRA_ARTIFACTS_DIR/connectors-sdk-$VERSION-SNAPSHOT.tar.gz
   setDraVaultCredentials
   export WORKFLOW="snapshot"
 
@@ -155,9 +173,16 @@ fi
 if [[ "${PUBLISH_STAGING:-}" == "true" ]]; then
   if [ -n "${VERSION_QUALIFIER:-}" ]; then
     dependencyReportName="dependencies-${VERSION}-${VERSION_QUALIFIER}.csv";
+
     zip_artifact_name="connectors-${VERSION}-${VERSION_QUALIFIER}.zip"
+
     cp $DRA_ARTIFACTS_DIR/$PROJECT_NAME-$VERSION-docker-image-linux-amd64.tar.gz $DRA_ARTIFACTS_DIR/$PROJECT_NAME-$VERSION-$VERSION_QUALIFIER-docker-image-linux-amd64.tar.gz
     cp $DRA_ARTIFACTS_DIR/$PROJECT_NAME-$VERSION-docker-image-linux-arm64.tar.gz $DRA_ARTIFACTS_DIR/$PROJECT_NAME-$VERSION-$VERSION_QUALIFIER-docker-image-linux-arm64.tar.gz
+
+    cp $DRA_ARTIFACTS_DIR/connectors-service-$VERSION.whl $DRA_ARTIFACTS_DIR/connectors-service-$VERSION-$VERSION_QUALIFIER.whl
+    cp $DRA_ARTIFACTS_DIR/connectors-service-$VERSION.tar.gz $DRA_ARTIFACTS_DIR/connectors-service-$VERSION-$VERSION_QUALIFIER.tar.gz
+    cp $DRA_ARTIFACTS_DIR/connectors-sdk-$VERSION.whl $DRA_ARTIFACTS_DIR/connectors-sdk-$VERSION-$VERSION_QUALIFIER.whl
+    cp $DRA_ARTIFACTS_DIR/connectors-sdk-$VERSION.tar.gz $DRA_ARTIFACTS_DIR/connectors-sdk-$VERSION-$VERSION_QUALIFIER.tar.gz
   else
     dependencyReportName="dependencies-${VERSION}.csv";
     zip_artifact_name="connectors-${VERSION}.zip"

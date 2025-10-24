@@ -624,6 +624,29 @@ steps:
               artifact_paths:
                 - "perf8-report-*/**/*"
 
+  - group: ":building_construction: Build and Test Python Packages"
+    key: "test_packages"
+    steps:
+      - label: ":python: Build Python {{matrix.python_version}} {{matrix.package_path}} package"
+        key: build_python_package
+        <<: *test-agents
+        matrix:
+          setup:
+            python_version:
+              - "3.10"
+              - "3.11"
+            package_path:
+              - "app/connectors_service"
+              - "libs/connectors_sdk"
+        env:
+          PYTHON_VERSION: "{{ matrix.python_version }}"
+          PACKAGE_PATH: "{{ matrix.package_path }}"
+        command: ".buildkite/test_python_packages.sh"
+        artifact_paths:
+          - "{{ matrix.package_path }}/dist/*.whl"
+          - "{{ matrix.package_path }}/dist/*.tar.gz"
+        timeout_in_minutes: 10
+
   # ----
   # DRA publishing
   # ----
@@ -635,6 +658,7 @@ steps:
       - "unit_tests"
       - "smoke_test"
       - "relevant_ftests"
+      - "test_packages"
     steps:
       # ----
       # Docker builds for amd64
@@ -699,7 +723,7 @@ steps:
           - ".buildkite/publish/test-docker.sh"
 
       # ----
-      # OSS Dockerfile build, tests and vunlerability scan on amd64
+      # OSS Dockerfile build, tests and vulnerability scan on amd64
       # ----
       - label: "Building amd64 Docker image from OSS Dockerfile"
         agents:
@@ -746,7 +770,7 @@ steps:
           find .artifacts -type f -name '*.tar.gz*' -exec trivy image --quiet --input {} \;
 
       # ----
-      # OSS Dockerfile build, tests and vunlerability scan on arm64
+      # OSS Dockerfile build, tests and vulnerability scan on arm64
       # ----
       - label: "Building arm64 Docker image from OSS Dockerfile"
         agents:
