@@ -85,11 +85,12 @@ steps:
         wait: false
         watch:
           - path:
-            - "connectors/sources/mysql/**"
-            - "tests/sources/fixtures/mysql/**"
-            - "tests/sources/fixtures/fixture.py"
-            - "${DOCKERFILE_FTEST_PATH}"
-            - "pyproject.toml"
+            - "app/connectors_service/connectors/sources/mysql/**"
+            - "app/connectors_service/tests/sources/fixtures/mysql/**"
+            - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "${DOCKERFILE_PATH}"
+            - "app/connectors_service/tests/Dockerfile.ftest"
+            - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 MySQL"
               <<: *test-agents
@@ -104,11 +105,12 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/network_drive/**"
-            - "tests/sources/fixtures/network_drive/**"
-            - "tests/sources/fixtures/fixture.py"
-            - "${DOCKERFILE_FTEST_PATH}"
-            - "pyproject.toml"
+            - "app/connectors_service/connectors/sources/network_drive/**"
+            - "app/connectors_service/tests/sources/fixtures/network_drive/**"
+            - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "${DOCKERFILE_PATH}"
+            - "app/connectors_service/tests/Dockerfile.ftest"
+            - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 Network Drive"
               <<: *test-agents
@@ -123,11 +125,12 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/s3/**"
-            - "tests/sources/fixtures/s3/**"
-            - "tests/sources/fixtures/fixture.py"
-            - "${DOCKERFILE_FTEST_PATH}"
-            - "pyproject.toml"
+            - "app/connectors_service/connectors/sources/s3/**"
+            - "app/connectors_service/tests/sources/fixtures/s3/**"
+            - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "${DOCKERFILE_PATH}"
+            - "app/connectors_service/tests/Dockerfile.ftest"
+            - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 Amazon S3"
               <<: *test-agents
@@ -142,11 +145,12 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/google_cloud_storage/**"
-            - "tests/sources/fixtures/google_cloud_storage/**"
-            - "tests/sources/fixtures/fixture.py"
-            - "${DOCKERFILE_FTEST_PATH}"
-            - "pyproject.toml"
+            - "app/connectors_service/connectors/sources/google_cloud_storage/**"
+            - "app/connectors_service/tests/sources/fixtures/google_cloud_storage/**"
+            - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "${DOCKERFILE_PATH}"
+            - "app/connectors_service/tests/Dockerfile.ftest"
+            - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 Google Cloud Storage"
               <<: *test-agents
@@ -161,11 +165,12 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/azure_blob_storage/**"
-            - "tests/sources/fixtures/azure_blob_storage/**"
-            - "tests/sources/fixtures/fixture.py"
-            - "${DOCKERFILE_FTEST_PATH}"
-            - "pyproject.toml"
+            - "app/connectors_service/connectors/sources/azure_blob_storage/**"
+            - "app/connectors_service/tests/sources/fixtures/azure_blob_storage/**"
+            - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "${DOCKERFILE_PATH}"
+            - "app/connectors_service/tests/Dockerfile.ftest"
+            - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 Azure Blob Storage"
               <<: *test-agents
@@ -180,11 +185,12 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/postgresql/**"
-            - "tests/sources/fixtures/postgresql/**"
-            - "tests/sources/fixtures/fixture.py"
-            - "${DOCKERFILE_FTEST_PATH}"
-            - "pyproject.toml"
+            - "app/connectors_service/connectors/sources/postgresql/**"
+            - "app/connectors_service/tests/sources/fixtures/postgresql/**"
+            - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "${DOCKERFILE_PATH}"
+            - "app/connectors_service/tests/Dockerfile.ftest"
+            - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 Postgresql"
               <<: *test-agents
@@ -199,11 +205,12 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/directory/**"
-            - "tests/sources/fixtures/dir/**"
-            - "tests/sources/fixtures/fixture.py"
-            - "${DOCKERFILE_FTEST_PATH}"
-            - "pyproject.toml"
+            - "app/connectors_service/connectors/sources/directory/**"
+            - "app/connectors_service/tests/sources/fixtures/dir/**"
+            - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "${DOCKERFILE_PATH}"
+            - "app/connectors_service/tests/Dockerfile.ftest"
+            - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 System Directory"
               <<: *test-agents
@@ -218,11 +225,12 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/oracle/**"
-            - "tests/sources/fixtures/oracle/**"
-            - "tests/sources/fixtures/fixture.py"
-            - "${DOCKERFILE_FTEST_PATH}"
-            - "pyproject.toml"
+            - "app/connectors_service/connectors/sources/oracle/**"
+            - "app/connectors_service/tests/sources/fixtures/oracle/**"
+            - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "${DOCKERFILE_PATH}"
+            - "app/connectors_service/tests/Dockerfile.ftest"
+            - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 Oracle Database"
               <<: *test-agents
@@ -237,11 +245,12 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/sharepoint/sharepoint_server/**"
-            - "tests/sources/fixtures/sharepoint_server/**"
-            - "tests/sources/fixtures/fixture.py"
-            - "${DOCKERFILE_FTEST_PATH}"
-            - "pyproject.toml"
+            - "app/connectors_service/connectors/sources/sharepoint/sharepoint_server/**"
+            - "app/connectors_service/tests/sources/fixtures/sharepoint_server/**"
+            - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "${DOCKERFILE_PATH}"
+            - "app/connectors_service/tests/Dockerfile.ftest"
+            - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 Sharepoint Server"
               <<: *test-agents
@@ -256,11 +265,12 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/sharepoint/sharepoint_online/**"
-            - "tests/sources/fixtures/sharepoint_online/**"
-            - "tests/sources/fixtures/fixture.py"
-            - "${DOCKERFILE_FTEST_PATH}"
-            - "pyproject.toml"
+            - "app/connectors_service/connectors/sources/sharepoint/sharepoint_online/**"
+            - "app/connectors_service/tests/sources/fixtures/sharepoint_online/**"
+            - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "${DOCKERFILE_PATH}"
+            - "app/connectors_service/tests/Dockerfile.ftest"
+            - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 Sharepoint Online"
               <<: *test-agents
@@ -275,11 +285,12 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/mssql/**"
-            - "tests/sources/fixtures/mssql/**"
-            - "tests/sources/fixtures/fixture.py"
-            - "${DOCKERFILE_FTEST_PATH}"
-            - "pyproject.toml"
+            - "app/connectors_service/connectors/sources/mssql/**"
+            - "app/connectors_service/tests/sources/fixtures/mssql/**"
+            - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "${DOCKERFILE_PATH}"
+            - "app/connectors_service/tests/Dockerfile.ftest"
+            - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 Microsoft SQL"
               <<: *test-agents
@@ -294,11 +305,12 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/atlassian/**"
-            - "tests/sources/fixtures/jira/**"
-            - "tests/sources/fixtures/fixture.py"
-            - "${DOCKERFILE_FTEST_PATH}"
-            - "pyproject.toml"
+            - "app/connectors_service/connectors/sources/atlassian/**"
+            - "app/connectors_service/tests/sources/fixtures/jira/**"
+            - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "${DOCKERFILE_PATH}"
+            - "app/connectors_service/tests/Dockerfile.ftest"
+            - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 Jira"
               <<: *test-agents
@@ -313,11 +325,12 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/atlassian/**"
-            - "tests/sources/fixtures/confluence/**"
-            - "tests/sources/fixtures/fixture.py"
-            - "${DOCKERFILE_FTEST_PATH}"
-            - "pyproject.toml"
+            - "app/connectors_service/connectors/sources/atlassian/**"
+            - "app/connectors_service/tests/sources/fixtures/confluence/**"
+            - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "${DOCKERFILE_PATH}"
+            - "app/connectors_service/tests/Dockerfile.ftest"
+            - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 Confluence"
               <<: *test-agents
@@ -332,11 +345,12 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/servicenow.py"
-            - "tests/sources/fixtures/servicenow/**"
-            - "tests/sources/fixtures/fixture.py"
-            - "${DOCKERFILE_FTEST_PATH}"
-            - "pyproject.toml"
+            - "app/connectors_service/connectors/sources/servicenow.py"
+            - "app/connectors_service/tests/sources/fixtures/servicenow/**"
+            - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "${DOCKERFILE_PATH}"
+            - "app/connectors_service/tests/Dockerfile.ftest"
+            - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 ServiceNow"
               <<: *test-agents
@@ -351,11 +365,12 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/mongo/**"
-            - "tests/sources/fixtures/mongodb/**"
-            - "tests/sources/fixtures/fixture.py"
-            - "${DOCKERFILE_FTEST_PATH}"
-            - "pyproject.toml"
+            - "app/connectors_service/connectors/sources/mongo/**"
+            - "app/connectors_service/tests/sources/fixtures/mongodb/**"
+            - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "${DOCKERFILE_PATH}"
+            - "app/connectors_service/tests/Dockerfile.ftest"
+            - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 MongoDB"
               <<: *test-agents
@@ -370,11 +385,12 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/github/**"
-            - "tests/sources/fixtures/github/**"
-            - "tests/sources/fixtures/fixture.py"
-            - "${DOCKERFILE_FTEST_PATH}"
-            - "pyproject.toml"
+            - "app/connectors_service/connectors/sources/github/**"
+            - "app/connectors_service/tests/sources/fixtures/github/**"
+            - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "${DOCKERFILE_PATH}"
+            - "app/connectors_service/tests/Dockerfile.ftest"
+            - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 GitHub"
               <<: *test-agents
@@ -389,11 +405,12 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/google_drive/**"
-            - "tests/sources/fixtures/google_drive/**"
-            - "tests/sources/fixtures/fixture.py"
-            - "${DOCKERFILE_FTEST_PATH}"
-            - "pyproject.toml"
+            - "app/connectors_service/connectors/sources/google_drive/**"
+            - "app/connectors_service/tests/sources/fixtures/google_drive/**"
+            - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "${DOCKERFILE_PATH}"
+            - "app/connectors_service/tests/Dockerfile.ftest"
+            - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 Google Drive"
               <<: *test-agents
@@ -408,11 +425,12 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/dropbox.py"
-            - "tests/sources/fixtures/dropbox/**"
-            - "tests/sources/fixtures/fixture.py"
-            - "${DOCKERFILE_FTEST_PATH}"
-            - "pyproject.toml"
+            - "app/connectors_service/connectors/sources/dropbox.py"
+            - "app/connectors_service/tests/sources/fixtures/dropbox/**"
+            - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "${DOCKERFILE_PATH}"
+            - "app/connectors_service/tests/Dockerfile.ftest"
+            - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 Dropbox"
               <<: *test-agents
@@ -427,11 +445,12 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/onedrive/**"
-            - "tests/sources/fixtures/onedrive/**"
-            - "tests/sources/fixtures/fixture.py"
-            - "${DOCKERFILE_FTEST_PATH}"
-            - "pyproject.toml"
+            - "app/connectors_service/connectors/sources/onedrive/**"
+            - "app/connectors_service/tests/sources/fixtures/onedrive/**"
+            - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "${DOCKERFILE_PATH}"
+            - "app/connectors_service/tests/Dockerfile.ftest"
+            - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 OneDrive"
               <<: *test-agents
@@ -446,11 +465,12 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/salesforce/**"
-            - "tests/sources/fixtures/salesforce/**"
-            - "tests/sources/fixtures/fixture.py"
-            - "${DOCKERFILE_FTEST_PATH}"
-            - "pyproject.toml"
+            - "app/connectors_service/connectors/sources/salesforce/**"
+            - "app/connectors_service/tests/sources/fixtures/salesforce/**"
+            - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "${DOCKERFILE_PATH}"
+            - "app/connectors_service/tests/Dockerfile.ftest"
+            - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 Salesforce"
               <<: *test-agents
@@ -465,11 +485,12 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/zoom/**"
-            - "tests/sources/fixtures/zoom/**"
-            - "tests/sources/fixtures/fixture.py"
-            - "${DOCKERFILE_FTEST_PATH}"
-            - "pyproject.toml"
+            - "app/connectors_service/connectors/sources/zoom/**"
+            - "app/connectors_service/tests/sources/fixtures/zoom/**"
+            - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "${DOCKERFILE_PATH}"
+            - "app/connectors_service/tests/Dockerfile.ftest"
+            - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 Zoom"
               <<: *test-agents
@@ -484,11 +505,12 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/box/**"
-            - "tests/sources/fixtures/box/**"
-            - "tests/sources/fixtures/fixture.py"
-            - "${DOCKERFILE_FTEST_PATH}"
-            - "pyproject.toml"
+            - "app/connectors_service/connectors/sources/box/**"
+            - "app/connectors_service/tests/sources/fixtures/box/**"
+            - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "${DOCKERFILE_PATH}"
+            - "app/connectors_service/tests/Dockerfile.ftest"
+            - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 Box"
               <<: *test-agents
@@ -503,11 +525,12 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/microsoft_teams.py"
-            - "tests/sources/fixtures/microsoft_teams/**"
-            - "tests/sources/fixtures/fixture.py"
-            - "${DOCKERFILE_FTEST_PATH}"
-            - "pyproject.toml"
+            - "app/connectors_service/connectors/sources/microsoft_teams.py"
+            - "app/connectors_service/tests/sources/fixtures/microsoft_teams/**"
+            - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "${DOCKERFILE_PATH}"
+            - "app/connectors_service/tests/Dockerfile.ftest"
+            - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 Microsoft Teams"
               <<: *test-agents
@@ -522,11 +545,12 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/notion/**"
-            - "tests/sources/fixtures/notion/**"
-            - "tests/sources/fixtures/fixture.py"
-            - "${DOCKERFILE_FTEST_PATH}"
-            - "pyproject.toml"
+            - "app/connectors_service/connectors/sources/notion/**"
+            - "app/connectors_service/tests/sources/fixtures/notion/**"
+            - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "${DOCKERFILE_PATH}"
+            - "app/connectors_service/tests/Dockerfile.ftest"
+            - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 Notion"
               <<: *test-agents
@@ -541,11 +565,12 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/redis/**"
-            - "tests/sources/fixtures/redis/**"
-            - "tests/sources/fixtures/fixture.py"
-            - "${DOCKERFILE_FTEST_PATH}"
-            - "pyproject.toml"
+            - "app/connectors_service/connectors/sources/redis/**"
+            - "app/connectors_service/tests/sources/fixtures/redis/**"
+            - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "${DOCKERFILE_PATH}"
+            - "app/connectors_service/tests/Dockerfile.ftest"
+            - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 Redis"
               <<: *test-agents
@@ -560,11 +585,12 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/graphql.py"
-            - "tests/sources/fixtures/graphql/**"
-            - "tests/sources/fixtures/fixture.py"
-            - "${DOCKERFILE_FTEST_PATH}"
-            - "pyproject.toml"
+            - "app/connectors_service/connectors/sources/graphql.py"
+            - "app/connectors_service/tests/sources/fixtures/graphql/**"
+            - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "${DOCKERFILE_PATH}"
+            - "app/connectors_service/tests/Dockerfile.ftest"
+            - "app/connectors_service/pyproject.toml"
             config:
               label: "🔨 GraphQL"
               <<: *test-agents
@@ -579,10 +605,11 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/sandfly/**"
-            - "tests/sources/fixtures/sandfly/**"
-            - "tests/sources/fixtures/fixture.py"
-            - "${DOCKERFILE_FTEST_PATH}"
+            - "app/connectors_service/connectors/sources/sandfly/**"
+            - "app/connectors_service/tests/sources/fixtures/sandfly/**"
+            - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "${DOCKERFILE_PATH}"
+            - "app/connectors_service/tests/Dockerfile.ftest"
             - "requirements/**"
             config:
               label: "🔨 Sandfly"
