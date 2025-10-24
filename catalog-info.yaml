@@ -86,6 +86,8 @@ spec:
           access_level: "READ_ONLY"
         search-extract-and-transform: {}
         search-productivity-team: {}
+        search-inference-team: {}
+        enterprise-search: {}
 
 # ------------------------------------------------------------------------------
 # nightly pipelines
@@ -151,6 +153,8 @@ spec:
           access_level: "READ_ONLY"
         search-extract-and-transform: {}
         search-productivity-team: {}
+        search-inference-team: {}
+        enterprise-search: {}
 
 ---
 apiVersion: "backstage.io/v1alpha1"
@@ -213,6 +217,8 @@ spec:
           access_level: "READ_ONLY"
         search-extract-and-transform: {}
         search-productivity-team: {}
+        search-inference-team: {}
+        enterprise-search: {}
 
 ########
 # Docker image build and publish - manual release
@@ -243,5 +249,7 @@ spec:
       teams:
         search-extract-and-transform: {}
         search-productivity-team: {}
+        search-inference-team: {}
+        enterprise-search: {}
         everyone:
           access_level: "READ_ONLY"
