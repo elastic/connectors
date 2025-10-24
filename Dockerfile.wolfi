@@ -3,5 +3,5 @@ USER root
 COPY . /app
 WORKDIR /app
 RUN make clean install-package
-RUN ln -s .venv/bin /app/bin
+RUN ln -s app/connectors_service/.venv/bin /app/bin
 ENTRYPOINT []

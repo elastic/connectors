@@ -597,8 +597,8 @@ steps:
               artifact_paths:
                 - "perf8-report-*/**/*"
 
-  - group: ":building_construction: Build Python Packages"
-    key: "build_package"
+  - group: ":building_construction: Build and Test Python Packages"
+    key: "test_packages"
     steps:
       - label: ":python: Build Python {{matrix.python_version}} {{matrix.package_path}} package"
         key: build_python_package
@@ -631,7 +631,7 @@ steps:
       - "unit_tests"
       - "smoke_test"
       - "relevant_ftests"
-      - "build_package"
+      - "test_packages"
     steps:
       # ----
       # Docker builds for amd64
