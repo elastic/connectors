@@ -3546,7 +3546,7 @@ Apache Software License
 
 
 elasticsearch-connectors
-9.2.0
+9.3.0
 UNKNOWN
 UNKNOWN
 
