@@ -3,15 +3,7 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-"""TypedDict schemas for GitLab Elasticsearch documents.
-
-These schemas define the expected structure of documents yielded by the GitLab connector.
-They provide:
-- Type safety during document creation
-- Self-documentation of document structure
-- IDE autocomplete and type checking
-- Easy testing of document schemas
-"""
+"""TypedDict schemas for GitLab Elasticsearch documents."""
 
 from typing import Any, Literal, TypedDict, NotRequired
 
@@ -134,7 +126,6 @@ class WorkItemDocument(TypedDict):
     """Schema for GitLab work item documents (Issues, Epics, Tasks) indexed to Elasticsearch.
 
     Work items can belong to either a project or a group, so the parent fields are dynamic.
-    Optional fields are marked with NotRequired[].
     """
 
     # Always-required fields

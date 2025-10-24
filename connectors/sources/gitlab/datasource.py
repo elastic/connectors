@@ -51,6 +51,7 @@ from connectors.sources.gitlab.models import (
     WorkItemWidgetLinkedItems,
     WorkItemWidgetNotes,
 )
+from connectors.sources.gitlab.queries import VALIDATE_PROJECTS_QUERY
 from connectors.utils import decode_base64_value
 
 SUPPORTED_EXTENSION = [".md", ".rst", ".txt"]
@@ -127,17 +128,17 @@ class GitLabDataSource(BaseDataSource):
         if self.configured_projects and self.configured_projects != ["*"]:
             await self._validate_configured_projects()
 
-    async def _validate_configured_projects(self) -> None:
+    async def _validate_configured_projects(self, batch_size: int = 50) -> None:
         """Validate that configured projects exist and are accessible using batched GraphQL queries.
 
         GitLab's GraphQL API allows querying up to 50 projects at once using the fullPaths parameter.
-        This is much more efficient than sequential REST API calls.
+
+        Args:
+            batch_size: Number of projects to validate per GraphQL query (default: 50).
 
         Raises:
             ConfigurableFieldValueError: If any project is invalid.
         """
-        from connectors.sources.gitlab.queries import VALIDATE_PROJECTS_QUERY
-
         valid_project_paths = [
             p.strip() for p in self.configured_projects if p and p.strip()
         ]
@@ -145,12 +146,10 @@ class GitLabDataSource(BaseDataSource):
         if not valid_project_paths:
             return
 
-        # GitLab allows max 50 projects per query
-        BATCH_SIZE = 50
         accessible_projects = set()
 
-        for i in range(0, len(valid_project_paths), BATCH_SIZE):
-            batch = valid_project_paths[i : i + BATCH_SIZE]
+        for i in range(0, len(valid_project_paths), batch_size):
+            batch = valid_project_paths[i : i + batch_size]
 
             try:
                 result = await self.gitlab_client._execute_graphql(
