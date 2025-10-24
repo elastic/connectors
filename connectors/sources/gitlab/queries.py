@@ -13,7 +13,7 @@ WORK_ITEMS_NODE_SIZE = (
 WORK_ITEMS_NESTED_SIZE = (
     50  # For discussions/notes in work items (reduced to lower complexity)
 )
-NESTED_FIELD_SIZE = 100  # For assignees, labels, discussions in MRs/legacy
+NESTED_FIELD_SIZE = 100  # For assignees, labels, discussions in MRs
 
 # GraphQL query to fetch projects
 PROJECTS_QUERY = f"""

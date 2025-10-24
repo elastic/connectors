@@ -6,6 +6,7 @@
 """GitLab GraphQL and REST API client for interacting with GitLab Cloud."""
 
 import os
+from typing import AsyncGenerator
 from urllib.parse import quote
 
 import aiohttp
@@ -13,9 +14,12 @@ import aiohttp
 from connectors.logger import logger
 from connectors.source import ConfigurableFieldValueError
 from connectors.sources.gitlab.models import (
+    GitLabDiscussion,
+    GitLabLabel,
     GitLabMergeRequest,
     GitLabProject,
     GitLabRelease,
+    GitLabUser,
     GitLabWorkItem,
     PageInfo,
 )
@@ -90,6 +94,9 @@ class GitLabClient:
             if RUNNING_FTEST and GITLAB_FTEST_HOST:
                 import ssl
 
+                self._logger.info(
+                    f"FTEST mode enabled: disabling SSL verification for {GITLAB_FTEST_HOST}"
+                )
                 ssl_context = ssl.create_default_context()
                 ssl_context.check_hostname = False
                 ssl_context.verify_mode = ssl.CERT_NONE
@@ -145,6 +152,11 @@ class GitLabClient:
         if variables:
             payload["variables"] = variables
 
+        # Debug logging for complexity issues
+        if "workItems" in query:
+            self._logger.debug(f"WORK_ITEMS QUERY LENGTH: {len(query)} chars")
+            self._logger.debug(f"Variables: {variables}")
+
         async with session.post(self.graphql_url, json=payload) as response:
             # Handle rate limiting - sleeps and raises exception for @retryable to catch
             if await self._handle_rate_limit(response):
@@ -157,6 +169,15 @@ class GitLabClient:
             # Check for GraphQL errors
             if "errors" in result:
                 errors = result["errors"]
+
+                # Save failing query for complexity debugging
+                if any("complexity" in str(e).lower() for e in errors):
+                    with open("/tmp/failing_gitlab_query.graphql", "w") as f:
+                        f.write(query)
+                        f.write("\n\n# Variables:\n")
+                        f.write(str(variables))
+                    self._logger.warning(f"Saved failing query to /tmp/failing_gitlab_query.graphql")
+
                 # Check if it's a rate limit error in GraphQL response
                 for error in errors:
                     error_msg = str(error.get("message", "")).lower()
@@ -566,18 +587,18 @@ class GitLabClient:
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
     async def fetch_remaining_work_item_assignees(
-        self, project_path, iid, work_item_type, cursor
-    ):
+        self, project_path: str, iid: int, work_item_type: str, cursor: str
+    ) -> AsyncGenerator[GitLabUser, None]:
         """Fetch remaining assignees for a work item.
 
         Args:
-            project_path (str): Full path of the project
-            iid (int): Work item internal ID
-            work_item_type (str): Work item type (e.g., 'ISSUE', 'TASK')
-            cursor (str): Pagination cursor
+            project_path: Full path of the project
+            iid: Work item internal ID
+            work_item_type: Work item type (e.g., 'ISSUE', 'TASK')
+            cursor: Pagination cursor
 
         Yields:
-            dict: Assignee data
+            GitLabUser: Validated assignee model
         """
         while cursor:
             variables = {
@@ -619,7 +640,7 @@ class GitLabClient:
 
             assignees = assignees_data.get("nodes", [])
             for assignee in assignees:
-                yield assignee
+                yield GitLabUser.model_validate(assignee)
 
             page_info = assignees_data.get("pageInfo", {})
             if not page_info.get("hasNextPage"):
@@ -633,18 +654,18 @@ class GitLabClient:
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
     async def fetch_remaining_work_item_labels(
-        self, project_path, iid, work_item_type, cursor
-    ):
+        self, project_path: str, iid: int, work_item_type: str, cursor: str
+    ) -> AsyncGenerator[GitLabLabel, None]:
         """Fetch remaining labels for a work item.
 
         Args:
-            project_path (str): Full path of the project
-            iid (int): Work item internal ID
-            work_item_type (str): Work item type (e.g., 'ISSUE', 'TASK')
-            cursor (str): Pagination cursor
+            project_path: Full path of the project
+            iid: Work item internal ID
+            work_item_type: Work item type (e.g., 'ISSUE', 'TASK')
+            cursor: Pagination cursor
 
         Yields:
-            dict: Label data
+            GitLabLabel: Validated label model
         """
         while cursor:
             variables = {
@@ -684,7 +705,7 @@ class GitLabClient:
 
             labels = labels_data.get("nodes", [])
             for label in labels:
-                yield label
+                yield GitLabLabel.model_validate(label)
 
             page_info = labels_data.get("pageInfo", {})
             if not page_info.get("hasNextPage"):
@@ -698,18 +719,18 @@ class GitLabClient:
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
     async def fetch_remaining_work_item_discussions(
-        self, project_path, iid, work_item_type, cursor
-    ):
+        self, project_path: str, iid: int, work_item_type: str, cursor: str
+    ) -> AsyncGenerator[GitLabDiscussion, None]:
         """Fetch remaining discussions for a work item.
 
         Args:
-            project_path (str): Full path of the project
-            iid (int): Work item internal ID
-            work_item_type (str): Work item type (e.g., 'ISSUE', 'TASK')
-            cursor (str): Pagination cursor
+            project_path: Full path of the project
+            iid: Work item internal ID
+            work_item_type: Work item type (e.g., 'ISSUE', 'TASK')
+            cursor: Pagination cursor
 
         Yields:
-            dict: Discussion data with notes
+            GitLabDiscussion: Validated discussion model
         """
         while cursor:
             variables = {
@@ -751,7 +772,7 @@ class GitLabClient:
 
             discussions = discussions_data.get("nodes", [])
             for discussion in discussions:
-                yield discussion
+                yield GitLabDiscussion.model_validate(discussion)
 
             page_info = discussions_data.get("pageInfo", {})
             if not page_info.get("hasNextPage"):
@@ -765,18 +786,18 @@ class GitLabClient:
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
     async def fetch_remaining_work_item_group_discussions(
-        self, group_path, iid, work_item_type, cursor
-    ):
+        self, group_path: str, iid: int, work_item_type: str, cursor: str
+    ) -> AsyncGenerator[GitLabDiscussion, None]:
         """Fetch remaining discussions for a group-level work item (e.g., Epic).
 
         Args:
-            group_path (str): Full path of the group
-            iid (int): Work item internal ID
-            work_item_type (str): Work item type (e.g., 'EPIC')
-            cursor (str): Pagination cursor
+            group_path: Full path of the group
+            iid: Work item internal ID
+            work_item_type: Work item type (e.g., 'EPIC')
+            cursor: Pagination cursor
 
         Yields:
-            dict: Discussion data with notes
+            GitLabDiscussion: Validated discussion model
         """
         while cursor:
             variables = {
@@ -818,7 +839,7 @@ class GitLabClient:
 
             discussions = discussions_data.get("nodes", [])
             for discussion in discussions:
-                yield discussion
+                yield GitLabDiscussion.model_validate(discussion)
 
             page_info = discussions_data.get("pageInfo", {})
             if not page_info.get("hasNextPage"):
@@ -832,18 +853,18 @@ class GitLabClient:
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
     async def fetch_remaining_work_item_assignees_group(
-        self, group_path, iid, work_item_type, cursor
-    ):
+        self, group_path: str, iid: int, work_item_type: str, cursor: str
+    ) -> AsyncGenerator[GitLabUser, None]:
         """Fetch remaining assignees for a group-level work item (Epic).
 
         Args:
-            group_path (str): Full path of the group
-            iid (int): Work item internal ID
-            work_item_type (str): Work item type (e.g., 'EPIC')
-            cursor (str): Pagination cursor
+            group_path: Full path of the group
+            iid: Work item internal ID
+            work_item_type: Work item type (e.g., 'EPIC')
+            cursor: Pagination cursor
 
         Yields:
-            dict: Assignee data
+            GitLabUser: Validated assignee model
         """
         while cursor:
             variables = {
@@ -885,7 +906,7 @@ class GitLabClient:
 
             assignees = assignees_data.get("nodes", [])
             for assignee in assignees:
-                yield assignee
+                yield GitLabUser.model_validate(assignee)
 
             page_info = assignees_data.get("pageInfo", {})
             if not page_info.get("hasNextPage"):
@@ -899,18 +920,18 @@ class GitLabClient:
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
     async def fetch_remaining_work_item_labels_group(
-        self, group_path, iid, work_item_type, cursor
-    ):
+        self, group_path: str, iid: int, work_item_type: str, cursor: str
+    ) -> AsyncGenerator[GitLabLabel, None]:
         """Fetch remaining labels for a group-level work item (Epic).
 
         Args:
-            group_path (str): Full path of the group
-            iid (int): Work item internal ID
-            work_item_type (str): Work item type (e.g., 'EPIC')
-            cursor (str): Pagination cursor
+            group_path: Full path of the group
+            iid: Work item internal ID
+            work_item_type: Work item type (e.g., 'EPIC')
+            cursor: Pagination cursor
 
         Yields:
-            dict: Label data
+            GitLabLabel: Validated label model
         """
         while cursor:
             variables = {
@@ -952,7 +973,7 @@ class GitLabClient:
 
             labels = labels_data.get("nodes", [])
             for label in labels:
-                yield label
+                yield GitLabLabel.model_validate(label)
 
             page_info = labels_data.get("pageInfo", {})
             if not page_info.get("hasNextPage"):

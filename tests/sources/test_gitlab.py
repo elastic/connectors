@@ -2169,54 +2169,6 @@ class TestGitLabDataSourceIntegration:
         assert release_doc["tag_name"] == "v1.0.0"
 
     @pytest.mark.asyncio
-    async def test_fetch_remaining_issue_fields(self, mock_configuration):
-        """Test _fetch_remaining_issue_fields calls all pagination methods."""
-        source = GitLabDataSource(configuration=mock_configuration)
-
-        issue = GitLabIssue(
-            iid=1,
-            title="Test Issue",
-            state="opened",
-            web_url="https://gitlab.com/test",
-            created_at="2023-01-01T00:00:00Z",
-            updated_at="2023-01-01T00:00:00Z",
-            assignees=PaginatedList(
-                nodes=[GitLabUser(username="user1")],
-                page_info=PageInfo(has_next_page=True, end_cursor="cursor1"),
-            ),
-            labels=PaginatedList(
-                nodes=[GitLabLabel(title="label1")],
-                page_info=PageInfo(has_next_page=True, end_cursor="cursor2"),
-            ),
-            discussions=PaginatedList(
-                nodes=[],
-                page_info=PageInfo(has_next_page=True, end_cursor="cursor3"),
-            ),
-        )
-
-        async def mock_fetch_remaining(
-            project_path, iid, field_name, issuable_type, cursor
-        ):
-            if field_name == "assignees":
-                yield {"username": "user2"}
-            elif field_name == "labels":
-                yield {"title": "label2"}
-            elif field_name == "discussions":
-                yield {
-                    "id": "disc1",
-                    "notes": {"nodes": [], "pageInfo": {"hasNextPage": False}},
-                }
-
-        source.gitlab_client.fetch_remaining_field = mock_fetch_remaining
-
-        await source._fetch_remaining_issue_fields(issue, "group/project")
-
-        # Should have appended paginated items
-        assert len(issue.assignees.nodes) == 2
-        assert len(issue.labels.nodes) == 2
-        assert len(issue.discussions.nodes) == 1
-
-    @pytest.mark.asyncio
     async def test_extract_notes_with_multi_level_pagination(self, mock_configuration):
         """Test complex nested pagination: multiple discussions each with paginated notes.
 

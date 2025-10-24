@@ -362,21 +362,6 @@ class GitLabDataSource(BaseDataSource):
             GitLabDiscussion,
         )
 
-    async def _fetch_remaining_issue_fields(
-        self,
-        issue: GitLabIssue,
-        project_path: str,
-    ) -> None:
-        """Fetch remaining paginated fields for an issue.
-
-        Args:
-            issue: Issue Pydantic model
-            project_path: Full path of the project
-        """
-        await self._fetch_remaining_assignees(issue, project_path, "issue")
-        await self._fetch_remaining_labels(issue, project_path, "issue")
-        await self._fetch_remaining_discussions(issue, project_path, "issue")
-
     async def _fetch_remaining_mr_fields(
         self,
         mr: GitLabMergeRequest,
@@ -427,32 +412,33 @@ class GitLabDataSource(BaseDataSource):
 
             if assignees_data.page_info.has_next_page:
                 cursor = assignees_data.page_info.end_cursor
-                async for (
-                    assignee
-                ) in self.gitlab_client.fetch_remaining_work_item_assignees(
-                    project.full_path, work_item.iid, work_item_type, cursor
-                ):
-                    assignees_data.nodes.append(GitLabUser.model_validate(assignee))
+                if cursor:
+                    async for (
+                        assignee
+                    ) in self.gitlab_client.fetch_remaining_work_item_assignees(
+                        project.full_path, work_item.iid, work_item_type, cursor
+                    ):
+                        assignees_data.nodes.append(assignee)
 
             if labels_data.page_info.has_next_page:
                 cursor = labels_data.page_info.end_cursor
-                async for label in self.gitlab_client.fetch_remaining_work_item_labels(
-                    project.full_path, work_item.iid, work_item_type, cursor
-                ):
-                    labels_data.nodes.append(GitLabLabel.model_validate(label))
+                if cursor:
+                    async for label in self.gitlab_client.fetch_remaining_work_item_labels(
+                        project.full_path, work_item.iid, work_item_type, cursor
+                    ):
+                        labels_data.nodes.append(label)
 
             discussions_data = self._extract_widget_discussions(work_item)
 
             if discussions_data.page_info.has_next_page:
                 cursor = discussions_data.page_info.end_cursor
-                async for (
-                    discussion
-                ) in self.gitlab_client.fetch_remaining_work_item_discussions(
-                    project.full_path, work_item.iid, work_item_type, cursor
-                ):
-                    discussions_data.nodes.append(
-                        GitLabDiscussion.model_validate(discussion)
-                    )
+                if cursor:
+                    async for (
+                        discussion
+                    ) in self.gitlab_client.fetch_remaining_work_item_discussions(
+                        project.full_path, work_item.iid, work_item_type, cursor
+                    ):
+                        discussions_data.nodes.append(discussion)
 
             notes = await self._extract_notes_from_discussions(
                 discussions_data,
@@ -463,10 +449,10 @@ class GitLabDataSource(BaseDataSource):
 
             work_item_doc = self._format_work_item_doc(
                 work_item,
+                assignees_data,
+                labels_data,
+                notes,
                 project=project,
-                assignees_data=assignees_data,
-                labels_data=labels_data,
-                notes=notes,
             )
 
             yield work_item_doc, None
@@ -533,34 +519,35 @@ class GitLabDataSource(BaseDataSource):
 
                 if assignees_data.page_info.has_next_page:
                     cursor = assignees_data.page_info.end_cursor
-                    async for (
-                        assignee
-                    ) in self.gitlab_client.fetch_remaining_work_item_assignees_group(
-                        group_path, epic.iid, WorkItemType.EPIC, cursor
-                    ):
-                        assignees_data.nodes.append(GitLabUser.model_validate(assignee))
+                    if cursor:
+                        async for (
+                            assignee
+                        ) in self.gitlab_client.fetch_remaining_work_item_assignees_group(
+                            group_path, epic.iid, WorkItemType.EPIC, cursor
+                        ):
+                            assignees_data.nodes.append(assignee)
 
                 if labels_data.page_info.has_next_page:
                     cursor = labels_data.page_info.end_cursor
-                    async for (
-                        label
-                    ) in self.gitlab_client.fetch_remaining_work_item_labels_group(
-                        group_path, epic.iid, WorkItemType.EPIC, cursor
-                    ):
-                        labels_data.nodes.append(GitLabLabel.model_validate(label))
+                    if cursor:
+                        async for (
+                            label
+                        ) in self.gitlab_client.fetch_remaining_work_item_labels_group(
+                            group_path, epic.iid, WorkItemType.EPIC, cursor
+                        ):
+                            labels_data.nodes.append(label)
 
                 discussions_data = self._extract_widget_discussions(epic)
 
                 if discussions_data.page_info.has_next_page:
                     cursor = discussions_data.page_info.end_cursor
-                    async for (
-                        discussion
-                    ) in self.gitlab_client.fetch_remaining_work_item_group_discussions(
-                        group_path, epic.iid, WorkItemType.EPIC, cursor
-                    ):
-                        discussions_data.nodes.append(
-                            GitLabDiscussion.model_validate(discussion)
-                        )
+                    if cursor:
+                        async for (
+                            discussion
+                        ) in self.gitlab_client.fetch_remaining_work_item_group_discussions(
+                            group_path, epic.iid, WorkItemType.EPIC, cursor
+                        ):
+                            discussions_data.nodes.append(discussion)
 
                 notes = await self._extract_notes_from_discussions(
                     discussions_data,
@@ -571,10 +558,10 @@ class GitLabDataSource(BaseDataSource):
 
                 epic_doc = self._format_work_item_doc(
                     epic,
+                    assignees_data,
+                    labels_data,
+                    notes,
                     group_path=group_path,
-                    assignees_data=assignees_data,
-                    labels_data=labels_data,
-                    notes=notes,
                 )
 
                 yield epic_doc, None
@@ -795,31 +782,26 @@ class GitLabDataSource(BaseDataSource):
     def _format_work_item_doc(
         self,
         work_item: GitLabWorkItem,
+        assignees_data: PaginatedList[GitLabUser],
+        labels_data: PaginatedList[GitLabLabel],
+        notes: list[dict[str, Any]],
         project: GitLabProject | None = None,
         group_path: str | None = None,
-        assignees_data: PaginatedList[GitLabUser] | None = None,
-        labels_data: PaginatedList[GitLabLabel] | None = None,
-        notes: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         """Format work item data into Elasticsearch document.
 
         Args:
             work_item: Work item model (Issue, Task, Epic, etc.)
+            assignees_data: Pre-fetched assignees data (with pagination)
+            labels_data: Pre-fetched labels data (with pagination)
+            notes: Pre-extracted notes from discussions
             project: Parent project (for Issues/MRs) or None (for Epics)
             group_path: Group path (for Epics) or None (for Issues/MRs)
-            assignees_data: Pre-fetched assignees data (with pagination) or None to extract from widgets
-            labels_data: Pre-fetched labels data (with pagination) or None to extract from widgets
-            notes: Pre-extracted notes from discussions or None
 
         Returns:
             dict: Formatted work item document
         """
         description = self._extract_widget_description(work_item)
-
-        if assignees_data is None:
-            assignees_data = self._extract_widget_assignees(work_item)
-        if labels_data is None:
-            labels_data = self._extract_widget_labels(work_item)
 
         hierarchy = self._extract_widget_hierarchy(work_item)
         linked_items = self._extract_widget_linked_items(work_item)
