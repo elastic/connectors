@@ -6,8 +6,8 @@
 """TypedDict schemas for GitLab Elasticsearch documents."""
 
 from typing import Any, Literal, TypedDict
-from typing_extensions import NotRequired
 
+from typing_extensions import NotRequired
 
 
 class NoteItem(TypedDict):
