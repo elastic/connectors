@@ -962,7 +962,7 @@ async def test_validate_config_with_extra_scopes_token(patch_logger):
         )
         await source.validate_config()
         patch_logger.assert_present(
-            "The provided token has higher privileges than required. It is advisable to run the connector with least privielged token. Required scopes are 'repo', 'user', and 'read:org'."
+            "The provided token has higher privileges than required. It is advisable to run the connector with least privileged token. Required scopes are 'repo', 'user', and 'read:org'."
         )
 
 
@@ -1140,31 +1140,25 @@ async def test_get_invalid_repos():
     async with create_github_source(
         repos="repo1, owner1/repo2, repo2, owner2/repo2"
     ) as source:
+        # Mock logged-in user
         source.github_client.graphql = AsyncMock(
-            side_effect=[
-                {"viewer": {"login": "owner1"}},
-                {
-                    "user": {
-                        "repositories": {
-                            "pageInfo": {
-                                "hasNextPage": True,
-                                "endCursor": "abcd1234",
-                            },
-                            "nodes": [
-                                {
-                                    "name": "owner1",
-                                    "nameWithOwner": "owner1/repo2",
-                                }
-                            ],
-                        }
-                    }
-                },
-                Exception(),
-            ]
+            return_value={"viewer": {"login": "owner1"}}
         )
-        source.github_client.get_user_repos = Mock(
-            return_value=AsyncIterator([{"nameWithOwner": "owner1/repo1"}])
+
+        def mock_batch_validation(repo_names):
+            # Simulate repos that exist - only owner1/repo1 exists
+            valid_repos = {
+                "owner1/repo1": {"nameWithOwner": "owner1/repo1"},
+            }
+            result = {}
+            for repo_name in repo_names:
+                result[repo_name] = valid_repos.get(repo_name)
+            return result
+
+        source.github_client.get_repos_by_fully_qualified_name_batch = AsyncMock(
+            side_effect=mock_batch_validation
         )
+
         invalid_repos = await source.get_invalid_repos()
         assert expected_response == invalid_repos
 
@@ -1175,7 +1169,20 @@ async def test_get_invalid_repos_organization():
     async with create_github_source(
         repos="repo1, owner1/repo2, repo3", repo_type="organization", org_name="org1"
     ) as source:
-        source.github_client.graphql = AsyncMock(return_value=MOCK_ORG_REPOS)
+
+        def mock_batch_validation(repo_names):
+            # Simulate repos that exist - only org1/repo1 exists
+            valid_repos = {
+                "org1/repo1": {"nameWithOwner": "org1/repo1"},
+            }
+            result = {}
+            for repo_name in repo_names:
+                result[repo_name] = valid_repos.get(repo_name)
+            return result
+
+        source.github_client.get_repos_by_fully_qualified_name_batch = AsyncMock(
+            side_effect=mock_batch_validation
+        )
 
         invalid_repos = await source.get_invalid_repos()
         assert sorted(expected_response) == sorted(invalid_repos)
@@ -1213,39 +1220,32 @@ async def test_get_invalid_repos_organization_for_github_app(
         )
         source.github_client._installation_access_token = "changeme"
         source.github_client._update_installation_access_token = AsyncMock()
-        source.github_client.get_org_repos = Mock(
-            side_effect=(
-                lambda owner: AsyncIterator(
-                    [
-                        {"nameWithOwner": "org_1/repo_1"},
-                        {"nameWithOwner": "org_1/repo_2"},
-                    ]
-                )
-                if owner == "org_1"
-                else AsyncIterator(
-                    [
-                        {"nameWithOwner": "org_2/repo_1"},
-                        {"nameWithOwner": "org_2/repo_2"},
-                    ]
-                )
-            )
-        )
-        source.github_client.get_user_repos = Mock(
-            side_effect=(
-                lambda owner: AsyncIterator(
-                    [
-                        {"nameWithOwner": "user_1/repo_1"},
-                        {"nameWithOwner": "user_1/repo_2"},
-                    ]
-                )
-                if owner == "user_1"
-                else AsyncIterator(
-                    [
-                        {"nameWithOwner": "user_2/repo_2"},
-                        {"nameWithOwner": "user_2/repo_2"},
-                    ]
-                )
-            )
+
+        def mock_batch_validation(repo_names):
+            # Simulate which repos exist and are accessible based on test data
+            # The GitHub App has installations on: org_1, org_2, user_1, user_2
+
+            # Only repos that actually exist based on the expected test behavior
+            # From test expectations, we can infer which repos should be valid/invalid
+            existing_repos = {
+                "org_1/repo_1": {"nameWithOwner": "org_1/repo_1"},
+                "org_1/repo_2": {"nameWithOwner": "org_1/repo_2"},
+                "org_2/repo_2": {"nameWithOwner": "org_2/repo_2"},
+                "user_1/repo_1": {"nameWithOwner": "user_1/repo_1"},
+                "user_1/repo_2": {"nameWithOwner": "user_1/repo_2"},
+                "user_2/repo_2": {"nameWithOwner": "user_2/repo_2"},
+                # fake_repo repos don't exist, causing them to be invalid
+            }
+
+            # Simulate the repository validation - only return None for non-existent repos
+            result = {}
+            for repo_name in repo_names:
+                # Return the repo data if it exists, None if it doesn't
+                result[repo_name] = existing_repos.get(repo_name)
+            return result
+
+        source.github_client.get_repos_by_fully_qualified_name_batch = AsyncMock(
+            side_effect=mock_batch_validation
         )
 
         invalid_repos = await source.get_invalid_repos()
@@ -2346,3 +2346,74 @@ async def test_get_github_item_when_error_occurs(exceptions, raises):
         source.github_client._get_client.getitem = Mock(side_effect=exceptions)
         with pytest.raises(raises):
             await source.github_client.get_github_item("/core")
+
+
+@pytest.mark.asyncio
+async def test_get_repos_by_fully_qualified_name_batch():
+    async with create_github_source() as source:
+        # Mock the GraphQL response for batch query
+        mock_response = {
+            "repo0": {
+                "id": "repo1_id",
+                "nameWithOwner": "owner1/repo1",
+                "name": "repo1",
+                "url": "https://github.com/owner1/repo1",
+            },
+            "repo1": {
+                "id": "repo2_id",
+                "nameWithOwner": "owner2/repo2",
+                "name": "repo2",
+                "url": "https://github.com/owner2/repo2",
+            },
+            "repo2": None,  # Invalid repo
+        }
+
+        source.github_client.graphql = AsyncMock(return_value=mock_response)
+
+        repo_names = ["owner1/repo1", "owner2/repo2", "owner3/invalid"]
+        results = await source.github_client.get_repos_by_fully_qualified_name_batch(
+            repo_names
+        )
+
+        assert len(results) == 3
+        assert results["owner1/repo1"]["nameWithOwner"] == "owner1/repo1"
+        assert results["owner2/repo2"]["nameWithOwner"] == "owner2/repo2"
+        assert results["owner3/invalid"] is None
+
+
+@pytest.mark.asyncio
+async def test_get_repos_by_fully_qualified_name_batch_empty_list():
+    async with create_github_source() as source:
+        results = await source.github_client.get_repos_by_fully_qualified_name_batch([])
+        assert results == {}
+
+
+@pytest.mark.asyncio
+async def test_get_repos_by_fully_qualified_name_batch_with_custom_batch_size():
+    async with create_github_source() as source:
+        # Test with batch size of 1 to force multiple GraphQL calls
+        repo_names = ["owner1/repo1", "owner2/repo2"]
+
+        # Mock responses for each batch
+        responses = [
+            {"repo0": {"nameWithOwner": "owner1/repo1"}},
+            {"repo0": {"nameWithOwner": "owner2/repo2"}},
+        ]
+        source.github_client.graphql = AsyncMock(side_effect=responses)
+
+        results = await source.github_client.get_repos_by_fully_qualified_name_batch(
+            repo_names, batch_size=1
+        )
+
+        assert len(results) == 2
+        assert results["owner1/repo1"]["nameWithOwner"] == "owner1/repo1"
+        assert results["owner2/repo2"]["nameWithOwner"] == "owner2/repo2"
+        # Verify graphql was called twice (once per batch)
+        assert source.github_client.graphql.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_fetch_repos_batch_empty_list():
+    async with create_github_source() as source:
+        results = await source.github_client._fetch_repos_batch([])
+        assert results == {}
