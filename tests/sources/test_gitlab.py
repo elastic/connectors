@@ -461,9 +461,10 @@ class TestGitLabDataSource:
 
         doc = source._format_work_item_doc(
             mock_gitlab_work_item,
-            project=mock_gitlab_project,
             assignees_data=source._extract_widget_assignees(mock_gitlab_work_item),
             labels_data=source._extract_widget_labels(mock_gitlab_work_item),
+            notes=[],
+            project=mock_gitlab_project,
         )
 
         assert doc["_id"] == "issue_123_1"
@@ -985,15 +986,14 @@ class TestGitLabClientAsyncGenerators:
 
     @pytest.mark.asyncio
     async def test_get_file_content_error(self):
-        """Test get_file_content handles errors."""
+        """Test get_file_content raises errors for retry."""
         client = GitLabClient(token="test-token")
 
         with patch.object(client, "_get_rest", new_callable=AsyncMock) as mock_rest:
             mock_rest.side_effect = Exception("File not found")
 
-            file_data = await client.get_file_content(123, "nonexistent.md", "main")
-
-            assert file_data is None
+            with pytest.raises(Exception, match="File not found"):
+                await client.get_file_content(123, "nonexistent.md", "main")
 
     @pytest.mark.asyncio
     async def test_fetch_remaining_field_assignees(self):
@@ -1171,7 +1171,7 @@ class TestGitLabClientAsyncGenerators:
                 assignees.append(assignee)
 
             assert len(assignees) == 1
-            assert assignees[0]["username"] == "user1"
+            assert assignees[0].username == "user1"
 
     @pytest.mark.asyncio
     async def test_fetch_remaining_work_item_labels(self):
@@ -1208,7 +1208,7 @@ class TestGitLabClientAsyncGenerators:
                 labels.append(label)
 
             assert len(labels) == 1
-            assert labels[0]["title"] == "bug"
+            assert labels[0].title == "bug"
 
     @pytest.mark.asyncio
     async def test_fetch_remaining_work_item_discussions(self):
@@ -1227,7 +1227,15 @@ class TestGitLabClientAsyncGenerators:
                                     {
                                         "__typename": "WorkItemWidgetNotes",
                                         "discussions": {
-                                            "nodes": [{"id": "disc1"}],
+                                            "nodes": [
+                                                {
+                                                    "id": "disc1",
+                                                    "notes": {
+                                                        "nodes": [],
+                                                        "pageInfo": {"hasNextPage": False},
+                                                    },
+                                                }
+                                            ],
                                             "pageInfo": {"hasNextPage": False},
                                         },
                                     }
@@ -1245,7 +1253,7 @@ class TestGitLabClientAsyncGenerators:
                 discussions.append(discussion)
 
             assert len(discussions) == 1
-            assert discussions[0]["id"] == "disc1"
+            assert discussions[0].id == "disc1"
 
     @pytest.mark.asyncio
     async def test_fetch_remaining_work_item_group_discussions(self):
@@ -1264,7 +1272,15 @@ class TestGitLabClientAsyncGenerators:
                                     {
                                         "__typename": "WorkItemWidgetNotes",
                                         "discussions": {
-                                            "nodes": [{"id": "disc1"}],
+                                            "nodes": [
+                                                {
+                                                    "id": "disc1",
+                                                    "notes": {
+                                                        "nodes": [],
+                                                        "pageInfo": {"hasNextPage": False},
+                                                    },
+                                                }
+                                            ],
                                             "pageInfo": {"hasNextPage": False},
                                         },
                                     }
@@ -1282,7 +1298,7 @@ class TestGitLabClientAsyncGenerators:
                 discussions.append(discussion)
 
             assert len(discussions) == 1
-            assert discussions[0]["id"] == "disc1"
+            assert discussions[0].id == "disc1"
 
     @pytest.mark.asyncio
     async def test_get_work_items_group(self):
@@ -1668,16 +1684,16 @@ class TestGitLabDataSourceIntegration:
             yield work_item
 
         async def mock_remaining_assignees(*args, **kwargs):
-            yield {"username": "user2", "name": "User 2"}
+            yield GitLabUser(username="user2", name="User 2")
 
         async def mock_remaining_labels(*args, **kwargs):
-            yield {"title": "label2"}
+            yield GitLabLabel(title="label2")
 
         async def mock_remaining_discussions(*args, **kwargs):
-            yield {
-                "id": "disc1",
-                "notes": {"nodes": [], "pageInfo": {"hasNextPage": False}},
-            }
+            yield GitLabDiscussion(
+                id="disc1",
+                notes=PaginatedList(nodes=[], page_info=PageInfo(has_next_page=False)),
+            )
 
         source.gitlab_client.get_projects = mock_get_projects
         source.gitlab_client.get_work_items_project = mock_get_work_items
@@ -1773,10 +1789,10 @@ class TestGitLabDataSourceIntegration:
             yield epic
 
         async def mock_remaining_epic_assignees(*args, **kwargs):
-            yield {"username": "epicuser2", "name": "Epic User 2"}
+            yield GitLabUser(username="epicuser2", name="Epic User 2")
 
         async def mock_remaining_epic_labels(*args, **kwargs):
-            yield {"title": "epiclabel2"}
+            yield GitLabLabel(title="epiclabel2")
 
         source.gitlab_client.get_projects = mock_get_projects
         source.gitlab_client.get_work_items_project = lambda *a, **k: async_gen_empty()
@@ -1920,20 +1936,21 @@ class TestGitLabDataSourceIntegration:
             yield epic
 
         async def mock_remaining_discussions(*args, **kwargs):
-            yield {
-                "id": "gid://gitlab/Discussion/2",
-                "notes": {
-                    "nodes": [
-                        {
-                            "id": "gid://gitlab/Note/2",
-                            "body": "Second note",
-                            "createdAt": "2023-01-02T00:00:00Z",
-                            "updatedAt": "2023-01-02T00:00:00Z",
-                            "author": {"username": "user2"},
-                        }
-                    ]
-                },
-            }
+            yield GitLabDiscussion(
+                id="gid://gitlab/Discussion/2",
+                notes=PaginatedList(
+                    nodes=[
+                        GitLabNote(
+                            id="gid://gitlab/Note/2",
+                            body="Second note",
+                            created_at="2023-01-02T00:00:00Z",
+                            updated_at="2023-01-02T00:00:00Z",
+                            author=GitLabUser(username="user2"),
+                        )
+                    ],
+                    page_info=PageInfo(has_next_page=False),
+                ),
+            )
 
         source.gitlab_client.get_projects = mock_get_projects
         source.gitlab_client.get_work_items_project = lambda *a, **k: async_gen_empty()
@@ -2091,11 +2108,11 @@ class TestGitLabDataSourceIntegration:
             project_path, iid, field_name, issuable_type, cursor
         ):
             if field_name == "assignees":
-                yield {"username": "assignee2", "name": "Assignee 2"}
+                yield GitLabUser(username="assignee2", name="Assignee 2")
             elif field_name == "reviewers":
-                yield {"username": "reviewer2", "name": "Reviewer 2"}
+                yield GitLabUser(username="reviewer2", name="Reviewer 2")
             elif field_name == "approvedBy":
-                yield {"username": "approver2", "name": "Approver 2"}
+                yield GitLabUser(username="approver2", name="Approver 2")
 
         source.gitlab_client.get_projects = mock_get_projects
         source.gitlab_client.get_work_items_project = lambda *a, **k: async_gen_empty()
@@ -2598,7 +2615,7 @@ class TestGitLabClientAsyncGeneratorErrors:
 
     @pytest.mark.asyncio
     async def test_fetch_remaining_field_exception(self):
-        """Test fetch_remaining_field handles exceptions."""
+        """Test fetch_remaining_field raises exceptions for retry."""
         client = GitLabClient(token="test-token")
 
         with patch.object(
@@ -2606,13 +2623,11 @@ class TestGitLabClientAsyncGeneratorErrors:
         ) as mock_graphql:
             mock_graphql.side_effect = Exception("Fetch failed")
 
-            items = []
-            async for item in client.fetch_remaining_field(
-                "group/project", 1, "assignees", "issue", "cursor1"
-            ):
-                items.append(item)
-
-            assert len(items) == 0
+            with pytest.raises(Exception, match="Fetch failed"):
+                async for item in client.fetch_remaining_field(
+                    "group/project", 1, "assignees", "issue", "cursor1"
+                ):
+                    pass  # Should not reach here
 
     @pytest.mark.asyncio
     async def test_fetch_remaining_field_missing_project(self):
@@ -2673,7 +2688,7 @@ class TestGitLabClientAsyncGeneratorErrors:
 
     @pytest.mark.asyncio
     async def test_fetch_remaining_work_item_assignees_exception(self):
-        """Test fetch_remaining_work_item_assignees handles aiohttp exceptions."""
+        """Test fetch_remaining_work_item_assignees raises aiohttp exceptions for retry."""
         import aiohttp
 
         client = GitLabClient(token="test-token")
@@ -2681,16 +2696,14 @@ class TestGitLabClientAsyncGeneratorErrors:
         with patch.object(
             client, "_execute_graphql", new_callable=AsyncMock
         ) as mock_graphql:
-            # Use aiohttp.ClientError which is caught by the code
+            # ClientError should be raised so @retryable can handle it
             mock_graphql.side_effect = aiohttp.ClientError("Fetch error")
 
-            assignees = []
-            async for assignee in client.fetch_remaining_work_item_assignees(
-                "group/project", 1, "ISSUE", "cursor1"
-            ):
-                assignees.append(assignee)
-
-            assert len(assignees) == 0
+            with pytest.raises(aiohttp.ClientError, match="Fetch error"):
+                async for assignee in client.fetch_remaining_work_item_assignees(
+                    "group/project", 1, "ISSUE", "cursor1"
+                ):
+                    pass  # Should not reach here
 
     @pytest.mark.asyncio
     async def test_fetch_remaining_work_item_assignees_missing_widget(self):
@@ -2852,9 +2865,9 @@ class TestGitLabClientAsyncGeneratorErrors:
                 assignees.append(assignee)
 
             assert len(assignees) == 3
-            assert assignees[0]["username"] == "user1"
-            assert assignees[1]["username"] == "user2"
-            assert assignees[2]["username"] == "user3"
+            assert assignees[0].username == "user1"
+            assert assignees[1].username == "user2"
+            assert assignees[2].username == "user3"
 
     @pytest.mark.asyncio
     async def test_fetch_remaining_work_item_labels_group(self):
@@ -2925,9 +2938,9 @@ class TestGitLabClientAsyncGeneratorErrors:
                 labels.append(label)
 
             assert len(labels) == 3
-            assert labels[0]["title"] == "bug"
-            assert labels[1]["title"] == "critical"
-            assert labels[2]["title"] == "feature"
+            assert labels[0].title == "bug"
+            assert labels[1].title == "critical"
+            assert labels[2].title == "feature"
 
     @pytest.mark.asyncio
     async def test_fetch_remaining_work_item_assignees_group_missing_group(self):

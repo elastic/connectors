@@ -20,6 +20,7 @@ Work Items API Reference: https://docs.gitlab.com/ee/api/graphql/reference/#work
 from functools import partial
 from typing import Any, AsyncGenerator, Type, TypeVar
 
+import aiohttp
 from pydantic import BaseModel
 
 from connectors.source import (
@@ -27,7 +28,11 @@ from connectors.source import (
     ConfigurableFieldValueError,
     DataSourceConfiguration,
 )
-from connectors.sources.gitlab.client import GitLabClient
+from connectors.sources.gitlab.client import (
+    GitLabClient,
+    GitLabGraphQLException,
+    GitLabRateLimitException,
+)
 from connectors.sources.gitlab.document_schemas import (
     FileDocument,
 )
@@ -163,7 +168,12 @@ class GitLabDataSource(BaseDataSource):
                         accessible_projects.add(full_path)
                         self._logger.debug(f"✓ Project '{full_path}' is accessible")
 
-            except Exception as e:
+            except (
+                aiohttp.ClientError,
+                TimeoutError,
+                GitLabRateLimitException,
+                GitLabGraphQLException,
+            ) as e:
                 self._logger.warning(f"Failed to validate project batch {batch}: {e}")
                 # If batch query fails, we can't determine which specific projects are invalid
                 # so we skip this batch and continue
@@ -231,47 +241,30 @@ class GitLabDataSource(BaseDataSource):
 
     T = TypeVar("T", bound=BaseModel)
 
-    def _extract_widget(
-        self, work_item: GitLabWorkItem, widget_type: Type[T]
-    ) -> T | None:
-        """Generic method to extract a specific widget type from work item.
-
-        Args:
-            work_item: Work item containing widgets
-            widget_type: The widget class type to search for
-
-        Returns:
-            The widget instance if found, None otherwise
-        """
-        for widget in work_item.widgets:
-            if isinstance(widget, widget_type):
-                return widget
-        return None
-
     def _extract_widget_description(self, work_item: GitLabWorkItem) -> str | None:
         """Extract description from work item widgets."""
-        widget = self._extract_widget(work_item, WorkItemWidgetDescription)
+        widget = work_item.get_widget(WorkItemWidgetDescription)
         return widget.description if widget else None
 
     def _extract_widget_assignees(
         self, work_item: GitLabWorkItem
     ) -> PaginatedList[GitLabUser]:
         """Extract assignees data from work item widgets."""
-        widget = self._extract_widget(work_item, WorkItemWidgetAssignees)
+        widget = work_item.get_widget(WorkItemWidgetAssignees)
         return widget.assignees if widget else PaginatedList[GitLabUser](nodes=[])
 
     def _extract_widget_labels(
         self, work_item: GitLabWorkItem
     ) -> PaginatedList[GitLabLabel]:
         """Extract labels data from work item widgets."""
-        widget = self._extract_widget(work_item, WorkItemWidgetLabels)
+        widget = work_item.get_widget(WorkItemWidgetLabels)
         return widget.labels if widget else PaginatedList[GitLabLabel](nodes=[])
 
     def _extract_widget_discussions(
         self, work_item: GitLabWorkItem
     ) -> PaginatedList[GitLabDiscussion]:
         """Extract discussions from work item widgets."""
-        widget = self._extract_widget(work_item, WorkItemWidgetNotes)
+        widget = work_item.get_widget(WorkItemWidgetNotes)
         return (
             widget.discussions if widget else PaginatedList[GitLabDiscussion](nodes=[])
         )
@@ -280,13 +273,13 @@ class GitLabDataSource(BaseDataSource):
         self, work_item: GitLabWorkItem
     ) -> WorkItemWidgetHierarchy | None:
         """Extract hierarchy info from work item widgets (for Epics)."""
-        return self._extract_widget(work_item, WorkItemWidgetHierarchy)
+        return work_item.get_widget(WorkItemWidgetHierarchy)
 
     def _extract_widget_linked_items(
         self, work_item: GitLabWorkItem
     ) -> WorkItemWidgetLinkedItems | None:
         """Extract linked items from work item widgets (for Epics/Issues)."""
-        return self._extract_widget(work_item, WorkItemWidgetLinkedItems)
+        return work_item.get_widget(WorkItemWidgetLinkedItems)
 
     async def _fetch_remaining_paginated_field(
         self,
@@ -584,25 +577,34 @@ class GitLabDataSource(BaseDataSource):
             if not project_id:
                 continue
 
+            self._logger.info(f"Syncing project: {project.full_path}")
+
             yield self._format_project_doc(project), None
 
+            self._logger.debug(f"Syncing issues for project: {project.full_path}")
             async for doc in self._fetch_work_items_for_project(
                 project, WorkItemType.ISSUE
             ):
                 yield doc
 
+            self._logger.debug(f"Syncing merge requests for project: {project.full_path}")
             async for doc in self._fetch_merge_requests_for_project(project):
                 yield doc
 
+            self._logger.debug(f"Syncing releases for project: {project.full_path}")
             async for doc in self._fetch_releases_for_project(project):
                 yield doc
 
             if project.group:
+                self._logger.debug(
+                    f"Syncing epics for group: {project.group.full_path}"
+                )
                 async for doc in self._fetch_epics_for_group(
                     project.group.full_path, seen_groups
                 ):
                     yield doc
 
+            self._logger.debug(f"Syncing README files for project: {project.full_path}")
             async for readme_doc, download_func in self._fetch_readme_files(
                 project_id, project
             ):

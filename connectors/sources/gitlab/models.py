@@ -6,11 +6,14 @@
 """Pydantic models for GitLab GraphQL API responses."""
 
 from enum import Enum
-from typing import Annotated, Any, Generic, Literal, TypeVar, Union, get_args
+from typing import Annotated, Any, Generic, Literal, Type, TypeVar, Union, get_args
 
-from pydantic import BaseModel, Discriminator, Field, Tag
+from pydantic import BaseModel, Discriminator, Field, PrivateAttr, Tag, model_validator
 from pydantic.alias_generators import to_camel
 from pydantic.config import ConfigDict
+
+# TypeVar for generic widget extraction
+T = TypeVar("T")
 
 
 class WorkItemType(str, Enum):
@@ -359,6 +362,32 @@ class GitLabWorkItem(BaseModel):
     widgets: list[
         WorkItemWidget
     ] = []  # Widgets fetched in initial query; paginated nested fields fetched separately
+
+    # Private attribute for widget type mapping (not serialized)
+    _widgets_by_type: dict[Type[WorkItemWidget], WorkItemWidget] = PrivateAttr(
+        default_factory=dict
+    )
+
+    @model_validator(mode="after")
+    def _build_widget_map(self) -> "GitLabWorkItem":
+        """Build widget type map after model validation for convenient lookups."""
+        self._widgets_by_type = {type(w): w for w in self.widgets}
+        return self
+
+    def get_widget(self, widget_type: Type[T]) -> T | None:
+        """Get widget by type for convenient lookup.
+
+        Args:
+            widget_type: The widget class type to retrieve
+
+        Returns:
+            The widget instance if found, None otherwise
+
+        Example:
+            description = work_item.get_widget(WorkItemWidgetDescription)
+            assignees = work_item.get_widget(WorkItemWidgetAssignees)
+        """
+        return self._widgets_by_type.get(widget_type)
 
     @property
     def type_name(self) -> str:

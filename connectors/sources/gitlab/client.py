@@ -13,6 +13,20 @@ import aiohttp
 
 from connectors.logger import logger
 from connectors.source import ConfigurableFieldValueError
+
+
+class GitLabRateLimitException(Exception):
+    """Raised when GitLab API rate limit is exceeded."""
+
+    pass
+
+
+class GitLabGraphQLException(Exception):
+    """Raised when GitLab GraphQL query returns errors."""
+
+    pass
+
+
 from connectors.sources.gitlab.models import (
     GitLabDiscussion,
     GitLabLabel,
@@ -127,6 +141,11 @@ class GitLabClient:
                     sleep_time = max(0, int(reset_time) - int(time.time()))
                 else:
                     # Default to 60 seconds if no headers found
+                    # Note: GitLab has known issues with missing rate limit headers:
+                    # - gitlab.com often doesn't return RateLimit-* headers (issue #365728)
+                    # - Self-managed GitLab stopped sending Retry-After in v13.0+ (issue #230914)
+                    # - GraphQL can return 500 instead of 429 when rate limited (v15.6+)
+                    # This fallback ensures we handle rate limits even when headers are absent.
                     sleep_time = 60
 
             self._logger.warning(
@@ -161,7 +180,7 @@ class GitLabClient:
             # Handle rate limiting - sleeps and raises exception for @retryable to catch
             if await self._handle_rate_limit(response):
                 msg = "Rate limit exceeded"
-                raise Exception(msg)
+                raise GitLabRateLimitException(msg)
 
             response.raise_for_status()
             result = await response.json()
@@ -185,11 +204,11 @@ class GitLabClient:
                         self._logger.warning(f"GraphQL rate limit error: {error}")
                         await self._sleeps.sleep(60)
                         msg = "GraphQL rate limit exceeded"
-                        raise Exception(msg)
+                        raise GitLabRateLimitException(msg)
 
                 # If not rate limit, raise the error
                 error_msg = f"GraphQL errors: {errors}"
-                raise Exception(error_msg)
+                raise GitLabGraphQLException(error_msg)
 
             return result.get("data", {})
 
@@ -206,11 +225,13 @@ class GitLabClient:
         session = self._get_session()
         url = f"{self.api_url}/{endpoint}"
 
+        self._logger.debug(f"REST GET {endpoint}" + (f" params={params}" if params else ""))
+
         async with session.get(url, params=params) as response:
             # Handle rate limiting - sleeps and raises exception for @retryable to catch
             if await self._handle_rate_limit(response):
                 msg = "Rate limit exceeded"
-                raise Exception(msg)
+                raise GitLabRateLimitException(msg)
 
             response.raise_for_status()
             return await response.json()
@@ -489,11 +510,11 @@ class GitLabClient:
 
             try:
                 result = await self._execute_graphql(query, variables)
-            except Exception as e:
+            except (aiohttp.ClientError, TimeoutError) as e:
                 self._logger.warning(
                     f"Failed to fetch remaining {field_type} for {issuable_type} {iid}: {e}"
                 )
-                return
+                raise
 
             project_data = result.get("project")
             if not project_data:
@@ -548,11 +569,11 @@ class GitLabClient:
 
             try:
                 result = await self._execute_graphql(query, variables)
-            except Exception as e:
+            except (aiohttp.ClientError, TimeoutError) as e:
                 self._logger.warning(
                     f"Failed to fetch remaining notes for discussion {discussion_id}: {e}"
                 )
-                return
+                raise
 
             project_data = result.get("project")
             if not project_data:
@@ -616,7 +637,7 @@ class GitLabClient:
                 self._logger.warning(
                     f"Failed to fetch remaining assignees for work item {iid}: {e}"
                 )
-                return
+                raise
 
             project_data = result.get("project")
             if not project_data:
@@ -681,7 +702,7 @@ class GitLabClient:
                 self._logger.warning(
                     f"Failed to fetch remaining labels for work item {iid}: {e}"
                 )
-                return
+                raise
 
             project_data = result.get("project")
             if not project_data:
@@ -748,7 +769,7 @@ class GitLabClient:
                 self._logger.warning(
                     f"Failed to fetch remaining discussions for work item {iid}: {e}"
                 )
-                return
+                raise
 
             project_data = result.get("project")
             if not project_data:
@@ -815,7 +836,7 @@ class GitLabClient:
                 self._logger.warning(
                     f"Failed to fetch remaining discussions for group work item {iid}: {e}"
                 )
-                return
+                raise
 
             group_data = result.get("group")
             if not group_data:
@@ -882,7 +903,7 @@ class GitLabClient:
                 self._logger.warning(
                     f"Failed to fetch remaining assignees for group work item {iid}: {e}"
                 )
-                return
+                raise
 
             group_data = result.get("group")
             if not group_data:
@@ -949,7 +970,7 @@ class GitLabClient:
                 self._logger.warning(
                     f"Failed to fetch remaining labels for group work item {iid}: {e}"
                 )
-                return
+                raise
 
             group_data = result.get("group")
             if not group_data:
@@ -981,6 +1002,11 @@ class GitLabClient:
 
             cursor = page_info.get("endCursor")
 
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    )
     async def get_file_content(self, project_id, file_path, ref=None):
         """Get file content from repository using REST API.
 
@@ -1000,11 +1026,11 @@ class GitLabClient:
 
             file_data = await self._get_rest(endpoint, params=params)
             return file_data
-        except Exception as e:
+        except (aiohttp.ClientError, TimeoutError) as e:
             self._logger.warning(
                 f"Failed to fetch file {file_path} from project {project_id}: {e}"
             )
-            return None
+            raise
 
     async def ping(self) -> None:
         """Test the connection to GitLab."""
