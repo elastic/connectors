@@ -145,7 +145,7 @@ filterwarnings = [
 ]
 
 [tool.pyright]
-pythonVersion = "3.10"
+pythonVersion = "3.11"
 include = ["connectors"]
 reportMissingImports = false
 reportMissingModuleSource = false
@@ -167,13 +167,6 @@ preview = true
 fixable = ["A", "B", "C", "C4", "D", "E", "F", "G", "I", "N", "Q", "S", "T", "W", "ANN", "ARG", "BLE", "COM", "DJ", "DTZ", "EM", "ERA", "EXE", "FBT", "ICN", "INP", "ISC", "NPY", "PD", "PGH", "PIE", "PL", "PT", "PTH", "PYI", "RET", "RSE", "RUF", "SIM", "SLF", "TCH", "TID", "TRY", "UP", "YTT", "T10", "T20"]
 unfixable = []
 
-exclude = [
-    ".git",
-    "__pycache__",
-    "lib",
-    "bin",
-    "include"
-]
 dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
 
 [tool.ruff.lint.per-file-ignores]
