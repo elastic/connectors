@@ -422,7 +422,9 @@ class GitLabDataSource(BaseDataSource):
             if labels_data.page_info.has_next_page:
                 cursor = labels_data.page_info.end_cursor
                 if cursor:
-                    async for label in self.gitlab_client.fetch_remaining_work_item_labels(
+                    async for (
+                        label
+                    ) in self.gitlab_client.fetch_remaining_work_item_labels(
                         project.full_path, work_item.iid, work_item_type, cursor
                     ):
                         labels_data.nodes.append(label)
@@ -519,9 +521,7 @@ class GitLabDataSource(BaseDataSource):
                 if assignees_data.page_info.has_next_page:
                     cursor = assignees_data.page_info.end_cursor
                     if cursor:
-                        async for (
-                            assignee
-                        ) in self.gitlab_client.fetch_remaining_work_item_assignees_group(
+                        async for assignee in self.gitlab_client.fetch_remaining_work_item_assignees_group(
                             group_path, epic.iid, WorkItemType.EPIC, cursor
                         ):
                             assignees_data.nodes.append(assignee)
@@ -541,9 +541,7 @@ class GitLabDataSource(BaseDataSource):
                 if discussions_data.page_info.has_next_page:
                     cursor = discussions_data.page_info.end_cursor
                     if cursor:
-                        async for (
-                            discussion
-                        ) in self.gitlab_client.fetch_remaining_work_item_group_discussions(
+                        async for discussion in self.gitlab_client.fetch_remaining_work_item_group_discussions(
                             group_path, epic.iid, WorkItemType.EPIC, cursor
                         ):
                             discussions_data.nodes.append(discussion)
@@ -601,7 +599,9 @@ class GitLabDataSource(BaseDataSource):
             ):
                 yield doc
 
-            self._logger.debug(f"Syncing merge requests for project: {project.full_path}")
+            self._logger.debug(
+                f"Syncing merge requests for project: {project.full_path}"
+            )
             async for doc in self._fetch_merge_requests_for_project(project):
                 yield doc
 

@@ -19,7 +19,6 @@ from connectors.sources.gitlab.models import (
     GitLabCommit,
     GitLabDiscussion,
     GitLabGroup,
-    GitLabIssue,
     GitLabLabel,
     GitLabMergeRequest,
     GitLabMilestone,
@@ -1234,7 +1233,9 @@ class TestGitLabClientAsyncGenerators:
                                                     "id": "disc1",
                                                     "notes": {
                                                         "nodes": [],
-                                                        "pageInfo": {"hasNextPage": False},
+                                                        "pageInfo": {
+                                                            "hasNextPage": False
+                                                        },
                                                     },
                                                 }
                                             ],
@@ -1279,7 +1280,9 @@ class TestGitLabClientAsyncGenerators:
                                                     "id": "disc1",
                                                     "notes": {
                                                         "nodes": [],
-                                                        "pageInfo": {"hasNextPage": False},
+                                                        "pageInfo": {
+                                                            "hasNextPage": False
+                                                        },
                                                     },
                                                 }
                                             ],
@@ -2642,7 +2645,7 @@ class TestGitLabClientAsyncGeneratorErrors:
             mock_graphql.side_effect = aiohttp.ClientError("Fetch failed")
 
             with pytest.raises(Exception, match="Fetch failed"):
-                async for item in client.fetch_remaining_field(
+                async for _item in client.fetch_remaining_field(
                     "group/project", 1, "assignees", "issue", "cursor1"
                 ):
                     pass  # Should not reach here
@@ -2718,7 +2721,7 @@ class TestGitLabClientAsyncGeneratorErrors:
             mock_graphql.side_effect = aiohttp.ClientError("Fetch error")
 
             with pytest.raises(aiohttp.ClientError, match="Fetch error"):
-                async for assignee in client.fetch_remaining_work_item_assignees(
+                async for _assignee in client.fetch_remaining_work_item_assignees(
                     "group/project", 1, "ISSUE", "cursor1"
                 ):
                     pass  # Should not reach here

@@ -15,6 +15,36 @@ import aiohttp
 
 from connectors.logger import logger
 from connectors.source import ConfigurableFieldValueError
+from connectors.sources.gitlab.models import (
+    GitLabDiscussion,
+    GitLabLabel,
+    GitLabMergeRequest,
+    GitLabProject,
+    GitLabRelease,
+    GitLabUser,
+    GitLabWorkItem,
+    PageInfo,
+)
+from connectors.sources.gitlab.queries import (
+    APPROVEDBY_QUERY,
+    ASSIGNEES_QUERY,
+    DISCUSSIONS_QUERY,
+    LABELS_QUERY,
+    MERGE_REQUESTS_QUERY,
+    NOTES_QUERY,
+    PROJECTS_QUERY,
+    RELEASES_QUERY,
+    REVIEWERS_QUERY,
+    WORK_ITEM_ASSIGNEES_QUERY,
+    WORK_ITEM_DISCUSSIONS_QUERY,
+    WORK_ITEM_GROUP_ASSIGNEES_QUERY,
+    WORK_ITEM_GROUP_DISCUSSIONS_QUERY,
+    WORK_ITEM_GROUP_LABELS_QUERY,
+    WORK_ITEM_LABELS_QUERY,
+    WORK_ITEMS_GROUP_QUERY,
+    WORK_ITEMS_PROJECT_QUERY,
+)
+from connectors.utils import CancellableSleeps, RetryStrategy, retryable
 
 
 class GitLabRateLimitException(Exception):
@@ -46,37 +76,6 @@ class GitLabUnauthorizedError(Exception):
 
     pass
 
-
-from connectors.sources.gitlab.models import (
-    GitLabDiscussion,
-    GitLabLabel,
-    GitLabMergeRequest,
-    GitLabProject,
-    GitLabRelease,
-    GitLabUser,
-    GitLabWorkItem,
-    PageInfo,
-)
-from connectors.sources.gitlab.queries import (
-    APPROVEDBY_QUERY,
-    ASSIGNEES_QUERY,
-    DISCUSSIONS_QUERY,
-    LABELS_QUERY,
-    MERGE_REQUESTS_QUERY,
-    NOTES_QUERY,
-    PROJECTS_QUERY,
-    RELEASES_QUERY,
-    REVIEWERS_QUERY,
-    WORK_ITEM_ASSIGNEES_QUERY,
-    WORK_ITEM_DISCUSSIONS_QUERY,
-    WORK_ITEM_GROUP_ASSIGNEES_QUERY,
-    WORK_ITEM_GROUP_DISCUSSIONS_QUERY,
-    WORK_ITEM_GROUP_LABELS_QUERY,
-    WORK_ITEM_LABELS_QUERY,
-    WORK_ITEMS_GROUP_QUERY,
-    WORK_ITEMS_PROJECT_QUERY,
-)
-from connectors.utils import CancellableSleeps, RetryStrategy, retryable
 
 GITLAB_FTEST_HOST = os.environ.get("GITLAB_FTEST_HOST")
 RUNNING_FTEST = "RUNNING_FTEST" in os.environ
@@ -198,17 +197,14 @@ class GitLabClient:
                 response.raise_for_status()
             except aiohttp.ClientResponseError as e:
                 if e.status == 401:
-                    raise GitLabUnauthorizedError(
-                        f"Authentication failed: {e.message}"
-                    ) from e
+                    msg = f"Authentication failed: {e.message}"
+                    raise GitLabUnauthorizedError(msg) from e
                 elif e.status == 403:
-                    raise GitLabForbiddenError(
-                        f"Access forbidden: {e.message}"
-                    ) from e
+                    msg = f"Access forbidden: {e.message}"
+                    raise GitLabForbiddenError(msg) from e
                 elif e.status == 404:
-                    raise GitLabNotFoundError(
-                        f"Resource not found: {e.message}"
-                    ) from e
+                    msg = f"Resource not found: {e.message}"
+                    raise GitLabNotFoundError(msg) from e
                 raise
 
             result = await response.json()
@@ -233,7 +229,9 @@ class GitLabClient:
         session = self._get_session()
         url = f"{self.api_url}/{endpoint}"
 
-        self._logger.debug(f"REST GET {endpoint}" + (f" params={params}" if params else ""))
+        self._logger.debug(
+            f"REST GET {endpoint}" + (f" params={params}" if params else "")
+        )
 
         async with session.get(url, params=params) as response:
             if await self._handle_rate_limit(response):
@@ -244,17 +242,14 @@ class GitLabClient:
                 response.raise_for_status()
             except aiohttp.ClientResponseError as e:
                 if e.status == 401:
-                    raise GitLabUnauthorizedError(
-                        f"Authentication failed: {e.message}"
-                    ) from e
+                    msg = f"Authentication failed: {e.message}"
+                    raise GitLabUnauthorizedError(msg) from e
                 elif e.status == 403:
-                    raise GitLabForbiddenError(
-                        f"Access forbidden: {e.message}"
-                    ) from e
+                    msg = f"Access forbidden: {e.message}"
+                    raise GitLabForbiddenError(msg) from e
                 elif e.status == 404:
-                    raise GitLabNotFoundError(
-                        f"Resource not found: {e.message}"
-                    ) from e
+                    msg = f"Resource not found: {e.message}"
+                    raise GitLabNotFoundError(msg) from e
                 raise
 
             return await response.json()
