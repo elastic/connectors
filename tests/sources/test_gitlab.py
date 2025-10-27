@@ -809,21 +809,21 @@ class TestGitLabClientAsyncGenerators:
             assert mock_graphql.call_count == 2
 
     @pytest.mark.asyncio
+    @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
     async def test_get_projects_handles_errors(self):
         """Test get_projects handles GraphQL errors gracefully."""
         import aiohttp
 
         client = GitLabClient(token="test-token")
 
-        with patch("asyncio.sleep", new_callable=AsyncMock):
-            with patch.object(
-                client, "_execute_graphql", new_callable=AsyncMock
-            ) as mock_graphql:
-                mock_graphql.side_effect = aiohttp.ClientError("GraphQL error")
+        with patch.object(
+            client, "_execute_graphql", new_callable=AsyncMock
+        ) as mock_graphql:
+            mock_graphql.side_effect = aiohttp.ClientError("GraphQL error")
 
-                with pytest.raises(aiohttp.ClientError, match="GraphQL error"):
-                    async for _ in client.get_projects():
-                        pass
+            with pytest.raises(aiohttp.ClientError, match="GraphQL error"):
+                async for _ in client.get_projects():
+                    pass
 
     @pytest.mark.asyncio
     async def test_get_merge_requests(self):
@@ -986,11 +986,14 @@ class TestGitLabClientAsyncGenerators:
             mock_rest.assert_called_once()
 
     @pytest.mark.asyncio
+    @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
     async def test_get_file_content_error(self):
         """Test get_file_content raises errors for retry."""
         client = GitLabClient(token="test-token")
 
-        with patch.object(client, "_get_rest", new_callable=AsyncMock) as mock_rest:
+        with patch.object(
+            client, "_get_rest", new_callable=AsyncMock
+        ) as mock_rest:
             mock_rest.side_effect = Exception("File not found")
 
             with pytest.raises(Exception, match="File not found"):
@@ -2633,6 +2636,7 @@ class TestGitLabClientAsyncGeneratorErrors:
             assert len(items) == 0
 
     @pytest.mark.asyncio
+    @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
     async def test_fetch_remaining_field_exception(self):
         """Test fetch_remaining_field raises exceptions for retry."""
         import aiohttp
@@ -2648,7 +2652,7 @@ class TestGitLabClientAsyncGeneratorErrors:
                 async for _item in client.fetch_remaining_field(
                     "group/project", 1, "assignees", "issue", "cursor1"
                 ):
-                    pass  # Should not reach here
+                    pass
 
     @pytest.mark.asyncio
     async def test_fetch_remaining_field_missing_project(self):
@@ -2708,6 +2712,7 @@ class TestGitLabClientAsyncGeneratorErrors:
             assert len(notes) == 0
 
     @pytest.mark.asyncio
+    @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
     async def test_fetch_remaining_work_item_assignees_exception(self):
         """Test fetch_remaining_work_item_assignees raises aiohttp exceptions for retry."""
         import aiohttp
@@ -2717,14 +2722,13 @@ class TestGitLabClientAsyncGeneratorErrors:
         with patch.object(
             client, "_execute_graphql", new_callable=AsyncMock
         ) as mock_graphql:
-            # ClientError should be raised so @retryable can handle it
             mock_graphql.side_effect = aiohttp.ClientError("Fetch error")
 
             with pytest.raises(aiohttp.ClientError, match="Fetch error"):
                 async for _assignee in client.fetch_remaining_work_item_assignees(
                     "group/project", 1, "ISSUE", "cursor1"
                 ):
-                    pass  # Should not reach here
+                    pass
 
     @pytest.mark.asyncio
     async def test_fetch_remaining_work_item_assignees_missing_widget(self):
