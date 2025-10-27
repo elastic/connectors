@@ -812,15 +812,17 @@ class TestGitLabClientAsyncGenerators:
     @pytest.mark.asyncio
     async def test_get_projects_handles_errors(self):
         """Test get_projects handles GraphQL errors gracefully."""
+        import aiohttp
+
         client = GitLabClient(token="test-token")
 
         with patch("asyncio.sleep", new_callable=AsyncMock):
             with patch.object(
                 client, "_execute_graphql", new_callable=AsyncMock
             ) as mock_graphql:
-                mock_graphql.side_effect = Exception("GraphQL error")
+                mock_graphql.side_effect = aiohttp.ClientError("GraphQL error")
 
-                with pytest.raises(Exception, match="GraphQL error"):
+                with pytest.raises(aiohttp.ClientError, match="GraphQL error"):
                     async for _ in client.get_projects():
                         pass
 
@@ -1847,8 +1849,10 @@ class TestGitLabDataSourceIntegration:
 
         async def mock_get_epics(*args, **kwargs):
             # Simulate Premium/Ultimate tier error
+            import aiohttp
+
             msg = "Epics require Premium tier"
-            raise Exception(msg)
+            raise aiohttp.ClientError(msg)
             yield  # Never reached
 
         source.gitlab_client.get_projects = mock_get_projects
@@ -2488,8 +2492,9 @@ class TestGitLabClientErrorHandling:
 
         client._session = mock_session
 
-        # Should raise HTTP error
-        with pytest.raises(aiohttp.ClientResponseError):
+        from connectors.sources.gitlab.client import GitLabNotFoundError
+
+        with pytest.raises(GitLabNotFoundError):
             await client._get_rest("invalid/endpoint")
 
     @pytest.mark.asyncio
@@ -2531,15 +2536,20 @@ class TestGitLabClientErrorHandling:
 class TestGitLabClientAsyncGeneratorErrors:
     """Test suite for error handling in async generator methods."""
 
+    # Tests use aiohttp.ClientError
+    import aiohttp
+
     @pytest.mark.asyncio
     async def test_get_merge_requests_exception(self):
         """Test get_merge_requests handles exceptions."""
+        import aiohttp
+
         client = GitLabClient(token="test-token")
 
         with patch.object(
             client, "_execute_graphql", new_callable=AsyncMock
         ) as mock_graphql:
-            mock_graphql.side_effect = Exception("Network error")
+            mock_graphql.side_effect = aiohttp.ClientError("Network error")
 
             mrs = []
             async for mr in client.get_merge_requests("group/project"):
@@ -2566,12 +2576,14 @@ class TestGitLabClientAsyncGeneratorErrors:
     @pytest.mark.asyncio
     async def test_get_releases_exception(self):
         """Test get_releases handles exceptions."""
+        import aiohttp
+
         client = GitLabClient(token="test-token")
 
         with patch.object(
             client, "_execute_graphql", new_callable=AsyncMock
         ) as mock_graphql:
-            mock_graphql.side_effect = Exception("Permission denied")
+            mock_graphql.side_effect = aiohttp.ClientError("Permission denied")
 
             releases = []
             async for release in client.get_releases("group/project"):
@@ -2582,12 +2594,14 @@ class TestGitLabClientAsyncGeneratorErrors:
     @pytest.mark.asyncio
     async def test_get_work_items_project_exception(self):
         """Test get_work_items_project handles exceptions."""
+        import aiohttp
+
         client = GitLabClient(token="test-token")
 
         with patch.object(
             client, "_execute_graphql", new_callable=AsyncMock
         ) as mock_graphql:
-            mock_graphql.side_effect = Exception("Query failed")
+            mock_graphql.side_effect = aiohttp.ClientError("Query failed")
 
             items = []
             async for item in client.get_work_items_project(
@@ -2600,12 +2614,14 @@ class TestGitLabClientAsyncGeneratorErrors:
     @pytest.mark.asyncio
     async def test_get_work_items_group_exception(self):
         """Test get_work_items_group handles exceptions."""
+        import aiohttp
+
         client = GitLabClient(token="test-token")
 
         with patch.object(
             client, "_execute_graphql", new_callable=AsyncMock
         ) as mock_graphql:
-            mock_graphql.side_effect = Exception("Group not found")
+            mock_graphql.side_effect = aiohttp.ClientError("Group not found")
 
             items = []
             async for item in client.get_work_items_group("group", [WorkItemType.EPIC]):
@@ -2616,12 +2632,14 @@ class TestGitLabClientAsyncGeneratorErrors:
     @pytest.mark.asyncio
     async def test_fetch_remaining_field_exception(self):
         """Test fetch_remaining_field raises exceptions for retry."""
+        import aiohttp
+
         client = GitLabClient(token="test-token")
 
         with patch.object(
             client, "_execute_graphql", new_callable=AsyncMock
         ) as mock_graphql:
-            mock_graphql.side_effect = Exception("Fetch failed")
+            mock_graphql.side_effect = aiohttp.ClientError("Fetch failed")
 
             with pytest.raises(Exception, match="Fetch failed"):
                 async for item in client.fetch_remaining_field(

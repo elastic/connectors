@@ -30,8 +30,11 @@ from connectors.source import (
 )
 from connectors.sources.gitlab.client import (
     GitLabClient,
+    GitLabForbiddenError,
     GitLabGraphQLException,
+    GitLabNotFoundError,
     GitLabRateLimitException,
+    GitLabUnauthorizedError,
 )
 from connectors.sources.gitlab.document_schemas import (
     FileDocument,
@@ -173,6 +176,9 @@ class GitLabDataSource(BaseDataSource):
                 TimeoutError,
                 GitLabRateLimitException,
                 GitLabGraphQLException,
+                GitLabUnauthorizedError,
+                GitLabForbiddenError,
+                GitLabNotFoundError,
             ) as e:
                 self._logger.warning(f"Failed to validate project batch {batch}: {e}")
                 # If batch query fails, we can't determine which specific projects are invalid
@@ -558,7 +564,15 @@ class GitLabDataSource(BaseDataSource):
                 )
 
                 yield epic_doc, None
-        except Exception as e:
+        except (
+            aiohttp.ClientError,
+            TimeoutError,
+            GitLabRateLimitException,
+            GitLabGraphQLException,
+            GitLabUnauthorizedError,
+            GitLabForbiddenError,
+            GitLabNotFoundError,
+        ) as e:
             self._logger.warning(f"Failed to fetch epics for group {group_path}: {e}")
 
     async def get_docs(self, filtering=None):
@@ -954,7 +968,15 @@ class GitLabDataSource(BaseDataSource):
                 f"projects/{project_id}/repository/tree",
                 params={"ref": default_branch, "path": "/", "recursive": "false"},
             )
-        except Exception as e:
+        except (
+            aiohttp.ClientError,
+            TimeoutError,
+            GitLabRateLimitException,
+            GitLabGraphQLException,
+            GitLabUnauthorizedError,
+            GitLabForbiddenError,
+            GitLabNotFoundError,
+        ) as e:
             self._logger.debug(f"Failed to fetch tree for project {project_id}: {e}")
             return
 

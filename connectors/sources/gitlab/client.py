@@ -6,6 +6,8 @@
 """GitLab GraphQL and REST API client for interacting with GitLab Cloud."""
 
 import os
+import ssl
+import time
 from typing import AsyncGenerator
 from urllib.parse import quote
 
@@ -23,6 +25,24 @@ class GitLabRateLimitException(Exception):
 
 class GitLabGraphQLException(Exception):
     """Raised when GitLab GraphQL query returns errors."""
+
+    pass
+
+
+class GitLabNotFoundError(Exception):
+    """Raised when a GitLab resource is not found (404)."""
+
+    pass
+
+
+class GitLabForbiddenError(Exception):
+    """Raised when access to a GitLab resource is forbidden (403)."""
+
+    pass
+
+
+class GitLabUnauthorizedError(Exception):
+    """Raised when GitLab authentication fails (401)."""
 
     pass
 
@@ -106,8 +126,6 @@ class GitLabClient:
             connector_kwargs = {}
             # Disable SSL verification for ftests (self-signed certificates)
             if RUNNING_FTEST and GITLAB_FTEST_HOST:
-                import ssl
-
                 self._logger.info(
                     f"FTEST mode enabled: disabling SSL verification for {GITLAB_FTEST_HOST}"
                 )
@@ -131,13 +149,11 @@ class GitLabClient:
         """
         if response.status == 429:
             retry_after = response.headers.get("Retry-After")
-            if retry_after:
+            if retry_after and int(retry_after) > 0:
                 sleep_time = int(retry_after)
             else:
                 reset_time = response.headers.get("RateLimit-Reset")
                 if reset_time:
-                    import time
-
                     sleep_time = max(0, int(reset_time) - int(time.time()))
                 else:
                     # Default to 60 seconds if no headers found
@@ -171,42 +187,34 @@ class GitLabClient:
         if variables:
             payload["variables"] = variables
 
-        # Debug logging for complexity issues
-        if "workItems" in query:
-            self._logger.debug(f"WORK_ITEMS QUERY LENGTH: {len(query)} chars")
-            self._logger.debug(f"Variables: {variables}")
+        self._logger.debug(f"GraphQL request payload: {payload}")
 
         async with session.post(self.graphql_url, json=payload) as response:
-            # Handle rate limiting - sleeps and raises exception for @retryable to catch
             if await self._handle_rate_limit(response):
                 msg = "Rate limit exceeded"
                 raise GitLabRateLimitException(msg)
 
-            response.raise_for_status()
+            try:
+                response.raise_for_status()
+            except aiohttp.ClientResponseError as e:
+                if e.status == 401:
+                    raise GitLabUnauthorizedError(
+                        f"Authentication failed: {e.message}"
+                    ) from e
+                elif e.status == 403:
+                    raise GitLabForbiddenError(
+                        f"Access forbidden: {e.message}"
+                    ) from e
+                elif e.status == 404:
+                    raise GitLabNotFoundError(
+                        f"Resource not found: {e.message}"
+                    ) from e
+                raise
+
             result = await response.json()
 
-            # Check for GraphQL errors
             if "errors" in result:
                 errors = result["errors"]
-
-                # Save failing query for complexity debugging
-                if any("complexity" in str(e).lower() for e in errors):
-                    with open("/tmp/failing_gitlab_query.graphql", "w") as f:
-                        f.write(query)
-                        f.write("\n\n# Variables:\n")
-                        f.write(str(variables))
-                    self._logger.warning(f"Saved failing query to /tmp/failing_gitlab_query.graphql")
-
-                # Check if it's a rate limit error in GraphQL response
-                for error in errors:
-                    error_msg = str(error.get("message", "")).lower()
-                    if "rate" in error_msg and "limit" in error_msg:
-                        self._logger.warning(f"GraphQL rate limit error: {error}")
-                        await self._sleeps.sleep(60)
-                        msg = "GraphQL rate limit exceeded"
-                        raise GitLabRateLimitException(msg)
-
-                # If not rate limit, raise the error
                 error_msg = f"GraphQL errors: {errors}"
                 raise GitLabGraphQLException(error_msg)
 
@@ -228,12 +236,27 @@ class GitLabClient:
         self._logger.debug(f"REST GET {endpoint}" + (f" params={params}" if params else ""))
 
         async with session.get(url, params=params) as response:
-            # Handle rate limiting - sleeps and raises exception for @retryable to catch
             if await self._handle_rate_limit(response):
                 msg = "Rate limit exceeded"
                 raise GitLabRateLimitException(msg)
 
-            response.raise_for_status()
+            try:
+                response.raise_for_status()
+            except aiohttp.ClientResponseError as e:
+                if e.status == 401:
+                    raise GitLabUnauthorizedError(
+                        f"Authentication failed: {e.message}"
+                    ) from e
+                elif e.status == 403:
+                    raise GitLabForbiddenError(
+                        f"Access forbidden: {e.message}"
+                    ) from e
+                elif e.status == 404:
+                    raise GitLabNotFoundError(
+                        f"Resource not found: {e.message}"
+                    ) from e
+                raise
+
             return await response.json()
 
     async def close(self) -> None:
@@ -246,6 +269,11 @@ class GitLabClient:
         retries=RETRIES,
         interval=RETRY_INTERVAL,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+        skipped_exceptions=[
+            GitLabUnauthorizedError,
+            GitLabForbiddenError,
+            GitLabNotFoundError,
+        ],
     )
     async def get_projects(self):
         """Fetch projects using GraphQL.
@@ -260,7 +288,12 @@ class GitLabClient:
 
             try:
                 result = await self._execute_graphql(PROJECTS_QUERY, variables)
-            except Exception as e:
+            except (
+                aiohttp.ClientError,
+                TimeoutError,
+                GitLabRateLimitException,
+                GitLabGraphQLException,
+            ) as e:
                 self._logger.exception(f"GraphQL query failed: {e}")
                 raise
 
@@ -282,6 +315,11 @@ class GitLabClient:
         retries=RETRIES,
         interval=RETRY_INTERVAL,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+        skipped_exceptions=[
+            GitLabUnauthorizedError,
+            GitLabForbiddenError,
+            GitLabNotFoundError,
+        ],
     )
     async def get_merge_requests(self, project_path):
         """Fetch merge requests for a project using GraphQL.
@@ -301,7 +339,12 @@ class GitLabClient:
 
             try:
                 result = await self._execute_graphql(MERGE_REQUESTS_QUERY, variables)
-            except Exception as e:
+            except (
+                aiohttp.ClientError,
+                TimeoutError,
+                GitLabRateLimitException,
+                GitLabGraphQLException,
+            ) as e:
                 self._logger.warning(
                     f"Failed to fetch merge requests for {project_path}: {e}"
                 )
@@ -329,6 +372,11 @@ class GitLabClient:
         retries=RETRIES,
         interval=RETRY_INTERVAL,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+        skipped_exceptions=[
+            GitLabUnauthorizedError,
+            GitLabForbiddenError,
+            GitLabNotFoundError,
+        ],
     )
     async def get_work_items_project(self, project_path, work_item_types):
         """Fetch work items for a project using Work Items API.
@@ -351,7 +399,12 @@ class GitLabClient:
                 result = await self._execute_graphql(
                     WORK_ITEMS_PROJECT_QUERY, variables
                 )
-            except Exception as e:
+            except (
+                aiohttp.ClientError,
+                TimeoutError,
+                GitLabRateLimitException,
+                GitLabGraphQLException,
+            ) as e:
                 self._logger.warning(
                     f"Failed to fetch work items for {project_path}: {e}"
                 )
@@ -379,6 +432,11 @@ class GitLabClient:
         retries=RETRIES,
         interval=RETRY_INTERVAL,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+        skipped_exceptions=[
+            GitLabUnauthorizedError,
+            GitLabForbiddenError,
+            GitLabNotFoundError,
+        ],
     )
     async def get_work_items_group(self, group_path, work_item_types):
         """Fetch work items for a group using Work Items API (for Epics).
@@ -399,7 +457,12 @@ class GitLabClient:
 
             try:
                 result = await self._execute_graphql(WORK_ITEMS_GROUP_QUERY, variables)
-            except Exception as e:
+            except (
+                aiohttp.ClientError,
+                TimeoutError,
+                GitLabRateLimitException,
+                GitLabGraphQLException,
+            ) as e:
                 self._logger.warning(
                     f"Failed to fetch work items for group {group_path}: {e}"
                 )
@@ -427,6 +490,11 @@ class GitLabClient:
         retries=RETRIES,
         interval=RETRY_INTERVAL,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+        skipped_exceptions=[
+            GitLabUnauthorizedError,
+            GitLabForbiddenError,
+            GitLabNotFoundError,
+        ],
     )
     async def get_releases(self, project_path):
         """Fetch releases for a project using GraphQL.
@@ -446,7 +514,12 @@ class GitLabClient:
 
             try:
                 result = await self._execute_graphql(RELEASES_QUERY, variables)
-            except Exception as e:
+            except (
+                aiohttp.ClientError,
+                TimeoutError,
+                GitLabRateLimitException,
+                GitLabGraphQLException,
+            ) as e:
                 self._logger.warning(
                     f"Failed to fetch releases for {project_path}: {e}"
                 )
@@ -474,6 +547,11 @@ class GitLabClient:
         retries=RETRIES,
         interval=RETRY_INTERVAL,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+        skipped_exceptions=[
+            GitLabUnauthorizedError,
+            GitLabForbiddenError,
+            GitLabNotFoundError,
+        ],
     )
     async def fetch_remaining_field(
         self, project_path, iid, field_type, issuable_type, cursor
@@ -540,6 +618,11 @@ class GitLabClient:
         retries=RETRIES,
         interval=RETRY_INTERVAL,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+        skipped_exceptions=[
+            GitLabUnauthorizedError,
+            GitLabForbiddenError,
+            GitLabNotFoundError,
+        ],
     )
     async def fetch_remaining_notes(
         self, project_path, iid, discussion_id, issuable_type, cursor
@@ -606,6 +689,11 @@ class GitLabClient:
         retries=RETRIES,
         interval=RETRY_INTERVAL,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+        skipped_exceptions=[
+            GitLabUnauthorizedError,
+            GitLabForbiddenError,
+            GitLabNotFoundError,
+        ],
     )
     async def fetch_remaining_work_item_assignees(
         self, project_path: str, iid: int, work_item_type: str, cursor: str
@@ -673,6 +761,11 @@ class GitLabClient:
         retries=RETRIES,
         interval=RETRY_INTERVAL,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+        skipped_exceptions=[
+            GitLabUnauthorizedError,
+            GitLabForbiddenError,
+            GitLabNotFoundError,
+        ],
     )
     async def fetch_remaining_work_item_labels(
         self, project_path: str, iid: int, work_item_type: str, cursor: str
@@ -738,6 +831,11 @@ class GitLabClient:
         retries=RETRIES,
         interval=RETRY_INTERVAL,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+        skipped_exceptions=[
+            GitLabUnauthorizedError,
+            GitLabForbiddenError,
+            GitLabNotFoundError,
+        ],
     )
     async def fetch_remaining_work_item_discussions(
         self, project_path: str, iid: int, work_item_type: str, cursor: str
@@ -805,6 +903,11 @@ class GitLabClient:
         retries=RETRIES,
         interval=RETRY_INTERVAL,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+        skipped_exceptions=[
+            GitLabUnauthorizedError,
+            GitLabForbiddenError,
+            GitLabNotFoundError,
+        ],
     )
     async def fetch_remaining_work_item_group_discussions(
         self, group_path: str, iid: int, work_item_type: str, cursor: str
@@ -872,6 +975,11 @@ class GitLabClient:
         retries=RETRIES,
         interval=RETRY_INTERVAL,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+        skipped_exceptions=[
+            GitLabUnauthorizedError,
+            GitLabForbiddenError,
+            GitLabNotFoundError,
+        ],
     )
     async def fetch_remaining_work_item_assignees_group(
         self, group_path: str, iid: int, work_item_type: str, cursor: str
@@ -939,6 +1047,11 @@ class GitLabClient:
         retries=RETRIES,
         interval=RETRY_INTERVAL,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+        skipped_exceptions=[
+            GitLabUnauthorizedError,
+            GitLabForbiddenError,
+            GitLabNotFoundError,
+        ],
     )
     async def fetch_remaining_work_item_labels_group(
         self, group_path: str, iid: int, work_item_type: str, cursor: str
@@ -1006,6 +1119,11 @@ class GitLabClient:
         retries=RETRIES,
         interval=RETRY_INTERVAL,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+        skipped_exceptions=[
+            GitLabUnauthorizedError,
+            GitLabForbiddenError,
+            GitLabNotFoundError,
+        ],
     )
     async def get_file_content(self, project_id, file_path, ref=None):
         """Get file content from repository using REST API.
