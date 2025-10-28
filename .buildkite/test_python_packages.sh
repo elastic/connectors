@@ -26,4 +26,7 @@ if [[ "$PACKAGE_PATH" == *app/connectors_service* ]]; then
   elastic-ingest --help
 #  elastic-agent-connectors --help
   test-connectors --help
+else
+  python -m pip install "$PACKAGE_PATH"/dist/*.whl
+  python -c "import connectors_sdk; print(f'🎉 Success! connectors_sdk version: {connectors_sdk.__version__}')"
 fi
