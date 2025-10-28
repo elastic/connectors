@@ -10,6 +10,13 @@ SLOW_TEST_THRESHOLD = 1
 
 install: .venv/bin/python
 
+install-package:
+	$(PYTHON) -m venv .venv
+	$(VENV_DIR)/pip install --upgrade pip
+	$(VENV_DIR)/python -m pip install build
+	$(VENV_DIR)/python -m build
+	$(VENV_DIR)/pip install dist/*.whl
+
 clean:
 	rm -rf bin lib .venv include elasticsearch_connectors.egg-info .coverage site-packages pyvenv.cfg include.site.python*.greenlet dist
 

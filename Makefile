@@ -11,6 +11,10 @@ install:
 	cd $(connectors_sdk_dir); make install
 	cd $(app_dir); make install
 
+install-package:
+	cd $(connectors_sdk_dir); make install-package
+	cd $(app_dir); make install-package
+
 test: install
 	cd $(connectors_sdk_dir); make test
 	cd $(app_dir); make test
