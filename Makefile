@@ -30,6 +30,7 @@ config.yml:
 	- cp -n config.yml.example config.yml
 
 .venv/bin/python: | config.yml
+	$(PYTHON) -m ensurepip
 	$(PYTHON) -m venv .venv
 	.venv/bin/pip install --upgrade pip
 	.venv/bin/pip install setuptools==79.0.1
