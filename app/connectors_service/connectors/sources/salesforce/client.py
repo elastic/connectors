@@ -1,0 +1,1084 @@
+#
+# Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+# or more contributor license agreements. Licensed under the Elastic License 2.0;
+# you may not use this file except in compliance with the Elastic License 2.0.
+#
+
+import re
+from functools import cached_property
+from itertools import groupby
+
+import aiohttp
+from aiohttp.client_exceptions import ClientResponseError
+from connectors_sdk.content_extraction import (
+    TIKA_SUPPORTED_FILETYPES,
+)
+from connectors_sdk.logger import logger
+
+from connectors.sources.salesforce.constants import (
+    CONTENT_VERSION_DOWNLOAD_ENDPOINT,
+    DESCRIBE_ENDPOINT,
+    DESCRIBE_SOBJECT_ENDPOINT,
+    FILE_ACCESS,
+    OBJECT_READ_PERMISSION_USERS,
+    OFFSET,
+    QUERY_ENDPOINT,
+    RELEVANT_SOBJECT_FIELDS,
+    RELEVANT_SOBJECTS,
+    RETRIES,
+    RETRY_INTERVAL,
+    SOSL_SEARCH_ENDPOINT,
+    TOKEN_ENDPOINT,
+    USERNAME_FROM_IDS,
+    WILDCARD,
+)
+from connectors.utils import (
+    CancellableSleeps,
+    retryable,
+)
+
+
+class RateLimitedException(Exception):
+    """Notifies that Salesforce has begun rate limiting the current account"""
+
+    pass
+
+
+class InvalidQueryException(Exception):
+    """Notifies that a query was malformed or otherwise incorrect"""
+
+    pass
+
+
+class InvalidCredentialsException(Exception):
+    """Notifies that credentials are invalid for fetching a Salesforce token"""
+
+    pass
+
+
+class TokenFetchException(Exception):
+    """Notifies that an unexpected error occurred when fetching a Salesforce token"""
+
+    pass
+
+
+class ConnectorRequestError(Exception):
+    """Notifies that a general uncaught 400 error occurred during a request, usually this is caused by the connector"""
+
+    pass
+
+
+class SalesforceServerError(Exception):
+    """Notifies that an internal server error occurred in Salesforce"""
+
+    pass
+
+
+class SalesforceClient:
+    def __init__(self, configuration, base_url):
+        self._logger = logger
+        self._sleeps = CancellableSleeps()
+
+        self._queryable_sobjects = None
+        self._queryable_sobject_fields = {}
+        self._sobjects_cache_by_type = None
+        self._content_document_links_join = None
+
+        self.base_url = base_url
+        self.api_token = SalesforceAPIToken(
+            self.session,
+            self.base_url,
+            configuration["client_id"],
+            configuration["client_secret"],
+        )
+        self.standard_objects_to_sync = configuration["standard_objects_to_sync"]
+        self.sync_custom_objects = configuration["sync_custom_objects"]
+        self.custom_objects_to_sync = [
+            obj if obj == WILDCARD else f"{obj}__c" if not obj.endswith("__c") else obj
+            for obj in configuration["custom_objects_to_sync"]
+        ]
+
+    def set_logger(self, logger_):
+        self._logger = logger_
+
+    @cached_property
+    def session(self):
+        return aiohttp.ClientSession(
+            timeout=aiohttp.ClientTimeout(total=None),
+        )
+
+    async def ping(self):
+        await self.session.head(self.base_url)
+
+    async def close(self):
+        self.api_token.clear()
+        await self.session.close()
+        del self.session
+
+    def modify_soql_query(self, query):
+        lowered_query = query.lower()
+        match_limit = re.search(r"(?i)(.*)FROM\s+(.*?)(?:LIMIT)(.*)", lowered_query)
+        match_offset = re.search(r"(?i)(.*)FROM\s+(.*?)(?:OFFSET)(.*)", lowered_query)
+
+        if "fields" in lowered_query and not match_limit:
+            query += " LIMIT 200 OFFSET 0"
+
+        elif "fields" in lowered_query and match_limit and not match_offset:
+            query += " OFFSET 0"
+
+        elif "fields" in lowered_query and match_limit and match_offset:
+            return query
+
+        return query
+
+    def _add_last_modified_date(self, query):
+        lowered_query = query.lower()
+        if (
+            not ("fields(all)" in lowered_query or "fields(standard)" in lowered_query)
+            and "lastmodifieddate" not in lowered_query
+        ):
+            query = re.sub(
+                r"(?i)SELECT (.*) FROM", r"SELECT \1, LastModifiedDate FROM", query
+            )
+
+        return query
+
+    def _add_id(self, query):
+        lowered_query = query.lower()
+        if not (
+            "fields(all)" in lowered_query or "fields(standard)" in lowered_query
+        ) and not re.search(r"\bid\b", lowered_query):
+            query = re.sub(r"(?i)SELECT (.*) FROM", r"SELECT \1, Id FROM", query)
+
+        return query
+
+    async def get_sync_rules_results(self, rule):
+        if rule["language"] == "SOQL":
+            query_with_id = self._add_id(query=rule["query"])
+            query = self._add_last_modified_date(query=query_with_id)
+
+            if "fields" not in query.lower():
+                async for records in self._yield_non_bulk_query_pages(soql_query=query):
+                    for record in records:
+                        yield record
+            # If FIELDS function is present in SOQL query, LIMIT/OFFSET is used for pagination
+            else:
+                soql_query = self.modify_soql_query(query=query)
+                async for records in self._yield_soql_query_pages_with_fields_function(
+                    soql_query=soql_query
+                ):
+                    for record in records:
+                        yield record
+
+        else:
+            async for records in self._yield_sosl_query_pages(sosl_query=rule["query"]):
+                for record in records:
+                    yield record
+
+    async def _custom_objects(self):
+        response = await self._get_json(f"{self.base_url}{DESCRIBE_ENDPOINT}")
+        custom_objects = []
+
+        for sobject in response.get("sobjects", []):
+            if sobject.get("custom") and sobject.get("name")[-3:] == "__c":
+                custom_objects.append(sobject.get("name"))
+        return custom_objects
+
+    async def get_custom_objects(self):
+        for custom_object in self.custom_objects_to_sync:
+            query = await self._custom_object_query(custom_object=custom_object)
+            async for records in self._yield_non_bulk_query_pages(query):
+                for record in records:
+                    yield record
+
+    async def get_salesforce_users(self):
+        if not await self._is_queryable("User"):
+            self._logger.warning(
+                "Object User is not queryable, so they won't be ingested."
+            )
+            return
+
+        query = await self._user_query()
+        async for records in self._yield_non_bulk_query_pages(query):
+            for record in records:
+                yield record
+
+    async def get_users_with_read_access(self, sobject):
+        query = OBJECT_READ_PERMISSION_USERS.format(sobject=sobject)
+        async for records in self._yield_non_bulk_query_pages(query):
+            for record in records:
+                yield record
+
+    async def get_username_by_id(self, user_list):
+        query = USERNAME_FROM_IDS.format(user_list=user_list)
+        async for records in self._yield_non_bulk_query_pages(query):
+            for record in records:
+                yield record
+
+    async def get_file_access(self, document_id):
+        query = FILE_ACCESS.format(document_id=document_id)
+        async for records in self._yield_non_bulk_query_pages(query):
+            for record in records:
+                yield record
+
+    async def get_accounts(self):
+        if not await self._is_queryable("Account"):
+            self._logger.warning(
+                "Object Account is not queryable, so they won't be ingested."
+            )
+            return
+
+        query = await self._accounts_query()
+        async for records in self._yield_non_bulk_query_pages(query):
+            for record in records:
+                yield record
+
+    async def get_opportunities(self):
+        if not await self._is_queryable("Opportunity"):
+            self._logger.warning(
+                "Object Opportunity is not queryable, so they won't be ingested."
+            )
+            return
+
+        query = await self._opportunities_query()
+        async for records in self._yield_non_bulk_query_pages(query):
+            for record in records:
+                yield record
+
+    async def get_contacts(self):
+        if not await self._is_queryable("Contact"):
+            self._logger.warning(
+                "Object Contact is not queryable, so they won't be ingested."
+            )
+            return
+
+        query = await self._contacts_query()
+        async for records in self._yield_non_bulk_query_pages(query):
+            for record in records:
+                sobjects_by_id = await self.sobjects_cache_by_type()
+                record["Account"] = sobjects_by_id["Account"].get(
+                    record.get("AccountId"), {}
+                )
+                record["Owner"] = sobjects_by_id["User"].get(record.get("OwnerId"), {})
+                yield record
+
+    async def get_leads(self):
+        if not await self._is_queryable("Lead"):
+            self._logger.warning(
+                "Object Lead is not queryable, so they won't be ingested."
+            )
+            return
+
+        query = await self._leads_query()
+        async for records in self._yield_non_bulk_query_pages(query):
+            for record in records:
+                sobjects_by_id = await self.sobjects_cache_by_type()
+                record["Owner"] = sobjects_by_id["User"].get(record.get("OwnerId"), {})
+                record["ConvertedAccount"] = sobjects_by_id["Account"].get(
+                    record.get("ConvertedAccountId"), {}
+                )
+                record["ConvertedContact"] = sobjects_by_id["Contact"].get(
+                    record.get("ConvertedContactId"), {}
+                )
+                record["ConvertedOpportunity"] = sobjects_by_id["Opportunity"].get(
+                    record.get("ConvertedOpportunityId"), {}
+                )
+
+                yield record
+
+    async def get_campaigns(self):
+        if not await self._is_queryable("Campaign"):
+            self._logger.warning(
+                "Object Campaign is not queryable, so they won't be ingested."
+            )
+            return
+
+        query = await self._campaigns_query()
+        async for records in self._yield_non_bulk_query_pages(query):
+            for record in records:
+                yield record
+
+    async def get_cases(self):
+        if not await self._is_queryable("Case"):
+            self._logger.warning(
+                "Object Case is not queryable, so they won't be ingested."
+            )
+            return
+
+        query = await self._cases_query()
+        async for records in self._yield_non_bulk_query_pages(query):
+            case_feeds_by_case_id = {}
+            if await self._is_queryable("CaseFeed") and records:
+                all_case_ids = [x.get("Id") for x in records]
+                case_ids_list = [
+                    all_case_ids[i : i + 800] for i in range(0, len(all_case_ids), 800)
+                ]
+
+                all_case_feeds = []
+                for case_ids in case_ids_list:
+                    case_feeds = await self.get_case_feeds(case_ids)
+                    all_case_feeds.extend(case_feeds)
+
+                # groupby requires pre-sorting apparently
+                all_case_feeds.sort(key=lambda x: x.get("ParentId", ""))
+                case_feeds_by_case_id = {
+                    k: list(feeds)
+                    for k, feeds in groupby(
+                        all_case_feeds, key=lambda x: x.get("ParentId", "")
+                    )
+                }
+
+            for record in records:
+                record["Feeds"] = case_feeds_by_case_id.get(record.get("Id"))
+                yield record
+
+    async def get_case_feeds(self, case_ids):
+        query = await self._case_feeds_query(case_ids)
+        all_case_feeds = []
+        async for case_feeds in self._yield_non_bulk_query_pages(query):
+            all_case_feeds.extend(case_feeds)
+
+        return all_case_feeds
+
+    async def queryable_sobjects(self):
+        """Cached async property"""
+        if self._queryable_sobjects is not None:
+            return self._queryable_sobjects
+
+        response = await self._get_json(f"{self.base_url}{DESCRIBE_ENDPOINT}")
+        self._queryable_sobjects = []
+
+        for sobject in response.get("sobjects", []):
+            if sobject["queryable"] is True and sobject["name"] in RELEVANT_SOBJECTS:
+                self._queryable_sobjects.append(sobject["name"].lower())
+
+        return self._queryable_sobjects
+
+    async def queryable_sobject_fields(
+        self,
+        relevant_objects,
+        relevant_sobject_fields,
+    ):
+        """Cached async property"""
+        objects_to_query = [
+            obj for obj in relevant_objects if obj not in self._queryable_sobject_fields
+        ]
+        if not objects_to_query:
+            return self._queryable_sobject_fields
+
+        for sobject in objects_to_query:
+            endpoint = DESCRIBE_SOBJECT_ENDPOINT.replace("<sobject>", sobject)
+            response = await self._get_json(f"{self.base_url}{endpoint}")
+
+            if relevant_sobject_fields is None:
+                queryable_fields = [
+                    f["name"].lower() for f in response.get("fields", [])
+                ]
+            else:
+                queryable_fields = [
+                    f["name"].lower()
+                    for f in response.get("fields", [])
+                    if f["name"] in relevant_sobject_fields
+                ]
+            self._queryable_sobject_fields[sobject] = queryable_fields
+
+        return self._queryable_sobject_fields
+
+    async def sobjects_cache_by_type(self):
+        """Cached async property
+
+        Many sobjects require extra data that is taxing on the rate limiter
+        to repeatedly fetch each request.
+        Instead we cache them on the first request for re-use later.
+        """
+        if self._sobjects_cache_by_type is not None:
+            return self._sobjects_cache_by_type
+
+        self._sobjects_cache_by_type = {}
+        self._sobjects_cache_by_type["Account"] = await self._prepare_sobject_cache(
+            "Account"
+        )
+        self._sobjects_cache_by_type["Contact"] = await self._prepare_sobject_cache(
+            "Contact"
+        )
+        self._sobjects_cache_by_type["Opportunity"] = await self._prepare_sobject_cache(
+            "Opportunity"
+        )
+        self._sobjects_cache_by_type["User"] = await self._prepare_sobject_cache("User")
+        return self._sobjects_cache_by_type
+
+    async def _prepare_sobject_cache(self, sobject):
+        if not await self._is_queryable(sobject):
+            self._logger.warning(
+                f"{sobject} is not queryable, so they won't be cached."
+            )
+            return {}
+
+        queryable_fields = ["Name"]
+        if sobject in ["User", "Contact", "Lead"]:
+            queryable_fields.append("Email")
+
+        sobjects = {}
+        query = (
+            SalesforceSoqlBuilder(sobject)
+            .with_id()
+            .with_fields(queryable_fields)
+            .build()
+        )
+
+        async for records in self._yield_non_bulk_query_pages(query):
+            for record in records:
+                sobjects[record["Id"]] = record
+
+        return sobjects
+
+    async def _is_queryable(self, sobject):
+        """User settings can cause sobjects to be non-queryable
+        Querying these causes errors, so we try to filter those out in advance
+        """
+        return sobject.lower() in await self.queryable_sobjects()
+
+    async def _select_queryable_fields(self, sobject, fields):
+        """User settings can cause fields to be non-queryable
+        Querying these causes errors, so we try to filter those out in advance
+        """
+        if sobject not in RELEVANT_SOBJECTS:
+            sobject_fields = await self.queryable_sobject_fields(
+                relevant_objects=[sobject], relevant_sobject_fields=None
+            )
+        else:
+            sobject_fields = await self.queryable_sobject_fields(
+                relevant_objects=RELEVANT_SOBJECTS,
+                relevant_sobject_fields=RELEVANT_SOBJECT_FIELDS,
+            )
+        queryable_fields = sobject_fields.get(sobject, [])
+        if fields == []:
+            return queryable_fields
+        return [f for f in fields if f.lower() in queryable_fields]
+
+    async def _yield_non_bulk_query_pages(self, soql_query, endpoint=QUERY_ENDPOINT):
+        """loops through query response pages and yields lists of records"""
+        url = f"{self.base_url}{endpoint}"
+        params = {"q": soql_query}
+
+        while True:
+            response = await self._get_json(
+                url,
+                params=params,
+            )
+            yield response.get("records")
+            if not response.get("nextRecordsUrl"):
+                break
+
+            url = f"{self.base_url}{response.get('nextRecordsUrl')}"
+            params = None
+
+    async def _yield_soql_query_pages_with_fields_function(self, soql_query):
+        """loops through SOQL query response pages and yields lists of records"""
+
+        def modify_offset(query, new_offset):
+            offset_pattern = r"OFFSET (\d+)"
+            new_query = re.sub(offset_pattern, f"OFFSET {new_offset}", query)
+
+            return new_query
+
+        url = f"{self.base_url}{QUERY_ENDPOINT}"
+        offset = OFFSET
+
+        while True:
+            response = await self._get_json(
+                url,
+                params={"q": soql_query},
+            )
+            yield response.get("records", [])
+
+            # Note: we can't set offset more than 2000 if SOQL query contains `FIELDS` function
+            if not response.get("records") or offset > 2000:
+                break
+
+            soql_query = modify_offset(soql_query, offset)
+            offset += OFFSET
+
+    async def _yield_sosl_query_pages(self, sosl_query):
+        """loops through SOSL query response pages and yields lists of records"""
+
+        url = f"{self.base_url}{SOSL_SEARCH_ENDPOINT}"
+        params = {"q": sosl_query}
+
+        response = await self._get_json(
+            url,
+            params=params,
+        )
+        yield response.get("searchRecords", [])
+
+    async def _execute_non_paginated_query(self, soql_query):
+        """For quick queries, ignores pagination"""
+        url = f"{self.base_url}{QUERY_ENDPOINT}"
+        params = {"q": soql_query}
+        response = await self._get_json(
+            url,
+            params=params,
+        )
+        return response.get("records")
+
+    async def _auth_headers(self):
+        token = await self.api_token.token()
+        return {"authorization": f"Bearer {token}"}
+
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        skipped_exceptions=[RateLimitedException, InvalidQueryException],
+    )
+    async def _get_json(self, url, params=None):
+        response_body = None
+        try:
+            response = await self._get(url, params=params)
+            response_body = await response.json()
+            # We get the response body before raising for status as it contains vital error information
+            response.raise_for_status()
+            return response_body
+        except ClientResponseError as e:
+            await self._handle_client_response_error(response_body, e)
+        except Exception as e:
+            raise e
+
+    async def _get(self, url, params=None):
+        self._logger.debug(f"Sending request. Url: {url}, params: {params}")
+        headers = await self._auth_headers()
+        return await self.session.get(
+            url,
+            headers=headers,
+            params=params,
+        )
+
+    async def _download(self, content_version_id):
+        endpoint = CONTENT_VERSION_DOWNLOAD_ENDPOINT.replace(
+            "<content_version_id>", content_version_id
+        )
+        response = await self._get(f"{self.base_url}{endpoint}")
+        yield response
+
+    async def _handle_client_response_error(self, response_body, e):
+        exception_details = f"status: {e.status}, message: {e.message}"
+
+        if e.status == 401:
+            self._logger.warning(
+                f"Token expired, attempting to fetch new token. Status: {e.status}, message: {e.message}"
+            )
+            # The user can alter the lifetime of issued tokens, so we don't know when they expire
+            # By clearing the bearer token, we force the auth headers to fetch a new token in the next request
+            self.api_token.clear()
+            # raise to continue with retry strategy
+            raise e
+        elif 400 <= e.status < 500:
+            errors = self._handle_response_body_error(response_body)
+            # response format is an array for some reason so we check all of the error codes
+            # errorCode and message are generally identical, except if the query is invalid
+            error_codes = [x["errorCode"] for x in errors]
+
+            if "REQUEST_LIMIT_EXCEEDED" in error_codes:
+                msg = f"Salesforce is rate limiting this account. {exception_details}, details: {', '.join(error_codes)}"
+                raise RateLimitedException(msg) from e
+            elif any(
+                error in error_codes
+                for error in [
+                    "INVALID_FIELD",
+                    "INVALID_TERM",
+                    "MALFORMED_QUERY",
+                    "INVALID_TYPE",
+                ]
+            ):
+                msg = f"The query was rejected by Salesforce. {exception_details}, details: {', '.join(error_codes)}, query: {', '.join([x['message'] for x in errors])}"
+                raise InvalidQueryException(msg) from e
+            else:
+                msg = f"The request to Salesforce failed. {exception_details}, details: {', '.join(error_codes)}"
+                raise ConnectorRequestError(msg) from e
+        else:
+            msg = (
+                f"Salesforce experienced an internal server error. {exception_details}."
+            )
+            raise SalesforceServerError(msg)
+
+    def _handle_response_body_error(self, error_list):
+        if error_list is None or len(error_list) < 1:
+            return [{"errorCode": "unknown"}]
+
+        return error_list
+
+    async def _custom_object_query(self, custom_object):
+        queryable_fields = await self._select_queryable_fields(
+            custom_object,
+            [],
+        )
+        doc_links_join = await self.content_document_links_join()
+        return (
+            SalesforceSoqlBuilder(custom_object)
+            .with_fields(queryable_fields)
+            .with_join(doc_links_join)
+            .build()
+        )
+
+    async def _user_query(self):
+        queryable_fields = await self._select_queryable_fields(
+            "User",
+            ["Name", "Email", "UserType"],
+        )
+
+        return (
+            SalesforceSoqlBuilder("User")
+            .with_id()
+            .with_default_metafields()
+            .with_fields(queryable_fields)
+            .build()
+        )
+
+    async def _accounts_query(self):
+        queryable_fields = await self._select_queryable_fields(
+            "Account",
+            [
+                "Name",
+                "Description",
+                "BillingAddress",
+                "Type",
+                "Website",
+                "Rating",
+                "Department",
+            ],
+        )
+
+        doc_links_join = await self.content_document_links_join()
+        opportunities_join = None
+        if await self._is_queryable("Opportunity"):
+            queryable_join_fields = await self._select_queryable_fields(
+                "Opportunity",
+                [
+                    "Name",
+                    "StageName",
+                ],
+            )
+            opportunities_join = (
+                SalesforceSoqlBuilder("Opportunities")
+                .with_id()
+                .with_fields(queryable_join_fields)
+                .with_order_by("CreatedDate DESC")
+                .with_limit(1)
+                .build()
+            )
+
+        return (
+            SalesforceSoqlBuilder("Account")
+            .with_id()
+            .with_default_metafields()
+            .with_fields(queryable_fields)
+            .with_fields(["Owner.Id", "Owner.Name", "Owner.Email"])
+            .with_fields(["Parent.Id", "Parent.Name"])
+            .with_join(opportunities_join)
+            .with_join(doc_links_join)
+            .build()
+        )
+
+    async def _opportunities_query(self):
+        queryable_fields = await self._select_queryable_fields(
+            "Opportunity",
+            [
+                "Name",
+                "Description",
+                "StageName",
+            ],
+        )
+
+        doc_links_join = await self.content_document_links_join()
+        return (
+            SalesforceSoqlBuilder("Opportunity")
+            .with_id()
+            .with_default_metafields()
+            .with_fields(queryable_fields)
+            .with_fields(["Owner.Id", "Owner.Name", "Owner.Email"])
+            .with_join(doc_links_join)
+            .build()
+        )
+
+    async def _contacts_query(self):
+        queryable_fields = await self._select_queryable_fields(
+            "Contact",
+            [
+                "Name",
+                "Description",
+                "Email",
+                "Phone",
+                "Title",
+                "PhotoUrl",
+                "LeadSource",
+                "AccountId",
+                "OwnerId",
+            ],
+        )
+        doc_links_join = await self.content_document_links_join()
+        return (
+            SalesforceSoqlBuilder("Contact")
+            .with_id()
+            .with_default_metafields()
+            .with_fields(queryable_fields)
+            .with_join(doc_links_join)
+            .build()
+        )
+
+    async def _leads_query(self):
+        queryable_fields = await self._select_queryable_fields(
+            "Lead",
+            [
+                "Company",
+                "ConvertedAccountId",
+                "ConvertedContactId",
+                "ConvertedDate",
+                "ConvertedOpportunityId",
+                "Description",
+                "Email",
+                "LeadSource",
+                "Name",
+                "OwnerId",
+                "Phone",
+                "PhotoUrl",
+                "Rating",
+                "Status",
+                "Title",
+            ],
+        )
+        doc_links_join = await self.content_document_links_join()
+        return (
+            SalesforceSoqlBuilder("Lead")
+            .with_id()
+            .with_default_metafields()
+            .with_fields(queryable_fields)
+            .with_join(doc_links_join)
+            .build()
+        )
+
+    async def _campaigns_query(self):
+        queryable_fields = await self._select_queryable_fields(
+            "Campaign",
+            [
+                "Name",
+                "IsActive",
+                "Type",
+                "Description",
+                "Status",
+                "StartDate",
+                "EndDate",
+            ],
+        )
+        doc_links_join = await self.content_document_links_join()
+        return (
+            SalesforceSoqlBuilder("Campaign")
+            .with_id()
+            .with_default_metafields()
+            .with_fields(queryable_fields)
+            .with_fields(["Owner.Id", "Owner.Name", "Owner.Email"])
+            .with_fields(["Parent.Id", "Parent.Name"])
+            .with_join(doc_links_join)
+            .build()
+        )
+
+    async def _cases_query(self):
+        queryable_fields = await self._select_queryable_fields(
+            "Case",
+            [
+                "Subject",
+                "Description",
+                "CaseNumber",
+                "Status",
+                "AccountId",
+                "ParentId",
+                "IsClosed",
+                "IsDeleted",
+            ],
+        )
+
+        email_mesasges_join = await self._email_messages_join_query()
+        case_comments_join = await self._case_comments_join_query()
+        doc_links_join = await self.content_document_links_join()
+
+        return (
+            SalesforceSoqlBuilder("Case")
+            .with_id()
+            .with_default_metafields()
+            .with_fields(queryable_fields)
+            .with_fields(["Owner.Id", "Owner.Name", "Owner.Email"])
+            .with_fields(["CreatedBy.Id", "CreatedBy.Name", "CreatedBy.Email"])
+            .with_join(email_mesasges_join)
+            .with_join(case_comments_join)
+            .with_join(doc_links_join)
+            .build()
+        )
+
+    async def _email_messages_join_query(self):
+        """For join with Case"""
+        queryable_fields = await self._select_queryable_fields(
+            "EmailMessage",
+            [
+                "ParentId",
+                "MessageDate",
+                "LastModifiedById",
+                "TextBody",
+                "Subject",
+                "FromName",
+                "FromAddress",
+                "ToAddress",
+                "CcAddress",
+                "BccAddress",
+                "Status",
+                "IsDeleted",
+                "FirstOpenedDate",
+            ],
+        )
+
+        return (
+            SalesforceSoqlBuilder("EmailMessages")
+            .with_id()
+            .with_fields(queryable_fields)
+            .with_fields(["CreatedBy.Id", "CreatedBy.Name", "CreatedBy.Email"])
+            .with_limit(500)
+            .build()
+        )
+
+    async def _case_comments_join_query(self):
+        """For join with Case"""
+        queryable_fields = await self._select_queryable_fields(
+            "CaseComment",
+            [
+                "ParentId",
+                "CommentBody",
+                "LastModifiedById",
+            ],
+        )
+
+        return (
+            SalesforceSoqlBuilder("CaseComments")
+            .with_id()
+            .with_default_metafields()
+            .with_fields(queryable_fields)
+            .with_fields(["CreatedBy.Id", "CreatedBy.Name", "CreatedBy.Email"])
+            .with_limit(500)
+            .build()
+        )
+
+    async def _case_feeds_query(self, case_ids):
+        queryable_fields = await self._select_queryable_fields(
+            "CaseFeed",
+            [
+                "ParentId",
+                "Type",
+                "IsDeleted",
+                "CommentCount",
+                "Title",
+                "Body",
+                "LinkUrl",
+            ],
+        )
+        where_in_clause = ",".join(f"'{x}'" for x in case_ids)
+        join_clause = await self._case_feed_comments_join()
+
+        return (
+            SalesforceSoqlBuilder("CaseFeed")
+            .with_id()
+            .with_default_metafields()
+            .with_fields(queryable_fields)
+            .with_fields(["CreatedBy.Id", "CreatedBy.Name", "CreatedBy.Email"])
+            .with_join(join_clause)
+            .with_where(f"ParentId IN ({where_in_clause})")
+            .build()
+        )
+
+    async def _case_feed_comments_join(self):
+        queryable_fields = await self._select_queryable_fields(
+            "FeedComment",
+            [
+                "ParentId",
+                "CreatedDate",
+                "LastEditById",
+                "LastEditDate",
+                "CommentBody",
+                "IsDeleted",
+                "StatusParentId",
+            ],
+        )
+        return (
+            SalesforceSoqlBuilder("FeedComments")
+            .with_id()
+            .with_fields(queryable_fields)
+            .with_fields(["CreatedBy.Id", "CreatedBy.Name", "CreatedBy.Email"])
+            .with_limit(500)
+            .build()
+        )
+
+    async def content_document_links_join(self):
+        """Cached async property for getting downloadable attached files
+        This join is identical for all SObject queries"""
+        if self._content_document_links_join is not None:
+            return self._content_document_links_join
+
+        links_queryable = await self._is_queryable("ContentDocumentLink")
+        docs_queryable = await self._is_queryable("ContentDocument")
+        versions_queryable = await self._is_queryable("ContentVersion")
+        if not all([links_queryable, docs_queryable, versions_queryable]):
+            self._logger.warning(
+                "ContentDocuments, ContentVersions, or ContentDocumentLinks were not queryable, so not including in any queries."
+            )
+            self._content_document_links_join = ""
+            return self._content_document_links_join
+
+        queryable_docs_fields = await self._select_queryable_fields(
+            "ContentDocument",
+            [
+                "Title",
+                "FileExtension",
+                "ContentSize",
+                "Description",
+            ],
+        )
+        queryable_version_fields = await self._select_queryable_fields(
+            "ContentVersion",
+            [
+                "VersionDataUrl",
+                "VersionNumber",
+            ],
+        )
+        queryable_docs_fields = [f"ContentDocument.{x}" for x in queryable_docs_fields]
+        queryable_version_fields = [
+            f"ContentDocument.LatestPublishedVersion.{x}"
+            for x in queryable_version_fields
+        ]
+        where_in_clause = ",".join([f"'{x[1:]}'" for x in TIKA_SUPPORTED_FILETYPES])
+
+        self._content_document_links_join = (
+            SalesforceSoqlBuilder("ContentDocumentLinks")
+            .with_fields(queryable_docs_fields)
+            .with_fields(queryable_version_fields)
+            .with_fields(
+                [
+                    "ContentDocument.Id",
+                    "ContentDocument.LatestPublishedVersion.Id",
+                    "ContentDocument.CreatedDate",
+                    "ContentDocument.LastModifiedDate",
+                    "ContentDocument.LatestPublishedVersion.CreatedDate",
+                ]
+            )
+            .with_fields(
+                [
+                    "ContentDocument.Owner.Id",
+                    "ContentDocument.Owner.Name",
+                    "ContentDocument.Owner.Email",
+                ]
+            )
+            .with_fields(
+                [
+                    "ContentDocument.CreatedBy.Id",
+                    "ContentDocument.CreatedBy.Name",
+                    "ContentDocument.CreatedBy.Email",
+                ]
+            )
+            .with_where(f"ContentDocument.FileExtension IN ({where_in_clause})")
+            .build()
+        )
+
+        return self._content_document_links_join
+
+
+class SalesforceAPIToken:
+    def __init__(self, session, base_url, client_id, client_secret):
+        self._token = None
+        self.session = session
+        self.url = f"{base_url}{TOKEN_ENDPOINT}"
+        self.token_payload = {
+            "grant_type": "client_credentials",
+            "client_id": client_id,
+            "client_secret": client_secret,
+        }
+
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        skipped_exceptions=[InvalidCredentialsException],
+    )
+    async def token(self):
+        if self._token:
+            return self._token
+
+        response_body = {}
+        try:
+            response = await self.session.post(self.url, data=self.token_payload)
+            response_body = await response.json()
+            response.raise_for_status()
+            self._token = response_body["access_token"]
+            return self._token
+        except ClientResponseError as e:
+            if 400 <= e.status < 500:
+                # 400s have detailed error messages in body
+                error_message = response_body.get("error", "No error message found.")
+                error_description = response_body.get(
+                    "error_description", "No error description found."
+                )
+                if error_message == "invalid_client":
+                    msg = f"The `client_id` and `client_secret` provided could not be used to generate a token. Status: {e.status}, message: {e.message}, details: {error_message}, description: {error_description}"
+                    raise InvalidCredentialsException(msg) from e
+                else:
+                    msg = f"Could not fetch token from Salesforce: Status: {e.status}, message: {e.message}, details: {error_message}, description: {error_description}"
+                    raise TokenFetchException(msg) from e
+            else:
+                msg = f"Unexpected error while fetching Salesforce token. Status: {e.status}, message: {e.message}"
+                raise TokenFetchException(msg) from e
+
+    def clear(self):
+        self._token = None
+
+
+class SalesforceSoqlBuilder:
+    def __init__(self, table):
+        self.table_name = table
+        self.fields = []
+        self.where = ""
+        self.order_by = ""
+        self.limit = ""
+
+    def with_id(self):
+        self.fields.append("Id")
+        return self
+
+    def with_default_metafields(self):
+        self.fields.extend(["CreatedDate", "LastModifiedDate"])
+        return self
+
+    def with_fields(self, fields):
+        self.fields.extend(fields)
+        return self
+
+    def with_where(self, where_string):
+        self.where = f"WHERE {where_string}"
+        return self
+
+    def with_order_by(self, order_by_string):
+        self.order_by = f"ORDER BY {order_by_string}"
+        return self
+
+    def with_limit(self, limit):
+        self.limit = f"LIMIT {limit}"
+        return self
+
+    def with_join(self, join):
+        if join:
+            self.fields.append(f"(\n{join})\n")
+
+        return self
+
+    def build(self):
+        select_columns = ",\n".join(set(self.fields))
+
+        query_lines = []
+        query_lines.append(f"SELECT {select_columns}")
+        query_lines.append(f"FROM {self.table_name}")
+        query_lines.append(self.where)
+        query_lines.append(self.order_by)
+        query_lines.append(self.limit)
+
+        return "\n".join([line for line in query_lines if line != ""])
