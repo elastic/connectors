@@ -10,55 +10,56 @@ Furthermore, you can use this SDK as a standalone framework to author simple dat
 
 ## Simple code example
 ```python
-import asyncio
 from connectors_sdk.source import (
-        BaseDataSource,
-        DataSourceConfiguration
+  BaseDataSource,
+  DataSourceConfiguration
 )
 
 class CustomDataSource(BaseDataSource):
-    def __init__(self, configuration):
-        super().__init__(configuration=configuration)
+  def __init__(self, configuration):
+    super().__init__(configuration=configuration)
 
-    @classmethod
-    def get_default_configuration(cls):
-        return {
-            "max_doc_count": {
-                "label": "Maximum nomber of documents",
-                "order": "1",
-                "tooltip": "Maximum number of documents to return",
-                "type":"int",
-                "value": 1
-            }
+  @classmethod
+  def get_default_configuration(cls):
+      # return a default configuration
+      return {
+        "max_doc_count": {
+          "label": "Maximum nomber of documents",
+          "order": "1",
+          "tooltip": "Maximum number of documents to return",
+          "type":"int",
+          "value": 1
         }
+      }
 
-    async def get_docs(self):
-        # get your data
-        data = {
-                "document_0451":"A shock to the system.",
-                "document_0452":"A Foundation for knowledge.",
-                "document_0453":"We CAN count to three.",
-                "document_0454":"Gather artifacts from anomalies.",
-                "document_0455":"Security is not optional.",
-                "document_0456":"The Invicible."
-            }
+  def get_docs(self):
+    # get your data
+    data = {
+      "document_0451": "A shock to the system.",
+      "document_0452": "A Foundation for knowledge.",
+      "document_0453": "We CAN count to three.",
+      "document_0454": "Gather artifacts from anomalies.",
+      "document_0455": "Security is not optional.",
+      "document_0456": "The Invicible."
+    }
 
-        docs_returned = 0
-        for key, value in data.items():
-            if docs_returned < self.configuration["max_doc_count"]:
-                yield value
-                docs_returned += 1
-                continue
-            break
+    docs_to_return = []
+    for k, v in data.items():
+      if len(docs_to_return) < self.configuration["max_doc_count"]:
+        docs_to_return.append(v)
+        continue
+      break
 
-# Define a main function and run it async
-async def main():
-    base_config = {"max_doc_count": 3}
-    data_source_config = DataSourceConfiguration(base_config)
-    # Create the data source object
-    data_source = CustomDataSource(data_source_config)
-    async for docs in data_source.get_docs():
-        print (docs)
+    return docs_to_return
 
-asyncio.run(main())
+
+if __name__ == "__main__":
+  # Initialize the base configuration.
+  base_config = {"max_doc_count": 3}
+  data_source_config = DataSourceConfiguration(base_config)
+  # Create the CustomDataSource by passing our DataSourceConfiguration object to it
+  data_source = CustomDataSource(data_source_config)
+  # Get docs and print it
+  docs = data_source.get_docs()
+  print (docs)
 ```
