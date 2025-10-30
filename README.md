@@ -43,10 +43,12 @@ There are two directories that contain the relevant code for running a connector
 The `app/` directory contains the primary connector service, as well as the individual data source implementations.
 The `libs/` directory is the home of the Connectors SDK, which is where the connectors framework is defined.
 
-The Connectors SDK is a dependency of the connectors application. You can use the Connectors SDK in and of itself to create your own data source connectors without needing to ingest data into Elasticsearch.  
+The Connectors SDK is a dependency of the connectors application. You can use the Connectors SDK in and of itself to create your own data source connectors without needing to ingest data into Elasticsearch.
 
-> [!NOTE] For those who are familiar with the [monolithic project structure](https://github.com/elastic/connectors/tree/1efa53e1ce47db2ae28d1390e5721932c58ce816) that preceded the current structure
-> Functionality has not been affected in any way.
+> [!NOTE]
+> For those who are familiar with the [monolithic project structure](https://github.com/elastic/connectors/tree/1efa53e1ce47db2ae28d1390e5721932c58ce816) that preceded the current structure:
+>
+> **Functionality has not been affected in any way.**
 > The top-level project Makefile provides the same general commands as were previously present, and they will behave the same as before.
 >
 > `make run` will run the Connectors code directly from source by calling the `make run` command defined under the `app/` directory.
