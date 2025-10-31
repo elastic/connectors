@@ -247,46 +247,6 @@ class GitLabDataSource(BaseDataSource):
 
     T = TypeVar("T", bound=BaseModel)
 
-    def _extract_widget_description(self, work_item: GitLabWorkItem) -> str | None:
-        """Extract description from work item widgets."""
-        widget = work_item.get_widget(WorkItemWidgetDescription)
-        return widget.description if widget else None
-
-    def _extract_widget_assignees(
-        self, work_item: GitLabWorkItem
-    ) -> PaginatedList[GitLabUser]:
-        """Extract assignees data from work item widgets."""
-        widget = work_item.get_widget(WorkItemWidgetAssignees)
-        return widget.assignees if widget else PaginatedList[GitLabUser](nodes=[])
-
-    def _extract_widget_labels(
-        self, work_item: GitLabWorkItem
-    ) -> PaginatedList[GitLabLabel]:
-        """Extract labels data from work item widgets."""
-        widget = work_item.get_widget(WorkItemWidgetLabels)
-        return widget.labels if widget else PaginatedList[GitLabLabel](nodes=[])
-
-    def _extract_widget_discussions(
-        self, work_item: GitLabWorkItem
-    ) -> PaginatedList[GitLabDiscussion]:
-        """Extract discussions from work item widgets."""
-        widget = work_item.get_widget(WorkItemWidgetNotes)
-        return (
-            widget.discussions if widget else PaginatedList[GitLabDiscussion](nodes=[])
-        )
-
-    def _extract_widget_hierarchy(
-        self, work_item: GitLabWorkItem
-    ) -> WorkItemWidgetHierarchy | None:
-        """Extract hierarchy info from work item widgets (for Epics)."""
-        return work_item.get_widget(WorkItemWidgetHierarchy)
-
-    def _extract_widget_linked_items(
-        self, work_item: GitLabWorkItem
-    ) -> WorkItemWidgetLinkedItems | None:
-        """Extract linked items from work item widgets (for Epics/Issues)."""
-        return work_item.get_widget(WorkItemWidgetLinkedItems)
-
     async def _fetch_remaining_paginated_field(
         self,
         paginated_list: PaginatedList[T],
@@ -406,8 +366,19 @@ class GitLabDataSource(BaseDataSource):
         async for work_item in self.gitlab_client.get_work_items_project(
             project.full_path, [work_item_type]
         ):
-            assignees_data = self._extract_widget_assignees(work_item)
-            labels_data = self._extract_widget_labels(work_item)
+            assignees_widget = work_item.get_widget(WorkItemWidgetAssignees)
+            assignees_data = (
+                assignees_widget.assignees
+                if assignees_widget
+                else PaginatedList[GitLabUser](nodes=[])
+            )
+
+            labels_widget = work_item.get_widget(WorkItemWidgetLabels)
+            labels_data = (
+                labels_widget.labels
+                if labels_widget
+                else PaginatedList[GitLabLabel](nodes=[])
+            )
 
             if assignees_data.page_info.has_next_page:
                 cursor = assignees_data.page_info.end_cursor
@@ -429,7 +400,12 @@ class GitLabDataSource(BaseDataSource):
                     ):
                         labels_data.nodes.append(label)
 
-            discussions_data = self._extract_widget_discussions(work_item)
+            notes_widget = work_item.get_widget(WorkItemWidgetNotes)
+            discussions_data = (
+                notes_widget.discussions
+                if notes_widget
+                else PaginatedList[GitLabDiscussion](nodes=[])
+            )
 
             if discussions_data.page_info.has_next_page:
                 cursor = discussions_data.page_info.end_cursor
@@ -515,8 +491,19 @@ class GitLabDataSource(BaseDataSource):
             async for epic in self.gitlab_client.get_work_items_group(
                 group_path, [WorkItemType.EPIC]
             ):
-                assignees_data = self._extract_widget_assignees(epic)
-                labels_data = self._extract_widget_labels(epic)
+                assignees_widget = epic.get_widget(WorkItemWidgetAssignees)
+                assignees_data = (
+                    assignees_widget.assignees
+                    if assignees_widget
+                    else PaginatedList[GitLabUser](nodes=[])
+                )
+
+                labels_widget = epic.get_widget(WorkItemWidgetLabels)
+                labels_data = (
+                    labels_widget.labels
+                    if labels_widget
+                    else PaginatedList[GitLabLabel](nodes=[])
+                )
 
                 if assignees_data.page_info.has_next_page:
                     cursor = assignees_data.page_info.end_cursor
@@ -536,7 +523,12 @@ class GitLabDataSource(BaseDataSource):
                         ):
                             labels_data.nodes.append(label)
 
-                discussions_data = self._extract_widget_discussions(epic)
+                notes_widget = epic.get_widget(WorkItemWidgetNotes)
+                discussions_data = (
+                    notes_widget.discussions
+                    if notes_widget
+                    else PaginatedList[GitLabDiscussion](nodes=[])
+                )
 
                 if discussions_data.page_info.has_next_page:
                     cursor = discussions_data.page_info.end_cursor
@@ -817,10 +809,11 @@ class GitLabDataSource(BaseDataSource):
         Returns:
             dict: Formatted work item document
         """
-        description = self._extract_widget_description(work_item)
+        description_widget = work_item.get_widget(WorkItemWidgetDescription)
+        description = description_widget.description if description_widget else None
 
-        hierarchy = self._extract_widget_hierarchy(work_item)
-        linked_items = self._extract_widget_linked_items(work_item)
+        hierarchy = work_item.get_widget(WorkItemWidgetHierarchy)
+        linked_items = work_item.get_widget(WorkItemWidgetLinkedItems)
 
         if project:
             parent_id = self.gitlab_client._extract_id(project.id) or project.id

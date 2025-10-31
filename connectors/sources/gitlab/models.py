@@ -443,3 +443,55 @@ class GitLabRelease(BaseModel):
     assets: GitLabAssets
 
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+
+# GraphQL Response Wrapper Models
+# These models map 1:1 to GraphQL query responses for type-safe parsing
+
+
+class ProjectsResponse(BaseModel):
+    """Response model for projects query."""
+
+    projects: PaginatedList[GitLabProject]
+
+
+class ProjectData(BaseModel):
+    """Project data wrapper for nested queries."""
+
+    merge_requests: PaginatedList[GitLabMergeRequest] | None = None
+    work_items: PaginatedList[GitLabWorkItem] | None = None
+    releases: PaginatedList[GitLabRelease] | None = None
+
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+
+class MergeRequestsResponse(BaseModel):
+    """Response model for merge requests query."""
+
+    project: ProjectData | None = None
+
+
+class WorkItemsProjectResponse(BaseModel):
+    """Response model for project work items query."""
+
+    project: ProjectData | None = None
+
+
+class GroupData(BaseModel):
+    """Group data wrapper for nested queries."""
+
+    work_items: PaginatedList[GitLabWorkItem] | None = None
+
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+
+class WorkItemsGroupResponse(BaseModel):
+    """Response model for group work items query."""
+
+    group: GroupData | None = None
+
+
+class ReleasesResponse(BaseModel):
+    """Response model for releases query."""
+
+    project: ProjectData | None = None

@@ -399,42 +399,45 @@ class TestGitLabDataSource:
         assert source._should_sync_project("group/project2") is True
         assert source._should_sync_project("other/project") is False
 
-    def test_extract_widget_description(
-        self, mock_configuration, mock_gitlab_work_item
-    ):
+    def test_extract_widget_description(self, mock_gitlab_work_item):
         """Test extracting description from work item widgets."""
-        source = GitLabDataSource(configuration=mock_configuration)
+        from connectors.sources.gitlab.models import WorkItemWidgetDescription
 
-        description = source._extract_widget_description(mock_gitlab_work_item)
+        widget = mock_gitlab_work_item.get_widget(WorkItemWidgetDescription)
+        description = widget.description if widget else None
 
         assert description == "Issue description"
 
-    def test_extract_widget_assignees(self, mock_configuration, mock_gitlab_work_item):
+    def test_extract_widget_assignees(self, mock_gitlab_work_item):
         """Test extracting assignees from work item widgets."""
-        source = GitLabDataSource(configuration=mock_configuration)
+        from connectors.sources.gitlab.models import WorkItemWidgetAssignees
 
-        assignees = source._extract_widget_assignees(mock_gitlab_work_item)
+        widget = mock_gitlab_work_item.get_widget(WorkItemWidgetAssignees)
+        assignees = widget.assignees if widget else None
 
+        assert assignees is not None
         assert len(assignees.nodes) == 1
         assert assignees.nodes[0].username == "assignee1"
 
-    def test_extract_widget_labels(self, mock_configuration, mock_gitlab_work_item):
+    def test_extract_widget_labels(self, mock_gitlab_work_item):
         """Test extracting labels from work item widgets."""
-        source = GitLabDataSource(configuration=mock_configuration)
+        from connectors.sources.gitlab.models import WorkItemWidgetLabels
 
-        labels = source._extract_widget_labels(mock_gitlab_work_item)
+        widget = mock_gitlab_work_item.get_widget(WorkItemWidgetLabels)
+        labels = widget.labels if widget else None
 
+        assert labels is not None
         assert len(labels.nodes) == 1
         assert labels.nodes[0].title == "bug"
 
-    def test_extract_widget_discussions(
-        self, mock_configuration, mock_gitlab_work_item
-    ):
+    def test_extract_widget_discussions(self, mock_gitlab_work_item):
         """Test extracting discussions from work item widgets."""
-        source = GitLabDataSource(configuration=mock_configuration)
+        from connectors.sources.gitlab.models import WorkItemWidgetNotes
 
-        discussions = source._extract_widget_discussions(mock_gitlab_work_item)
+        widget = mock_gitlab_work_item.get_widget(WorkItemWidgetNotes)
+        discussions = widget.discussions if widget else None
 
+        assert discussions is not None
         assert len(discussions.nodes) == 0
         assert discussions.page_info.has_next_page is False
 
@@ -456,12 +459,35 @@ class TestGitLabDataSource:
         self, mock_configuration, mock_gitlab_work_item, mock_gitlab_project
     ):
         """Test formatting work item document for project-level item."""
+        from connectors.sources.gitlab.models import (
+            GitLabLabel,
+            GitLabUser,
+            PaginatedList,
+            WorkItemWidgetAssignees,
+            WorkItemWidgetLabels,
+        )
+
         source = GitLabDataSource(configuration=mock_configuration)
+
+        # Extract widgets directly through Pydantic models
+        assignees_widget = mock_gitlab_work_item.get_widget(WorkItemWidgetAssignees)
+        assignees_data = (
+            assignees_widget.assignees
+            if assignees_widget
+            else PaginatedList[GitLabUser](nodes=[])
+        )
+
+        labels_widget = mock_gitlab_work_item.get_widget(WorkItemWidgetLabels)
+        labels_data = (
+            labels_widget.labels
+            if labels_widget
+            else PaginatedList[GitLabLabel](nodes=[])
+        )
 
         doc = source._format_work_item_doc(
             mock_gitlab_work_item,
-            assignees_data=source._extract_widget_assignees(mock_gitlab_work_item),
-            labels_data=source._extract_widget_labels(mock_gitlab_work_item),
+            assignees_data=assignees_data,
+            labels_data=labels_data,
             notes=[],
             project=mock_gitlab_project,
         )

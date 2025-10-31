@@ -18,12 +18,12 @@ from connectors.source import ConfigurableFieldValueError
 from connectors.sources.gitlab.models import (
     GitLabDiscussion,
     GitLabLabel,
-    GitLabMergeRequest,
-    GitLabProject,
-    GitLabRelease,
     GitLabUser,
-    GitLabWorkItem,
-    PageInfo,
+    MergeRequestsResponse,
+    ProjectsResponse,
+    ReleasesResponse,
+    WorkItemsGroupResponse,
+    WorkItemsProjectResponse,
 )
 from connectors.sources.gitlab.queries import (
     APPROVEDBY_QUERY,
@@ -292,19 +292,15 @@ class GitLabClient:
                 self._logger.exception(f"GraphQL query failed: {e}")
                 raise
 
-            projects_data = result.get("projects", {})
-            projects = projects_data.get("nodes", [])
+            response = ProjectsResponse.model_validate(result)
 
-            for project_data in projects:
-                project = GitLabProject.model_validate(project_data)
+            for project in response.projects.nodes:
                 yield project
 
-            page_info_data = projects_data.get("pageInfo", {})
-            page_info = PageInfo.model_validate(page_info_data)
-            if not page_info.has_next_page:
+            if not response.projects.page_info.has_next_page:
                 break
 
-            cursor = page_info.end_cursor
+            cursor = response.projects.page_info.end_cursor
 
     @retryable(
         retries=RETRIES,
@@ -345,23 +341,18 @@ class GitLabClient:
                 )
                 return
 
-            project_data = result.get("project")
-            if not project_data:
+            response = MergeRequestsResponse.model_validate(result)
+
+            if not response.project or not response.project.merge_requests:
                 return
 
-            mrs_data = project_data.get("mergeRequests", {})
-            mrs = mrs_data.get("nodes", [])
-
-            for mr_data in mrs:
-                mr = GitLabMergeRequest.model_validate(mr_data)
+            for mr in response.project.merge_requests.nodes:
                 yield mr
 
-            page_info_data = mrs_data.get("pageInfo", {})
-            page_info = PageInfo.model_validate(page_info_data)
-            if not page_info.has_next_page:
+            if not response.project.merge_requests.page_info.has_next_page:
                 break
 
-            cursor = page_info.end_cursor
+            cursor = response.project.merge_requests.page_info.end_cursor
 
     @retryable(
         retries=RETRIES,
@@ -405,23 +396,18 @@ class GitLabClient:
                 )
                 return
 
-            project_data = result.get("project")
-            if not project_data:
+            response = WorkItemsProjectResponse.model_validate(result)
+
+            if not response.project or not response.project.work_items:
                 return
 
-            work_items_data = project_data.get("workItems", {})
-            work_items = work_items_data.get("nodes", [])
-
-            for work_item_data in work_items:
-                work_item = GitLabWorkItem.model_validate(work_item_data)
+            for work_item in response.project.work_items.nodes:
                 yield work_item
 
-            page_info_data = work_items_data.get("pageInfo", {})
-            page_info = PageInfo.model_validate(page_info_data)
-            if not page_info.has_next_page:
+            if not response.project.work_items.page_info.has_next_page:
                 break
 
-            cursor = page_info.end_cursor
+            cursor = response.project.work_items.page_info.end_cursor
 
     @retryable(
         retries=RETRIES,
@@ -463,23 +449,18 @@ class GitLabClient:
                 )
                 return
 
-            group_data = result.get("group")
-            if not group_data:
+            response = WorkItemsGroupResponse.model_validate(result)
+
+            if not response.group or not response.group.work_items:
                 return
 
-            work_items_data = group_data.get("workItems", {})
-            work_items = work_items_data.get("nodes", [])
-
-            for work_item_data in work_items:
-                work_item = GitLabWorkItem.model_validate(work_item_data)
+            for work_item in response.group.work_items.nodes:
                 yield work_item
 
-            page_info_data = work_items_data.get("pageInfo", {})
-            page_info = PageInfo.model_validate(page_info_data)
-            if not page_info.has_next_page:
+            if not response.group.work_items.page_info.has_next_page:
                 break
 
-            cursor = page_info.end_cursor
+            cursor = response.group.work_items.page_info.end_cursor
 
     @retryable(
         retries=RETRIES,
@@ -520,23 +501,18 @@ class GitLabClient:
                 )
                 return
 
-            project_data = result.get("project")
-            if not project_data:
+            response = ReleasesResponse.model_validate(result)
+
+            if not response.project or not response.project.releases:
                 return
 
-            releases_data = project_data.get("releases", {})
-            releases = releases_data.get("nodes", [])
-
-            for release_data in releases:
-                release = GitLabRelease.model_validate(release_data)
+            for release in response.project.releases.nodes:
                 yield release
 
-            page_info_data = releases_data.get("pageInfo", {})
-            page_info = PageInfo.model_validate(page_info_data)
-            if not page_info.has_next_page:
+            if not response.project.releases.page_info.has_next_page:
                 break
 
-            cursor = page_info.end_cursor
+            cursor = response.project.releases.page_info.end_cursor
 
     @retryable(
         retries=RETRIES,
