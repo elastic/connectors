@@ -13,7 +13,7 @@ from connectors_sdk.source import BaseDataSource, ConfigurableFieldValueError
 from connectors_sdk.utils import (
     iso_utc,
 )
-from graphql import parse
+from graphql.language import parse
 
 from connectors.sources.graphql.client import GraphQLClient
 from connectors.sources.graphql.constants import (

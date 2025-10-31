@@ -6,6 +6,7 @@
 import json
 from functools import partial
 
+from aiohttp.client_exceptions import ClientResponseError
 from connectors_sdk.source import BaseDataSource
 from connectors_sdk.utils import iso_utc
 
@@ -16,7 +17,6 @@ from connectors.access_control import (
 )
 from connectors.sources.dropbox.client import (
     BASE_URLS,
-    ClientResponseError,
     DropboxClient,
     EndpointName,
 )
