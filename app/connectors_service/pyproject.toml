@@ -146,7 +146,7 @@ filterwarnings = [
 ]
 
 [tool.pyright]
-pythonVersion = "3.11"
+pythonVersion = "3.10"
 include = ["connectors"]
 reportMissingImports = false
 reportMissingModuleSource = false
