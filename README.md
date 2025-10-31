@@ -10,7 +10,7 @@ Use connectors to sync data from popular data sources to Elasticsearch.
 
 These connectors are available to be self-managed on your own infrastructure.
 
-> [!NOTE]  
+> [!NOTE]
 > Managed connectors on Elastic Cloud Hosted are no longer available as of version 9.0.
 
 ℹ️ For an overview of the steps involved in deploying connectors refer to [**Self-managed connectors**](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-build-connector.html) in the official Elastic documentation.
@@ -33,14 +33,36 @@ Refer to the [Connector API documentation](https://www.elastic.co/docs/api/doc/e
 
 Learn about our CLI tool in [`docs/CLI.md`](./docs/CLI.md).
 
+## Connector project structure
+
+There are two directories that contain the relevant code for running a connector:
+
+- `app/`
+- `libs/`
+
+The `app/` directory contains the primary connector service, as well as the individual data source implementations.
+The `libs/` directory is the home of the Connectors SDK, which is where the connectors framework is defined.
+
+The Connectors SDK is a dependency of the connectors application. You can use the Connectors SDK in and of itself to create your own data source connectors without needing to ingest data into Elasticsearch.
+
+> [!NOTE]
+> For those who are familiar with the [monolithic project structure](https://github.com/elastic/connectors/tree/1efa53e1ce47db2ae28d1390e5721932c58ce816) that preceded the current structure:
+>
+> **Functionality has not been affected in any way.**
+> The top-level project Makefile provides the same general commands as were previously present, and they will behave the same as before.
+>
+> `make run` will run the Connectors code directly from source by calling the `make run` command defined under the `app/` directory.
+>
+> Furthermore, `make docker-build` and `make docker-run` commands will still build and run local Docker images.
+
 ## Connector service code
 
-In addition to the source code for individual connectors, this repo also contains the connector service code, which is used for tasks like running connectors, and managing scheduling, syncs, and cleanup.
+As mentioned in the section above, the connector service code lives under the `app/` directory. The code here defines tasks such as running connectors and managing scheduling, syncs, and cleanup.
 This is shared code that is not used by individual connectors, but helps to coordinate and run a deployed instance/process.
 
-## Connector framework
+## Connectors SDK and framework
 
-This repo is also the home of the Elastic connector framework. This framework enables developers to build Elastic-supported self-managed connectors.
+The `libs/` directory is home to the Elastic connector SDK. This SDK provides a framework that enables developers to build self-managed connectors.
 The framework implements common functionalities out of the box, so developers can focus on the logic specific to integrating their chosen data source.
 
 The framework ensures compatibility, makes it easier for our team to review PRs, and help out in the development process. When you build using our framework, we provide a pathway for the connector to be officially supported by Elastic.

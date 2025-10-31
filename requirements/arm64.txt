@@ -1,6 +1,0 @@
-# Apple M1
-
--r aarch64.txt
-
-SQLAlchemy[asyncio]==2.0.1
-pymongo[srv]==4.6.3

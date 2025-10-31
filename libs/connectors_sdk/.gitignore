@@ -1,0 +1,5 @@
+htmlcov
+build
+.venv
+.ruff_cache
+.coverage

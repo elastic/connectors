@@ -8,8 +8,8 @@ COPY --chown=nonroot:nonroot . /app
 
 USER nonroot
 WORKDIR /app
-RUN make clean install
-RUN ln -s .venv/bin /app/bin
+RUN make clean install-package
+RUN ln -s app/connectors_service/.venv/bin /app/bin
 
 USER root
 RUN apk del make git

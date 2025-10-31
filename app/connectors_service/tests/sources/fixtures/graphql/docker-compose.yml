@@ -1,0 +1,44 @@
+version: "3.9"
+
+services:
+  elasticsearch:
+    image: ${ELASTICSEARCH_DRA_DOCKER_IMAGE}
+    container_name: elasticsearch
+    environment:
+      - cluster.name=docker-cluster
+      - bootstrap.memory_lock=true
+      - ES_JAVA_OPTS=-Xms2g -Xmx2g
+      - ELASTIC_PASSWORD=changeme
+      - xpack.security.enabled=true
+      - xpack.security.authc.api_key.enabled=true
+      - discovery.type=single-node
+      - action.destructive_requires_name=false
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - esdata:/usr/share/elasticsearch/data
+    ports:
+      - 9200:9200
+    networks:
+      - esnet
+
+  graphql:
+    build:
+      context: ../../../../
+      dockerfile: ${DOCKERFILE_FTEST_PATH}
+    command: .venv/bin/python -m tests.sources.fixtures.graphql.fixture
+    ports:
+      - "9094:9094"
+    volumes:
+      - .:/python-flask
+    restart: always
+
+volumes:
+  esdata:
+    driver: local
+
+networks:
+  esnet:
+    driver: bridge
