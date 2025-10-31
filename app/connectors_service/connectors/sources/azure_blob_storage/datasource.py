@@ -207,7 +207,7 @@ class AzureBlobStorageDataSource(BaseDataSource):
             try:
                 self.container_clients[container_name] = (
                     ContainerClient.from_connection_string(
-                        conn_str=self.connection_string,
+                        conn_str=self.connection_string,  # type: ignore[arg-type]
                         container_name=container_name,
                         retry_total=self.retry_count,
                     )
@@ -247,7 +247,8 @@ class AzureBlobStorageDataSource(BaseDataSource):
         """
         container_set = set(container_list)
         async with BlobServiceClient.from_connection_string(
-            conn_str=self.connection_string, retry_total=self.retry_count
+            conn_str=self.connection_string,  # type: ignore[arg-type]
+            retry_total=self.retry_count,
         ) as azure_base_client:
             try:
                 async for container in azure_base_client.list_containers(

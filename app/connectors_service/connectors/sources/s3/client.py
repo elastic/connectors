@@ -56,7 +56,7 @@ class S3Client:
         # these context manager will be stored in client_context list also client will be stored in clients dict with their region
         s3_context_stack = AsyncExitStack()
         s3_client = await s3_context_stack.enter_async_context(
-            self.session.client(
+            self.session.client(  # type: ignore[arg-type]
                 service_name="s3",
                 config=self.config,
                 endpoint_url=AWS_ENDPOINT,

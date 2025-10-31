@@ -36,7 +36,7 @@ class S3AdvancedRulesValidator(AdvancedRulesValidator):
                 SyncRuleValidationResult.ADVANCED_RULES
             )
         try:
-            S3AdvancedRulesValidator.SCHEMA(advanced_rules)
+            S3AdvancedRulesValidator.SCHEMA(advanced_rules)  # type: ignore[misc]
             return SyncRuleValidationResult.valid_result(
                 rule_id=SyncRuleValidationResult.ADVANCED_RULES
             )

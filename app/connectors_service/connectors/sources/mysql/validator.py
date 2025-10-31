@@ -51,7 +51,7 @@ class MySQLAdvancedRulesValidator(AdvancedRulesValidator):
     )
     async def _remote_validation(self, advanced_rules):
         try:
-            MySQLAdvancedRulesValidator.SCHEMA(advanced_rules)
+            MySQLAdvancedRulesValidator.SCHEMA(advanced_rules)  # type: ignore[misc]
         except JsonSchemaValueException as e:
             return SyncRuleValidationResult(
                 rule_id=SyncRuleValidationResult.ADVANCED_RULES,

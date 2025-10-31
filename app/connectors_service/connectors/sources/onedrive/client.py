@@ -201,7 +201,7 @@ class OneDriveClient:
             await self._handle_client_side_errors(e)
         except ClientPayloadError as e:
             retry_seconds = DEFAULT_RETRY_SECONDS
-            response_headers = e.headers or {}
+            response_headers = e.headers or {}  # type: ignore[attr-defined]
             if "Retry-After" in response_headers:
                 try:
                     retry_seconds = int(response_headers["Retry-After"])

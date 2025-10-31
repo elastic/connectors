@@ -553,12 +553,12 @@ class GitHubDataSource(BaseDataSource):
         async for installation in self.github_client.get_installations():
             if (
                 self.configuration["repo_type"] == "organization"
-                and installation["account"]["type"] == "Organization"
+                and installation["account"]["type"] == "Organization"  # type: ignore[index]
             ) or (
                 self.configuration["repo_type"] == "other"
-                and installation["account"]["type"] == "User"
+                and installation["account"]["type"] == "User"  # type: ignore[index]
             ):
-                self._installations[installation["account"]["login"]] = installation[
+                self._installations[installation["account"]["login"]] = installation[  # type: ignore[index]
                     "id"
                 ]
 

@@ -121,9 +121,9 @@ class GitHubClient:
         try:
             access_token_response = await get_installation_access_token(
                 gh=self._get_client,
-                installation_id=self._installation_id,
-                app_id=self.app_id,
-                private_key=self.private_key,
+                installation_id=self._installation_id,  # type: ignore[arg-type]
+                app_id=self.app_id,  # type: ignore[arg-type]
+                private_key=self.private_key,  # type: ignore[arg-type]
             )
             self._installation_access_token = access_token_response["token"]
         except gidgethub.RateLimitExceeded:
@@ -347,7 +347,7 @@ class GitHubClient:
                 {},
                 b"",
                 sansio.accept_format(),
-                get_jwt(app_id=self.app_id, private_key=self.private_key),
+                get_jwt(app_id=self.app_id, private_key=self.private_key),  # type: ignore[arg-type]
             )
         # we don't expect any 401 error as the jwt is freshly generated
         except gidgethub.RateLimitExceeded:
@@ -368,9 +368,9 @@ class GitHubClient:
         async for installation in self._github_app_paginated_get(
             url="/app/installations"
         ):
-            if installation["suspended_at"]:
+            if installation["suspended_at"]:  # type: ignore[index]
                 self._logger.debug(
-                    f"Skip installation '{installation['id']}' because it's suspended."
+                    f"Skip installation '{installation['id']}' because it's suspended."  # type: ignore[index]
                 )
                 continue
             yield installation

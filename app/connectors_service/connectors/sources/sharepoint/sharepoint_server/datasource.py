@@ -695,7 +695,7 @@ class SharepointServerDataSource(BaseDataSource):
                     site_access_control,
                     site_admin_access_control,
                 ) = await self._site_access_control(
-                    site_url=f'{self.sharepoint_client.host_url}{site_data.get("ServerRelativeUrl")}'
+                    site_url=f'{self.sharepoint_client.host_url}{site_data.get("ServerRelativeUrl")}'  # type: ignore[attr-defined]
                 )
                 site_document = self._decorate_with_access_control(
                     self.format_sites(item=site_data), site_access_control

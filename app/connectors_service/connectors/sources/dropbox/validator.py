@@ -83,7 +83,7 @@ class DropBoxAdvancedRulesValidator(AdvancedRulesValidator):
     )
     async def _remote_validation(self, advanced_rules):
         try:
-            DropBoxAdvancedRulesValidator.SCHEMA(advanced_rules)
+            DropBoxAdvancedRulesValidator.SCHEMA(advanced_rules)  # type: ignore[misc]
         except fastjsonschema.JsonSchemaValueException as e:
             return SyncRuleValidationResult(
                 rule_id=SyncRuleValidationResult.ADVANCED_RULES,

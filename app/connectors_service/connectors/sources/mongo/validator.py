@@ -63,7 +63,7 @@ class MongoAdvancedRulesValidator(AdvancedRulesValidator):
 
     async def validate(self, advanced_rules):
         try:
-            MongoAdvancedRulesValidator.SCHEMA(advanced_rules)
+            MongoAdvancedRulesValidator.SCHEMA(advanced_rules)  # type: ignore[misc]
 
             return SyncRuleValidationResult.valid_result(
                 rule_id=SyncRuleValidationResult.ADVANCED_RULES

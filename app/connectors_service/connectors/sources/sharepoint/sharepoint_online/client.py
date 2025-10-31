@@ -386,7 +386,7 @@ class MicrosoftAPISession:
                 if absolute_url.endswith("/$batch"):  # response code of $batch lies
                     await self._check_batch_items_for_errors(absolute_url, resp)
                 yield resp
-        except aiohttp.client_exceptions.ClientOSError:
+        except aiohttp.client_exceptions.ClientOSError:  # type: ignore[attr-defined]
             self._logger.warning(
                 "The Microsoft Graph API dropped the connection. It might indicate that the connector is making too many requests. Decrease concurrency settings, otherwise the Graph API may block this app."
             )
@@ -404,7 +404,7 @@ class MicrosoftAPISession:
             if status != 200:
                 self._logger.warning(f"Batch request item failed with: {response}")
                 headers = response.get("headers", {})
-                req_info = RequestInfo(url=url, method="POST", headers=headers)
+                req_info = RequestInfo(url=url, method="POST", headers=headers)  # type: ignore[call-arg]
                 raise ClientResponseError(
                     request_info=req_info,
                     headers=headers,
@@ -428,7 +428,7 @@ class MicrosoftAPISession:
                 headers=headers,
             ) as resp:
                 yield resp
-        except aiohttp.client_exceptions.ClientOSError:
+        except aiohttp.client_exceptions.ClientOSError:  # type: ignore[attr-defined]
             self._logger.warning(
                 "Graph API dropped the connection. It might indicate, that connector makes too many requests - decrease concurrency settings, otherwise Graph API can block this app."
             )

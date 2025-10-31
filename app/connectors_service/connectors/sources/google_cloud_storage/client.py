@@ -85,7 +85,7 @@ class GoogleCloudStorageClient:
                             f"Using the storage emulator at {STORAGE_EMULATOR_HOST}"
                         )
                         # Redirecting calls to fake Google Cloud Storage server for e2e test.
-                        storage_client.discovery_document["rootUrl"] = (
+                        storage_client.discovery_document["rootUrl"] = (  # type: ignore[index]
                             STORAGE_EMULATOR_HOST + "/"
                         )
                     resource_object = getattr(storage_client, resource)
@@ -100,7 +100,7 @@ class GoogleCloudStorageClient:
                                 full_res=True,
                             )
                         )
-                        async for page_items in first_page_with_next_attached:
+                        async for page_items in first_page_with_next_attached:  # type: ignore[misc]
                             yield page_items
                     else:
                         if sub_method:

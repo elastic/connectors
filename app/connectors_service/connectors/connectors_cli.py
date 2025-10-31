@@ -180,7 +180,7 @@ def interactive_service_type_prompt():
         clear_menu_on_exit=False,
         show_search_hint=True,
     ).show()
-    return options[result]
+    return options[result]  # type: ignore[assignment]
 
 
 @click.command(help="Creates a new connector and a search index")

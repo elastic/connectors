@@ -432,7 +432,7 @@ class MicrosoftTeamsClient:
                     url=absolute_url,
                 ) as resp:
                     yield resp
-        except aiohttp.client_exceptions.ClientOSError:
+        except aiohttp.client_exceptions.ClientOSError:  # type: ignore[attr-defined]
             self._logger.error(
                 "Graph API dropped the connection. It might indicate, that connector makes too many requests - decrease concurrency settings, otherwise Graph API can block this app."
             )

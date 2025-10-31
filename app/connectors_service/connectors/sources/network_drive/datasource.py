@@ -426,9 +426,10 @@ class NASDataSource(BaseDataSource):
                 port=self.port,
             ) as file:
                 descriptor = self.security_info.get_descriptor(
-                    file_descriptor=file.fd, info=SECURITY_INFO_DACL
+                    file_descriptor=file.fd,  # type: ignore[attr-defined]
+                    info=SECURITY_INFO_DACL,
                 )
-                return descriptor.get_dacl()["aces"]
+                return descriptor.get_dacl()["aces"]  # type: ignore[index]
         except SMBOSError as error:
             self._logger.error(
                 f"Cannot read the contents of file on path:{file_path}. Error {error}"

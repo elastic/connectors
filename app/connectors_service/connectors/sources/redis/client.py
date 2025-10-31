@@ -156,18 +156,18 @@ class RedisClient:
         """
         try:
             if key_type == KeyType.HASH.value:
-                return await self._client.hgetall(key)
+                return await self._client.hgetall(key)  # type: ignore[misc]
             elif key_type == KeyType.STREAM.value:
                 return await self._client.xread({key: "0"})
             elif key_type == KeyType.LIST.value:
-                return await self._client.lrange(key, 0, -1)
+                return await self._client.lrange(key, 0, -1)  # type: ignore[misc]
             elif key_type == KeyType.SET.value:
-                return await self._client.smembers(key)
+                return await self._client.smembers(key)  # type: ignore[misc]
             elif key_type == KeyType.ZSET.value:
                 return await self._client.zrange(key, 0, -1, withscores=True)
             elif key_type == KeyType.JSON.value:
                 value = await self._client.execute_command("JSON.GET", key)
-                return json.loads(value)
+                return json.loads(value)  # type: ignore[arg-type]
             else:
                 value = await self._client.get(key)
                 if value is not None:

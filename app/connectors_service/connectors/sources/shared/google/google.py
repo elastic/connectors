@@ -214,7 +214,7 @@ class GoogleServiceAccountClient:
                 )
 
                 if RUNNING_FTEST and GOOGLE_API_FTEST_HOST:
-                    workspace_client.discovery_document["rootUrl"] = (
+                    workspace_client.discovery_document["rootUrl"] = (  # type: ignore[index]
                         GOOGLE_API_FTEST_HOST + "/"
                     )
 

@@ -36,7 +36,7 @@ class GMailAdvancedRulesValidator(AdvancedRulesValidator):
             )
 
         try:
-            GMailAdvancedRulesValidator.SCHEMA(advanced_rules)
+            GMailAdvancedRulesValidator.SCHEMA(advanced_rules)  # type: ignore[misc]
 
             return SyncRuleValidationResult.valid_result(
                 rule_id=SyncRuleValidationResult.ADVANCED_RULES

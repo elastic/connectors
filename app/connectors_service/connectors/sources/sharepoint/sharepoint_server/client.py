@@ -478,7 +478,7 @@ class SharepointServerClient:
                 site_list_name=site_list_name,
             )
         )
-        return role.get("value", False)
+        return role.get("value", False)  # type: ignore[attr-defined]
 
     async def site_list_item_has_unique_role_assignments(
         self, site_url, site_list_name, list_item_id
@@ -492,7 +492,7 @@ class SharepointServerClient:
                 list_item_id=list_item_id,
             )
         )
-        return role.get("value", False)
+        return role.get("value", False)  # type: ignore[attr-defined]
 
     async def site_list_item_role_assignments(
         self, site_url, site_list_name, list_item_id

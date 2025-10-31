@@ -146,17 +146,14 @@ filterwarnings = [
 ]
 
 [tool.pyright]
-pythonVersion = "3.10"
+pythonVersion = "3.11"
 include = ["connectors"]
 reportMissingImports = false
 reportMissingModuleSource = false
 reportOptionalMemberAccess = false
 exclude = ["**/tests", "**/__pycache__"]
-venvPath = "./"
+venvPath = "."
 venv = ".venv"
-executionEnvironments = [
-    { root = "./", venv = ".venv" }
-]
 
 [tool.ruff]
 target-version = "py310"

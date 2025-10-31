@@ -24,7 +24,7 @@ class SharepointOnlineAdvancedRulesValidator(AdvancedRulesValidator):
 
     async def validate(self, advanced_rules):
         try:
-            SharepointOnlineAdvancedRulesValidator.SCHEMA(advanced_rules)
+            SharepointOnlineAdvancedRulesValidator.SCHEMA(advanced_rules)  # type: ignore[misc]
 
             return SyncRuleValidationResult.valid_result(
                 rule_id=SyncRuleValidationResult.ADVANCED_RULES
