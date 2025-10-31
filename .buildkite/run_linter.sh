@@ -20,6 +20,7 @@ if is_pr && ! is_fork; then
 
   if [ -z "$(git status --porcelain)" ]; then
     echo "Nothing to be fixed by autoformat"
+    make lint
     exit 0
   else
 

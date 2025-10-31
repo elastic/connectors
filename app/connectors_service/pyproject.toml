@@ -152,6 +152,8 @@ reportMissingImports = false
 reportMissingModuleSource = false
 reportOptionalMemberAccess = false
 exclude = ["**/tests", "**/__pycache__"]
+venvPath = "./"
+venv = ".venv"
 executionEnvironments = [
     { root = "./", venv = ".venv" }
 ]
