@@ -28,6 +28,7 @@ notify:
 
 env:
   DOCKERFILE_PATH: "Dockerfile.wolfi"
+  DRA_PYTHON_VERSION: "3.11"
 
 steps:
   - label: ":eyes: Notice check"
@@ -628,7 +629,6 @@ steps:
     key: "test_packages"
     steps:
       - label: ":python: Build Python {{matrix.python_version}} {{matrix.package_path}} package"
-        key: test_package
         <<: *test-agents
         matrix:
           setup:
@@ -642,11 +642,6 @@ steps:
           PYTHON_VERSION: "{{ matrix.python_version }}"
           PACKAGE_PATH: "{{ matrix.package_path }}"
         command: ".buildkite/test_python_packages.sh"
-        artifact_paths:
-          - "app/connectors_service/dist/*.whl"
-          - "app/connectors_service/dist/*.tar.gz"
-          - "libs/connectors_sdk/dist/*.whl"
-          - "libs/connectors_sdk/dist/*.tar.gz"
         timeout_in_minutes: 10
 
   # ----
