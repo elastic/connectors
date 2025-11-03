@@ -9,7 +9,9 @@ import aiohttp
 from aiohttp import ClientResponseError
 from connectors_sdk.logger import logger
 from connectors_sdk.source import ConfigurableFieldValueError
-from graphql import VariableNode, Visitor, parse, visit
+from graphql.language import parse, visit
+from graphql.language.ast import VariableNode
+from graphql.language.visitor import Visitor
 
 from connectors.sources.graphql.constants import (
     BASIC,
