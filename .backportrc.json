@@ -11,5 +11,5 @@
     "^v9.3.0$": "main",
     "^v(\\d+).(\\d+)(.\\d+)*$": "$1.$2"
   },
-  "upstream": "elastic/app/connectors_service/connectors"
+  "upstream": "elastic/connectors"
 }
