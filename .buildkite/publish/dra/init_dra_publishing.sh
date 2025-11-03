@@ -25,10 +25,10 @@ cd -
 # Download previous step artifacts
 buildkite-agent artifact download '.artifacts/*.tar.gz*' $RELEASE_DIR/dist/ --step build_docker_image_amd64
 buildkite-agent artifact download '.artifacts/*.tar.gz*' $RELEASE_DIR/dist/ --step build_docker_image_arm64
-buildkite-agent artifact download 'app/connectors_service/dist/*.whl' $RELEASE_DIR/ --step test_packages
-buildkite-agent artifact download 'app/connectors_service/dist/*.tar.gz' $RELEASE_DIR/ --step test_packages
-buildkite-agent artifact download 'libs/connectors_sdk/dist/*.whl' $RELEASE_DIR/ --step test_packages
-buildkite-agent artifact download 'libs/connectors_sdk/dist/*.tar.gz' $RELEASE_DIR/ --step test_packages
+buildkite-agent artifact download 'app/connectors_service/dist/*.whl' $RELEASE_DIR/ --step test_package
+buildkite-agent artifact download 'app/connectors_service/dist/*.tar.gz' $RELEASE_DIR/ --step test_package
+buildkite-agent artifact download 'libs/connectors_sdk/dist/*.whl' $RELEASE_DIR/ --step test_package
+buildkite-agent artifact download 'libs/connectors_sdk/dist/*.tar.gz' $RELEASE_DIR/ --step test_package
 
 
 # Copy previous step artifacts to DRA dir

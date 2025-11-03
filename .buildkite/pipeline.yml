@@ -628,7 +628,7 @@ steps:
     key: "test_packages"
     steps:
       - label: ":python: Build Python {{matrix.python_version}} {{matrix.package_path}} package"
-        key: build_python_package
+        key: test_package
         <<: *test-agents
         matrix:
           setup:
@@ -643,8 +643,10 @@ steps:
           PACKAGE_PATH: "{{ matrix.package_path }}"
         command: ".buildkite/test_python_packages.sh"
         artifact_paths:
-          - "{{ matrix.package_path }}/dist/*.whl"
-          - "{{ matrix.package_path }}/dist/*.tar.gz"
+          - "app/connectors_service/dist/*.whl"
+          - "app/connectors_service/dist/*.tar.gz"
+          - "libs/connectors_sdk/dist/*.whl"
+          - "libs/connectors_sdk/dist/*.tar.gz"
         timeout_in_minutes: 10
 
   # ----
