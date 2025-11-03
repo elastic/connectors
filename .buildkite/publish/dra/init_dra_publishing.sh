@@ -18,7 +18,7 @@ cd $PROJECT_ROOT
 make clean zip
 export DRA_ARTIFACTS_DIR=$RELEASE_DIR/dist/dra-artifacts
 mkdir -p $DRA_ARTIFACTS_DIR
-cp $RELEASE_DIR/dist/elasticsearch_connectors-${VERSION}.zip $DRA_ARTIFACTS_DIR/connectors-${VERSION}.zip
+cp $RELEASE_DIR/app/connectors_service/dist/elasticsearch_connectors-${VERSION}.zip $DRA_ARTIFACTS_DIR/connectors-${VERSION}.zip
 
 cd -
 
