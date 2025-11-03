@@ -56,3 +56,6 @@ docker-run:
 
 docker-push:
 	docker push $(DOCKER_IMAGE_NAME):$(VERSION)-SNAPSHOT
+
+zip:
+	cd $(app_dir); make zip
