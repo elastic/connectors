@@ -36,15 +36,15 @@ elif [[ -n "${VERSION_QUALIFIER:-}" ]]; then
 fi
 
 # Create a build.yaml file for reference after build process
-cat <<EOL > connectors/build.yaml
+cat <<EOL > app/connectors_service/connectors/build.yaml
 version: "$version"
 qualifier: "$version_qualifier"
 revision: "$revision"
 repository: "$repository"
 EOL
 
-echo "Created connectors/build.yaml file:"
-cat connectors/build.yaml
+echo "Created app/connectors_service/connectors/build.yaml file:"
+cat app/connectors_service/connectors/build.yaml
 
 if [[ "${MANUAL_RELEASE:-}" == "true" ]]; then
   # This block is for out-of-band releases, triggered by the release-pipeline
