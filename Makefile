@@ -40,6 +40,7 @@ autoformat: install
 clean:
 	cd $(connectors_sdk_dir); make clean
 	cd $(app_dir); make clean
+	rm -rf .coverage
 
 run:
 	cd $(app_dir); make run

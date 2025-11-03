@@ -17,6 +17,7 @@ app/connectors_service/config.yml
 *.iml
 .cli
 
+htmlcov
 .venv
 **/venv
 scripts/stack/connectors-config
