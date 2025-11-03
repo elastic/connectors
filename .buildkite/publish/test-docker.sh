@@ -76,7 +76,7 @@ commandTests:
     args: ["--version"]
     expectedOutput: ["Python\\s3\\.11\\.*"]
   - name: "Connectors Installation"
-    command: "/app/.venv/bin/elastic-ingest"
+    command: "/app/bin/elastic-ingest"
     args: ["--version"]
     expectedOutput: ["'"${ESCAPED_VERSION}"'*"]
 '
