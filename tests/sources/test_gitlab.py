@@ -1017,9 +1017,7 @@ class TestGitLabClientAsyncGenerators:
         """Test get_file_content raises errors for retry."""
         client = GitLabClient(token="test-token")
 
-        with patch.object(
-            client, "_get_rest", new_callable=AsyncMock
-        ) as mock_rest:
+        with patch.object(client, "_get_rest", new_callable=AsyncMock) as mock_rest:
             mock_rest.side_effect = Exception("File not found")
 
             with pytest.raises(Exception, match="File not found"):
@@ -1474,7 +1472,7 @@ class TestGitLabDataSourceIntegration:
 
         readme_docs = []
         async for doc, _download_func in source._fetch_readme_files(
-            123, mock_gitlab_project
+            "123", mock_gitlab_project
         ):
             readme_docs.append(doc)
 
@@ -3028,6 +3026,326 @@ class TestGitLabClientAsyncGeneratorErrors:
                 labels.append(label)
 
             assert len(labels) == 0
+
+
+class TestGitLabAPIResilience:
+    """Test resilience to API schema changes with graceful fallback."""
+
+    @pytest.mark.asyncio
+    async def test_get_projects_with_invalid_field_type(self):
+        """Test get_projects handles API schema changes gracefully (field type changed)."""
+        client = GitLabClient(token="test-token")
+
+        # Simulate API change: starCount changed from int to string
+        with patch.object(
+            client, "_execute_graphql", new_callable=AsyncMock
+        ) as mock_graphql:
+            mock_graphql.return_value = {
+                "projects": {
+                    "nodes": [
+                        {
+                            "id": "gid://gitlab/Project/1",
+                            "name": "Project 1",
+                            "path": "project1",
+                            "fullPath": "group/project1",
+                            "visibility": "public",
+                            "starCount": "not-an-integer",
+                            "forksCount": 5,
+                            "createdAt": "2023-01-01T00:00:00Z",
+                            "webUrl": "https://gitlab.com/group/project1",
+                        }
+                    ],
+                    "pageInfo": {"hasNextPage": False, "endCursor": None},
+                }
+            }
+
+            projects = []
+            async for project in client.get_projects():
+                projects.append(project)
+
+            assert len(projects) == 1
+            assert isinstance(projects[0], dict)
+            assert projects[0]["name"] == "Project 1"
+            assert projects[0]["starCount"] == "not-an-integer"
+
+    @pytest.mark.asyncio
+    async def test_get_projects_with_missing_required_field(self):
+        """Test get_projects handles missing required fields gracefully."""
+        client = GitLabClient(token="test-token")
+
+        with patch.object(
+            client, "_execute_graphql", new_callable=AsyncMock
+        ) as mock_graphql:
+            mock_graphql.return_value = {
+                "projects": {
+                    "nodes": [
+                        {
+                            "id": "gid://gitlab/Project/1",
+                            "name": "Project 1",
+                            "fullPath": "group/project1",
+                            "visibility": "public",
+                            "starCount": 10,
+                            "forksCount": 5,
+                            "createdAt": "2023-01-01T00:00:00Z",
+                            "webUrl": "https://gitlab.com/group/project1",
+                        }
+                    ],
+                    "pageInfo": {"hasNextPage": False, "endCursor": None},
+                }
+            }
+
+            projects = []
+            async for project in client.get_projects():
+                projects.append(project)
+
+            assert len(projects) == 1
+            assert isinstance(projects[0], dict)
+            assert projects[0]["name"] == "Project 1"
+
+    @pytest.mark.asyncio
+    async def test_get_merge_requests_with_schema_change(self):
+        """Test get_merge_requests handles API schema changes gracefully."""
+        client = GitLabClient(token="test-token")
+
+        with patch.object(
+            client, "_execute_graphql", new_callable=AsyncMock
+        ) as mock_graphql:
+            # API change: assignees structure changed from object to string
+            mock_graphql.return_value = {
+                "project": {
+                    "mergeRequests": {
+                        "nodes": [
+                            {
+                                "id": "gid://gitlab/MergeRequest/1",
+                                "iid": 1,
+                                "title": "Test MR",
+                                "state": "opened",
+                                "createdAt": "2023-01-01T00:00:00Z",
+                                "updatedAt": "2023-01-02T00:00:00Z",
+                                "webUrl": "https://gitlab.com/group/project/merge_requests/1",
+                                "sourceBranch": "feature",
+                                "targetBranch": "main",
+                                "assignees": "invalid-structure",
+                                "reviewers": {"nodes": []},
+                                "approvedBy": {"nodes": []},
+                                "labels": {"nodes": []},
+                            }
+                        ],
+                        "pageInfo": {"hasNextPage": False, "endCursor": None},
+                    }
+                }
+            }
+
+            mrs = []
+            async for mr in client.get_merge_requests("group/project"):
+                mrs.append(mr)
+
+            assert len(mrs) == 1
+            assert isinstance(mrs[0], dict)
+            assert mrs[0]["title"] == "Test MR"
+
+    @pytest.mark.asyncio
+    async def test_full_flow_client_to_formatter_with_validation_failure(self):
+        """Test full flow: client.get_projects() → formatter with validation failure."""
+        async with create_gitlab_source() as source:
+            # Mock the client's GraphQL execution to return invalid data
+            with patch.object(
+                source.gitlab_client, "_execute_graphql", new_callable=AsyncMock
+            ) as mock_graphql:
+                mock_graphql.return_value = {
+                    "projects": {
+                        "nodes": [
+                            {
+                                "id": "gid://gitlab/Project/1",
+                                "name": "Test Project",
+                                "path": "test-project",
+                                "fullPath": "group/test-project",
+                                "visibility": "public",
+                                "starCount": "INVALID_TYPE",  # This breaks Pydantic validation
+                                "forksCount": 5,
+                                "createdAt": "2023-01-01T00:00:00Z",
+                                "lastActivityAt": "2023-01-02T00:00:00Z",
+                                "webUrl": "https://gitlab.com/group/test-project",
+                                "newApiField": "some new field GitLab added",  # Extra field
+                            }
+                        ],
+                        "pageInfo": {"hasNextPage": False, "endCursor": None},
+                    }
+                }
+
+                # Step 1: Client gets projects (validation fails, returns raw dict)
+                projects = []
+                async for project in source.gitlab_client.get_projects():
+                    projects.append(project)
+
+                assert len(projects) == 1
+                assert isinstance(projects[0], dict)  # Validation failed, got raw dict
+
+                # Step 2: Formatter receives raw dict and passes it through
+                doc = source._format_project_doc(projects[0])
+
+                # Required ES fields added by formatter
+                assert doc["_id"] == "project_1"
+                assert doc["type"] == "Project"
+                assert doc["_timestamp"] == "2023-01-02T00:00:00Z"
+
+                # Raw API data preserved transparently (including invalid field)
+                assert doc["starCount"] == "INVALID_TYPE"  # Invalid type preserved as-is
+                assert doc["name"] == "Test Project"
+                assert doc["newApiField"] == "some new field GitLab added"  # New field passed through
+
+    @pytest.mark.asyncio
+    async def test_full_flow_merge_request_with_validation_failure(self):
+        """Test full flow: client.get_merge_requests() → formatter with validation failure."""
+        async with create_gitlab_source() as source:
+            with patch.object(
+                source.gitlab_client, "_execute_graphql", new_callable=AsyncMock
+            ) as mock_graphql:
+                mock_graphql.return_value = {
+                    "project": {
+                        "mergeRequests": {
+                            "nodes": [
+                                {
+                                    "id": "gid://gitlab/MergeRequest/1",
+                                    "iid": "INVALID_TYPE",  # String instead of int
+                                    "title": "Test MR",
+                                    "state": "opened",
+                                    "createdAt": "2023-01-01T00:00:00Z",
+                                    "updatedAt": "2023-01-02T00:00:00Z",
+                                    "webUrl": "https://gitlab.com/test",
+                                    "sourceBranch": "feature",
+                                    "targetBranch": "main",
+                                    "assignees": {"nodes": []},
+                                    "reviewers": {"nodes": []},
+                                    "approvedBy": {"nodes": []},
+                                    "labels": {"nodes": []},
+                                    "newField": "some new API field",
+                                }
+                            ],
+                            "pageInfo": {"hasNextPage": False, "endCursor": None},
+                        }
+                    }
+                }
+
+                fake_project = {"id": "gid://gitlab/Project/123", "fullPath": "group/project"}
+
+                # Step 1: Client gets MRs (validation fails, returns raw dict)
+                mrs = []
+                async for mr in source.gitlab_client.get_merge_requests("group/project"):
+                    mrs.append(mr)
+
+                assert len(mrs) == 1
+                assert isinstance(mrs[0], dict)
+
+                # Step 2: Formatter receives raw dict and passes it through
+                doc = source._format_merge_request_doc(mrs[0], fake_project)
+
+                assert doc["_id"] == "mr_123_INVALID_TYPE"
+                assert doc["type"] == "Merge Request"
+                assert doc["iid"] == "INVALID_TYPE"  # Invalid type preserved
+                assert doc["newField"] == "some new API field"  # New field passed through
+
+    @pytest.mark.asyncio
+    async def test_get_work_items_project_with_pagination_fallback(self):
+        """Test work items project handles validation failure across pages."""
+        client = GitLabClient(token="test-token")
+
+        with patch.object(
+            client, "_execute_graphql", new_callable=AsyncMock
+        ) as mock_graphql:
+            mock_graphql.side_effect = [
+                {
+                    "project": {
+                        "workItems": {
+                            "nodes": [{"id": "1", "iid": "invalid", "title": "Issue 1", "state": "opened", "createdAt": "2023-01-01T00:00:00Z", "updatedAt": "2023-01-01T00:00:00Z", "webUrl": "http://test.com", "workItemType": {"name": "Issue"}, "widgets": []}],
+                            "pageInfo": {"hasNextPage": True, "endCursor": "c1"},
+                        }
+                    }
+                },
+                {
+                    "project": {
+                        "workItems": {
+                            "nodes": [{"id": "2", "iid": "also-invalid", "title": "Issue 2", "state": "opened", "createdAt": "2023-01-01T00:00:00Z", "updatedAt": "2023-01-01T00:00:00Z", "webUrl": "http://test.com", "workItemType": {"name": "Issue"}, "widgets": []}],
+                            "pageInfo": {"hasNextPage": False, "endCursor": None},
+                        }
+                    }
+                },
+            ]
+
+            items = []
+            async for item in client.get_work_items_project("group/proj", ["ISSUE"]):
+                items.append(item)
+
+            assert len(items) == 2
+            assert all(isinstance(i, dict) for i in items)
+
+    @pytest.mark.asyncio
+    async def test_get_work_items_group_with_pagination_fallback(self):
+        """Test work items group handles validation failure across pages."""
+        client = GitLabClient(token="test-token")
+
+        with patch.object(
+            client, "_execute_graphql", new_callable=AsyncMock
+        ) as mock_graphql:
+            mock_graphql.side_effect = [
+                {
+                    "group": {
+                        "workItems": {
+                            "nodes": [{"id": "1", "iid": "bad", "title": "Epic 1", "state": "opened", "createdAt": "2023-01-01T00:00:00Z", "updatedAt": "2023-01-01T00:00:00Z", "webUrl": "http://test.com", "workItemType": {"name": "Epic"}, "widgets": []}],
+                            "pageInfo": {"hasNextPage": True, "endCursor": "c1"},
+                        }
+                    }
+                },
+                {
+                    "group": {
+                        "workItems": {
+                            "nodes": [],
+                            "pageInfo": {"hasNextPage": False, "endCursor": None},
+                        }
+                    }
+                },
+            ]
+
+            items = []
+            async for item in client.get_work_items_group("mygroup", ["EPIC"]):
+                items.append(item)
+
+            assert len(items) == 1
+            assert isinstance(items[0], dict)
+
+    @pytest.mark.asyncio
+    async def test_get_releases_with_pagination_fallback(self):
+        """Test releases handles validation failure across pages."""
+        client = GitLabClient(token="test-token")
+
+        with patch.object(
+            client, "_execute_graphql", new_callable=AsyncMock
+        ) as mock_graphql:
+            mock_graphql.side_effect = [
+                {
+                    "project": {
+                        "releases": {
+                            "nodes": [{"tagName": "v1.0", "name": 123, "description": "Rel 1", "createdAt": "2023-01-01T00:00:00Z", "milestones": {"nodes": []}, "assets": {"count": 0, "links": {"nodes": []}}}],
+                            "pageInfo": {"hasNextPage": True, "endCursor": "c1"},
+                        }
+                    }
+                },
+                {
+                    "project": {
+                        "releases": {
+                            "nodes": [{"tagName": "v2.0", "name": 456, "description": "Rel 2", "createdAt": "2023-02-01T00:00:00Z", "milestones": {"nodes": []}, "assets": {"count": 0, "links": {"nodes": []}}}],
+                            "pageInfo": {"hasNextPage": False, "endCursor": None},
+                        }
+                    }
+                },
+            ]
+
+            rels = []
+            async for rel in client.get_releases("group/proj"):
+                rels.append(rel)
+
+            assert len(rels) == 2
+            assert all(isinstance(r, dict) for r in rels)
 
 
 # Helper for empty async generators

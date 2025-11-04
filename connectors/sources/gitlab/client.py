@@ -44,6 +44,10 @@ from connectors.sources.gitlab.queries import (
     WORK_ITEMS_GROUP_QUERY,
     WORK_ITEMS_PROJECT_QUERY,
 )
+from connectors.sources.gitlab.validation_utils import (
+    safe_get_nested,
+    validate_with_fallback,
+)
 from connectors.utils import CancellableSleeps, RetryStrategy, retryable
 
 
@@ -274,7 +278,7 @@ class GitLabClient:
         """Fetch projects using GraphQL.
 
         Yields:
-            GitLabProject: Validated project data
+            GitLabProject | dict: Validated project data or raw dict on validation failure
         """
         cursor = None
 
@@ -292,15 +296,35 @@ class GitLabClient:
                 self._logger.exception(f"GraphQL query failed: {e}")
                 raise
 
-            response = ProjectsResponse.model_validate(result)
+            # Try validation with graceful fallback
+            response = validate_with_fallback(
+                ProjectsResponse, result, self._logger, context="projects query"
+            )
 
-            for project in response.projects.nodes:
-                yield project
+            # Extract projects and pagination info (works for both validated and raw)
+            if isinstance(response, dict):
+                # Fallback: manual extraction from raw dict
+                projects_data = safe_get_nested(result, "projects", "nodes", default=[])
+                page_info = safe_get_nested(result, "projects", "pageInfo", default={})
 
-            if not response.projects.page_info.has_next_page:
-                break
+                for project_data in projects_data:
+                    # Yield raw dict, formatter will handle defensively
+                    yield project_data
 
-            cursor = response.projects.page_info.end_cursor
+                has_next = page_info.get("hasNextPage", False) if page_info else False
+                cursor = page_info.get("endCursor") if page_info else None
+
+                if not has_next:
+                    break
+            else:
+                # Normal path: validated Pydantic model
+                for project in response.projects.nodes:
+                    yield project
+
+                if not response.projects.page_info.has_next_page:
+                    break
+
+                cursor = response.projects.page_info.end_cursor
 
     @retryable(
         retries=RETRIES,
@@ -319,7 +343,7 @@ class GitLabClient:
             project_path (str): Full path of the project (e.g., 'namespace/project')
 
         Yields:
-            GitLabMergeRequest: Validated merge request data
+            GitLabMergeRequest | dict: Validated merge request data or raw dict on validation failure
         """
         cursor = None
 
@@ -341,18 +365,47 @@ class GitLabClient:
                 )
                 return
 
-            response = MergeRequestsResponse.model_validate(result)
+            # Try validation with graceful fallback
+            response = validate_with_fallback(
+                MergeRequestsResponse,
+                result,
+                self._logger,
+                context=f"merge requests for {project_path}",
+            )
 
-            if not response.project or not response.project.merge_requests:
-                return
+            # Extract merge requests and pagination info
+            if isinstance(response, dict):
+                # Fallback: manual extraction from raw dict
+                mrs_data = safe_get_nested(
+                    result, "project", "mergeRequests", "nodes", default=[]
+                )
+                page_info = safe_get_nested(
+                    result, "project", "mergeRequests", "pageInfo", default={}
+                )
 
-            for mr in response.project.merge_requests.nodes:
-                yield mr
+                if not mrs_data:
+                    return
 
-            if not response.project.merge_requests.page_info.has_next_page:
-                break
+                for mr_data in mrs_data:
+                    yield mr_data
 
-            cursor = response.project.merge_requests.page_info.end_cursor
+                has_next = page_info.get("hasNextPage", False) if page_info else False
+                cursor = page_info.get("endCursor") if page_info else None
+
+                if not has_next:
+                    break
+            else:
+                # Normal path: validated Pydantic model
+                if not response.project or not response.project.merge_requests:
+                    return
+
+                for mr in response.project.merge_requests.nodes:
+                    yield mr
+
+                if not response.project.merge_requests.page_info.has_next_page:
+                    break
+
+                cursor = response.project.merge_requests.page_info.end_cursor
 
     @retryable(
         retries=RETRIES,
@@ -372,7 +425,7 @@ class GitLabClient:
             work_item_types (list): List of work item type names (e.g., ['ISSUE', 'TASK'])
 
         Yields:
-            GitLabWorkItem: Validated work item data
+            GitLabWorkItem | dict: Validated work item data or raw dict on validation failure
         """
         cursor = None
 
@@ -396,18 +449,47 @@ class GitLabClient:
                 )
                 return
 
-            response = WorkItemsProjectResponse.model_validate(result)
+            # Try validation with graceful fallback
+            response = validate_with_fallback(
+                WorkItemsProjectResponse,
+                result,
+                self._logger,
+                context=f"work items for {project_path}",
+            )
 
-            if not response.project or not response.project.work_items:
-                return
+            # Extract work items and pagination info
+            if isinstance(response, dict):
+                # Fallback: manual extraction from raw dict
+                work_items_data = safe_get_nested(
+                    result, "project", "workItems", "nodes", default=[]
+                )
+                page_info = safe_get_nested(
+                    result, "project", "workItems", "pageInfo", default={}
+                )
 
-            for work_item in response.project.work_items.nodes:
-                yield work_item
+                if not work_items_data:
+                    return
 
-            if not response.project.work_items.page_info.has_next_page:
-                break
+                for work_item_data in work_items_data:
+                    yield work_item_data
 
-            cursor = response.project.work_items.page_info.end_cursor
+                has_next = page_info.get("hasNextPage", False) if page_info else False
+                cursor = page_info.get("endCursor") if page_info else None
+
+                if not has_next:
+                    break
+            else:
+                # Normal path: validated Pydantic model
+                if not response.project or not response.project.work_items:
+                    return
+
+                for work_item in response.project.work_items.nodes:
+                    yield work_item
+
+                if not response.project.work_items.page_info.has_next_page:
+                    break
+
+                cursor = response.project.work_items.page_info.end_cursor
 
     @retryable(
         retries=RETRIES,
@@ -427,7 +509,7 @@ class GitLabClient:
             work_item_types (list): List of work item type names (e.g., ['EPIC'])
 
         Yields:
-            GitLabWorkItem: Validated work item data
+            GitLabWorkItem | dict: Validated work item data or raw dict on validation failure
         """
         cursor = None
 
@@ -449,18 +531,47 @@ class GitLabClient:
                 )
                 return
 
-            response = WorkItemsGroupResponse.model_validate(result)
+            # Try validation with graceful fallback
+            response = validate_with_fallback(
+                WorkItemsGroupResponse,
+                result,
+                self._logger,
+                context=f"work items for group {group_path}",
+            )
 
-            if not response.group or not response.group.work_items:
-                return
+            # Extract work items and pagination info
+            if isinstance(response, dict):
+                # Fallback: manual extraction from raw dict
+                work_items_data = safe_get_nested(
+                    result, "group", "workItems", "nodes", default=[]
+                )
+                page_info = safe_get_nested(
+                    result, "group", "workItems", "pageInfo", default={}
+                )
 
-            for work_item in response.group.work_items.nodes:
-                yield work_item
+                if not work_items_data:
+                    return
 
-            if not response.group.work_items.page_info.has_next_page:
-                break
+                for work_item_data in work_items_data:
+                    yield work_item_data
 
-            cursor = response.group.work_items.page_info.end_cursor
+                has_next = page_info.get("hasNextPage", False) if page_info else False
+                cursor = page_info.get("endCursor") if page_info else None
+
+                if not has_next:
+                    break
+            else:
+                # Normal path: validated Pydantic model
+                if not response.group or not response.group.work_items:
+                    return
+
+                for work_item in response.group.work_items.nodes:
+                    yield work_item
+
+                if not response.group.work_items.page_info.has_next_page:
+                    break
+
+                cursor = response.group.work_items.page_info.end_cursor
 
     @retryable(
         retries=RETRIES,
@@ -479,7 +590,7 @@ class GitLabClient:
             project_path (str): Full path of the project (e.g., 'namespace/project')
 
         Yields:
-            GitLabRelease: Validated release data
+            GitLabRelease | dict: Validated release data or raw dict on validation failure
         """
         cursor = None
 
@@ -501,18 +612,47 @@ class GitLabClient:
                 )
                 return
 
-            response = ReleasesResponse.model_validate(result)
+            # Try validation with graceful fallback
+            response = validate_with_fallback(
+                ReleasesResponse,
+                result,
+                self._logger,
+                context=f"releases for {project_path}",
+            )
 
-            if not response.project or not response.project.releases:
-                return
+            # Extract releases and pagination info
+            if isinstance(response, dict):
+                # Fallback: manual extraction from raw dict
+                releases_data = safe_get_nested(
+                    result, "project", "releases", "nodes", default=[]
+                )
+                page_info = safe_get_nested(
+                    result, "project", "releases", "pageInfo", default={}
+                )
 
-            for release in response.project.releases.nodes:
-                yield release
+                if not releases_data:
+                    return
 
-            if not response.project.releases.page_info.has_next_page:
-                break
+                for release_data in releases_data:
+                    yield release_data
 
-            cursor = response.project.releases.page_info.end_cursor
+                has_next = page_info.get("hasNextPage", False) if page_info else False
+                cursor = page_info.get("endCursor") if page_info else None
+
+                if not has_next:
+                    break
+            else:
+                # Normal path: validated Pydantic model
+                if not response.project or not response.project.releases:
+                    return
+
+                for release in response.project.releases.nodes:
+                    yield release
+
+                if not response.project.releases.page_info.has_next_page:
+                    break
+
+                cursor = response.project.releases.page_info.end_cursor
 
     @retryable(
         retries=RETRIES,

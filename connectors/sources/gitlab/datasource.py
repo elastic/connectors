@@ -58,6 +58,7 @@ from connectors.sources.gitlab.models import (
     WorkItemWidgetNotes,
 )
 from connectors.sources.gitlab.queries import VALIDATE_PROJECTS_QUERY
+from connectors.sources.gitlab.validation_utils import safe_get_nested
 from connectors.utils import decode_base64_value
 
 SUPPORTED_EXTENSION = [".md", ".rst", ".txt"]
@@ -616,35 +617,56 @@ class GitLabDataSource(BaseDataSource):
             ):
                 yield readme_doc, download_func
 
-    def _format_project_doc(self, project: GitLabProject) -> dict[str, Any]:
+    def _format_project_doc(
+        self, project: GitLabProject | dict[str, Any]
+    ) -> dict[str, Any]:
         """Format project data into Elasticsearch document.
 
+        Handles both validated Pydantic models and raw dicts for resilience.
+        When validation fails, passes through raw API response with minimal modifications.
+
         Args:
-            project (GitLabProject): Validated project model
+            project: Validated GitLabProject model or raw dict from API
 
         Returns:
             dict: Formatted project document dict
         """
-        project_id = self.gitlab_client._extract_id(project.id) or project.id
+        if isinstance(project, dict):
+            # Transparent passthrough: just add required ES fields, keep rest as-is
+            raw_id = project.get("id", "unknown")
+            project_id = self.gitlab_client._extract_id(raw_id) or raw_id
 
-        return {
-            "_id": f"project_{project_id}",
-            "_timestamp": project.last_activity_at or project.created_at,
-            "type": "Project",
-            "id": project_id,
-            "name": project.name,
-            "path": project.path,
-            "full_path": project.full_path,
-            "description": project.description,
-            "visibility": project.visibility,
-            "star_count": project.star_count,
-            "forks_count": project.forks_count,
-            "created_at": project.created_at,
-            "last_activity_at": project.last_activity_at,
-            "archived": project.archived,
-            "default_branch": project.default_branch,
-            "web_url": project.web_url,
-        }
+            # Start with the raw dict from API
+            doc = dict(project)
+            # Add only required Elasticsearch fields
+            doc["_id"] = f"project_{project_id}"
+            doc["_timestamp"] = project.get("lastActivityAt") or project.get(
+                "createdAt"
+            )
+            doc["type"] = "Project"
+            return doc
+        else:
+            # Normal path: validated Pydantic model
+            project_id = self.gitlab_client._extract_id(project.id) or project.id
+
+            return {
+                "_id": f"project_{project_id}",
+                "_timestamp": project.last_activity_at or project.created_at,
+                "type": "Project",
+                "id": project_id,
+                "name": project.name,
+                "path": project.path,
+                "full_path": project.full_path,
+                "description": project.description,
+                "visibility": project.visibility,
+                "star_count": project.star_count,
+                "forks_count": project.forks_count,
+                "created_at": project.created_at,
+                "last_activity_at": project.last_activity_at,
+                "archived": project.archived,
+                "default_branch": project.default_branch,
+                "web_url": project.web_url,
+            }
 
     def _format_issue_doc(self, issue: GitLabIssue, project: GitLabProject):
         """Format issue data into Elasticsearch document.
@@ -744,48 +766,70 @@ class GitLabDataSource(BaseDataSource):
 
     def _format_merge_request_doc(
         self,
-        mr: GitLabMergeRequest,
-        project: GitLabProject,
+        mr: GitLabMergeRequest | dict[str, Any],
+        project: GitLabProject | dict[str, Any],
         notes: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         """Format merge request data into Elasticsearch document.
 
+        Handles both validated Pydantic models and raw dicts for resilience.
+
         Args:
-            mr (GitLabMergeRequest): Validated merge request model
-            project (GitLabProject): Parent project model
+            mr: Validated GitLabMergeRequest model or raw dict from API
+            project: Validated GitLabProject model or raw dict from API
             notes: Pre-extracted notes from discussions or None
 
         Returns:
             dict: Formatted merge request document
         """
-        project_id = self.gitlab_client._extract_id(project.id) or project.id
+        # Extract project info (works for both types)
+        if isinstance(project, dict):
+            raw_id = project.get("id", "unknown")
+            project_id = self.gitlab_client._extract_id(raw_id) or raw_id
+            project_path = project.get("fullPath", "")
+        else:
+            project_id = self.gitlab_client._extract_id(project.id) or project.id
+            project_path = project.full_path
 
-        return {
-            "_id": f"mr_{project_id}_{mr.iid}",
-            "_timestamp": mr.updated_at,
-            "type": "Merge Request",
-            "project_id": project_id,
-            "project_path": project.full_path,
-            "iid": mr.iid,
-            "title": mr.title,
-            "description": mr.description,
-            "state": mr.state,
-            "created_at": mr.created_at,
-            "updated_at": mr.updated_at,
-            "merged_at": mr.merged_at,
-            "closed_at": mr.closed_at,
-            "web_url": mr.web_url,
-            "source_branch": mr.source_branch,
-            "target_branch": mr.target_branch,
-            "author": mr.author.username if mr.author else None,
-            "author_name": mr.author.name if mr.author else None,
-            "assignees": [a.username for a in mr.assignees.nodes],
-            "reviewers": [r.username for r in mr.reviewers.nodes],
-            "approved_by": [a.username for a in mr.approved_by.nodes],
-            "merged_by": mr.merged_by.username if mr.merged_by else None,
-            "labels": [label.title for label in mr.labels.nodes],
-            "notes": notes,
-        }
+        if isinstance(mr, dict):
+            # Transparent passthrough: just add required ES fields, keep rest as-is
+            doc = dict(mr)
+            doc["_id"] = f"mr_{project_id}_{mr.get('iid', 'unknown')}"
+            doc["_timestamp"] = mr.get("updatedAt")
+            doc["type"] = "Merge Request"
+            doc["project_id"] = project_id
+            doc["project_path"] = project_path
+            if notes:
+                doc["notes"] = notes
+            return doc
+        else:
+            # Normal path: validated Pydantic model
+            return {
+                "_id": f"mr_{project_id}_{mr.iid}",
+                "_timestamp": mr.updated_at,
+                "type": "Merge Request",
+                "project_id": project_id,
+                "project_path": project_path,
+                "iid": mr.iid,
+                "title": mr.title,
+                "description": mr.description,
+                "state": mr.state,
+                "created_at": mr.created_at,
+                "updated_at": mr.updated_at,
+                "merged_at": mr.merged_at,
+                "closed_at": mr.closed_at,
+                "web_url": mr.web_url,
+                "source_branch": mr.source_branch,
+                "target_branch": mr.target_branch,
+                "author": mr.author.username if mr.author else None,
+                "author_name": mr.author.name if mr.author else None,
+                "assignees": [a.username for a in mr.assignees.nodes],
+                "reviewers": [r.username for r in mr.reviewers.nodes],
+                "approved_by": [a.username for a in mr.approved_by.nodes],
+                "merged_by": mr.merged_by.username if mr.merged_by else None,
+                "labels": [label.title for label in mr.labels.nodes],
+                "notes": notes,
+            }
 
     def _format_work_item_doc(
         self,
