@@ -18,17 +18,17 @@ cd $PROJECT_ROOT
 make clean zip
 export DRA_ARTIFACTS_DIR=$RELEASE_DIR/dist/dra-artifacts
 mkdir -p $DRA_ARTIFACTS_DIR
-cp $RELEASE_DIR/dist/elasticsearch_connectors-${VERSION}.zip $DRA_ARTIFACTS_DIR/connectors-${VERSION}.zip
+cp $RELEASE_DIR/app/connectors_service/dist/elasticsearch_connectors-${VERSION}.zip $DRA_ARTIFACTS_DIR/connectors-${VERSION}.zip
 
 cd -
 
 # Download previous step artifacts
 buildkite-agent artifact download '.artifacts/*.tar.gz*' $RELEASE_DIR/dist/ --step build_docker_image_amd64
 buildkite-agent artifact download '.artifacts/*.tar.gz*' $RELEASE_DIR/dist/ --step build_docker_image_arm64
-buildkite-agent artifact download 'app/connectors_service/dist/*.whl' $RELEASE_DIR/ --step test_packages
-buildkite-agent artifact download 'app/connectors_service/dist/*.tar.gz' $RELEASE_DIR/ --step test_packages
-buildkite-agent artifact download 'libs/connectors_sdk/dist/*.whl' $RELEASE_DIR/ --step test_packages
-buildkite-agent artifact download 'libs/connectors_sdk/dist/*.tar.gz' $RELEASE_DIR/ --step test_packages
+buildkite-agent artifact download 'app/connectors_service/dist/*.whl' $RELEASE_DIR/
+buildkite-agent artifact download 'app/connectors_service/dist/*.tar.gz' $RELEASE_DIR/
+buildkite-agent artifact download 'libs/connectors_sdk/dist/*.whl' $RELEASE_DIR/
+buildkite-agent artifact download 'libs/connectors_sdk/dist/*.tar.gz' $RELEASE_DIR/
 
 
 # Copy previous step artifacts to DRA dir
@@ -136,8 +136,8 @@ function unsetDraVaultCredentials() {
 
 # function to generate dependency report.
 function generateDependencyReport() {
-  make install deps-csv
-  cp $RELEASE_DIR/dist/dependencies.csv $1
+  make -C app/connectors_service install deps-csv
+  cp $RELEASE_DIR/app/connectors_service/dist/dependencies.csv $1
 }
 
 # generate the dependency report and publish SNAPSHOT artifacts
@@ -150,10 +150,12 @@ if [[ "${PUBLISH_SNAPSHOT:-}" == "true" ]]; then
   echo "-------- Publishing SNAPSHOT DRA Artifacts"
 
   # Make *-SNAPSHOT* copies
+  src=( "$DRA_ARTIFACTS_DIR"/elasticsearch_connectors-"$VERSION"-*.whl )
+  src_sdk=( "$DRA_ARTIFACTS_DIR"/elasticsearch_connectors_sdk-"$VERSION"-*.whl )
   cp $DRA_ARTIFACTS_DIR/connectors-${VERSION}.zip $DRA_ARTIFACTS_DIR/connectors-${VERSION}-SNAPSHOT.zip
-  cp $DRA_ARTIFACTS_DIR/elasticsearch_connectors-$VERSION.whl $DRA_ARTIFACTS_DIR/elasticsearch_connectors-$VERSION-SNAPSHOT.whl
+  cp "${src[0]}" "${src[0]/-$VERSION-/-$VERSION-SNAPSHOT-}"
   cp $DRA_ARTIFACTS_DIR/elasticsearch_connectors-$VERSION.tar.gz $DRA_ARTIFACTS_DIR/elasticsearch_connectors-$VERSION-SNAPSHOT.tar.gz
-  cp $DRA_ARTIFACTS_DIR/elasticsearch_connectors_sdk-$VERSION.whl $DRA_ARTIFACTS_DIR/elasticsearch_connectors_sdk-$VERSION-SNAPSHOT.whl
+  cp "${src_sdk[0]}" "${src_sdk[0]/-$VERSION-/-$VERSION-SNAPSHOT-}"
   cp $DRA_ARTIFACTS_DIR/elasticsearch_connectors_sdk-$VERSION.tar.gz $DRA_ARTIFACTS_DIR/elasticsearch_connectors_sdk-$VERSION-SNAPSHOT.tar.gz
   cp $DRA_ARTIFACTS_DIR/$PROJECT_NAME-$VERSION-docker-image-linux-amd64.tar.gz $DRA_ARTIFACTS_DIR/$PROJECT_NAME-$VERSION-SNAPSHOT-docker-image-linux-amd64.tar.gz
   cp $DRA_ARTIFACTS_DIR/$PROJECT_NAME-$VERSION-docker-image-linux-arm64.tar.gz $DRA_ARTIFACTS_DIR/$PROJECT_NAME-$VERSION-SNAPSHOT-docker-image-linux-arm64.tar.gz
@@ -174,12 +176,14 @@ if [[ "${PUBLISH_STAGING:-}" == "true" ]]; then
     dependencyReportName="dependencies-${VERSION}-${VERSION_QUALIFIER}.csv";
 
     # Make *-$VERSION_QUALIFIER* copies
+    src=( "$DRA_ARTIFACTS_DIR"/elasticsearch_connectors-"$VERSION"-*.whl )
+    src_sdk=( "$DRA_ARTIFACTS_DIR"/elasticsearch_connectors_sdk-"$VERSION"-*.whl )
     cp $DRA_ARTIFACTS_DIR/connectors-${VERSION}.zip $DRA_ARTIFACTS_DIR/$PROJECT_NAME-${VERSION}-${VERSION_QUALIFIER}.zip
     cp $DRA_ARTIFACTS_DIR/$PROJECT_NAME-$VERSION-docker-image-linux-amd64.tar.gz $DRA_ARTIFACTS_DIR/$PROJECT_NAME-$VERSION-$VERSION_QUALIFIER-docker-image-linux-amd64.tar.gz
     cp $DRA_ARTIFACTS_DIR/$PROJECT_NAME-$VERSION-docker-image-linux-arm64.tar.gz $DRA_ARTIFACTS_DIR/$PROJECT_NAME-$VERSION-$VERSION_QUALIFIER-docker-image-linux-arm64.tar.gz
-    cp $DRA_ARTIFACTS_DIR/elasticsearch_connectors-$VERSION.whl $DRA_ARTIFACTS_DIR/elasticsearch_connectors-$VERSION-$VERSION_QUALIFIER.whl
+    cp "${src[0]}" "${src[0]/-$VERSION-/-$VERSION-$VERSION_QUALIFIER-}"
     cp $DRA_ARTIFACTS_DIR/elasticsearch_connectors-$VERSION.tar.gz $DRA_ARTIFACTS_DIR/elasticsearch_connectors-$VERSION-$VERSION_QUALIFIER.tar.gz
-    cp $DRA_ARTIFACTS_DIR/elasticsearch_connectors_sdk-$VERSION.whl $DRA_ARTIFACTS_DIR/elasticsearch_connectors_sdk-$VERSION-$VERSION_QUALIFIER.whl
+    cp "${src_sdk[0]}" "${src_sdk[0]/-$VERSION-/-$VERSION-$VERSION_QUALIFIER-}"
     cp $DRA_ARTIFACTS_DIR/elasticsearch_connectors_sdk-$VERSION.tar.gz $DRA_ARTIFACTS_DIR/elasticsearch_connectors_sdk-$VERSION-$VERSION_QUALIFIER.tar.gz
   else
     dependencyReportName="dependencies-${VERSION}.csv";
