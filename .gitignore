@@ -10,13 +10,14 @@ pyvenv.cfg
 __pycache__
 
 # real configurations
-config.yml
+app/connectors_service/config.yml
 
 # jetbrains files
 .idea
 *.iml
 .cli
 
+htmlcov
 .venv
 **/venv
 scripts/stack/connectors-config
