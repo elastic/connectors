@@ -28,7 +28,7 @@ services:
     build:
       context: ../../../../
       dockerfile: ${DOCKERFILE_FTEST_PATH}
-    command: .venv/bin/python tests/sources/fixtures/gitlab/fixture.py
+    command: .venv/bin/python -m tests.sources.fixtures.gitlab.fixture
     ports:
       - "9091:9091"
     volumes:
