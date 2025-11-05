@@ -5,44 +5,9 @@
 #
 """Utilities for resilient API response validation with graceful degradation.
 
-API Resilience Pattern
-======================
-
-This module defines the core pattern used throughout the GitLab connector to handle
-third-party API changes gracefully without breaking the connector.
-
-Pattern Overview
-----------------
-
-1. **Client Layer** (gitlab/client.py):
-   - All API methods use validate_with_fallback() to attempt Pydantic validation
-   - Return type: Union of Pydantic model or dict (e.g., GitLabProject | dict[str, Any])
-   - On validation success: Returns validated Pydantic model
-   - On validation failure: Logs warning, returns raw dict from API
-
-2. **Data Source Layer** (gitlab/datasource.py):
-   - All formatters check isinstance(data, dict) to detect fallback case
-   - When dict (validation failed):
-     * Transparent passthrough: doc = dict(data)
-     * Add only required Elasticsearch metadata (_id, _timestamp, type)
-     * Preserve all API fields (even unexpected/new ones)
-   - When Pydantic model (validation succeeded):
-     * Explicit field mapping with full type safety
-     * Controlled document structure
-
-3. **Reasoning**:
-   - Connector continues working when GitLab API changes
-   - New API fields automatically passed through to Elasticsearch
-   - Warnings logged for validation failures to alert operators
-   - Elasticsearch dynamic mapping handles unexpected fields
-
-
-Types Using This Pattern:
---------------------------
-- GitLabProject | dict → _format_project_doc()
-- GitLabMergeRequest | dict → _format_merge_request_doc()
-- GitLabWorkItem | dict → _format_work_item_doc()
-- GitLabRelease | dict → _format_release_doc()
+Provides validate_with_fallback() to attempt Pydantic validation on API responses.
+On validation failure, returns raw dict and logs warning, allowing the connector
+to continue syncing even when the GitLab API schema changes unexpectedly.
 """
 
 from typing import Any, TypeVar

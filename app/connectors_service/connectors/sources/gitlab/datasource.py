@@ -23,7 +23,7 @@ from typing import Any, AsyncGenerator, Type, TypeVar
 import aiohttp
 from pydantic import BaseModel
 
-from connectors.source import (
+from connectors_sdk.source import (
     BaseDataSource,
     ConfigurableFieldValueError,
     DataSourceConfiguration,

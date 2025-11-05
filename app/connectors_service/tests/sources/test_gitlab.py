@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
-from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
+from connectors_sdk.source import ConfigurableFieldValueError, DataSourceConfiguration
 from connectors.sources.gitlab.client import GitLabClient
 from connectors.sources.gitlab.datasource import GitLabDataSource
 from connectors.sources.gitlab.models import (
