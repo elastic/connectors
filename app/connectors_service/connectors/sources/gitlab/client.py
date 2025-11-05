@@ -13,7 +13,7 @@ from urllib.parse import quote
 
 import aiohttp
 
-from connectors.logger import logger
+from connectors_sdk.logger import logger
 from connectors_sdk.source import ConfigurableFieldValueError
 from connectors.sources.gitlab.models import (
     GitLabDiscussion,
