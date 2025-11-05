@@ -33,7 +33,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 MarkupSafe
 3.0.3
-BSD-3-Clause
+UNKNOWN
 Copyright 2010 Pallets
 
 Redistribution and use in source and binary forms, with or without
@@ -92,7 +92,7 @@ SOFTWARE.
 
 PyMySQL
 1.1.2
-MIT
+UNKNOWN
 Copyright (c) 2010, 2013 PyMySQL contributors
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -1629,7 +1629,7 @@ SOFTWARE.
 
 anyio
 4.11.0
-MIT
+UNKNOWN
 The MIT License (MIT)
 
 Copyright (c) 2018 Alex Grönholm
@@ -1881,7 +1881,7 @@ Copyright (C) 2016-present the asyncpg authors and contributors.
 
 attrs
 25.4.0
-MIT
+UNKNOWN
 The MIT License (MIT)
 
 Copyright (c) 2015 Hynek Schlawack and the attrs contributors
@@ -2190,7 +2190,7 @@ Apache Software License
 
 beautifulsoup4
 4.12.2
-MIT
+MIT License
 Beautiful Soup is made available under the MIT license:
 
  Copyright (c) Leonard Richardson
@@ -2590,7 +2590,7 @@ Apache Software License
 
 bracex
 2.6
-MIT
+MIT License
 MIT License
 
 Copyright (c) 2018 - 2025 Isaac Muse
@@ -3392,7 +3392,7 @@ SOFTWARE
 
 elasticsearch
 8.18.0
-Apache-2.0
+Apache Software License
 
                                  Apache License
                            Version 2.0, January 2004
@@ -5088,7 +5088,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 httpcore
 1.0.9
-BSD-3-Clause
+BSD License
 Copyright © 2020, [Encode OSS Ltd](https://www.encode.io/).
 All rights reserved.
 
@@ -5120,7 +5120,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 httpx
 0.27.0
-BSD-3-Clause
+BSD License
 Copyright © 2019, [Encode OSS Ltd](https://www.encode.io/).
 All rights reserved.
 
@@ -5157,7 +5157,7 @@ OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 idna
 3.11
-BSD-3-Clause
+UNKNOWN
 BSD 3-Clause License
 
 Copyright (c) 2013-2025, Kim Davies and contributors.
@@ -6575,7 +6575,7 @@ OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 pydantic
 2.10.6
-MIT
+MIT License
 The MIT License (MIT)
 
 Copyright (c) 2017 to present Pydantic Services Inc. and individual contributors.
@@ -6859,7 +6859,7 @@ THE SOFTWARE.
 
 pyspnego
 0.12.0
-MIT
+UNKNOWN
 MIT License
 
 Copyright (c) 2020 Jordan Borean, Red Hat
@@ -7567,7 +7567,7 @@ made under the terms of *both* these licenses.
 
 soupsieve
 2.8
-MIT
+MIT License
 MIT License
 
 Copyright (c) 2018 - 2025 Isaac Muse <isaacmuse@gmail.com>
@@ -7915,7 +7915,7 @@ DEALINGS IN THE SOFTWARE.
 
 typing_extensions
 4.15.0
-PSF-2.0
+UNKNOWN
 A. HISTORY OF THE SOFTWARE
 ==========================
 
@@ -8256,7 +8256,7 @@ made under the terms of *both* these licenses.
 
 urllib3
 2.5.0
-MIT
+UNKNOWN
 MIT License
 
 Copyright (c) 2008-2020 Andrey Petrov and contributors.
