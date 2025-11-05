@@ -21,13 +21,13 @@ from functools import partial
 from typing import Any, AsyncGenerator, Type, TypeVar
 
 import aiohttp
-from pydantic import BaseModel
-
 from connectors_sdk.source import (
     BaseDataSource,
     ConfigurableFieldValueError,
     DataSourceConfiguration,
 )
+from pydantic import BaseModel
+
 from connectors.sources.gitlab.client import (
     GitLabClient,
     GitLabForbiddenError,
@@ -58,7 +58,6 @@ from connectors.sources.gitlab.models import (
     WorkItemWidgetNotes,
 )
 from connectors.sources.gitlab.queries import VALIDATE_PROJECTS_QUERY
-from connectors.sources.gitlab.validation_utils import safe_get_nested
 from connectors.utils import decode_base64_value
 
 SUPPORTED_EXTENSION = [".md", ".rst", ".txt"]

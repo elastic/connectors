@@ -9,8 +9,8 @@ from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
-
 from connectors_sdk.source import ConfigurableFieldValueError, DataSourceConfiguration
+
 from connectors.sources.gitlab.client import GitLabClient
 from connectors.sources.gitlab.datasource import GitLabDataSource
 from connectors.sources.gitlab.models import (
@@ -3190,9 +3190,13 @@ class TestGitLabAPIResilience:
                 assert doc["_timestamp"] == "2023-01-02T00:00:00Z"
 
                 # Raw API data preserved transparently (including invalid field)
-                assert doc["starCount"] == "INVALID_TYPE"  # Invalid type preserved as-is
+                assert (
+                    doc["starCount"] == "INVALID_TYPE"
+                )  # Invalid type preserved as-is
                 assert doc["name"] == "Test Project"
-                assert doc["newApiField"] == "some new field GitLab added"  # New field passed through
+                assert (
+                    doc["newApiField"] == "some new field GitLab added"
+                )  # New field passed through
 
     @pytest.mark.asyncio
     async def test_full_flow_merge_request_with_validation_failure(self):
@@ -3227,11 +3231,16 @@ class TestGitLabAPIResilience:
                     }
                 }
 
-                fake_project = {"id": "gid://gitlab/Project/123", "fullPath": "group/project"}
+                fake_project = {
+                    "id": "gid://gitlab/Project/123",
+                    "fullPath": "group/project",
+                }
 
                 # Step 1: Client gets MRs (validation fails, returns raw dict)
                 mrs = []
-                async for mr in source.gitlab_client.get_merge_requests("group/project"):
+                async for mr in source.gitlab_client.get_merge_requests(
+                    "group/project"
+                ):
                     mrs.append(mr)
 
                 assert len(mrs) == 1
@@ -3243,7 +3252,9 @@ class TestGitLabAPIResilience:
                 assert doc["_id"] == "mr_123_INVALID_TYPE"
                 assert doc["type"] == "Merge Request"
                 assert doc["iid"] == "INVALID_TYPE"  # Invalid type preserved
-                assert doc["newField"] == "some new API field"  # New field passed through
+                assert (
+                    doc["newField"] == "some new API field"
+                )  # New field passed through
 
     @pytest.mark.asyncio
     async def test_get_work_items_project_with_pagination_fallback(self):
@@ -3257,7 +3268,19 @@ class TestGitLabAPIResilience:
                 {
                     "project": {
                         "workItems": {
-                            "nodes": [{"id": "1", "iid": "invalid", "title": "Issue 1", "state": "opened", "createdAt": "2023-01-01T00:00:00Z", "updatedAt": "2023-01-01T00:00:00Z", "webUrl": "http://test.com", "workItemType": {"name": "Issue"}, "widgets": []}],
+                            "nodes": [
+                                {
+                                    "id": "1",
+                                    "iid": "invalid",
+                                    "title": "Issue 1",
+                                    "state": "opened",
+                                    "createdAt": "2023-01-01T00:00:00Z",
+                                    "updatedAt": "2023-01-01T00:00:00Z",
+                                    "webUrl": "http://test.com",
+                                    "workItemType": {"name": "Issue"},
+                                    "widgets": [],
+                                }
+                            ],
                             "pageInfo": {"hasNextPage": True, "endCursor": "c1"},
                         }
                     }
@@ -3265,7 +3288,19 @@ class TestGitLabAPIResilience:
                 {
                     "project": {
                         "workItems": {
-                            "nodes": [{"id": "2", "iid": "also-invalid", "title": "Issue 2", "state": "opened", "createdAt": "2023-01-01T00:00:00Z", "updatedAt": "2023-01-01T00:00:00Z", "webUrl": "http://test.com", "workItemType": {"name": "Issue"}, "widgets": []}],
+                            "nodes": [
+                                {
+                                    "id": "2",
+                                    "iid": "also-invalid",
+                                    "title": "Issue 2",
+                                    "state": "opened",
+                                    "createdAt": "2023-01-01T00:00:00Z",
+                                    "updatedAt": "2023-01-01T00:00:00Z",
+                                    "webUrl": "http://test.com",
+                                    "workItemType": {"name": "Issue"},
+                                    "widgets": [],
+                                }
+                            ],
                             "pageInfo": {"hasNextPage": False, "endCursor": None},
                         }
                     }
@@ -3291,7 +3326,19 @@ class TestGitLabAPIResilience:
                 {
                     "group": {
                         "workItems": {
-                            "nodes": [{"id": "1", "iid": "bad", "title": "Epic 1", "state": "opened", "createdAt": "2023-01-01T00:00:00Z", "updatedAt": "2023-01-01T00:00:00Z", "webUrl": "http://test.com", "workItemType": {"name": "Epic"}, "widgets": []}],
+                            "nodes": [
+                                {
+                                    "id": "1",
+                                    "iid": "bad",
+                                    "title": "Epic 1",
+                                    "state": "opened",
+                                    "createdAt": "2023-01-01T00:00:00Z",
+                                    "updatedAt": "2023-01-01T00:00:00Z",
+                                    "webUrl": "http://test.com",
+                                    "workItemType": {"name": "Epic"},
+                                    "widgets": [],
+                                }
+                            ],
                             "pageInfo": {"hasNextPage": True, "endCursor": "c1"},
                         }
                     }
@@ -3325,7 +3372,16 @@ class TestGitLabAPIResilience:
                 {
                     "project": {
                         "releases": {
-                            "nodes": [{"tagName": "v1.0", "name": 123, "description": "Rel 1", "createdAt": "2023-01-01T00:00:00Z", "milestones": {"nodes": []}, "assets": {"count": 0, "links": {"nodes": []}}}],
+                            "nodes": [
+                                {
+                                    "tagName": "v1.0",
+                                    "name": 123,
+                                    "description": "Rel 1",
+                                    "createdAt": "2023-01-01T00:00:00Z",
+                                    "milestones": {"nodes": []},
+                                    "assets": {"count": 0, "links": {"nodes": []}},
+                                }
+                            ],
                             "pageInfo": {"hasNextPage": True, "endCursor": "c1"},
                         }
                     }
@@ -3333,7 +3389,16 @@ class TestGitLabAPIResilience:
                 {
                     "project": {
                         "releases": {
-                            "nodes": [{"tagName": "v2.0", "name": 456, "description": "Rel 2", "createdAt": "2023-02-01T00:00:00Z", "milestones": {"nodes": []}, "assets": {"count": 0, "links": {"nodes": []}}}],
+                            "nodes": [
+                                {
+                                    "tagName": "v2.0",
+                                    "name": 456,
+                                    "description": "Rel 2",
+                                    "createdAt": "2023-02-01T00:00:00Z",
+                                    "milestones": {"nodes": []},
+                                    "assets": {"count": 0, "links": {"nodes": []}},
+                                }
+                            ],
                             "pageInfo": {"hasNextPage": False, "endCursor": None},
                         }
                     }
