@@ -11,6 +11,8 @@ install:
 	cd $(connectors_sdk_dir); make install
 	cd $(app_dir); make install
 
+install-agent: install
+
 install-package:
 	cd $(connectors_sdk_dir); make install-package
 	cd $(app_dir); make install-package
@@ -57,5 +59,8 @@ docker-run:
 docker-push:
 	docker push $(DOCKER_IMAGE_NAME):$(VERSION)-SNAPSHOT
 
-zip:
-	cd $(app_dir); make zip
+zip: clean
+	zip -r \
+		$(PACKAGE_NAME_VERSION).zip \
+		./* \
+		-x  *htmlcov*/* *docs*/* Dockerfile* *ruff_cache*/* *pytest_cache*/* *__pycache__*/* *build*/* *egg-info*/*
