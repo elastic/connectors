@@ -21,7 +21,6 @@ ARCH=$(shell uname -m)
 PERF8?=no
 SLOW_TEST_THRESHOLD=1 # seconds
 VERSION=$(shell cat connectors/VERSION)
-PACKAGE_NAME_VERSION="elasticsearch_connectors-$(VERSION)"
 
 config.yml:
 	- cp -n config.yml.example config.yml
@@ -118,12 +117,6 @@ agent-docker-all: agent-docker-build agent-docker-run
 
 sdist: .venv/bin/python
 	.venv/bin/python -m build --sdist
-
-zip: sdist
-	cd dist && \
-	tar -xzf $(PACKAGE_NAME_VERSION).tar.gz && \
-	zip -r $(PACKAGE_NAME_VERSION).zip $(PACKAGE_NAME_VERSION)/ && \
-	rm -rf $(PACKAGE_NAME_VERSION)/
 
 deps-csv: .venv/bin/pip-licenses
 	mkdir -p dist
