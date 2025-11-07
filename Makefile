@@ -7,6 +7,8 @@ DOCKER_IMAGE_NAME?=docker.elastic.co/integrations/elastic-connectors
 DOCKERFILE_PATH?=Dockerfile
 DOCKERFILE_FTEST_PATH?=app/connectors_service/tests/Dockerfile.ftest
 
+PACKAGE_NAME_VERSION="elasticsearch_connectors-$(VERSION)"
+
 install:
 	cd $(connectors_sdk_dir); make install
 	cd $(app_dir); make install
