@@ -71,7 +71,11 @@ class ConnectorsAgentConfigurationWrapper:
 
         # Auth-related
         if has_hosts and (has_api_key or has_basic_auth):
-            hosts = source["hosts"] if isinstance(source["hosts"], str) else source["hosts"][0]
+            hosts = (
+                source["hosts"]
+                if isinstance(source["hosts"], str)
+                else source["hosts"][0]
+            )
 
             es_creds = {"host": hosts}
 
