@@ -93,28 +93,6 @@ run: install
 default-config: install
 	.venv/bin/elastic-ingest --action config --service-type $(SERVICE_TYPE)
 
-## Agent Docker Zone
-# Only use it for local testing, that's it
-AGENT_ES_HOSTS?=[http://127.0.0.1:9200]
-AGENT_ES_USERNAME?=elastic
-AGENT_ES_PASSWORD?=changeme
-AGENT_DOCKERFILE_NAME?=Dockerfile.agent
-AGENT_DOCKER_IMAGE_NAME?=connectors-agent-component-local
-
-agent-docker-build:
-	docker build -t $(AGENT_DOCKER_IMAGE_NAME) -f $(AGENT_DOCKERFILE_NAME) .
-
-agent-docker-run:
-	docker run \
-		--env ELASTICSEARCH_HOSTS=$(AGENT_ES_HOSTS) \
-		--env ELASTICSEARCH_USERNAME=$(AGENT_ES_USERNAME) \
-		--env ELASTICSEARCH_PASSWORD=$(AGENT_ES_PASSWORD) \
-		--network host \
-		$(AGENT_DOCKER_IMAGE_NAME)
-
-agent-docker-all: agent-docker-build agent-docker-run
-## End Agent Docker Zone
-
 sdist: .venv/bin/python
 	.venv/bin/python -m build --sdist
 
