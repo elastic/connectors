@@ -1,7 +1,6 @@
 # This file is for internal experimental purposes only.
 # Please do not use this file for any real-world workloads.
-
-FROM docker.elastic.co/elastic-agent/elastic-agent:9.0.0-SNAPSHOT
+FROM docker.elastic.co/elastic-agent/elastic-agent:9.3.0-SNAPSHOT
 
 USER root
 
