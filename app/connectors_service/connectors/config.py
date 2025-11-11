@@ -117,6 +117,7 @@ def _default_config():
             "dir": "connectors.sources.directory:DirectoryDataSource",
             "dropbox": "connectors.sources.dropbox:DropboxDataSource",
             "github": "connectors.sources.github:GitHubDataSource",
+            "gitlab": "connectors.sources.gitlab:GitLabDataSource",
             "gmail": "connectors.sources.gmail:GMailDataSource",
             "google_cloud_storage": "connectors.sources.google_cloud_storage:GoogleCloudStorageDataSource",
             "google_drive": "connectors.sources.google_drive:GoogleDriveDataSource",

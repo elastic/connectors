@@ -59,6 +59,7 @@ dependencies = [
     "motor==3.4.0",
     "pyOpenSSL==24.3.0",
     "pyasn1<0.6.1",
+    "pydantic==2.10.6",
     "pympler==1.0.1",
     "python-dateutil==2.8.2",
     "python-tds==1.12.0",
