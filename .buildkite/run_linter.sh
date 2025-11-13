@@ -20,7 +20,6 @@ if is_pr && ! is_fork; then
 
   if [ -z "$(git status --porcelain)" ]; then
     echo "Nothing to be fixed by autoformat"
-    exit 0
   else
 
     git --no-pager diff
@@ -30,6 +29,12 @@ if is_pr && ! is_fork; then
     git commit -m"make autoformat"
     git push
     # exit 1 to re-trigger the build
+    exit 1
+  fi
+
+  echo "Running type checking"
+  if ! make typecheck ; then
+    echo "Type checking failed"
     exit 1
   fi
 else

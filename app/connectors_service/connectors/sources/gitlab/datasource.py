@@ -790,45 +790,50 @@ class GitLabDataSource(BaseDataSource):
             project_id = self.gitlab_client._extract_id(project.id) or project.id
             project_path = project.full_path
 
-        if isinstance(mr, dict):
-            # Transparent passthrough: just add required ES fields, keep rest as-is
-            doc = dict(mr)
-            doc["_id"] = f"mr_{project_id}_{mr.get('iid', 'unknown')}"
-            doc["_timestamp"] = mr.get("updatedAt")
-            doc["type"] = "Merge Request"
-            doc["project_id"] = project_id
-            doc["project_path"] = project_path
-            if notes:
-                doc["notes"] = notes
-            return doc
-        else:
-            # Normal path: validated Pydantic model
-            return {
-                "_id": f"mr_{project_id}_{mr.iid}",
-                "_timestamp": mr.updated_at,
-                "type": "Merge Request",
-                "project_id": project_id,
-                "project_path": project_path,
-                "iid": mr.iid,
-                "title": mr.title,
-                "description": mr.description,
-                "state": mr.state,
-                "created_at": mr.created_at,
-                "updated_at": mr.updated_at,
-                "merged_at": mr.merged_at,
-                "closed_at": mr.closed_at,
-                "web_url": mr.web_url,
-                "source_branch": mr.source_branch,
-                "target_branch": mr.target_branch,
-                "author": mr.author.username if mr.author else None,
-                "author_name": mr.author.name if mr.author else None,
-                "assignees": [a.username for a in mr.assignees.nodes],
-                "reviewers": [r.username for r in mr.reviewers.nodes],
-                "approved_by": [a.username for a in mr.approved_by.nodes],
-                "merged_by": mr.merged_by.username if mr.merged_by else None,
-                "labels": [label.title for label in mr.labels.nodes],
-                "notes": notes,
-            }
+        match mr:
+            case dict():
+                # Transparent passthrough: just add required ES fields, keep rest as-is
+                doc = dict(mr)
+                doc["_id"] = f"mr_{project_id}_{mr.get('iid', 'unknown')}"
+                doc["_timestamp"] = mr.get("updatedAt")
+                doc["type"] = "Merge Request"
+                doc["project_id"] = project_id
+                doc["project_path"] = project_path
+                if notes:
+                    doc["notes"] = notes
+                return doc
+            case GitLabMergeRequest():
+                # Normal path: validated Pydantic model
+                return {
+                    "_id": f"mr_{project_id}_{mr.iid}",
+                    "_timestamp": mr.updated_at,
+                    "type": "Merge Request",
+                    "project_id": project_id,
+                    "project_path": project_path,
+                    "iid": mr.iid,
+                    "title": mr.title,
+                    "description": mr.description,
+                    "state": mr.state,
+                    "created_at": mr.created_at,
+                    "updated_at": mr.updated_at,
+                    "merged_at": mr.merged_at,
+                    "closed_at": mr.closed_at,
+                    "web_url": mr.web_url,
+                    "source_branch": mr.source_branch,
+                    "target_branch": mr.target_branch,
+                    "author": mr.author.username if mr.author else None,
+                    "author_name": mr.author.name if mr.author else None,
+                    "assignees": [a.username for a in mr.assignees.nodes],
+                    "reviewers": [r.username for r in mr.reviewers.nodes],
+                    "approved_by": [a.username for a in mr.approved_by.nodes],
+                    "merged_by": mr.merged_by.username if mr.merged_by else None,
+                    "labels": [label.title for label in mr.labels.nodes],
+                    "notes": notes,
+                }
+            case _:
+                # This should never happen - mr should be dict or GitLabMergeRequest
+                msg = f"Unexpected mr type: {type(mr)}"
+                raise TypeError(msg)
 
     def _format_work_item_doc(
         self,

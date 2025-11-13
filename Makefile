@@ -33,6 +33,10 @@ notice: install
 	cd $(connectors_sdk_dir); make notice
 	cd $(app_dir); make notice
 
+typecheck: install
+	cd $(connectors_sdk_dir); make typecheck
+	cd $(app_dir); make typecheck
+
 lint: install
 	cd $(connectors_sdk_dir); make lint
 	cd $(app_dir); make lint

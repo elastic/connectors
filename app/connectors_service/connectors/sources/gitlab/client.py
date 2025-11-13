@@ -302,29 +302,40 @@ class GitLabClient:
             )
 
             # Extract projects and pagination info (works for both validated and raw)
-            if isinstance(response, dict):
-                # Fallback: manual extraction from raw dict
-                projects_data = safe_get_nested(result, "projects", "nodes", default=[])
-                page_info = safe_get_nested(result, "projects", "pageInfo", default={})
+            match response:
+                case dict():
+                    # Fallback: manual extraction from raw dict
+                    projects_data = safe_get_nested(
+                        result, "projects", "nodes", default=[]
+                    )
+                    page_info = safe_get_nested(
+                        result, "projects", "pageInfo", default={}
+                    )
 
-                for project_data in projects_data:
-                    # Yield raw dict, formatter will handle defensively
-                    yield project_data
+                    for project_data in projects_data:
+                        # Yield raw dict, formatter will handle defensively
+                        yield project_data
 
-                has_next = page_info.get("hasNextPage", False) if page_info else False
-                cursor = page_info.get("endCursor") if page_info else None
+                    has_next = (
+                        page_info.get("hasNextPage", False) if page_info else False
+                    )
+                    cursor = page_info.get("endCursor") if page_info else None
 
-                if not has_next:
-                    break
-            else:
-                # Normal path: validated Pydantic model
-                for project in response.projects.nodes:
-                    yield project
+                    if not has_next:
+                        break
+                case ProjectsResponse():
+                    # Normal path: validated Pydantic model
+                    for project in response.projects.nodes:
+                        yield project
 
-                if not response.projects.page_info.has_next_page:
-                    break
+                    if not response.projects.page_info.has_next_page:
+                        break
 
-                cursor = response.projects.page_info.end_cursor
+                    cursor = response.projects.page_info.end_cursor
+                case _:
+                    # This should never happen - response should be dict or ProjectsResponse
+                    msg = f"Unexpected response type: {type(response)}"
+                    raise TypeError(msg)
 
     @retryable(
         retries=RETRIES,
@@ -374,38 +385,45 @@ class GitLabClient:
             )
 
             # Extract merge requests and pagination info
-            if isinstance(response, dict):
-                # Fallback: manual extraction from raw dict
-                mrs_data = safe_get_nested(
-                    result, "project", "mergeRequests", "nodes", default=[]
-                )
-                page_info = safe_get_nested(
-                    result, "project", "mergeRequests", "pageInfo", default={}
-                )
+            match response:
+                case dict():
+                    # Fallback: manual extraction from raw dict
+                    mrs_data = safe_get_nested(
+                        result, "project", "mergeRequests", "nodes", default=[]
+                    )
+                    page_info = safe_get_nested(
+                        result, "project", "mergeRequests", "pageInfo", default={}
+                    )
 
-                if not mrs_data:
-                    return
+                    if not mrs_data:
+                        return
 
-                for mr_data in mrs_data:
-                    yield mr_data
+                    for mr_data in mrs_data:
+                        yield mr_data
 
-                has_next = page_info.get("hasNextPage", False) if page_info else False
-                cursor = page_info.get("endCursor") if page_info else None
+                    has_next = (
+                        page_info.get("hasNextPage", False) if page_info else False
+                    )
+                    cursor = page_info.get("endCursor") if page_info else None
 
-                if not has_next:
-                    break
-            else:
-                # Normal path: validated Pydantic model
-                if not response.project or not response.project.merge_requests:
-                    return
+                    if not has_next:
+                        break
+                case MergeRequestsResponse():
+                    # Normal path: validated Pydantic model
+                    if not response.project or not response.project.merge_requests:
+                        return
 
-                for mr in response.project.merge_requests.nodes:
-                    yield mr
+                    for mr in response.project.merge_requests.nodes:
+                        yield mr
 
-                if not response.project.merge_requests.page_info.has_next_page:
-                    break
+                    if not response.project.merge_requests.page_info.has_next_page:
+                        break
 
-                cursor = response.project.merge_requests.page_info.end_cursor
+                    cursor = response.project.merge_requests.page_info.end_cursor
+                case _:
+                    # This should never happen - response should be dict or MergeRequestsResponse
+                    msg = f"Unexpected response type: {type(response)}"
+                    raise TypeError(msg)
 
     @retryable(
         retries=RETRIES,
@@ -458,38 +476,45 @@ class GitLabClient:
             )
 
             # Extract work items and pagination info
-            if isinstance(response, dict):
-                # Fallback: manual extraction from raw dict
-                work_items_data = safe_get_nested(
-                    result, "project", "workItems", "nodes", default=[]
-                )
-                page_info = safe_get_nested(
-                    result, "project", "workItems", "pageInfo", default={}
-                )
+            match response:
+                case dict():
+                    # Fallback: manual extraction from raw dict
+                    work_items_data = safe_get_nested(
+                        result, "project", "workItems", "nodes", default=[]
+                    )
+                    page_info = safe_get_nested(
+                        result, "project", "workItems", "pageInfo", default={}
+                    )
 
-                if not work_items_data:
-                    return
+                    if not work_items_data:
+                        return
 
-                for work_item_data in work_items_data:
-                    yield work_item_data
+                    for work_item_data in work_items_data:
+                        yield work_item_data
 
-                has_next = page_info.get("hasNextPage", False) if page_info else False
-                cursor = page_info.get("endCursor") if page_info else None
+                    has_next = (
+                        page_info.get("hasNextPage", False) if page_info else False
+                    )
+                    cursor = page_info.get("endCursor") if page_info else None
 
-                if not has_next:
-                    break
-            else:
-                # Normal path: validated Pydantic model
-                if not response.project or not response.project.work_items:
-                    return
+                    if not has_next:
+                        break
+                case WorkItemsProjectResponse():
+                    # Normal path: validated Pydantic model
+                    if not response.project or not response.project.work_items:
+                        return
 
-                for work_item in response.project.work_items.nodes:
-                    yield work_item
+                    for work_item in response.project.work_items.nodes:
+                        yield work_item
 
-                if not response.project.work_items.page_info.has_next_page:
-                    break
+                    if not response.project.work_items.page_info.has_next_page:
+                        break
 
-                cursor = response.project.work_items.page_info.end_cursor
+                    cursor = response.project.work_items.page_info.end_cursor
+                case _:
+                    # This should never happen - response should be dict or WorkItemsProjectResponse
+                    msg = f"Unexpected response type: {type(response)}"
+                    raise TypeError(msg)
 
     @retryable(
         retries=RETRIES,
@@ -540,38 +565,45 @@ class GitLabClient:
             )
 
             # Extract work items and pagination info
-            if isinstance(response, dict):
-                # Fallback: manual extraction from raw dict
-                work_items_data = safe_get_nested(
-                    result, "group", "workItems", "nodes", default=[]
-                )
-                page_info = safe_get_nested(
-                    result, "group", "workItems", "pageInfo", default={}
-                )
+            match response:
+                case dict():
+                    # Fallback: manual extraction from raw dict
+                    work_items_data = safe_get_nested(
+                        result, "group", "workItems", "nodes", default=[]
+                    )
+                    page_info = safe_get_nested(
+                        result, "group", "workItems", "pageInfo", default={}
+                    )
 
-                if not work_items_data:
-                    return
+                    if not work_items_data:
+                        return
 
-                for work_item_data in work_items_data:
-                    yield work_item_data
+                    for work_item_data in work_items_data:
+                        yield work_item_data
 
-                has_next = page_info.get("hasNextPage", False) if page_info else False
-                cursor = page_info.get("endCursor") if page_info else None
+                    has_next = (
+                        page_info.get("hasNextPage", False) if page_info else False
+                    )
+                    cursor = page_info.get("endCursor") if page_info else None
 
-                if not has_next:
-                    break
-            else:
-                # Normal path: validated Pydantic model
-                if not response.group or not response.group.work_items:
-                    return
+                    if not has_next:
+                        break
+                case WorkItemsGroupResponse():
+                    # Normal path: validated Pydantic model
+                    if not response.group or not response.group.work_items:
+                        return
 
-                for work_item in response.group.work_items.nodes:
-                    yield work_item
+                    for work_item in response.group.work_items.nodes:
+                        yield work_item
 
-                if not response.group.work_items.page_info.has_next_page:
-                    break
+                    if not response.group.work_items.page_info.has_next_page:
+                        break
 
-                cursor = response.group.work_items.page_info.end_cursor
+                    cursor = response.group.work_items.page_info.end_cursor
+                case _:
+                    # This should never happen - response should be dict or WorkItemsGroupResponse
+                    msg = f"Unexpected response type: {type(response)}"
+                    raise TypeError(msg)
 
     @retryable(
         retries=RETRIES,
@@ -621,38 +653,45 @@ class GitLabClient:
             )
 
             # Extract releases and pagination info
-            if isinstance(response, dict):
-                # Fallback: manual extraction from raw dict
-                releases_data = safe_get_nested(
-                    result, "project", "releases", "nodes", default=[]
-                )
-                page_info = safe_get_nested(
-                    result, "project", "releases", "pageInfo", default={}
-                )
+            match response:
+                case dict():
+                    # Fallback: manual extraction from raw dict
+                    releases_data = safe_get_nested(
+                        result, "project", "releases", "nodes", default=[]
+                    )
+                    page_info = safe_get_nested(
+                        result, "project", "releases", "pageInfo", default={}
+                    )
 
-                if not releases_data:
-                    return
+                    if not releases_data:
+                        return
 
-                for release_data in releases_data:
-                    yield release_data
+                    for release_data in releases_data:
+                        yield release_data
 
-                has_next = page_info.get("hasNextPage", False) if page_info else False
-                cursor = page_info.get("endCursor") if page_info else None
+                    has_next = (
+                        page_info.get("hasNextPage", False) if page_info else False
+                    )
+                    cursor = page_info.get("endCursor") if page_info else None
 
-                if not has_next:
-                    break
-            else:
-                # Normal path: validated Pydantic model
-                if not response.project or not response.project.releases:
-                    return
+                    if not has_next:
+                        break
+                case ReleasesResponse():
+                    # Normal path: validated Pydantic model
+                    if not response.project or not response.project.releases:
+                        return
 
-                for release in response.project.releases.nodes:
-                    yield release
+                    for release in response.project.releases.nodes:
+                        yield release
 
-                if not response.project.releases.page_info.has_next_page:
-                    break
+                    if not response.project.releases.page_info.has_next_page:
+                        break
 
-                cursor = response.project.releases.page_info.end_cursor
+                    cursor = response.project.releases.page_info.end_cursor
+                case _:
+                    # This should never happen - response should be dict or ReleasesResponse
+                    msg = f"Unexpected response type: {type(response)}"
+                    raise TypeError(msg)
 
     @retryable(
         retries=RETRIES,
