@@ -1,4 +1,4 @@
-.PHONY: install clean lint autoformat test ftest ftrace install run default-config docker-build docker-run docker-push
+.PHONY: install clean typecheck lint autoformat test ftest ftrace install run default-config docker-build docker-run docker-push
 
 # Default to python3, but if its version is >3.11, try using python3.11 or python3.10.
 PYTHON ?= python3
@@ -59,15 +59,17 @@ install-package: .venv/bin/python
 clean:
 	rm -rf bin lib .venv include elasticsearch_connectors.egg-info .coverage site-packages pyvenv.cfg include.site.python*.greenlet dist build htmlcov
 
-lint: .venv/bin/python .venv/bin/ruff .venv/bin/elastic-ingest
+typecheck: .venv/bin/python .venv/bin/elastic-ingest
+	.venv/bin/pyright connectors
+	.venv/bin/pyright tests
+
+lint: .venv/bin/python .venv/bin/ruff .venv/bin/elastic-ingest typecheck
 	.venv/bin/ruff check connectors
 	.venv/bin/ruff format connectors --check
 	.venv/bin/ruff check tests
 	.venv/bin/ruff format tests --check
 	.venv/bin/ruff check scripts
 	.venv/bin/ruff format scripts --check
-	.venv/bin/pyright connectors
-	.venv/bin/pyright tests
 
 autoformat: .venv/bin/python .venv/bin/ruff .venv/bin/elastic-ingest
 	.venv/bin/ruff check connectors --fix

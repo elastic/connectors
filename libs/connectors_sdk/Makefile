@@ -30,13 +30,15 @@ clean:
 .venv/bin/pip-licenses: .venv/bin/python
 	.venv/bin/pip install pip-licenses
 
-lint: install .venv/bin/ruff
+typecheck: install
+	.venv/bin/pyright connectors_sdk
+	.venv/bin/pyright tests
+
+lint: install .venv/bin/ruff typecheck
 	.venv/bin/ruff check connectors_sdk
 	.venv/bin/ruff format connectors_sdk --check
 	.venv/bin/ruff check tests
 	.venv/bin/ruff format tests --check
-	.venv/bin/pyright connectors_sdk
-	.venv/bin/pyright tests
 
 test: .venv/bin/pytest
 	$(VENV_DIR)/pytest --cov-report term-missing --cov-fail-under 80 --cov-report html --cov=connectors_sdk --fail-slow=$(SLOW_TEST_THRESHOLD) -sv tests
