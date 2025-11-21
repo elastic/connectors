@@ -1,6 +1,6 @@
 aiohttp==3.12.14
 aiofiles==23.2.1
-aiomysql==0.1.1
+aiomysql==0.3.0
 httpx==0.27.0
 httpx-ntlm==1.4.0
 elasticsearch[async]==8.18.0
