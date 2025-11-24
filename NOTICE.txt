@@ -1372,8 +1372,8 @@ SOFTWARE.
 
 
 aiomysql
-0.1.1
-MIT License
+0.3.0
+MIT
 Copyright (c) 2010, 2013 PyMySQL contributors
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
