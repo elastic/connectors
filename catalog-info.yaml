@@ -66,10 +66,6 @@ spec:
           branch: "8.19"
           cronline: '@daily'
           message: "Builds, tests, and pushes daily `8.19` DRA artifacts"
-        Daily 8.18:
-          branch: "8.18"
-          cronline: '@daily'
-          message: "Builds, tests, and pushes daily `8.18` DRA artifacts"
       provider_settings:
         skip_pull_request_builds_for_existing_commits: false
         build_pull_request_labels_changed: true
@@ -112,10 +108,6 @@ spec:
         trigger_mode: "none"
       repository: "elastic/connectors"
       schedules:
-        Daily 8_18:
-          branch: '8.18'
-          cronline: '@daily'
-          message: "Runs daily `8.18` e2e test"
         Daily 8_19:
           branch: '8.19'
           cronline: '@daily'
@@ -168,10 +160,6 @@ spec:
         trigger_mode: "none"
       repository: "elastic/connectors"
       schedules:
-        Daily 8_18:
-          branch: '8.18'
-          cronline: '@daily'
-          message: "Runs daily `8.18` e2e aarch64 test"
         Daily 8_19:
           branch: '8.19'
           cronline: '@daily'
