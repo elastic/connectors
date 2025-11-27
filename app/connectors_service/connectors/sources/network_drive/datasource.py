@@ -82,7 +82,13 @@ class NASDataSource(BaseDataSource):
 
     @cached_property
     def smb_connection(self):
-        return SMBSession(self.server_ip, self.username, self.password, self.port, self._connection_cache)
+        return SMBSession(
+            self.server_ip,
+            self.username,
+            self.password,
+            self.port,
+            self._connection_cache,
+        )
 
     @classmethod
     def get_default_configuration(cls):
@@ -204,7 +210,7 @@ class NASDataSource(BaseDataSource):
                             username=self.username,
                             password=self.password,
                             port=self.port,
-                            connection_cache=self._connection_cache
+                            connection_cache=self._connection_cache,
                         ),
                     )
                 )
@@ -261,7 +267,7 @@ class NASDataSource(BaseDataSource):
                         port=self.port,
                         username=self.username,
                         password=self.password,
-                        connection_cache=self._connection_cache
+                        connection_cache=self._connection_cache,
                     ),
                 )
                 for file in directory_info:
@@ -355,7 +361,10 @@ class NASDataSource(BaseDataSource):
         await loop.run_in_executor(
             executor=None,
             func=partial(
-                smbclient.delete_session, server=self.server_ip, port=self.port, connection_cache = self._connection_cache
+                smbclient.delete_session,
+                server=self.server_ip,
+                port=self.port,
+                connection_cache=self._connection_cache,
             ),
         )
 
