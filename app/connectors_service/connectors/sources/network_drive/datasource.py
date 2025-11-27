@@ -82,7 +82,7 @@ class NASDataSource(BaseDataSource):
 
     @cached_property
     def smb_connection(self):
-        return SMBSession(self.server_ip, self.username, self.password, self.port)
+        return SMBSession(self.server_ip, self.username, self.password, self.port, self._connection_cache)
 
     @classmethod
     def get_default_configuration(cls):
