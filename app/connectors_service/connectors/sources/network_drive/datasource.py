@@ -75,13 +75,20 @@ class NASDataSource(BaseDataSource):
         self.drive_type = self.configuration["drive_type"]
         self.identity_mappings = self.configuration["identity_mappings"]
         self.security_info = SecurityInfo(self.username, self.password, self.server_ip)
+        self._connection_cache = {}
 
     def advanced_rules_validators(self):
         return [NetworkDriveAdvancedRulesValidator(self)]
 
     @cached_property
     def smb_connection(self):
-        return SMBSession(self.server_ip, self.username, self.password, self.port)
+        return SMBSession(
+            self.server_ip,
+            self.username,
+            self.password,
+            self.port,
+            self._connection_cache,
+        )
 
     @classmethod
     def get_default_configuration(cls):
@@ -203,6 +210,7 @@ class NASDataSource(BaseDataSource):
                             username=self.username,
                             password=self.password,
                             port=self.port,
+                            connection_cache=self._connection_cache,
                         ),
                     )
                 )
@@ -257,6 +265,9 @@ class NASDataSource(BaseDataSource):
                         smbclient.scandir,
                         path=current_path,
                         port=self.port,
+                        username=self.username,
+                        password=self.password,
+                        connection_cache=self._connection_cache,
                     ),
                 )
                 for file in directory_info:
@@ -337,9 +348,9 @@ class NASDataSource(BaseDataSource):
 
     async def ping(self):
         """Verify the connection with Network Drive"""
+        if self.smb_connection.session is None:
+            await asyncio.to_thread(self.smb_connection.create_connection)
 
-        await asyncio.to_thread(self.smb_connection.create_connection)
-        await self.close()
         self._logger.info("Successfully connected to the Network Drive")
 
     async def close(self):
@@ -350,7 +361,10 @@ class NASDataSource(BaseDataSource):
         await loop.run_in_executor(
             executor=None,
             func=partial(
-                smbclient.delete_session, server=self.server_ip, port=self.port
+                smbclient.delete_session,
+                server=self.server_ip,
+                port=self.port,
+                connection_cache=self._connection_cache,
             ),
         )
 
@@ -615,7 +629,9 @@ class NASDataSource(BaseDataSource):
         Yields:
             dictionary: Dictionary containing the Network Drive files and folders as documents
         """
-        await asyncio.to_thread(self.smb_connection.create_connection)
+        if self.smb_connection.session is None:
+            await asyncio.to_thread(self.smb_connection.create_connection)
+
         if filtering and filtering.has_advanced_rules():
             advanced_rules = filtering.get_advanced_rules()
             async for document in self.fetch_filtered_directory(advanced_rules):
