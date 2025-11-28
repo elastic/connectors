@@ -278,7 +278,7 @@ class SMBSession:
                 username=self.username,
                 password=self.password,
                 port=self.port,
-                connection_cache=self._connection_cache
+                connection_cache=self._connection_cache,
             )
         except SMBResponseException as exception:
             self.handle_smb_response_errors(exception=exception)
