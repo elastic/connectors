@@ -261,13 +261,14 @@ class SecurityInfo:
 class SMBSession:
     _connection = None
 
-    def __init__(self, server_ip, username, password, port):
+    def __init__(self, server_ip, username, password, port, connection_cache):
         self.server_ip = server_ip
         self.username = username
         self.password = password
         self.port = port
         self.session = None
         self._logger = logger
+        self._connection_cache = connection_cache
 
     def create_connection(self):
         """Creates an SMB session to the shared drive."""
@@ -277,6 +278,7 @@ class SMBSession:
                 username=self.username,
                 password=self.password,
                 port=self.port,
+                connection_cache=self._connection_cache
             )
         except SMBResponseException as exception:
             self.handle_smb_response_errors(exception=exception)
