@@ -384,6 +384,7 @@ class NASDataSource(BaseDataSource):
                 username=self.username,
                 password=self.password,
                 port=self.port,
+                connection_cache=self._connection_cache,
             ) as file:
                 chunk = True
                 while chunk:
@@ -440,6 +441,7 @@ class NASDataSource(BaseDataSource):
                 username=self.username,
                 password=self.password,
                 port=self.port,
+                connection_cache=self._connection_cache,
             ) as file:
                 descriptor = self.security_info.get_descriptor(
                     file_descriptor=file.fd, info=SECURITY_INFO_DACL
