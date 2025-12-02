@@ -437,6 +437,8 @@ class NASDataSource(BaseDataSource):
                 buffering=0,
                 file_type=file_type,
                 desired_access=access,
+                username=self.username,
+                password=self.password,
                 port=self.port,
             ) as file:
                 descriptor = self.security_info.get_descriptor(
