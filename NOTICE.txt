@@ -8122,7 +8122,7 @@ made under the terms of *both* these licenses.
 
 urllib3
 2.6.1
-UNKNOWN
+MIT
 MIT License
 
 Copyright (c) 2008-2020 Andrey Petrov and contributors.
