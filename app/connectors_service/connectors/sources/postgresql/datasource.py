@@ -340,7 +340,7 @@ class PostgreSQLDataSource(BaseDataSource):
                 id_columns = rule.get("id_columns")
                 if id_columns:
                     id_columns = [
-                        f"{self.schema}_{'_'.join(sorted(tables))}_{column}"
+                        f"{self.schema}_{'_'.join(sorted(tables))}_{column}".lower()
                         for column in id_columns
                     ]
                 async for row in self.fetch_documents_from_query(
