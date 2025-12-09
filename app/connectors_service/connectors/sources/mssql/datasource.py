@@ -341,13 +341,10 @@ class MSSQLDataSource(BaseDataSource):
                 tables = rule.get("tables")
                 id_columns = rule.get("id_columns", [])
 
-                id_columns_str = ""
-                for i, table in enumerate(tables):
-                    if i == 0:
-                        id_columns_str = f"{self.schema}_{table}"
-                    else:
-                        id_columns_str = f"{id_columns_str}_{table}"
-                id_columns = [f"{id_columns_str}_{column}" for column in id_columns]
+                id_columns = [
+                    f"{self.schema}_{'_'.join(sorted(tables))}_{column}".lower()
+                    for column in id_columns
+                ]
 
                 async for row in self.fetch_documents_from_query(
                     tables=tables, query=query, id_columns=id_columns
