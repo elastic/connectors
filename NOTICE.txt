@@ -4349,7 +4349,7 @@ SOFTWARE.
 
 
 greenlet
-3.2.4
+3.3.0
 MIT AND Python-2.0
 The following files are derived from Stackless Python and are subject to the
 same license as Stackless Python:
@@ -8121,7 +8121,7 @@ made under the terms of *both* these licenses.
 
 
 urllib3
-2.5.0
+2.6.1
 MIT
 MIT License
 
