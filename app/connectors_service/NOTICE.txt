@@ -8203,8 +8203,8 @@ Apache Software License
 UNKNOWN
 
 tzdata
-2025.2
-Apache Software License
+2025.3
+Apache-2.0
 Apache Software License 2.0
 
 Copyright (c) 2020, Paul Ganssle (Google)

@@ -10,7 +10,6 @@
   "labels": [
     "renovate",
     "auto-backport",
-    "v8.18.0",
     "v8.19.0",
     "v9.1.0",
     "v9.2.0",
