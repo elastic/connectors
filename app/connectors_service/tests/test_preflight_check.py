@@ -436,3 +436,20 @@ async def test_extraction_service_enabled_but_missing_logs_critical(
     patched_logger.critical.assert_any_call(
         f"Expected to find a running instance of data extraction service at {local_config['extraction_service']['host']} but failed. Connection refused: GET {local_config['extraction_service']['host']}/ping/."
     )
+
+
+@pytest.mark.asyncio
+@patch("connectors.preflight_check.logger")
+@patch.dict("os.environ", {"ALLOW_ES_VERSION_MISMATCH": "true"})
+async def test_allow_es_version_mismatch_bypasses_check(patched_logger, mock_responses):
+    # Use a completely incompatible ES version (different major)
+    mock_es_info(mock_responses, es_version="2.0.0-SNAPSHOT")
+    mock_index_exists(mock_responses, CONCRETE_CONNECTORS_INDEX)
+    mock_index_exists(mock_responses, CONCRETE_JOBS_INDEX)
+    preflight = PreflightCheck(config, connectors_version)
+    result = await preflight.run()
+    # Should pass despite incompatible versions due to allow flag
+    assert result == (True, False)
+    patched_logger.warning.assert_any_call(
+        f"ALLOW_ES_VERSION_MISMATCH is set. Skipping version compatibility check between Elasticsearch 2.0.0-SNAPSHOT and Connectors {connectors_version}. This should only be used in CI/testing environments."
+    )

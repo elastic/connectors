@@ -4,6 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 
+import os
 import re
 
 import aiohttp
@@ -88,6 +89,17 @@ class PreflightCheck:
         """
         Checks if the Connector and ES versions are compatible
         """
+
+        # Check if version mismatch should be allowed (for CI only)
+        allow_version_mismatch = os.environ.get(
+            "ALLOW_ES_VERSION_MISMATCH", "false"
+        ).lower() in ("true", "1", "yes")
+
+        if allow_version_mismatch:
+            logger.warning(
+                f"ALLOW_ES_VERSION_MISMATCH is set. Skipping version compatibility check between Elasticsearch {es_version} and Connectors {self.version}. This should only be used in CI/testing environments."
+            )
+            return True
 
         # Remove any version qualifier (e.g., -SNAPSHOT, -beta1, -rc1)
         major_minor_patch_es_version = re.split(r"-", es_version)[0]
