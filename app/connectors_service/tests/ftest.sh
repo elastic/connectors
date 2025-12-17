@@ -26,6 +26,7 @@ export REFRESH_RATE="${REFRESH_RATE:-5}"
 export DATA_SIZE="${DATA_SIZE:-medium}"
 export RUNNING_FTEST=True
 export VERSION="${CONNECTORS_VERSION}-SNAPSHOT"
+export ALLOW_ES_VERSION_MISMATCH=true
 
 
 
@@ -68,9 +69,15 @@ function get_fallback_versions {
   # Try current patch version first
   fallback_versions+=("${major}.${minor}.${patch}-SNAPSHOT")
 
-  # Try only n-1 (previous patch version)
   if [ "$patch" -gt 0 ]; then
+    # Try n-1 (previous patch version)
     fallback_versions+=("${major}.${minor}.$((patch-1))-SNAPSHOT")
+  elif [ "$minor" -gt 0 ]; then
+    # When patch is 0, fall back to previous minor version
+    # Try a few patch versions of the previous minor
+    for prev_patch in 5 4 3 2 1 0; do
+      fallback_versions+=("${major}.$((minor-1)).${prev_patch}-SNAPSHOT")
+    done
   fi
 
   echo "${fallback_versions[@]}"
