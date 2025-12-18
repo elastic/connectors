@@ -2606,7 +2606,7 @@ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND 
 
 
 cachetools
-6.2.3
+6.2.4
 MIT
 The MIT License (MIT)
 
@@ -3521,7 +3521,7 @@ Apache-2.0
 
 
 elasticsearch-connectors
-9.2.3
+9.2.4
 Apache Software License
 Elastic License 2.0
 
@@ -4115,7 +4115,7 @@ Apache Software License
 
 
 google-auth
-2.43.0
+2.45.0
 Apache Software License
                                  Apache License
                            Version 2.0, January 2004
@@ -7432,7 +7432,7 @@ made under the terms of *both* these licenses.
 
 
 soupsieve
-2.8
+2.8.1
 MIT
 MIT License
 
