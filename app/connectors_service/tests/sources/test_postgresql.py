@@ -557,7 +557,9 @@ async def test_get_docs():
                             {
                                 "tables": ["emp_table"],
                                 "query": "select * from emp_table",
-                                "id_columns": ["IDS"],  # uppercase to test case insensitivity
+                                "id_columns": [
+                                    "IDS"
+                                ],  # uppercase to test case insensitivity
                             },
                         ]
                     }
