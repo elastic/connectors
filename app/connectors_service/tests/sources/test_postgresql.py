@@ -548,6 +548,42 @@ async def test_get_docs():
                 },
             ],
         ),
+        (
+            # Configured with id_columns using mixed case - tests case sensitivity
+            Filter(
+                {
+                    ADVANCED_SNIPPET: {
+                        "value": [
+                            {
+                                "tables": ["emp_table"],
+                                "query": "select * from emp_table",
+                                "id_columns": ["IDS"],  # uppercase to test case insensitivity
+                            },
+                        ]
+                    }
+                }
+            ),
+            [
+                {
+                    "public_emp_table_ids": 1,
+                    "public_emp_table_names": "abcd",
+                    "_id": "xe_public_emp_table_1",
+                    "_timestamp": "2023-02-21T08:37:15+00:00",
+                    "database": "xe",
+                    "table": ["emp_table"],
+                    "schema": "public",
+                },
+                {
+                    "public_emp_table_ids": 2,
+                    "public_emp_table_names": "xyz",
+                    "_id": "xe_public_emp_table_2",
+                    "_timestamp": "2023-02-21T08:37:15+00:00",
+                    "database": "xe",
+                    "table": ["emp_table"],
+                    "schema": "public",
+                },
+            ],
+        ),
     ],
 )
 @pytest.mark.asyncio
