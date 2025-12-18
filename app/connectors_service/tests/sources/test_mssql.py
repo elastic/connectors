@@ -457,6 +457,42 @@ async def test_advanced_rules_validation_when_id_in_source_available(
                 },
             ],
         ),
+        (
+            # Configured with id_columns using mixed case - tests case sensitivity
+            Filter(
+                {
+                    ADVANCED_SNIPPET: {
+                        "value": [
+                            {
+                                "tables": ["emp_table"],
+                                "query": "select * from emp_table",
+                                "id_columns": ["IDS"],  # uppercase to test case insensitivity
+                            },
+                        ]
+                    }
+                }
+            ),
+            [
+                {
+                    "dbo_emp_table_ids": 1,
+                    "dbo_emp_table_names": "abcd",
+                    "_id": "xe_dbo_emp_table_1",
+                    "_timestamp": "2023-02-21T08:37:15+00:00",
+                    "database": "xe",
+                    "table": ["emp_table"],
+                    "schema": "dbo",
+                },
+                {
+                    "dbo_emp_table_ids": 2,
+                    "dbo_emp_table_names": "xyz",
+                    "_id": "xe_dbo_emp_table_2",
+                    "_timestamp": "2023-02-21T08:37:15+00:00",
+                    "database": "xe",
+                    "table": ["emp_table"],
+                    "schema": "dbo",
+                },
+            ],
+        ),
     ],
 )
 @pytest.mark.asyncio
