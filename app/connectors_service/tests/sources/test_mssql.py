@@ -466,7 +466,9 @@ async def test_advanced_rules_validation_when_id_in_source_available(
                             {
                                 "tables": ["emp_table"],
                                 "query": "select * from emp_table",
-                                "id_columns": ["IDS"],  # uppercase to test case insensitivity
+                                "id_columns": [
+                                    "IDS"
+                                ],  # uppercase to test case insensitivity
                             },
                         ]
                     }
