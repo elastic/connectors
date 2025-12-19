@@ -34,11 +34,17 @@ match DATA_SIZE:
 
 RECORDS_TO_DELETE = 10
 
+# Mixed-case table for testing id_columns case sensitivity.
+# This table uses uppercase column names ("ID", "Name", "Age") and is synced
+# via advanced sync rules with id_columns: ["ID"] (uppercase).
+MIXED_CASE_TABLE = "MixedCase_Table"
+MIXED_CASE_RECORD_COUNT = 10
+
 event_loop = asyncio.get_event_loop()
 
 
 def get_num_docs():
-    print(NUM_TABLES * (RECORD_COUNT - RECORDS_TO_DELETE))
+    print(NUM_TABLES * (RECORD_COUNT - RECORDS_TO_DELETE) + MIXED_CASE_RECORD_COUNT)
 
 
 async def load():
@@ -91,8 +97,24 @@ async def load():
             await inject_lines(table, connect, RECORD_COUNT)
         await connect.close()
 
+    async def load_mixed_case_table():
+        """Create a table with mixed-case name to test id_columns case sensitivity.
+        This table is used with advanced sync rules to verify that id_columns
+        with different casing (e.g., 'ID' vs 'id') correctly match column names.
+        """
+        connect = await asyncpg.connect(CONNECTION_STRING)
+        print(f"Adding data to mixed-case table '{MIXED_CASE_TABLE}'...")
+        sql_query = f'CREATE TABLE IF NOT EXISTS "{MIXED_CASE_TABLE}" ("ID" SERIAL PRIMARY KEY, "Name" VARCHAR(255), "Age" int)'
+        await connect.execute(sql_query)
+        rows = [(f"User_{i}", i) for i in range(MIXED_CASE_RECORD_COUNT)]
+        sql_query = f'INSERT INTO "{MIXED_CASE_TABLE}" ("Name", "Age") VALUES ($1, $2)'
+        await connect.executemany(sql_query, rows)
+        print(f"Inserted {MIXED_CASE_RECORD_COUNT} rows into '{MIXED_CASE_TABLE}'")
+        await connect.close()
+
     await create_readonly_user()
     await load_rows()
+    await load_mixed_case_table()
 
 
 async def remove():
