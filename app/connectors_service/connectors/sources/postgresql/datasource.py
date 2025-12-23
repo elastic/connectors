@@ -170,7 +170,14 @@ class PostgreSQLDataSource(BaseDataSource):
                 value (Any): Serialized version of input value.
             """
             match value:
-                case IPv4Address() | IPv6Address() | IPv4Interface() | IPv6Interface() | IPv4Network() | IPv6Network():
+                case (
+                    IPv4Address()
+                    | IPv6Address()
+                    | IPv4Interface()
+                    | IPv6Interface()
+                    | IPv4Network()
+                    | IPv6Network()
+                ):
                     return str(value)
                 case list() | tuple():
                     return [_serialize(item) for item in value]
