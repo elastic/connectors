@@ -18,8 +18,19 @@ from ipaddress import (
     IPv6Network,
 )
 from unittest.mock import ANY, Mock, patch
+from uuid import UUID
 
 import pytest
+from asyncpg.types import (
+    BitString,
+    Box,
+    Circle,
+    Line,
+    LineSegment,
+    Path,
+    Point,
+    Polygon,
+)
 from connectors_sdk.filtering.validation import Filter, SyncRuleValidationResult
 from connectors_sdk.utils import iso_utc
 from freezegun import freeze_time
@@ -849,3 +860,257 @@ async def test_serialize_all_network_types():
         assert serialized["ipv4_net"] == "172.16.0.0/12"
         assert serialized["ipv6_net"] == "2001:db8::/32"
         assert all(isinstance(v, str) for k, v in serialized.items() if k != "id")
+
+
+@pytest.mark.asyncio
+async def test_serialize_uuid():
+    """Test that UUID objects are correctly serialized to strings"""
+    # Setup
+    async with create_postgresql_source() as source:
+        doc = {
+            "id": 1,
+            "uuid_col": UUID("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11"),
+        }
+
+        # Execute
+        serialized = source.serialize(doc)
+
+        # Assert
+        assert serialized["uuid_col"] == "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11"
+        assert isinstance(serialized["uuid_col"], str)
+
+
+@pytest.mark.asyncio
+async def test_serialize_uuid_in_list():
+    """Test that UUIDs nested in lists are correctly serialized"""
+    # Setup
+    async with create_postgresql_source() as source:
+        doc = {
+            "id": 1,
+            "uuid_array": [
+                UUID("550e8400-e29b-41d4-a716-446655440000"),
+                UUID("f47ac10b-58cc-4372-a567-0e02b2c3d479"),
+            ],
+        }
+
+        # Execute
+        serialized = source.serialize(doc)
+
+        # Assert
+        assert serialized["uuid_array"] == [
+            "550e8400-e29b-41d4-a716-446655440000",
+            "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+        ]
+        assert all(isinstance(uuid, str) for uuid in serialized["uuid_array"])
+
+
+@pytest.mark.asyncio
+async def test_serialize_mixed_special_types():
+    """Test serialization of multiple special types together"""
+    # Setup
+    async with create_postgresql_source() as source:
+        doc = {
+            "id": 1,
+            "ip_addr": IPv4Address("192.168.1.1"),
+            "ip_network": IPv4Network("10.0.0.0/8"),
+            "uuid_col": UUID("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11"),
+            "mixed_array": [
+                IPv4Address("10.0.0.1"),
+                UUID("550e8400-e29b-41d4-a716-446655440000"),
+            ],
+        }
+
+        # Execute
+        serialized = source.serialize(doc)
+
+        # Assert
+        assert serialized["ip_addr"] == "192.168.1.1"
+        assert serialized["ip_network"] == "10.0.0.0/8"
+        assert serialized["uuid_col"] == "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11"
+        assert serialized["mixed_array"] == [
+            "10.0.0.1",
+            "550e8400-e29b-41d4-a716-446655440000",
+        ]
+        # Check that scalar values are strings
+        assert isinstance(serialized["ip_addr"], str)
+        assert isinstance(serialized["ip_network"], str)
+        assert isinstance(serialized["uuid_col"], str)
+        # Check that array items are strings
+        assert all(isinstance(item, str) for item in serialized["mixed_array"])
+
+
+@pytest.mark.asyncio
+async def test_serialize_geometric_point():
+    """Test serialization of PostgreSQL POINT type"""
+    # Setup
+    async with create_postgresql_source() as source:
+        doc = {
+            "id": 1,
+            "location": Point(1.5, 2.5),
+        }
+
+        # Execute
+        serialized = source.serialize(doc)
+
+        # Assert
+        assert serialized["location"] == "(1.5, 2.5)"
+
+
+@pytest.mark.asyncio
+async def test_serialize_geometric_line():
+    """Test serialization of PostgreSQL LINE type"""
+    # Setup
+    async with create_postgresql_source() as source:
+        doc = {
+            "id": 1,
+            "boundary": Line(1, -1, 0),  # x - y = 0
+        }
+
+        # Execute
+        serialized = source.serialize(doc)
+
+        # Assert
+        assert serialized["boundary"] == "(1, -1, 0)"
+
+
+@pytest.mark.asyncio
+async def test_serialize_geometric_lseg():
+    """Test serialization of PostgreSQL LSEG (line segment) type"""
+    # Setup
+    async with create_postgresql_source() as source:
+        doc = {
+            "id": 1,
+            "segment": LineSegment((0, 0), (1, 1)),
+        }
+
+        # Execute
+        serialized = source.serialize(doc)
+
+        # Assert
+        assert serialized["segment"] == "[(0.0, 0.0), (1.0, 1.0)]"
+
+
+@pytest.mark.asyncio
+async def test_serialize_geometric_box():
+    """Test serialization of PostgreSQL BOX type"""
+    # Setup
+    async with create_postgresql_source() as source:
+        doc = {
+            "id": 1,
+            "area": Box((2, 2), (0, 0)),
+        }
+
+        # Execute
+        serialized = source.serialize(doc)
+
+        # Assert
+        assert serialized["area"] == "[(2.0, 2.0), (0.0, 0.0)]"
+
+
+@pytest.mark.asyncio
+async def test_serialize_geometric_path():
+    """Test serialization of PostgreSQL PATH type"""
+    # Setup
+    async with create_postgresql_source() as source:
+        doc = {
+            "id": 1,
+            "route": Path((0, 0), (1, 1), (2, 0)),
+        }
+
+        # Execute
+        serialized = source.serialize(doc)
+
+        # Assert
+        assert serialized["route"] == "open [(0.0, 0.0), (1.0, 1.0), (2.0, 0.0)]"
+
+
+@pytest.mark.asyncio
+async def test_serialize_geometric_polygon():
+    """Test serialization of PostgreSQL POLYGON type"""
+    # Setup
+    async with create_postgresql_source() as source:
+        doc = {
+            "id": 1,
+            "shape": Polygon((0, 0), (1, 0), (1, 1), (0, 1)),
+        }
+
+        # Execute
+        serialized = source.serialize(doc)
+
+        # Assert
+        assert serialized["shape"] == "[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]"
+
+
+@pytest.mark.asyncio
+async def test_serialize_geometric_circle():
+    """Test serialization of PostgreSQL CIRCLE type"""
+    # Setup
+    async with create_postgresql_source() as source:
+        doc = {
+            "id": 1,
+            "zone": Circle((0, 0), 5),
+        }
+
+        # Execute
+        serialized = source.serialize(doc)
+
+        # Assert
+        assert serialized["zone"] == "((0, 0), 5)"
+
+
+@pytest.mark.asyncio
+async def test_serialize_bitstring():
+    """Test serialization of PostgreSQL BIT/VARBIT types"""
+    # Setup
+    async with create_postgresql_source() as source:
+        doc = {
+            "id": 1,
+            "flags": BitString("10101010"),
+        }
+
+        # Execute
+        serialized = source.serialize(doc)
+
+        # Assert
+        assert serialized["flags"] == "1010 1010"
+
+
+@pytest.mark.asyncio
+async def test_serialize_all_special_types():
+    """Test serialization of all PostgreSQL special types together"""
+    # Setup
+    async with create_postgresql_source() as source:
+        doc = {
+            "id": 1,
+            # Network types
+            "ip_inet": IPv4Address("192.168.1.1"),
+            "ip_cidr": IPv4Network("10.0.0.0/8"),
+            # UUID
+            "uuid_col": UUID("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11"),
+            # Geometric types
+            "point_col": Point(1.5, 2.5),
+            "line_col": Line(1, -1, 0),
+            "lseg_col": LineSegment((0, 0), (1, 1)),
+            "box_col": Box((2, 2), (0, 0)),
+            "path_col": Path((0, 0), (1, 1), (2, 0)),
+            "polygon_col": Polygon((0, 0), (1, 0), (1, 1), (0, 1)),
+            "circle_col": Circle((0, 0), 5),
+            # BitString
+            "bit_col": BitString("10101010"),
+        }
+
+        # Execute
+        serialized = source.serialize(doc)
+
+        # Assert - check exact serialized values
+        assert serialized["ip_inet"] == "192.168.1.1"
+        assert serialized["ip_cidr"] == "10.0.0.0/8"
+        assert serialized["uuid_col"] == "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11"
+        assert serialized["point_col"] == "(1.5, 2.5)"
+        assert serialized["line_col"] == "(1, -1, 0)"
+        assert serialized["lseg_col"] == "[(0.0, 0.0), (1.0, 1.0)]"
+        assert serialized["box_col"] == "[(2.0, 2.0), (0.0, 0.0)]"
+        assert serialized["path_col"] == "open [(0.0, 0.0), (1.0, 1.0), (2.0, 0.0)]"
+        assert serialized["polygon_col"] == "[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]"
+        assert serialized["circle_col"] == "((0, 0), 5)"
+        assert serialized["bit_col"] == "1010 1010"
