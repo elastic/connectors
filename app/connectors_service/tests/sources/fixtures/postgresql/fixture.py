@@ -46,9 +46,12 @@ RECORDS_TO_DELETE = 10
 
 event_loop = asyncio.get_event_loop()
 
+# Number of test rows in special_types table for serialization testing
+SPECIAL_TYPES_TEST_ROWS = 3
+
 
 def get_num_docs():
-    print(NUM_TABLES * (RECORD_COUNT - RECORDS_TO_DELETE) + 3)
+    print(NUM_TABLES * (RECORD_COUNT - RECORDS_TO_DELETE) + SPECIAL_TYPES_TEST_ROWS)
 
 
 async def load():

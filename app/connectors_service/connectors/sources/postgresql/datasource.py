@@ -210,11 +210,11 @@ class PostgreSQLDataSource(BaseDataSource):
                 case Polygon():
                     # Polygon inherits from Path, so check it first
                     coords = [(p.x, p.y) for p in value.points]
-                    return f"{coords}"
+                    return str(coords)
                 case Path():
                     coords = [(p.x, p.y) for p in value.points]
                     status = "closed" if value.is_closed else "open"
-                    return f"{status} {coords}"
+                    return f"{status} {str(coords)}"
                 case Line() | Circle():
                     return str(value)
                 case BitString():
