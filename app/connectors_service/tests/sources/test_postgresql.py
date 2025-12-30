@@ -1111,6 +1111,9 @@ async def test_serialize_all_special_types():
         assert serialized["lseg_col"] == "[(0.0, 0.0), (1.0, 1.0)]"
         assert serialized["box_col"] == "[(2.0, 2.0), (0.0, 0.0)]"
         assert serialized["path_col"] == "open [(0.0, 0.0), (1.0, 1.0), (2.0, 0.0)]"
-        assert serialized["polygon_col"] == "[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]"
+        assert (
+            serialized["polygon_col"]
+            == "[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]"
+        )
         assert serialized["circle_col"] == "((0, 0), 5)"
         assert serialized["bit_col"] == "1010 1010"
