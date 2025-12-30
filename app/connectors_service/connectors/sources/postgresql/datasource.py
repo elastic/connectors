@@ -11,8 +11,19 @@ from ipaddress import (
     IPv6Interface,
     IPv6Network,
 )
+from uuid import UUID
 
 from asyncpg.exceptions._base import InternalClientError
+from asyncpg.types import (
+    BitString,
+    Box,
+    Circle,
+    Line,
+    LineSegment,
+    Path,
+    Point,
+    Polygon,
+)
 from connectors_sdk.source import BaseDataSource
 from connectors_sdk.utils import iso_utc
 from sqlalchemy.exc import ProgrammingError
@@ -151,7 +162,14 @@ class PostgreSQLDataSource(BaseDataSource):
             raise Exception(msg) from e
 
     def serialize(self, doc):
-        """Override base serialize to handle PostgreSQL-specific types like IP addresses.
+        """Override base serialize to handle PostgreSQL-specific types.
+
+        PostgreSQL connector uses asyncpg which returns special Python objects for certain
+        PostgreSQL data types that need to be serialized to strings:
+        - Network types (INET, CIDR) -> ipaddress module objects
+        - UUID type -> uuid.UUID objects
+        - Geometric types (POINT, LINE, POLYGON, etc.) -> asyncpg.types objects
+        - BitString type (BIT, VARBIT) -> asyncpg.types.BitString objects
 
         Args:
             doc (Dict): Dictionary to be serialized
@@ -170,8 +188,37 @@ class PostgreSQLDataSource(BaseDataSource):
                 value (Any): Serialized version of input value.
             """
             match value:
-                case IPv4Address() | IPv6Address() | IPv4Interface() | IPv6Interface() | IPv4Network() | IPv6Network():
+                case (
+                    IPv4Address()
+                    | IPv6Address()
+                    | IPv4Interface()
+                    | IPv6Interface()
+                    | IPv4Network()
+                    | IPv6Network()
+                ):
                     return str(value)
+                case UUID():
+                    return str(value)
+                case Point():
+                    return f"({value.x}, {value.y})"
+                case LineSegment():
+                    return (
+                        f"[({value.p1.x}, {value.p1.y}), ({value.p2.x}, {value.p2.y})]"
+                    )
+                case Box():
+                    return f"[({value.high.x}, {value.high.y}), ({value.low.x}, {value.low.y})]"
+                case Polygon():
+                    # Polygon inherits from Path, so check it first
+                    coords = [(p.x, p.y) for p in value.points]
+                    return f"{coords}"
+                case Path():
+                    coords = [(p.x, p.y) for p in value.points]
+                    status = "closed" if value.is_closed else "open"
+                    return f"{status} {coords}"
+                case Line() | Circle():
+                    return str(value)
+                case BitString():
+                    return value.as_string()
                 case list() | tuple():
                     return [_serialize(item) for item in value]
                 case dict():
