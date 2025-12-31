@@ -668,7 +668,6 @@ async def test_serialize_ipv4_address():
 
         # Assert
         assert serialized["ip_address"] == "192.168.1.1"
-        assert isinstance(serialized["ip_address"], str)
 
 
 @pytest.mark.asyncio
@@ -687,7 +686,6 @@ async def test_serialize_ipv6_address():
 
         # Assert
         assert serialized["ip_address"] == "2001:db8::1"
-        assert isinstance(serialized["ip_address"], str)
 
 
 @pytest.mark.asyncio
@@ -731,8 +729,6 @@ async def test_serialize_ip_address_in_nested_dict():
         # Assert
         assert serialized["connection"]["source_ip"] == "192.168.1.100"
         assert serialized["connection"]["dest_ip"] == "8.8.8.8"
-        assert isinstance(serialized["connection"]["source_ip"], str)
-        assert isinstance(serialized["connection"]["dest_ip"], str)
 
 
 @pytest.mark.asyncio
@@ -754,12 +750,9 @@ async def test_serialize_mixed_types_with_ip():
 
         # Assert
         assert serialized["ip_address"] == "10.30.0.9"
-        assert isinstance(serialized["ip_address"], str)
         assert serialized["timestamp"] == timestamp.isoformat()
         assert serialized["price"] == 99.99
-        assert isinstance(serialized["price"], float)
         assert serialized["data"] == "test"
-        assert isinstance(serialized["data"], str)
 
 
 @pytest.mark.asyncio
@@ -777,7 +770,6 @@ async def test_serialize_ipv4_network():
 
         # Assert
         assert serialized["network"] == "192.168.0.0/24"
-        assert isinstance(serialized["network"], str)
 
 
 @pytest.mark.asyncio
@@ -795,7 +787,6 @@ async def test_serialize_ipv6_network():
 
         # Assert
         assert serialized["network"] == "2001:db8::/32"
-        assert isinstance(serialized["network"], str)
 
 
 @pytest.mark.asyncio
@@ -813,7 +804,6 @@ async def test_serialize_ipv4_interface():
 
         # Assert
         assert serialized["interface"] == "192.168.1.1/24"
-        assert isinstance(serialized["interface"], str)
 
 
 @pytest.mark.asyncio
@@ -831,7 +821,6 @@ async def test_serialize_ipv6_interface():
 
         # Assert
         assert serialized["interface"] == "2001:db8::1/64"
-        assert isinstance(serialized["interface"], str)
 
 
 @pytest.mark.asyncio
@@ -877,7 +866,6 @@ async def test_serialize_uuid():
 
         # Assert
         assert serialized["uuid_col"] == "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11"
-        assert isinstance(serialized["uuid_col"], str)
 
 
 @pytest.mark.asyncio
@@ -931,12 +919,6 @@ async def test_serialize_mixed_special_types():
             "10.0.0.1",
             "550e8400-e29b-41d4-a716-446655440000",
         ]
-        # Check that scalar values are strings
-        assert isinstance(serialized["ip_addr"], str)
-        assert isinstance(serialized["ip_network"], str)
-        assert isinstance(serialized["uuid_col"], str)
-        # Check that array items are strings
-        assert all(isinstance(item, str) for item in serialized["mixed_array"])
 
 
 @pytest.mark.asyncio
