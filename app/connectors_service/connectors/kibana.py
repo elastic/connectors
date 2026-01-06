@@ -93,6 +93,14 @@ async def prepare(service_type, index_name, config, connector_definition=None):
             schema=connector_configuration,
         )
 
+        if connector_definition is not None and "filtering" in connector_definition:
+            logger.info(f"Updating filtering for '{connector_name}' connector")
+            filtering = connector_definition["filtering"]
+            await connector_index.api.client.connector.update_filtering(
+                connector_id=config["connectors"][0]["connector_id"],
+                filtering=filtering,
+            )
+
         logger.info(f"Prepare {index_name}")
         await upsert_index(es, index_name)
         logger.info("Done")
