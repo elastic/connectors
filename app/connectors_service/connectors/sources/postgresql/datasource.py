@@ -3,7 +3,27 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+from ipaddress import (
+    IPv4Address,
+    IPv4Interface,
+    IPv4Network,
+    IPv6Address,
+    IPv6Interface,
+    IPv6Network,
+)
+from uuid import UUID
+
 from asyncpg.exceptions._base import InternalClientError
+from asyncpg.types import (
+    BitString,
+    Box,
+    Circle,
+    Line,
+    LineSegment,
+    Path,
+    Point,
+    Polygon,
+)
 from connectors_sdk.source import BaseDataSource
 from connectors_sdk.utils import iso_utc
 from sqlalchemy.exc import ProgrammingError
@@ -140,6 +160,76 @@ class PostgreSQLDataSource(BaseDataSource):
         except Exception as e:
             msg = f"Can't connect to Postgresql on {self.postgresql_client.host}."
             raise Exception(msg) from e
+
+    def serialize(self, doc):
+        """Override base serialize to handle PostgreSQL-specific types.
+
+        PostgreSQL connector uses asyncpg which returns special Python objects for certain
+        PostgreSQL data types that need to be serialized to strings:
+        - Network types (INET, CIDR) -> ipaddress module objects
+        - UUID type -> uuid.UUID objects
+        - Geometric types (POINT, LINE, POLYGON, etc.) -> asyncpg.types objects
+        - BitString type (BIT, VARBIT) -> asyncpg.types.BitString objects
+
+        Args:
+            doc (Dict): Dictionary to be serialized
+
+        Returns:
+            doc (Dict): Serialized version of dictionary
+        """
+
+        def _serialize(value):
+            """Serialize input value with respect to its datatype.
+
+            Args:
+                value (Any): Value to be serialized
+
+            Returns:
+                value (Any): Serialized version of input value.
+            """
+            match value:
+                case (
+                    IPv4Address()
+                    | IPv6Address()
+                    | IPv4Interface()
+                    | IPv6Interface()
+                    | IPv4Network()
+                    | IPv6Network()
+                ):
+                    return str(value)
+                case UUID():
+                    return str(value)
+                case Point():
+                    return f"({value.x}, {value.y})"
+                case LineSegment():
+                    return (
+                        f"[({value.p1.x}, {value.p1.y}), ({value.p2.x}, {value.p2.y})]"
+                    )
+                case Box():
+                    return f"[({value.high.x}, {value.high.y}), ({value.low.x}, {value.low.y})]"
+                case Polygon():
+                    # Polygon inherits from Path, so check it first
+                    coords = [(p.x, p.y) for p in value.points]
+                    return str(coords)
+                case Path():
+                    coords = [(p.x, p.y) for p in value.points]
+                    status = "closed" if value.is_closed else "open"
+                    return f"{status} {str(coords)}"
+                case Line() | Circle():
+                    return str(value)
+                case BitString():
+                    return value.as_string()
+                case list() | tuple():
+                    return [_serialize(item) for item in value]
+                case dict():
+                    return {k: _serialize(v) for k, v in value.items()}
+                case _:
+                    return value
+
+        for key, value in doc.items():
+            doc[key] = _serialize(value)
+
+        return super().serialize(doc)
 
     def row2doc(self, row, doc_id, table, timestamp):
         row.update(
