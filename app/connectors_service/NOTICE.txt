@@ -2615,7 +2615,7 @@ SOFTWARE.
 
 
 build
-1.3.0
+1.4.0
 UNKNOWN
 Copyright © 2019 Filipe Laíns <filipe.lains@gmail.com>
 
@@ -8230,7 +8230,7 @@ made under the terms of *both* these licenses.
 
 
 urllib3
-2.6.2
+2.6.3
 UNKNOWN
 MIT License
 
