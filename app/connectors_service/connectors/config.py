@@ -119,6 +119,7 @@ def _default_config():
             "github": "connectors.sources.github:GitHubDataSource",
             "gitlab": "connectors.sources.gitlab:GitLabDataSource",
             "gmail": "connectors.sources.gmail:GMailDataSource",
+            "google_bigquery": "connectors.sources.google_bigquery:GoogleBigqueryDataSource",
             "google_cloud_storage": "connectors.sources.google_cloud_storage:GoogleCloudStorageDataSource",
             "google_drive": "connectors.sources.google_drive:GoogleDriveDataSource",
             "graphql": "connectors.sources.graphql:GraphQLDataSource",
