@@ -1880,7 +1880,7 @@ SOFTWARE.
 
 
 azure-core
-1.37.0
+1.38.0
 MIT License
 Copyright (c) Microsoft Corporation.
 
@@ -3496,7 +3496,7 @@ Apache-2.0
 
 
 elasticsearch-connectors
-9.2.4
+9.2.5
 Apache Software License
 Elastic License 2.0
 
