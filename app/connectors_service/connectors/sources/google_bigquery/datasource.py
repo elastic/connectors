@@ -20,9 +20,10 @@ from connectors.sources.shared.google import (
     validate_service_account_json,
 )
 from connectors.utils import get_pem_format
-
+from datetime import datetime, timezone
 from functools import cached_property, partial
 import os
+import uuid
 
 RUNNING_FTEST = (
     "RUNNING_FTEST" in os.environ
@@ -127,15 +128,6 @@ class GoogleBigqueryDataSource(BaseDataSource):
                 "default_value": "",
                 "tooltip": "Defaults to the service account project.",
             },
-            "index_settings": {
-                "display": "textarea",
-                "label": "Additional index settings, if any. For example, to set mode to lookup.",
-                "order": 5,
-                "required": False,
-                "default_value": "",
-                "type": "str",
-                "ui_restrictions": ["advanced"],
-            },
             "columns": {
                 "display": "textarea",
                 "label": "Columns to fetch. Defaults to * if none are set.",
@@ -144,12 +136,32 @@ class GoogleBigqueryDataSource(BaseDataSource):
                 "default_value": "*",
                 "type": "str",
                 "ui_restrictions": ["advanced"],
-                "tooltip": "Comma-separated, as in a SQL SELECT."
+                "tooltip": "Comma-separated, as in a SQL SELECT.",
+            },
+            "doc_id_column": {
+                "display": "text",
+                "label": "Document _id column",
+                "order": 7,
+                "required": False,
+                "default_value": None,
+                "type": "str",
+                "ui_restrictions": ["advanced"],
+                "tooltip": "Use the value of this column as the ES document _id instead of generating a UUID.",
+            },
+            "timestamp_column": {
+                "display": "text",
+                "label": "Timestamp column",
+                "order": 8,
+                "required": False,
+                "default_value": None,
+                "type": "str",
+                "ui_restrictions": ["advanced"],
+                "tooltip": "Use the value of this column as the ES document _timestamp instead of using the sync start time."
             },
             "predicates": {
                 "display": "textarea",
                 "label": "Predicates for the query.",
-                "order": 7,
+                "order": 9,
                 "required": False,
                 "default_value": "",
                 "type": "str",
@@ -160,7 +172,7 @@ class GoogleBigqueryDataSource(BaseDataSource):
                 "default_value": DEFAULT_FETCH_SIZE,
                 "display": "numeric",
                 "label": "Rows fetched per request",
-                "order": 8,
+                "order": 10,
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
@@ -169,7 +181,7 @@ class GoogleBigqueryDataSource(BaseDataSource):
                 "default_value": DEFAULT_RETRY_COUNT,
                 "display": "numeric",
                 "label": "Retries per request",
-                "order": 9,
+                "order": 11,
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
@@ -190,7 +202,7 @@ class GoogleBigqueryDataSource(BaseDataSource):
 
         # if they set a project_id and have a wrong service account, a log message
         # will give them a fighting chance :)
-        if self.configuration["project_id"] and self.configuration["service_account_credentials"]["project_id"] != self.configuration["project_id"]:
+        if self.configuration["project_id"] and self.resolve_project() != self.configuration["project_id"]:
             self._logger.info("A project_id is configured and does not match the project_id for the service_account_credentials block. If authorization fails, this could be why!")
         self.project_id = self.resolve_project()
 
@@ -199,12 +211,9 @@ class GoogleBigqueryDataSource(BaseDataSource):
         if RUNNING_FTEST:
             return
         try:
-            await anext(
-                self._google_bigquery_client.api_call(
-                    resource="projects",
-                    method="serviceAccount",
-                    sub_method="get",
-                    projectId=self._google_bigquery_client.user_project_id))
+            sql = "SELECT 1=1"
+            job = self._google_bigquery_client.client().query(sql)
+            return job.done() # signal we can indeed run queries
         except Exception:
             self._logger.exception("Error while connecting to Google Bigquery.")
             raise
@@ -261,6 +270,54 @@ class GoogleBigqueryDataSource(BaseDataSource):
             query = query + " " + conf["predicates"]
         return query.strip()
 
+    def url_safe_uuid(self):
+        return base64.urlsafe_b64encode(uuid.uuid4().bytes).rstrip('b=').decode('ascii')
+
+    def generate_doc_id(self, row):
+        """Creates and returns a string suitable for use as a doc _id. If the user
+        configured a doc_id_column to use for this, uses that from the row. If no id is
+        configured, documents will be assigned a random uuid, similar to what
+        Elasticsearch itself would do.
+
+        Args:
+            row (dict): A row from BQ
+
+        Returns:
+            str: A string for the _id
+
+        """
+        if self.configuration["doc_id_column"]:
+            return row.get(self.configuration["doc_id_column"])
+        return self.url_safe_uuid()
+
+    def generate_doc_timestamp(self, row):
+        """Creates and returns a timestamp string. If the user configured a
+        timestamp_column from their table, uses that. If not, returns None, and current
+        sync run start time in UTC will be assigned.
+
+        Args:
+            row (dict): A row from BQ
+
+        Returns:
+            str, or None: a timestamp string
+        """
+        if self.configuration["timestamp_column"]:
+            return row.get(self.configuration["timestamp_column"])
+        return None
+
+    def row2doc(self, row):
+        doc = dict(row)
+        doc_id = self.generate_doc_id(row)
+        doc_timestamp = self.generate_doc_timestamp(row)
+        if doc_timestamp is None:
+            doc_timestamp = self._run_timestamp
+        row.update(
+            {
+                "_id_": doc_id,
+                "_timestamp": doc_timestamp,
+            }
+        )
+        return row
 
     async def get_docs(self, filtering=None):
         """Returns results as (rowdict,None) on the configured query results. Realizes
@@ -274,6 +331,8 @@ class GoogleBigqueryDataSource(BaseDataSource):
 
         """
         self._logger.info("Connected to Google Bigquery.")
+        # collect the start time of the sync, used when no timestamp_column is configured
+        self._run_timestamp = datetime.now(timezone.utc).isoformat()
         sql = self.build_query()
 
         # job is a QueryJob instance
@@ -292,7 +351,7 @@ class GoogleBigqueryDataSource(BaseDataSource):
                 for _ in range(fetch_size):
                     try:
                         row = next(job_iter)
-                        chunk.append(dict(row)) # Row -> dict
+                        chunk.append(row2doc(row)) # Row -> dict
                     except StopIteration:
                         break
                 return chunk

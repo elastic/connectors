@@ -27,6 +27,8 @@ class GoogleBigqueryClient:
         self.json_credentials = json_credentials
         self._logger = logger
 
+    def set_logger(self, logger_):
+        self._logger = logger_
 
     def client(self, project_id=None):
         """Returns an instance of a bigquery client, using the configured credentials,
