@@ -5,6 +5,7 @@
 #
 
 import asyncio
+import base64
 from concurrent.futures import ThreadPoolExecutor
 from connectors_sdk.source import (
     BaseDataSource,
@@ -271,7 +272,7 @@ class GoogleBigqueryDataSource(BaseDataSource):
         return query.strip()
 
     def url_safe_uuid(self):
-        return base64.urlsafe_b64encode(uuid.uuid4().bytes).rstrip('b=').decode('ascii')
+        return base64.urlsafe_b64encode(uuid.uuid4().bytes).rstrip(b'=').decode('ascii')
 
     def generate_doc_id(self, row):
         """Creates and returns a string suitable for use as a doc _id. If the user
@@ -306,18 +307,18 @@ class GoogleBigqueryDataSource(BaseDataSource):
         return None
 
     def row2doc(self, row):
-        doc = dict(row)
+        doc = dict(row) # cast to dict from the google class
         doc_id = self.generate_doc_id(row)
         doc_timestamp = self.generate_doc_timestamp(row)
         if doc_timestamp is None:
             doc_timestamp = self._run_timestamp
-        row.update(
+        doc.update(
             {
-                "_id_": doc_id,
+                "_id": doc_id,
                 "_timestamp": doc_timestamp,
             }
         )
-        return row
+        return doc
 
     async def get_docs(self, filtering=None):
         """Returns results as (rowdict,None) on the configured query results. Realizes
@@ -351,7 +352,7 @@ class GoogleBigqueryDataSource(BaseDataSource):
                 for _ in range(fetch_size):
                     try:
                         row = next(job_iter)
-                        chunk.append(row2doc(row)) # Row -> dict
+                        chunk.append(self.row2doc(row)) # Row -> dict
                     except StopIteration:
                         break
                 return chunk
