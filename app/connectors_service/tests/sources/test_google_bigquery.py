@@ -187,7 +187,7 @@ async def test_get_docs():
 #     """Tests get_docs against the small bq fixture."""
 #     credsfile = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
 #     if credsfile is None:
-#         print("GOOGLE_APPLICATION_CREDENTIALS was unset; skipping test_get_docs")
+#         print("GOOGLE_APPLICATION_CREDENTIALS was unset; skipping test_get_docs_from_live")
 #         return
 #
 #     with open(credsfile, 'r') as gac:

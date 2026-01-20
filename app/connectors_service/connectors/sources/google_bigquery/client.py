@@ -12,9 +12,6 @@ from google.oauth2 import service_account
 import os
 import tempfile
 
-RUNNING_FTEST = (
-    "RUNNING_FTEST" in os.environ
-)  # Flag to check if a connector is run for ftest or not.
 
 class GoogleBigqueryClient:
     """A client to make api calls to Google Bigquery."""
