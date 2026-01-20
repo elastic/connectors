@@ -8,6 +8,7 @@
 import asyncio
 from contextlib import asynccontextmanager
 import json
+import os
 import pytest
 from unittest import mock
 from unittest.mock import Mock, patch
@@ -150,6 +151,8 @@ async def test_build_query():
     query = bq.build_query()
     expected = """SELECT * FROM `testprojectid.testdataset.testtable` WHERE foo=1"""
     assert query == expected
+
+
 @pytest.mark.asyncio
 async def test_ping():
     async with create_bigquery_source() as source:
@@ -173,3 +176,29 @@ async def test_get_docs():
             async for doc, _ in source.get_docs():
                 docs.append(doc)
             assert len(docs) == 5
+
+# To test against live bigquery, you can uncomment this and:
+# - have an active google cloud service account with BQ execute permission
+# - set up those creds and provide the location in GOOGLE_APPLICATION_CREDENTIALS
+# - run the tests with fail-slow increased to 10 (live BQ isn't 'under 1s' fast)
+
+# @pytest.mark.asyncio
+# async def test_get_docs_from_live():
+#     """Tests get_docs against the small bq fixture."""
+#     credsfile = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+#     if credsfile is None:
+#         print("GOOGLE_APPLICATION_CREDENTIALS was unset; skipping test_get_docs")
+#         return
+#
+#     with open(credsfile, 'r') as gac:
+#         creds = gac.read()
+#
+#     config = DataSourceConfiguration(
+#         test_bq_small | {"service_account_credentials": creds,}
+#     )
+#
+#     bq = GoogleBigqueryDataSource(configuration=config)
+#     docs = []
+#     async for doc, _ in bq.get_docs():
+#         docs.append(doc)
+#     assert len(docs) > 0
