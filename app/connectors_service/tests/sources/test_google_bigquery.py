@@ -12,7 +12,10 @@ import pytest
 from unittest import mock
 from unittest.mock import Mock, patch
 
-from connectors.sources.google_bigquery import GoogleBigqueryDataSource
+from connectors.sources.google_bigquery import (
+    GoogleBigqueryClient,
+    GoogleBigqueryDataSource,
+)
 from connectors_sdk.source import ConfigurableFieldValueError, DataSourceConfiguration
 from tests.sources.support import create_source
 
@@ -45,6 +48,42 @@ async def create_bigquery_source(
             table=table
     ) as source:
         yield source
+
+class Credentials:
+    """Creates a mocked google oauth2 service_account Credentials instance."""
+    def __init__(self, creds):
+        self.json_credentials = creds
+
+
+class Job:
+    """Creates a mocked google bigquery Job. Job is an iterator. Iteration returns a
+    fixture result a few times and then stops."""
+    def __init__(self, *args, **kw):
+        self.doc_count = 5
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self.doc_count < 1:
+            raise StopIteration
+        self.doc_count = self.doc_count - 1
+        return {"foo": "bar"}
+
+    def done(self):
+        return True
+
+
+class Client:
+    """This class creates a mocked bigquery client."""
+    def __init__(self, *args, **kw):
+        self.credentials = kw.get('credentials')
+        self.project = kw.get('project')
+
+    def query(self, sql):
+        """Returns mocked Job."""
+        return Job()
+
 
 @pytest.mark.asyncio
 async def test_empty_configuration():
@@ -111,3 +150,26 @@ async def test_build_query():
     query = bq.build_query()
     expected = """SELECT * FROM `testprojectid.testdataset.testtable` WHERE foo=1"""
     assert query == expected
+@pytest.mark.asyncio
+async def test_ping():
+    async with create_bigquery_source() as source:
+        with patch.object(GoogleBigqueryClient, "client", return_value=Client()):
+            await source.ping()
+
+@pytest.mark.asyncio
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_ping_negative():
+    with pytest.raises(Exception):
+        async with create_bigquery_source() as source:
+            with patch.object(GoogleBigqueryClient, "client", return_value=Client()):
+                with patch.object(Client, "query", side_effect=Exception()):
+                    await source.ping()
+
+@pytest.mark.asyncio
+async def test_get_docs():
+    async with create_bigquery_source() as source:
+        with patch.object(GoogleBigqueryClient, "client", return_value=Client()):
+            docs = []
+            async for doc, _ in source.get_docs():
+                docs.append(doc)
+            assert len(docs) == 5
