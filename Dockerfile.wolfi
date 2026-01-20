@@ -2,6 +2,6 @@ FROM docker.elastic.co/wolfi/python:3.11-dev@sha256:a9925189e90f510c3fefad6f243f
 USER root
 COPY . /app
 WORKDIR /app
-RUN make clean install-package
-RUN ln -s app/connectors_service/.venv/bin /app/bin
+RUN make clean install
+RUN ln -s .venv/bin /app/bin
 ENTRYPOINT []
