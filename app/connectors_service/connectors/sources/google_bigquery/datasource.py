@@ -203,9 +203,9 @@ class GoogleBigqueryDataSource(BaseDataSource):
 
         # if they set a project_id and have a wrong service account, a log message
         # will give them a fighting chance :)
-        if self.configuration["project_id"] and self.resolve_project() != self.configuration["project_id"]:
+        if self.configuration["project_id"] and self._resolve_project() != self.configuration["project_id"]:
             self._logger.info("A project_id is configured and does not match the project_id for the service_account_credentials block. If authorization fails, this could be why!")
-        self.project_id = self.resolve_project()
+        self.project_id = self._resolve_project()
 
     async def ping(self):
         """Verify the connection with Google Bigquery"""
@@ -220,7 +220,7 @@ class GoogleBigqueryDataSource(BaseDataSource):
             raise
 
 
-    def resolve_project(self):
+    def _resolve_project(self):
         """
         Resolves a project_id, as a string. This should be a Google Cloud project.
         Chooses configured project_id first, or if that is unset, falls back to the
@@ -241,7 +241,7 @@ class GoogleBigqueryDataSource(BaseDataSource):
         return json_credentials["project_id"]
 
 
-    def resolve_table(self):
+    def _resolve_table(self):
         """Inspects the configuration and produces a fully qualified BigQuery table
         identifier.
 
@@ -249,7 +249,7 @@ class GoogleBigqueryDataSource(BaseDataSource):
             string: A BQ table in the form `project.dataset.table`
         """
 
-        return "`%s.%s.%s`" % (self.resolve_project(), self.configuration["dataset"], self.configuration["table"])
+        return "`%s.%s.%s`" % (self._resolve_project(), self.configuration["dataset"], self.configuration["table"])
 
 
     def build_query(self):
@@ -261,7 +261,7 @@ class GoogleBigqueryDataSource(BaseDataSource):
         """
         # create a sub-config because full config contains secrets
         conf = {k: self.configuration[k] for k in ("predicates", "columns")}
-        conf["resolved_table"] = self.resolve_table()
+        conf["resolved_table"] = self._resolve_table()
         if not conf["columns"]:
             conf["columns"] = "*"
 
@@ -271,10 +271,10 @@ class GoogleBigqueryDataSource(BaseDataSource):
             query = query + " " + conf["predicates"]
         return query.strip()
 
-    def url_safe_uuid(self):
+    def _url_safe_uuid(self):
         return base64.urlsafe_b64encode(uuid.uuid4().bytes).rstrip(b'=').decode('ascii')
 
-    def generate_doc_id(self, row):
+    def _generate_doc_id(self, row):
         """Creates and returns a string suitable for use as a doc _id. If the user
         configured a doc_id_column to use for this, uses that from the row. If no id is
         configured, documents will be assigned a random uuid, similar to what
@@ -289,9 +289,9 @@ class GoogleBigqueryDataSource(BaseDataSource):
         """
         if self.configuration["doc_id_column"]:
             return row.get(self.configuration["doc_id_column"])
-        return self.url_safe_uuid()
+        return self._url_safe_uuid()
 
-    def generate_doc_timestamp(self, row):
+    def _generate_doc_timestamp(self, row):
         """Creates and returns a timestamp string. If the user configured a
         timestamp_column from their table, uses that. If not, returns None, and current
         sync run start time in UTC will be assigned.
@@ -308,8 +308,8 @@ class GoogleBigqueryDataSource(BaseDataSource):
 
     def row2doc(self, row):
         doc = dict(row) # cast to dict from the google class
-        doc_id = self.generate_doc_id(row)
-        doc_timestamp = self.generate_doc_timestamp(row)
+        doc_id = self._generate_doc_id(row)
+        doc_timestamp = self._generate_doc_timestamp(row)
         if doc_timestamp is None:
             doc_timestamp = self._run_timestamp
         doc.update(
