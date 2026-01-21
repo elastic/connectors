@@ -6,31 +6,31 @@
 
 import asyncio
 import base64
+import os
+import uuid
 from concurrent.futures import ThreadPoolExecutor
-from connectors_sdk.source import (
-    BaseDataSource,
-    DataSourceConfiguration
-)
+from datetime import datetime, timezone
+from functools import cached_property
+
+from connectors_sdk.source import BaseDataSource, DataSourceConfiguration
+
 from connectors.sources.google_bigquery.client import GoogleBigqueryClient
 from connectors.sources.shared.database.generic_database import (
     DEFAULT_FETCH_SIZE,
-    DEFAULT_RETRY_COUNT
+    DEFAULT_RETRY_COUNT,
 )
 from connectors.sources.shared.google import (
     load_service_account_json,
     validate_service_account_json,
 )
 from connectors.utils import get_pem_format
-from datetime import datetime, timezone
-from functools import cached_property, partial
-import os
-import uuid
 
 RUNNING_FTEST = (
     "RUNNING_FTEST" in os.environ
 )  # Flag to check if a connector is run for ftest or not.
 
 executor = ThreadPoolExecutor(1)
+
 
 class GoogleBigqueryDataSource(BaseDataSource):
     """Google Bigquery"""
@@ -40,7 +40,6 @@ class GoogleBigqueryDataSource(BaseDataSource):
     incremental_sync_enabled = False
     advanced_rules_enabled = True
     dls_enabled = False
-
 
     def __init__(self, configuration: DataSourceConfiguration):
         """Set up the connection to Google Bigquery.
@@ -76,8 +75,8 @@ class GoogleBigqueryDataSource(BaseDataSource):
         )
 
         if (
-                json_credentials.get("private_key")
-                and "\n" not in json_credentials["private_key"]
+            json_credentials.get("private_key")
+            and "\n" not in json_credentials["private_key"]
         ):
             json_credentials["private_key"] = get_pem_format(
                 key=json_credentials["private_key"].strip(),
@@ -92,7 +91,6 @@ class GoogleBigqueryDataSource(BaseDataSource):
 
         return GoogleBigqueryClient(json_credentials=required_credentials)
 
-
     @classmethod
     def get_default_configuration(cls) -> dict:
         """Get the default configuration for Google Bigquery.
@@ -106,7 +104,7 @@ class GoogleBigqueryDataSource(BaseDataSource):
                 "label": "Google Cloud service account JSON",
                 "sensitive": True,
                 "order": 1,
-                "type": "str"
+                "type": "str",
             },
             "dataset": {
                 "display": "text",
@@ -157,7 +155,7 @@ class GoogleBigqueryDataSource(BaseDataSource):
                 "default_value": None,
                 "type": "str",
                 "ui_restrictions": ["advanced"],
-                "tooltip": "Use the value of this column as the ES document _timestamp instead of using the sync start time."
+                "tooltip": "Use the value of this column as the ES document _timestamp instead of using the sync start time.",
             },
             "predicates": {
                 "display": "textarea",
@@ -167,7 +165,7 @@ class GoogleBigqueryDataSource(BaseDataSource):
                 "default_value": "",
                 "type": "str",
                 "ui_restrictions": ["advanced"],
-                "tooltip": "A SQL WHERE clause. May be required for some partitioned table configurations."
+                "tooltip": "A SQL WHERE clause. May be required for some partitioned table configurations.",
             },
             "fetch_size": {
                 "default_value": DEFAULT_FETCH_SIZE,
@@ -197,14 +195,18 @@ class GoogleBigqueryDataSource(BaseDataSource):
         """
         await super().validate_config()
         validate_service_account_json(
-            self.configuration["service_account_credentials"],
-            "Google Bigquery"
+            self.configuration["service_account_credentials"], "Google Bigquery"
         )
 
         # if they set a project_id and have a wrong service account, a log message
         # will give them a fighting chance :)
-        if self.configuration["project_id"] and self._resolve_project() != self.configuration["project_id"]:
-            self._logger.info("A project_id is configured and does not match the project_id for the service_account_credentials block. If authorization fails, this could be why!")
+        if (
+            self.configuration["project_id"]
+            and self._resolve_project() != self.configuration["project_id"]
+        ):
+            self._logger.info(
+                "A project_id is configured and does not match the project_id for the service_account_credentials block. If authorization fails, this could be why!"
+            )
         self.project_id = self._resolve_project()
 
     async def ping(self):
@@ -214,11 +216,10 @@ class GoogleBigqueryDataSource(BaseDataSource):
         try:
             sql = "SELECT 1=1"
             job = self._google_bigquery_client.client().query(sql)
-            return job.done() # signal we can indeed run queries
+            return job.done()  # signal we can indeed run queries
         except Exception:
             self._logger.exception("Error while connecting to Google Bigquery.")
             raise
-
 
     def _resolve_project(self):
         """
@@ -240,7 +241,6 @@ class GoogleBigqueryDataSource(BaseDataSource):
         )
         return json_credentials["project_id"]
 
-
     def _resolve_table(self):
         """Inspects the configuration and produces a fully qualified BigQuery table
         identifier.
@@ -249,8 +249,11 @@ class GoogleBigqueryDataSource(BaseDataSource):
             string: A BQ table in the form `project.dataset.table`
         """
 
-        return "`%s.%s.%s`" % (self._resolve_project(), self.configuration["dataset"], self.configuration["table"])
-
+        return "`%s.%s.%s`" % (
+            self._resolve_project(),
+            self.configuration["dataset"],
+            self.configuration["table"],
+        )
 
     def build_query(self):
         """
@@ -272,7 +275,7 @@ class GoogleBigqueryDataSource(BaseDataSource):
         return query.strip()
 
     def _url_safe_uuid(self):
-        return base64.urlsafe_b64encode(uuid.uuid4().bytes).rstrip(b'=').decode('ascii')
+        return base64.urlsafe_b64encode(uuid.uuid4().bytes).rstrip(b"=").decode("ascii")
 
     def _generate_doc_id(self, row):
         """Creates and returns a string suitable for use as a doc _id. If the user
@@ -307,7 +310,7 @@ class GoogleBigqueryDataSource(BaseDataSource):
         return None
 
     def row2doc(self, row):
-        doc = dict(row) # cast to dict from the google class
+        doc = dict(row)  # cast to dict from the google class
         doc_id = self._generate_doc_id(row)
         doc_timestamp = self._generate_doc_timestamp(row)
         if doc_timestamp is None:
@@ -352,7 +355,7 @@ class GoogleBigqueryDataSource(BaseDataSource):
                 for _ in range(fetch_size):
                     try:
                         row = next(job_iter)
-                        chunk.append(self.row2doc(row)) # Row -> dict
+                        chunk.append(self.row2doc(row))  # Row -> dict
                     except StopIteration:
                         break
                 return chunk

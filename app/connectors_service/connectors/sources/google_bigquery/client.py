@@ -5,12 +5,9 @@
 #
 """Google Bigquery module which fetches rows from a Bigquery table."""
 
-from aiogoogle.auth.creds import ServiceAccountCreds
 from connectors_sdk.logger import logger
 from google.cloud import bigquery
 from google.oauth2 import service_account
-import os
-import tempfile
 
 
 class GoogleBigqueryClient:
@@ -40,7 +37,9 @@ class GoogleBigqueryClient:
             bigquery.Client instance
 
         """
-        credentials = service_account.Credentials.from_service_account_info(self.json_credentials)
+        credentials = service_account.Credentials.from_service_account_info(
+            self.json_credentials
+        )
         if project_id is not None:
             return bigquery.Client(credentials=credentials, project=project_id)
         else:
