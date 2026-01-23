@@ -1,0 +1,216 @@
+# Stage 1: Build FIPS-enabled OpenSSL
+FROM cgr.dev/chainguard/wolfi-base:latest AS openssl-builder
+
+ARG FIPS_VERSION=3.0.9
+ARG OPENSSL_VERSION=3.5.2
+
+USER root
+RUN apk add --no-cache \
+  build-base \
+  wget \
+  perl \
+  linux-headers \
+  zlib-dev \
+  ca-certificates
+
+WORKDIR /build
+
+# Download and build validated FIPS provider (OpenSSL ${FIPS_VERSION})
+RUN wget https://www.openssl.org/source/openssl-${FIPS_VERSION}.tar.gz && \
+  tar -xf openssl-${FIPS_VERSION}.tar.gz && \
+  cd openssl-${FIPS_VERSION} && \
+  ./Configure enable-fips --prefix=/usr/local --openssldir=/usr/local/ssl && \
+  make -j$(nproc) && \
+  cd ..
+
+# Download and build latest OpenSSL ${OPENSSL_VERSION}
+RUN wget https://www.openssl.org/source/openssl-${OPENSSL_VERSION}.tar.gz && \
+  tar -xf openssl-${OPENSSL_VERSION}.tar.gz && \
+  cd openssl-${OPENSSL_VERSION} && \
+  ./Configure enable-fips --prefix=/usr/local --openssldir=/usr/local/ssl && \
+  make -j$(nproc) && \
+  cd ..
+
+# Replace OpenSSL ${OPENSSL_VERSION} FIPS provider with validated ${FIPS_VERSION} version
+RUN cd openssl-${OPENSSL_VERSION} && \
+  cp ../openssl-${FIPS_VERSION}/providers/fips.so providers/. && \
+  cp ../openssl-${FIPS_VERSION}/providers/fipsmodule.cnf providers/.
+
+# Verify FIPS provider is working correctly BEFORE system installation
+RUN cd openssl-${OPENSSL_VERSION} && \
+  ./util/wrap.pl -fips apps/openssl list -provider-path providers -provider fips -providers
+
+# Install FIPS provider artifacts to system locations
+RUN cd openssl-${FIPS_VERSION} && \
+  make install_fips
+
+# Install OpenSSL ${OPENSSL_VERSION} to system
+RUN cd openssl-${OPENSSL_VERSION} && \
+  make install
+
+# Update library path
+RUN echo "/usr/local/lib64" > /etc/ld.so.conf.d/openssl.conf && \
+  echo "/usr/local/lib" >> /etc/ld.so.conf.d/openssl.conf && \
+  ldconfig
+
+# Create the FIPS configuration file using the installed OpenSSL binary
+RUN /usr/local/bin/openssl fipsinstall -out /usr/local/ssl/fipsmodule.cnf -module /usr/local/lib64/ossl-modules/fips.so
+
+# Create main OpenSSL configuration file that includes FIPS
+RUN cat <<'EOF' > /usr/local/ssl/openssl.cnf
+config_diagnostics = 1
+openssl_conf = openssl_init
+
+.include /usr/local/ssl/fipsmodule.cnf
+
+[openssl_init]
+providers = provider_sect
+
+[provider_sect]
+fips = fips_sect
+base = base_sect
+
+[base_sect]
+activate = 1
+
+[fips_sect]
+activate = 1
+EOF
+
+# Stage 2: Build Python linked against FIPS OpenSSL
+FROM cgr.dev/chainguard/wolfi-base:latest AS python-builder
+
+ARG PYTHON_VERSION=3.11.9
+
+USER root
+
+# Copy FIPS OpenSSL from builder
+COPY --from=openssl-builder /usr/local/bin/openssl /usr/local/bin/
+COPY --from=openssl-builder /usr/local/lib64/ /usr/local/lib64/
+COPY --from=openssl-builder /usr/local/include/openssl/ /usr/local/include/openssl/
+COPY --from=openssl-builder /usr/local/ssl/ /usr/local/ssl/
+COPY --from=openssl-builder /etc/ld.so.conf.d/openssl.conf /etc/ld.so.conf.d/
+
+# Install build dependencies for Python
+RUN apk add --no-cache \
+  build-base \
+  wget \
+  zlib-dev \
+  libffi-dev \
+  bzip2-dev \
+  xz-dev \
+  sqlite-dev \
+  readline-dev \
+  ncurses-dev \
+  ca-certificates
+
+# Update library cache
+RUN ldconfig
+
+# Set environment for building Python against FIPS OpenSSL
+ENV PATH="/usr/local/bin:${PATH}"
+ENV LD_LIBRARY_PATH="/usr/local/lib64:/usr/local/lib"
+ENV OPENSSL_CONF=/usr/local/ssl/openssl.cnf
+ENV OPENSSL_MODULES=/usr/local/lib64/ossl-modules
+
+WORKDIR /build
+
+# Download and build Python against FIPS OpenSSL
+RUN wget https://www.python.org/ftp/python/${PYTHON_VERSION}/Python-${PYTHON_VERSION}.tgz && \
+  tar -xf Python-${PYTHON_VERSION}.tgz && \
+  cd Python-${PYTHON_VERSION} && \
+  ./configure \
+    --prefix=/usr/local \
+    --enable-optimizations \
+    --with-openssl=/usr/local \
+    --with-openssl-rpath=auto \
+    --enable-shared \
+    LDFLAGS="-L/usr/local/lib64 -Wl,-rpath,/usr/local/lib64" \
+    CPPFLAGS="-I/usr/local/include" && \
+  make -j$(nproc) && \
+  make install
+
+# Verify Python ssl module uses FIPS OpenSSL
+RUN python3 -c "import ssl; print('SSL version:', ssl.OPENSSL_VERSION)"
+
+# Stage 3: Final runtime image
+FROM cgr.dev/chainguard/wolfi-base:latest
+
+ARG FIPS_VERSION=3.0.9
+ARG OPENSSL_VERSION=3.5.2
+ARG PYTHON_VERSION=3.11.9
+
+USER root
+
+# Copy FIPS OpenSSL installation
+COPY --from=openssl-builder /usr/local/bin/openssl /usr/local/bin/
+COPY --from=openssl-builder /usr/local/lib64/ /usr/local/lib64/
+COPY --from=openssl-builder /usr/local/include/openssl/ /usr/local/include/openssl/
+COPY --from=openssl-builder /usr/local/ssl/ /usr/local/ssl/
+COPY --from=openssl-builder /etc/ld.so.conf.d/openssl.conf /etc/ld.so.conf.d/
+
+# Copy Python installation
+COPY --from=python-builder /usr/local/bin/python3* /usr/local/bin/
+COPY --from=python-builder /usr/local/bin/pip3* /usr/local/bin/
+COPY --from=python-builder /usr/local/lib/python3.11/ /usr/local/lib/python3.11/
+COPY --from=python-builder /usr/local/lib/libpython3.11.so* /usr/local/lib/
+COPY --from=python-builder /usr/local/include/python3.11/ /usr/local/include/python3.11/
+
+# Install runtime dependencies and build tools
+RUN apk add --no-cache \
+  ca-certificates \
+  git \
+  make \
+  libffi \
+  bzip2 \
+  xz \
+  sqlite-libs \
+  readline \
+  ncurses \
+  zlib
+
+# Add Python lib to library path and update cache
+RUN echo "/usr/local/lib" >> /etc/ld.so.conf.d/openssl.conf && ldconfig
+
+# Create symlinks for python and pip
+RUN ln -sf /usr/local/bin/python3 /usr/local/bin/python && \
+  ln -sf /usr/local/bin/pip3 /usr/local/bin/pip
+
+# Set environment variables
+ENV PATH="/usr/local/bin:${PATH}"
+ENV LD_LIBRARY_PATH="/usr/local/lib64:/usr/local/lib"
+ENV OPENSSL_CONF=/usr/local/ssl/openssl.cnf
+ENV OPENSSL_MODULES=/usr/local/lib64/ossl-modules
+
+# Verify FIPS is working
+RUN echo "=== OpenSSL FIPS Verification ===" && \
+  openssl version && \
+  echo "=== FIPS Providers ===" && \
+  openssl list -providers && \
+  echo "=== Python SSL Version ===" && \
+  python3 -c "import ssl; print('Python SSL:', ssl.OPENSSL_VERSION)" && \
+  echo "=== FIPS Self-test ===" && \
+  (openssl md5 /dev/null 2>&1 | grep -i "disabled for FIPS" && echo "FIPS mode confirmed") || \
+  echo "Warning: FIPS mode may not be active"
+
+# Copy application
+COPY --chown=nonroot:nonroot . /app
+
+# Install application
+USER nonroot
+WORKDIR /app
+RUN make clean install-package
+RUN ln -s app/connectors_service/.venv/bin /app/bin
+
+# Clean up build tools
+USER root
+RUN apk del git make
+
+USER nonroot
+ENTRYPOINT []
+
+# Labels
+LABEL description="Elastic Connectors with OpenSSL FIPS 140-2 validated provider"
+LABEL openssl_version="${OPENSSL_VERSION}"
+LABEL fips_version="${FIPS_VERSION}"
+LABEL python_version="${PYTHON_VERSION}"

@@ -246,6 +246,16 @@
 #service.log_level: INFO
 #
 #
+##  Enable FIPS 140-2/140-3 compliance mode.
+##    When enabled, the service will:
+##    - Validate that the system's OpenSSL is in FIPS mode
+##    - Disable connectors that cannot be FIPS-compliant
+##    - Use only FIPS-approved cryptographic algorithms
+##    Note: Requires the underlying system to have FIPS-validated OpenSSL configured.
+##    See docs/FIPS.md for more information.
+#service.fips_mode: false
+#
+#
 ## ------------------------------- Extraction Service ----------------------------------
 #
 ##  Local extraction service-related configurations.

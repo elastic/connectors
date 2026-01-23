@@ -7,6 +7,9 @@ DOCKER_IMAGE_NAME?=docker.elastic.co/integrations/elastic-connectors
 DOCKERFILE_PATH?=Dockerfile
 DOCKERFILE_FTEST_PATH?=app/connectors_service/tests/Dockerfile.ftest
 
+FIPS_DOCKERFILE_PATH?=Dockerfile.fips
+FIPS_DOCKERFILE_FTEST_PATH?=app/connectors_service/tests/Dockerfile.fips-ftest
+
 PACKAGE_NAME_VERSION="elasticsearch_connectors-$(VERSION)"
 
 install:
@@ -23,8 +26,16 @@ test: install
 	cd $(connectors_sdk_dir); make test
 	cd $(app_dir); make test
 
-ftest: install $(DOCKERFILE_FTEST_PATH) build-connectors-base-image
-	cd $(app_dir); make ftest
+ftest: ftest-non-fips ftest-fips
+	@echo "=== All functional tests completed (non-FIPS and FIPS) ==="
+
+ftest-non-fips: install build-connectors-base-image
+	@echo "=== Running non-FIPS functional tests ==="
+	cd $(app_dir); make ftest NAME=$(NAME)
+
+ftest-fips: fips-build-test
+	@echo "=== Running FIPS functional tests ==="
+	cd $(app_dir); make fips-ftest NAME=$(NAME)
 
 ftrace:
 	cd $(app_dir); make ftrace
@@ -70,6 +81,25 @@ zip: clean
 		$(PACKAGE_NAME_VERSION).zip \
 		./* \
 		-x  *htmlcov*/* *docs*/* Dockerfile* *ruff_cache*/* *pytest_cache*/* *__pycache__*/* *build*/* *egg-info*/*
+
+## FIPS Zone
+# Build FIPS images
+fips-build-base:
+	docker build -f $(FIPS_DOCKERFILE_PATH) -t connectors-fips-base .
+
+fips-build-test: fips-build-base
+	docker build -f $(FIPS_DOCKERFILE_FTEST_PATH) -t connectors-fips-test .
+
+fips-verify: fips-build-base
+	@echo "=== Verifying FIPS mode in container ==="
+	@docker run --rm connectors-fips-base /bin/sh -c '\
+		echo "OpenSSL version:" && openssl version && \
+		echo "" && echo "FIPS providers:" && openssl list -providers && \
+		echo "" && echo "Python SSL version:" && python3 -c "import ssl; print(ssl.OPENSSL_VERSION)" && \
+		echo "" && echo "FIPS cipher test:" && \
+		python3 -c "import ssl; ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT); ctx.set_ciphers(\"RC4-SHA\")" 2>&1 | grep -q "No cipher" && \
+		echo "FIPS ENABLED: RC4 correctly rejected" || echo "WARNING: RC4 not rejected"'
+## End FIPS Zone
 
 ## Agent Docker Zone
 # Only use it for local testing, that's it
