@@ -110,4 +110,4 @@ fips-ftest:
 		echo "SKIPPING: $(NAME) is not FIPS-compliant (uses NTLM authentication)"; \
 		exit 0; \
 	fi
-	ELASTICSEARCH_CONNECTORS_FIPS_MODE=true DOCKERFILE_FTEST_PATH=tests/Dockerfile.fips-ftest tests/ftest.sh $(NAME) $(PERF8)
+	FIPS_MODE=true tests/ftest.sh $(NAME) $(PERF8)

@@ -1,11 +1,5 @@
 # FIPS 140-2/140-3 Compliance Guide
 
-This document outlines the FIPS (Federal Information Processing Standards) compliance considerations for the Elasticsearch Connectors application.
-
-## Overview
-
-FIPS compliance requires that all cryptographic operations use FIPS-validated cryptographic modules. This guide identifies areas that need attention for FIPS compliance and documents known limitations.
-
 ## Enabling FIPS Mode
 
 Add the following to your `config.yml` to enable FIPS-aware mode in the application:
@@ -17,8 +11,7 @@ service:
 
 When enabled, this will:
 1. Validate that the system's OpenSSL is in FIPS mode
-2. Use FIPS-compliant algorithms where possible
-3. Log warnings for connectors that cannot be FIPS-compliant
+2. Log warnings for connectors that cannot be FIPS-compliant
 
 ## How Library FIPS Compliance Works
 
@@ -131,16 +124,6 @@ When FIPS mode is enabled in the application, these connectors are automatically
 | SharePoint Server | ❌ No | NTLM authentication |
 | Slack | ✅ Yes | Uses OAuth 2.0 |
 | Zoom | ✅ Yes | Uses OAuth 2.0 |
-
-## Remaining Items
-
-1. **[ ] SSL context cipher suite enforcement** (Optional)
-   - Ensure all SSL contexts explicitly use FIPS-approved cipher suites
-   - Currently relies on system OpenSSL FIPS mode to enforce this
-   - Files if needed:
-     - `connectors/utils.py`
-     - `connectors/sources/postgresql/client.py`
-     - `connectors/sources/gitlab/client.py`
 
 ## References
 

@@ -137,7 +137,7 @@ def run(action, config_file, log_level, filebeat, service_type, uvloop):
     fips_enabled = config.get("service", {}).get("fips_mode", False)
     FIPSConfig.set_fips_mode(fips_enabled)
 
-    # Enable FIPS mode if configured (validates OpenSSL and patches hash_id)
+    # Enable FIPS mode if configured (validates OpenSSL)
     try:
         enable_fips_mode()
         if fips_enabled:

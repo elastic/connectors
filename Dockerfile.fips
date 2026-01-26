@@ -157,6 +157,8 @@ COPY --from=python-builder /usr/local/lib/libpython3.11.so* /usr/local/lib/
 COPY --from=python-builder /usr/local/include/python3.11/ /usr/local/include/python3.11/
 
 # Install runtime dependencies and build tools
+# Note: libstdc++ is needed for Python packages with C++ extensions (greenlet, etc.)
+# libxml2/libxslt are needed for lxml (XML/HTML parsing in some connectors)
 RUN apk add --no-cache \
   ca-certificates \
   git \
@@ -167,7 +169,10 @@ RUN apk add --no-cache \
   sqlite-libs \
   readline \
   ncurses \
-  zlib
+  zlib \
+  libstdc++ \
+  libxml2 \
+  libxslt
 
 # Add Python lib to library path and update cache
 RUN echo "/usr/local/lib" >> /etc/ld.so.conf.d/openssl.conf && ldconfig

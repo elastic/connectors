@@ -27,14 +27,11 @@ test: install
 	cd $(app_dir); make test
 
 ftest: ftest-non-fips ftest-fips
-	@echo "=== All functional tests completed (non-FIPS and FIPS) ==="
 
 ftest-non-fips: install build-connectors-base-image
-	@echo "=== Running non-FIPS functional tests ==="
 	cd $(app_dir); make ftest NAME=$(NAME)
 
 ftest-fips: fips-build-test
-	@echo "=== Running FIPS functional tests ==="
 	cd $(app_dir); make fips-ftest NAME=$(NAME)
 
 ftrace:

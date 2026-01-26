@@ -56,16 +56,13 @@ class TestFIPSConfig:
             assert FIPSConfig.is_fips_mode_enabled() is True
 
     def test_fips_mode_from_environment_only_true_accepted(self):
-        """Only 'true' should enable FIPS mode via environment variable."""
-        for value in ["1", "yes", "TRUE", "True"]:
+        for value in ["true", "TRUE", "True", "tRuE"]:
             FIPSConfig.reset()
             with patch.dict(os.environ, {"ELASTICSEARCH_CONNECTORS_FIPS_MODE": value}):
                 FIPSConfig.reset()
-                # Only lowercase "true" is accepted
-                if value == "true":
-                    assert FIPSConfig.is_fips_mode_enabled() is True
-                else:
-                    assert FIPSConfig.is_fips_mode_enabled() is False
+                assert (
+                    FIPSConfig.is_fips_mode_enabled() is True
+                ), f"'{value}' should enable FIPS mode"
 
     def test_singleton_behavior(self):
         """FIPSConfig should be a singleton."""
@@ -203,9 +200,9 @@ class TestConnectorCompliance:
             "zoom",
         ]
         for connector in compliant_connectors:
-            assert is_connector_fips_compliant(connector) is True, (
-                f"{connector} should be FIPS-compliant"
-            )
+            assert (
+                is_connector_fips_compliant(connector) is True
+            ), f"{connector} should be FIPS-compliant"
 
 
 class TestFilterFIPSCompliantSources:
