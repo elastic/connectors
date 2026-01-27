@@ -105,9 +105,9 @@ deps-csv: .venv/bin/pip-licenses
 
 NON_FIPS_CONNECTORS := network_drive sharepoint_server
 
-fips-ftest:
+fips-ftest: .venv/bin/pytest
 	@if echo "$(NON_FIPS_CONNECTORS)" | grep -qw "$(NAME)"; then \
 		echo "SKIPPING: $(NAME) is not FIPS-compliant (uses NTLM authentication)"; \
-		exit 0; \
+	else \
+		FIPS_MODE=true tests/ftest.sh $(NAME) $(PERF8); \
 	fi
-	FIPS_MODE=true tests/ftest.sh $(NAME) $(PERF8)
