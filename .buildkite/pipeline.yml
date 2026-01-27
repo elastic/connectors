@@ -78,6 +78,21 @@ steps:
       useVault: true
       image: family/enterprise-search-ubuntu-2204-connectors-py
 
+  - label: ":pytest: FIPS Unit tests"
+    <<: *retries
+    key: "fips_unit_tests"
+    commands: ".buildkite/run_fips_unit_tests.sh"
+    env:
+      PYTHON_VERSION: "3.11" # TODO: can actually do a matrix too
+      CONNECTOR: "dir"
+      DATA_SIZE: "small"
+    timeout_in_minutes: 10
+    agents:
+      machineType: "n1-standard-8"
+      provider: "gcp"
+      useVault: true
+      image: family/enterprise-search-ubuntu-2204-connectors-py
+
   - label: ":sweating: Checking for changes in connectors"
     key: "relevant_ftests"
     plugins:
