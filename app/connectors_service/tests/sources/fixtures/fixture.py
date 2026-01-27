@@ -66,11 +66,9 @@ def _parser():
         ],
     )
 
-    parser.add_argument("--name", type=str,
-                        help="fixture to run", default="mysql")
+    parser.add_argument("--name", type=str, help="fixture to run", default="mysql")
 
-    parser.add_argument("--pid", type=int,
-                        help="process id to kill", default=0)
+    parser.add_argument("--pid", type=int, help="process id to kill", default=0)
 
     parser.add_argument(
         "--container",
@@ -164,8 +162,7 @@ async def _monitor_service(pid, container=None):
                 break
             await asyncio.sleep(1)
     except Exception as e:
-        logger.error(
-            f"Failed to monitor the sync job. Something bad happened: {e}")
+        logger.error(f"Failed to monitor the sync job. Something bad happened: {e}")
         raise
     finally:
         if container:
@@ -205,14 +202,12 @@ async def main(args=None):
 
     if action == "monitor":
         if args.pid == 0 and not args.container:
-            logger.error(
-                "Must specify either --pid or --container for monitor action.")
+            logger.error("Must specify either --pid or --container for monitor action.")
             return
         await _monitor_service(args.pid, container=args.container)
         return
 
-    fixture_file = os.path.join(os.path.dirname(
-        __file__), args.name, "fixture.py")
+    fixture_file = os.path.join(os.path.dirname(__file__), args.name, "fixture.py")
     module_name = f"fixtures.{args.name}.fixture"
     spec = importlib.util.spec_from_file_location(module_name, fixture_file)
     module = importlib.util.module_from_spec(spec)
