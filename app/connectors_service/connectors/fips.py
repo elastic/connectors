@@ -12,7 +12,7 @@ When FIPS mode is enabled, the application will:
 3. Ensure all TLS connections use FIPS-approved cipher suites
 
 Note: The hash_id function uses MD5 for document ID generation, which is not a security
-function and does not require FIPS-approved algorithms per FedRAMP/IL5 guidance.
+function and does not require FIPS-approved algorithms
 """
 
 import os
@@ -52,7 +52,8 @@ class FIPSConfig:
         if cls._fips_mode is not None:
             return cls._fips_mode
 
-        env_fips = os.environ.get("ELASTICSEARCH_CONNECTORS_FIPS_MODE", "").lower()
+        env_fips = os.environ.get(
+            "ELASTICSEARCH_CONNECTORS_FIPS_MODE", "").lower()
         if env_fips == "true":
             cls._fips_mode = True
             return True
@@ -107,7 +108,8 @@ def validate_fips_mode():
         )
         raise FIPSModeError(msg)
 
-    logger.info(f"FIPS validation passed. OpenSSL version: {ssl.OPENSSL_VERSION}")
+    logger.info(
+        f"FIPS validation passed. OpenSSL version: {ssl.OPENSSL_VERSION}")
 
 
 def is_connector_fips_compliant(connector_type: str) -> bool:
@@ -181,4 +183,5 @@ def enable_fips_mode():
         )
         raise FIPSModeError(msg)
 
-    logger.info(f"FIPS mode initialized. OpenSSL version: {ssl.OPENSSL_VERSION}")
+    logger.info(
+        f"FIPS mode initialized. OpenSSL version: {ssl.OPENSSL_VERSION}")
