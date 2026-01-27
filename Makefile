@@ -26,13 +26,10 @@ test: install
 	cd $(connectors_sdk_dir); make test
 	cd $(app_dir); make test
 
-ftest: ftest-non-fips ftest-fips
+ftest: ftest-non-fips fips-ftest
 
 ftest-non-fips: install build-connectors-base-image
 	cd $(app_dir); make ftest NAME=$(NAME)
-
-ftest-fips: fips-build-test
-	cd $(app_dir); make fips-ftest NAME=$(NAME)
 
 ftrace:
 	cd $(app_dir); make ftrace
@@ -86,6 +83,21 @@ fips-build-base:
 
 fips-build-test: fips-build-base
 	docker build -f $(FIPS_DOCKERFILE_FTEST_PATH) -t connectors-fips-test .
+
+fips-ftest: fips-build-test
+	cd $(app_dir); make fips-ftest NAME=$(NAME)
+
+fips-test: fips-build-base
+	@echo "=== Running unit tests in FIPS mode ==="
+	docker run --rm --user root \
+		-v $(PWD):/workspace \
+		-w /workspace \
+		connectors-fips-base \
+		/bin/sh -c '\
+			apk add --no-cache git && \
+			pip install -e libs/connectors_sdk[tests] -e app/connectors_service[tests] && \
+			cd libs/connectors_sdk && python -m pytest tests -sv && \
+			cd /workspace/app/connectors_service && python -m pytest --cov-report term-missing --cov-fail-under 90 --cov-report html --cov=connectors -sv tests'
 
 fips-verify: fips-build-base
 	@echo "=== Verifying FIPS mode in container ==="
