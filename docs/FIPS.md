@@ -28,7 +28,7 @@ The only application-level concerns are:
 
 ## Known FIPS Compliance Issues
 
-### 1. NTLM Authentication (NOT FIPS-COMPLIANT - PROTOCOL LIMITATION)
+### NTLM Authentication (NOT FIPS-COMPLIANT - PROTOCOL LIMITATION)
 
 **Affected Connectors:**
 - **SharePoint Server** (`connectors/sources/sharepoint/sharepoint_server/`)
