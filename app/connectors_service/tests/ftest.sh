@@ -398,13 +398,20 @@ $PYTHON fixture.py --name $NAME --action load
 if [[ "$FIPS_MODE" == "true" ]]; then
   # FIPS mode: run in container
   run_fips_connector "$PWD/$NAME/config.yml"
+  # Stream container logs in background so they appear in CI output
+  docker logs -f "$FIPS_CONTAINER_NAME" &
+  LOG_PID=$!
   monitor_process ""
+  kill $LOG_PID 2>/dev/null || true
   stop_fips_container
 
   $PYTHON fixture.py --name $NAME --action remove
 
   run_fips_connector "$PWD/$NAME/config.yml"
+  docker logs -f "$FIPS_CONTAINER_NAME" &
+  LOG_PID=$!
   monitor_process ""
+  kill $LOG_PID 2>/dev/null || true
   stop_fips_container
 else
   # Non-FIPS mode: original behavior
