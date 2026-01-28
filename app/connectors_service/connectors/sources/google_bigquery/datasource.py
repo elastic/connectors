@@ -12,7 +12,11 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from functools import cached_property
 
-from connectors_sdk.source import BaseDataSource, DataSourceConfiguration
+from connectors_sdk.source import (
+    BaseDataSource,
+    ConfigurableFieldValueError,
+    DataSourceConfiguration,
+)
 
 from connectors.sources.google_bigquery.client import GoogleBigqueryClient
 from connectors.sources.shared.database.generic_database import (
@@ -106,22 +110,42 @@ class GoogleBigqueryDataSource(BaseDataSource):
                 "order": 1,
                 "type": "str",
             },
+            "query_type": {
+                "label": "Query Method",
+                "order": 2,
+                "type": "str",
+                "display": "dropdown",
+                "options": [
+                    {"label": "Table", "value": "table"},
+                    {"label": "Custom SQL Query", "value": "custom_query"},
+                ],
+                "value": "table",
+            },
+            "custom_query": {
+                "label": "Custom SQL Query",
+                "order": 3,
+                "type": "str",
+                "display": "textarea",
+                "depends_on": [{"field": "query_type", "value": "custom_query"}],
+            },
             "dataset": {
                 "display": "text",
                 "label": "Dataset the table is in.",
-                "order": 2,
+                "order": 4,
                 "type": "str",
+                "depends_on": [{"field": "query_type", "value": "table"}],
             },
             "table": {
                 "display": "text",
                 "label": "Table to sync.",
-                "order": 3,
+                "order": 5,
                 "type": "str",
+                "depends_on": [{"field": "query_type", "value": "table"}],
             },
             "project_id": {
                 "display": "text",
                 "label": "Google Cloud project.",
-                "order": 4,
+                "order": 6,
                 "type": "str",
                 "required": False,
                 "default_value": "",
@@ -130,17 +154,29 @@ class GoogleBigqueryDataSource(BaseDataSource):
             "columns": {
                 "display": "textarea",
                 "label": "Columns to fetch. Defaults to * if none are set.",
-                "order": 6,
+                "order": 7,
                 "required": False,
                 "default_value": "*",
                 "type": "str",
                 "ui_restrictions": ["advanced"],
                 "tooltip": "Comma-separated, as in a SQL SELECT.",
+                "depends_on": [{"field": "query_type", "value": "table"}],
+            },
+            "predicates": {
+                "display": "textarea",
+                "label": "Predicates for the query.",
+                "order": 8,
+                "required": False,
+                "default_value": "",
+                "type": "str",
+                "ui_restrictions": ["advanced"],
+                "tooltip": "A SQL WHERE clause. May be required for some partitioned table configurations.",
+                "depends_on": [{"field": "query_type", "value": "table"}],
             },
             "doc_id_column": {
                 "display": "text",
                 "label": "Document _id column",
-                "order": 7,
+                "order": 9,
                 "required": False,
                 "default_value": None,
                 "type": "str",
@@ -150,28 +186,18 @@ class GoogleBigqueryDataSource(BaseDataSource):
             "timestamp_column": {
                 "display": "text",
                 "label": "Timestamp column",
-                "order": 8,
+                "order": 10,
                 "required": False,
                 "default_value": None,
                 "type": "str",
                 "ui_restrictions": ["advanced"],
                 "tooltip": "Use the value of this column as the ES document _timestamp instead of using the sync start time.",
             },
-            "predicates": {
-                "display": "textarea",
-                "label": "Predicates for the query.",
-                "order": 9,
-                "required": False,
-                "default_value": "",
-                "type": "str",
-                "ui_restrictions": ["advanced"],
-                "tooltip": "A SQL WHERE clause. May be required for some partitioned table configurations.",
-            },
             "fetch_size": {
                 "default_value": DEFAULT_FETCH_SIZE,
                 "display": "numeric",
                 "label": "Rows fetched per request",
-                "order": 10,
+                "order": 11,
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
@@ -180,7 +206,7 @@ class GoogleBigqueryDataSource(BaseDataSource):
                 "default_value": DEFAULT_RETRY_COUNT,
                 "display": "numeric",
                 "label": "Retries per request",
-                "order": 11,
+                "order": 12,
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
@@ -207,7 +233,16 @@ class GoogleBigqueryDataSource(BaseDataSource):
             self._logger.info(
                 "A project_id is configured and does not match the project_id for the service_account_credentials block. If authorization fails, this could be why!"
             )
-        self.project_id = self._resolve_project()
+            self.project_id = self._resolve_project()
+
+            # validate that the UI wasn't bypassed, and an invalid config of both query
+            # types has been configured on the connector.
+            if (
+                self.configuration["custom_query"] is not None
+                and self.configuration["table"] is not None
+            ):
+                msg = "Both table and custom_query cannot be set simultaneously."
+                raise ConfigurableFieldValueError(msg)
 
     async def ping(self):
         """Verify the connection with Google Bigquery"""
@@ -262,6 +297,13 @@ class GoogleBigqueryDataSource(BaseDataSource):
         Returns:
             string: The query.
         """
+        # if the user configured their own SQL use that
+        if (
+            self.configuration["custom_query"] is not None
+            and self.configuration["custom_query"] != ""
+        ):
+            return self.configuration["custom_query"]
+
         # create a sub-config because full config contains secrets
         conf = {k: self.configuration[k] for k in ("predicates", "columns")}
         conf["resolved_table"] = self._resolve_table()
@@ -315,12 +357,12 @@ class GoogleBigqueryDataSource(BaseDataSource):
         doc_timestamp = self._generate_doc_timestamp(row)
         if doc_timestamp is None:
             doc_timestamp = self._run_timestamp
-        doc.update(
-            {
-                "_id": doc_id,
-                "_timestamp": doc_timestamp,
-            }
-        )
+            doc.update(
+                {
+                    "_id": doc_id,
+                    "_timestamp": doc_timestamp,
+                }
+            )
         return doc
 
     async def get_docs(self, filtering=None):
