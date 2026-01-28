@@ -1,0 +1,4 @@
+FROM connectors-fips-base
+
+WORKDIR app/connectors_service
+RUN .venv/bin/pip install ".[ftest]"
