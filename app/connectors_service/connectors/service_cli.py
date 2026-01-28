@@ -29,8 +29,8 @@ from connectors.config import load_config
 from connectors.fips import (
     FIPSConfig,
     FIPSModeError,
-    enable_fips_mode,
     filter_fips_compliant_sources,
+    validate_fips_mode,
 )
 from connectors.preflight_check import PreflightCheck
 from connectors.services import get_services
@@ -139,7 +139,7 @@ def run(action, config_file, log_level, filebeat, service_type, uvloop):
 
     # Enable FIPS mode if configured (validates OpenSSL)
     try:
-        enable_fips_mode()
+        validate_fips_mode()
         if fips_enabled:
             # Filter out non-FIPS-compliant connectors
             config["sources"] = filter_fips_compliant_sources(config.get("sources", {}))

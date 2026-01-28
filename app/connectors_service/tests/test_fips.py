@@ -11,11 +11,10 @@ from unittest.mock import patch
 import pytest
 
 from connectors.fips import (
+    NON_FIPS_COMPLIANT_CONNECTORS,
     FIPSConfig,
     FIPSModeError,
-    enable_fips_mode,
     filter_fips_compliant_sources,
-    get_non_fips_connectors,
     is_connector_fips_compliant,
     is_openssl_fips_mode,
     validate_fips_mode,
@@ -113,42 +112,16 @@ class TestValidateFIPSMode:
             validate_fips_mode()
 
 
-class TestEnableFIPSMode:
-    """Tests for enable_fips_mode function."""
-
-    def test_enable_fips_mode_disabled(self):
-        """enable_fips_mode should do nothing when FIPS mode is disabled."""
-        FIPSConfig.set_fips_mode(False)
-        # Should not raise any exception
-        enable_fips_mode()
-
-    def test_enable_fips_mode_enabled_without_fips_openssl(self):
-        """enable_fips_mode should fail when FIPS is enabled but OpenSSL is not FIPS."""
-        FIPSConfig.set_fips_mode(True)
-        with patch("connectors.fips.is_openssl_fips_mode", return_value=False):
-            with pytest.raises(FIPSModeError) as exc_info:
-                enable_fips_mode()
-            assert "OpenSSL is not in FIPS mode" in str(exc_info.value)
-
-    def test_enable_fips_mode_enabled_with_fips_openssl(self):
-        """enable_fips_mode should succeed when FIPS is enabled and OpenSSL is FIPS."""
-        FIPSConfig.set_fips_mode(True)
-        with patch("connectors.fips.is_openssl_fips_mode", return_value=True):
-            # Should not raise any exception
-            enable_fips_mode()
-
-
 class TestConnectorCompliance:
     """Tests for connector FIPS compliance functions."""
 
     def test_non_fips_connectors_list(self):
         """Verify the list of non-FIPS-compliant connectors."""
-        non_fips = get_non_fips_connectors()
-        assert "network_drive" in non_fips
-        assert "sharepoint_server" in non_fips
+        assert "network_drive" in NON_FIPS_COMPLIANT_CONNECTORS
+        assert "sharepoint_server" in NON_FIPS_COMPLIANT_CONNECTORS
         # FIPS-compliant connectors should not be in the list
-        assert "sharepoint_online" not in non_fips
-        assert "github" not in non_fips
+        assert "sharepoint_online" not in NON_FIPS_COMPLIANT_CONNECTORS
+        assert "github" not in NON_FIPS_COMPLIANT_CONNECTORS
 
     def test_is_connector_fips_compliant_network_drive(self):
         """network_drive connector should not be FIPS-compliant."""
@@ -264,8 +237,8 @@ class TestFIPSIntegration:
             # RC4 rejected, so FIPS is active
             assert is_fips is True, "FIPS detected as False but RC4 cipher is rejected"
 
-    def test_enable_fips_mode_in_non_fips_environment(self):
-        """In a non-FIPS environment, enable_fips_mode should raise FIPSModeError.
+    def test_validate_fips_mode_in_non_fips_environment(self):
+        """In a non-FIPS environment, validate_fips_mode should raise FIPSModeError.
 
         This test only runs meaningfully in a non-FIPS container.
         In a FIPS container, it will pass (no error raised).
@@ -275,11 +248,11 @@ class TestFIPSIntegration:
         if not is_openssl_fips_mode():
             # Non-FIPS environment: should raise error
             with pytest.raises(FIPSModeError) as exc_info:
-                enable_fips_mode()
+                validate_fips_mode()
             assert "OpenSSL is not in FIPS mode" in str(exc_info.value)
         else:
             # FIPS environment: should succeed
-            enable_fips_mode()  # Should not raise
+            validate_fips_mode()  # Should not raise
 
     def test_enable_fips_mode_in_fips_environment(self):
         """In a FIPS environment, enable_fips_mode should succeed.
@@ -292,10 +265,10 @@ class TestFIPSIntegration:
 
         FIPSConfig.set_fips_mode(True)
         # Should not raise any exception
-        enable_fips_mode()
+        validate_fips_mode()
 
     def test_fips_mode_disabled_always_succeeds(self):
         """When FIPS mode is disabled, enable_fips_mode should always succeed."""
         FIPSConfig.set_fips_mode(False)
         # Should not raise any exception regardless of environment
-        enable_fips_mode()
+        validate_fips_mode()

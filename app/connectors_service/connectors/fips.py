@@ -49,17 +49,10 @@ class FIPSConfig:
     @classmethod
     def is_fips_mode_enabled(cls) -> bool:
         """Check if FIPS mode is enabled via configuration or environment."""
-        if cls._fips_mode is not None:
-            return cls._fips_mode
-
-        env_fips = os.environ.get(
-            "ELASTICSEARCH_CONNECTORS_FIPS_MODE", "").lower()
-        if env_fips == "true":
-            cls._fips_mode = True
-            return True
-
-        cls._fips_mode = False
-        return False
+        if cls._fips_mode is None:
+            env_fips = os.environ.get("ELASTICSEARCH_CONNECTORS_FIPS_MODE", "").lower()
+            cls._fips_mode = env_fips == "true"
+        return cls._fips_mode
 
     @classmethod
     def set_fips_mode(cls, enabled: bool):
@@ -80,36 +73,16 @@ def is_openssl_fips_mode() -> bool:
     """
     # Check via SSL context - try to set a non-FIPS cipher
     # In FIPS mode, RC4 and other non-approved ciphers are rejected
+
+    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+
     try:
-        ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
         ctx.set_ciphers("RC4-SHA")
-        return False
     except ssl.SSLError:
         # RC4 rejected - FIPS mode is active
         return True
 
-
-def validate_fips_mode():
-    """Validate that the system is properly configured for FIPS mode.
-
-    Raises:
-        FIPSModeError: If FIPS mode is enabled but system is not FIPS-compliant.
-    """
-    if not FIPSConfig.is_fips_mode_enabled():
-        return
-
-    logger.info("FIPS mode is enabled, validating system configuration...")
-
-    if not is_openssl_fips_mode():
-        msg = (
-            "FIPS mode is enabled but OpenSSL is not in FIPS mode. "
-            "Please ensure your system's OpenSSL is configured for FIPS compliance. "
-            "Set OPENSSL_FIPS=1 or configure your system's FIPS mode properly."
-        )
-        raise FIPSModeError(msg)
-
-    logger.info(
-        f"FIPS validation passed. OpenSSL version: {ssl.OPENSSL_VERSION}")
+    return False
 
 
 def is_connector_fips_compliant(connector_type: str) -> bool:
@@ -124,16 +97,7 @@ def is_connector_fips_compliant(connector_type: str) -> bool:
     return connector_type not in NON_FIPS_COMPLIANT_CONNECTORS
 
 
-def get_non_fips_connectors() -> frozenset:
-    """Get the set of connector types that are not FIPS-compliant.
-
-    Returns:
-        frozenset: Set of non-FIPS-compliant connector type identifiers.
-    """
-    return NON_FIPS_COMPLIANT_CONNECTORS
-
-
-def filter_fips_compliant_sources(sources: dict) -> dict:
+def filter_fips_compliant_sources(sources: dict) -> dict[str, str]:
     """Filter sources dictionary to only include FIPS-compliant connectors.
 
     Args:
@@ -158,8 +122,8 @@ def filter_fips_compliant_sources(sources: dict) -> dict:
     return filtered
 
 
-def enable_fips_mode():
-    """Enable FIPS mode for the connectors service.
+def validate_fips_mode():
+    """Validate FIPS mode for the connectors service.
 
     This function should be called early in application startup when FIPS mode
     is enabled. It will:
@@ -183,5 +147,4 @@ def enable_fips_mode():
         )
         raise FIPSModeError(msg)
 
-    logger.info(
-        f"FIPS mode initialized. OpenSSL version: {ssl.OPENSSL_VERSION}")
+    logger.info(f"FIPS mode initialized. OpenSSL version: {ssl.OPENSSL_VERSION}")
