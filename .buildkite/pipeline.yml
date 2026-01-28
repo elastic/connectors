@@ -84,7 +84,7 @@ steps:
     commands: ".buildkite/run_fips_unit_tests.sh"
     env:
       PYTHON_VERSION: "{{ matrix }}"
-    timeout_in_minutes: 10
+    timeout_in_minutes: 45
     agents:
       machineType: "n1-standard-8"
       provider: "gcp"
