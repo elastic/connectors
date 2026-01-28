@@ -4146,7 +4146,7 @@ Apache Software License
 
 
 google-auth
-2.47.0
+2.48.0
 Apache Software License
                                  Apache License
                            Version 2.0, January 2004
@@ -4380,8 +4380,8 @@ SOFTWARE.
 
 
 greenlet
-3.3.0
-MIT AND Python-2.0
+3.3.1
+UNKNOWN
 The following files are derived from Stackless Python and are subject to the
 same license as Stackless Python:
 
@@ -5198,28 +5198,29 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
 jmespath
-1.0.1
+1.1.0
 MIT License
+MIT License
+
 Copyright (c) 2013 Amazon.com, Inc. or its affiliates.  All Rights Reserved
 
-Permission is hereby granted, free of charge, to any person obtaining a
-copy of this software and associated documentation files (the
-"Software"), to deal in the Software without restriction, including
-without limitation the rights to use, copy, modify, merge, publish, dis-
-tribute, sublicense, and/or sell copies of the Software, and to permit
-persons to whom the Software is furnished to do so, subject to the fol-
-lowing conditions:
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-The above copyright notice and this permission notice shall be included
-in all copies or substantial portions of the Software.
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
-OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABIL-
-ITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
-SHALL THE AUTHOR BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
-WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
-IN THE SOFTWARE.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 
 
 ldap3
@@ -5686,7 +5687,7 @@ MIT License
 
 
 multidict
-6.7.0
+6.7.1
 Apache License 2.0
    Copyright 2016 Andrew Svetlov and aio-libs contributors
 
@@ -5995,8 +5996,8 @@ END OF TERMS AND CONDITIONS
 
 
 packaging
-25.0
-Apache Software License; BSD License
+26.0
+UNKNOWN
 This software is made available under the terms of *either* of the licenses
 found in LICENSE.APACHE or LICENSE.BSD. Contributions to this software is made
 under the terms of *both* these licenses.
@@ -6517,8 +6518,8 @@ POSSIBILITY OF SUCH DAMAGE.
 
 
 pycparser
-2.23
-BSD License
+3.0
+UNKNOWN
 pycparser -- A C parser in Python
 
 Copyright (c) 2008-2022, Eli Bendersky
@@ -7541,7 +7542,7 @@ made under the terms of *both* these licenses.
 
 
 soupsieve
-2.8.2
+2.8.3
 MIT License
 MIT License
 

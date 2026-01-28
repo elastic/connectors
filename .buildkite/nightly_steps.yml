@@ -11,6 +11,14 @@ definitions:
         - exit_status: 2  # Flaky test
           signal_reason: none
           limit: 2
+  ftest_defaults: &ftest_defaults
+    command: ".buildkite/run_functional_test.sh"
+    timeout_in_minutes: 45
+    artifact_paths:
+      - "perf8-report-*/**/*"
+    matrix:
+      - "3.10"
+      - "3.11"
 
 notify:
   - if: 'build.branch =~ /^((main)|([0-9]+\.[0-9]+))\$/ && (build.state == "failed" || pipeline.started_passing)'
@@ -25,188 +33,113 @@ env:
 steps:
   - label: "🔨 [Python {{ matrix }}] MySQL"
     <<: *retries
-    command: ".buildkite/run_functional_test.sh"
+    <<: *ftest_defaults
     env:
       PYTHON_VERSION: "{{ matrix }}"
       CONNECTOR: "mysql"
       DATA_SIZE: "small"
-    artifact_paths:
-      - "perf8-report-*/**/*"
-    matrix:
-      - "3.10"
-      - "3.11"
   - label: "🔨 [Python {{ matrix }}] Network Drive"
     <<: *retries
-    command: ".buildkite/run_functional_test.sh"
+    <<: *ftest_defaults
     env:
       PYTHON_VERSION: "{{ matrix }}"
       CONNECTOR: "network_drive"
       DATA_SIZE: "small"
-    artifact_paths:
-      - "perf8-report-*/**/*"
-    matrix:
-      - "3.10"
-      - "3.11"
   - label: "🔨 [Python {{ matrix }}] Amazon S3"
     <<: *retries
-    command: ".buildkite/run_functional_test.sh"
+    <<: *ftest_defaults
     env:
       PYTHON_VERSION: "{{ matrix }}"
       CONNECTOR: "s3"
       DATA_SIZE: "small"
-    artifact_paths:
-      - "perf8-report-*/**/*"
-    matrix:
-      - "3.10"
-      - "3.11"
   - label: "🔨 [Python {{ matrix }}] Google Cloud Storage"
     <<: *retries
-    command: ".buildkite/run_functional_test.sh"
+    <<: *ftest_defaults
     env:
       PYTHON_VERSION: "{{ matrix }}"
       CONNECTOR: "google_cloud_storage"
       DATA_SIZE: "small"
-    artifact_paths:
-      - "perf8-report-*/**/*"
-    matrix:
-      - "3.10"
-      - "3.11"
   - label: "🔨 [Python {{ matrix }}] Azure Blob Storage"
     <<: *retries
-    command: ".buildkite/run_functional_test.sh"
+    <<: *ftest_defaults
     env:
       PYTHON_VERSION: "{{ matrix }}"
       CONNECTOR: "azure_blob_storage"
       DATA_SIZE: "small"
-    artifact_paths:
-      - "perf8-report-*/**/*"
-    matrix:
-      - "3.10"
-      - "3.11"
   - label: "🔨 [Python {{ matrix }}] Postgresql"
     <<: *retries
-    command: ".buildkite/run_functional_test.sh"
+    <<: *ftest_defaults
     env:
       PYTHON_VERSION: "{{ matrix }}"
       CONNECTOR: "postgresql"
       DATA_SIZE: "small"
-    artifact_paths:
-      - "perf8-report-*/**/*"
-    matrix:
-      - "3.10"
-      - "3.11"
   - label: "🔨 [Python {{ matrix }}] System Directory"
     <<: *retries
-    command: ".buildkite/run_functional_test.sh"
+    <<: *ftest_defaults
     env:
       PYTHON_VERSION: "{{ matrix }}"
       CONNECTOR: "dir"
       DATA_SIZE: "small"
-    artifact_paths:
-      - "perf8-report-*/**/*"
-    matrix:
-      - "3.10"
-      - "3.11"
   - label: "🔨 [Python {{ matrix }}] Oracle Database"
     <<: *retries
-    command: ".buildkite/run_functional_test.sh"
+    <<: *ftest_defaults
     env:
       PYTHON_VERSION: "{{ matrix }}"
       CONNECTOR: "oracle"
       DATA_SIZE: "small"
       SKIP_AARCH64: "true"
-    artifact_paths:
-      - "perf8-report-*/**/*"
-    matrix:
-      - "3.10"
-      - "3.11"
   - label: "🔨 [Python {{ matrix }}] Sharepoint Server"
     <<: *retries
-    command: ".buildkite/run_functional_test.sh"
+    <<: *ftest_defaults
     env:
       PYTHON_VERSION: "{{ matrix }}"
       CONNECTOR: "sharepoint_server"
       DATA_SIZE: "small"
-    artifact_paths:
-      - "perf8-report-*/**/*"
-    matrix:
-      - "3.10"
-      - "3.11"
   - label: "🔨 [Python {{ matrix }}] Sharepoint Online"
     <<: *retries
-    command: ".buildkite/run_functional_test.sh"
+    <<: *ftest_defaults
     env:
       PYTHON_VERSION: "{{ matrix }}"
       CONNECTOR: "sharepoint_online"
       DATA_SIZE: "small"
-    artifact_paths:
-      - "perf8-report-*/**/*"
-    matrix:
-      - "3.10"
-      - "3.11"
   - label: "🔨 [Python {{ matrix }}] Microsoft SQL"
     <<: *retries
-    command: ".buildkite/run_functional_test.sh"
+    <<: *ftest_defaults
     env:
       PYTHON_VERSION: "{{ matrix }}"
       CONNECTOR: "mssql"
       DATA_SIZE: "small"
       SKIP_AARCH64: "true"
-    artifact_paths:
-      - "perf8-report-*/**/*"
-    matrix:
-      - "3.10"
-      - "3.11"
   - label: "🔨 [Python {{ matrix }}] Jira"
     <<: *retries
-    command: ".buildkite/run_functional_test.sh"
+    <<: *ftest_defaults
     env:
       PYTHON_VERSION: "{{ matrix }}"
       CONNECTOR: "jira"
       DATA_SIZE: "small"
-    artifact_paths:
-      - "perf8-report-*/**/*"
-    matrix:
-      - "3.10"
-      - "3.11"
   - label: "🔨 [Python {{ matrix }}] Confluence"
     <<: *retries
-    command: ".buildkite/run_functional_test.sh"
+    <<: *ftest_defaults
     env:
       PYTHON_VERSION: "{{ matrix }}"
       CONNECTOR: "confluence"
       DATA_SIZE: "small"
-    artifact_paths:
-      - "perf8-report-*/**/*"
-    matrix:
-      - "3.10"
-      - "3.11"
   - label: "🔨 [Python {{ matrix }}] ServiceNow"
     <<: *retries
-    command: ".buildkite/run_functional_test.sh"
+    <<: *ftest_defaults
     env:
       PYTHON_VERSION: "{{ matrix }}"
       CONNECTOR: "servicenow"
       DATA_SIZE: "small"
-    artifact_paths:
-      - "perf8-report-*/**/*"
-    matrix:
-      - "3.10"
-      - "3.11"
   - label: "🔨 [Python {{ matrix }}] MongoDB"
     <<: *retries
-    command: ".buildkite/run_functional_test.sh"
+    <<: *ftest_defaults
     env:
       PYTHON_VERSION: "{{ matrix }}"
       CONNECTOR: "mongodb"
       DATA_SIZE: "small"
-    artifact_paths:
-      - "perf8-report-*/**/*"
-    matrix:
-      - "3.10"
-      - "3.11"
 #   - label: "🔨 [Python {{ matrix }}] MongoDB Serverless"
-    <<: *retries
+#     <<: *retries
 #     command: ".buildkite/run_functional_test.sh"
 #     env:
 #       PYTHON_VERSION: "{{ matrix }}"
@@ -219,133 +152,78 @@ steps:
 #       - "perf8-report-*/**/*"
   - label: "🔨 [Python {{ matrix }}] GitHub"
     <<: *retries
-    command: ".buildkite/run_functional_test.sh"
+    <<: *ftest_defaults
     env:
       PYTHON_VERSION: "{{ matrix }}"
       CONNECTOR: "github"
       DATA_SIZE: "small"
-    artifact_paths:
-      - "perf8-report-*/**/*"
-    matrix:
-      - "3.10"
-      - "3.11"
   - label: "🔨 [Python {{ matrix }}] Google Drive"
     <<: *retries
-    command: ".buildkite/run_functional_test.sh"
+    <<: *ftest_defaults
     env:
       PYTHON_VERSION: "{{ matrix }}"
       CONNECTOR: "google_drive"
       DATA_SIZE: "small"
-    artifact_paths:
-      - "perf8-report-*/**/*"
-    matrix:
-      - "3.10"
-      - "3.11"
   - label: "🔨 [Python {{ matrix }}] Dropbox"
     <<: *retries
-    command: ".buildkite/run_functional_test.sh"
+    <<: *ftest_defaults
     env:
       PYTHON_VERSION: "{{ matrix }}"
       CONNECTOR: "dropbox"
       DATA_SIZE: "small"
-    artifact_paths:
-      - "perf8-report-*/**/*"
-    matrix:
-      - "3.10"
-      - "3.11"
   - label: "🔨 [Python {{ matrix }}] OneDrive"
     <<: *retries
-    command: ".buildkite/run_functional_test.sh"
+    <<: *ftest_defaults
     env:
       PYTHON_VERSION: "{{ matrix }}"
       CONNECTOR: "onedrive"
       DATA_SIZE: "small"
-    artifact_paths:
-      - "perf8-report-*/**/*"
-    matrix:
-      - "3.10"
-      - "3.11"
   - label: "🔨 [Python {{ matrix }}] Salesforce"
     <<: *retries
-    command: ".buildkite/run_functional_test.sh"
+    <<: *ftest_defaults
     env:
       PYTHON_VERSION: "{{ matrix }}"
       CONNECTOR: "salesforce"
       DATA_SIZE: "small"
-    artifact_paths:
-      - "perf8-report-*/**/*"
-    matrix:
-      - "3.10"
-      - "3.11"
   - label: "🔨 [Python {{ matrix }}] Zoom"
     <<: *retries
-    command: ".buildkite/run_functional_test.sh"
+    <<: *ftest_defaults
     env:
       PYTHON_VERSION: "{{ matrix }}"
       CONNECTOR: "zoom"
       DATA_SIZE: "small"
-    artifact_paths:
-      - "perf8-report-*/**/*"
-    matrix:
-      - "3.10"
-      - "3.11"
   - label: "🔨 [Python {{ matrix }}] Box"
     <<: *retries
-    command: ".buildkite/run_functional_test.sh"
+    <<: *ftest_defaults
     env:
       PYTHON_VERSION: "{{ matrix }}"
       CONNECTOR: "box"
       DATA_SIZE: "small"
-    artifact_paths:
-      - "perf8-report-*/**/*"
-    matrix:
-      - "3.10"
-      - "3.11"
   - label: "🔨 [Python {{ matrix }}] Notion"
     <<: *retries
-    command: ".buildkite/run_functional_test.sh"
+    <<: *ftest_defaults
     env:
       PYTHON_VERSION: "{{ matrix }}"
       CONNECTOR: "notion"
       DATA_SIZE: "small"
-    artifact_paths:
-      - "perf8-report-*/**/*"
-    matrix:
-      - "3.10"
-      - "3.11"
   - label: "🔨 [Python {{ matrix }}] Redis"
     <<: *retries
-    command: ".buildkite/run_functional_test.sh"
+    <<: *ftest_defaults
     env:
       PYTHON_VERSION: "{{ matrix }}"
       CONNECTOR: "redis"
       DATA_SIZE: "small"
-    artifact_paths:
-      - "perf8-report-*/**/*"
-    matrix:
-      - "3.10"
-      - "3.11"
   - label: "🔨 [Python {{ matrix }}] GraphQL"
     <<: *retries
-    command: ".buildkite/run_functional_test.sh"
+    <<: *ftest_defaults
     env:
       PYTHON_VERSION: "{{ matrix }}"
       CONNECTOR: "graphql"
       DATA_SIZE: "small"
-    artifact_paths:
-      - "perf8-report-*/**/*"
-    matrix:
-      - "3.10"
-      - "3.11"
   - label: "🔨 [Python {{ matrix }}] Sandfly"
     <<: *retries
-    command: ".buildkite/run_functional_test.sh"
+    <<: *ftest_defaults
     env:
       PYTHON_VERSION: "{{ matrix }}"
       CONNECTOR: "sandfly"
       DATA_SIZE: "small"
-    artifact_paths:
-      - "perf8-report-*/**/*"
-    matrix:
-      - "3.10"
-      - "3.11"
