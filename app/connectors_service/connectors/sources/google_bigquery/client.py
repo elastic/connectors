@@ -5,12 +5,13 @@
 #
 """Google Bigquery module which fetches rows from a Bigquery table."""
 
+import os
+
 from connectors_sdk.logger import logger
 from google.api_core.client_options import ClientOptions
 from google.auth.credentials import AnonymousCredentials
 from google.cloud import bigquery
 from google.oauth2 import service_account
-import os
 
 RUNNING_FTEST = (
     "RUNNING_FTEST" in os.environ
@@ -46,7 +47,9 @@ class GoogleBigqueryClient:
         """
 
         if RUNNING_FTEST:
-            self._logger.debug("GoogleBigqueryClient: ftest detected, using AnonymousCredentials.")
+            self._logger.debug(
+                "GoogleBigqueryClient: ftest detected, using AnonymousCredentials."
+            )
             credentials = AnonymousCredentials()
             # even AnonymousCredentials will pick up a project_id it finds in the user's
             # ADC config if they have one, so we MUST override that here too.
@@ -64,16 +67,23 @@ class GoogleBigqueryClient:
         if RUNNING_FTEST:
             client_options = ClientOptions(api_endpoint="http://0.0.0.0:9050")
 
-
         if project_id is not None:
-            self._logger.debug(f"GoogleBigqueryClient setting project_id: {project_id}.")
+            self._logger.debug(
+                f"GoogleBigqueryClient setting project_id: {project_id}."
+            )
             if client_options is not None:
-                return bigquery.Client(credentials=credentials, project=project_id, client_options=client_options)
+                return bigquery.Client(
+                    credentials=credentials,
+                    project=project_id,
+                    client_options=client_options,
+                )
             else:
                 return bigquery.Client(credentials=credentials, project=project_id)
         else:
-            self._logger.debug(f"GoogleBigqueryClient setting default project_id.")
+            self._logger.debug("GoogleBigqueryClient setting default project_id.")
             if client_options is not None:
-                return bigquery.Client(credentials=credentials, client_options=client_options)
+                return bigquery.Client(
+                    credentials=credentials, client_options=client_options
+                )
             else:
                 return bigquery.Client(credentials=credentials)

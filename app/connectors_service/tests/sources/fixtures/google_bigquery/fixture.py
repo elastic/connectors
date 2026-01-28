@@ -7,12 +7,12 @@
 
 """Google Bigquery module that generates fixture data on the local mocked Bigquery container."""
 
+import os
+from itertools import islice
+
 from google.api_core.client_options import ClientOptions
 from google.auth.credentials import AnonymousCredentials
 from google.cloud import bigquery
-from google.cloud.bigquery import QueryJobConfig
-from itertools import islice
-import os
 
 client_options = ClientOptions(api_endpoint="http://0.0.0.0:9050")
 
@@ -36,6 +36,7 @@ def partition_all(iterable, chunk_size):
     while chunk := tuple(islice(iterator, chunk_size)):
         yield chunk
 
+
 def insert_rows(client, table):
     print(f"Loading BQ fixture data into {table}", end="")
     rows = []
@@ -46,6 +47,7 @@ def insert_rows(client, table):
         client.insert_rows_json(table, chunk)
     print("done.")
 
+
 async def load():
     """Loads DATA_SIZE records into the Bigquery fixture container."""
     client = bigquery.Client(
@@ -54,9 +56,7 @@ async def load():
         credentials=AnonymousCredentials(),
     )
 
-    schema = [
-        bigquery.SchemaField("testcolumn", "STRING", mode="NULLABLE")
-    ]
+    schema = [bigquery.SchemaField("testcolumn", "STRING", mode="NULLABLE")]
 
     table_ref = client.dataset(DATASET).table(TABLE)
     table = bigquery.Table(table_ref, schema=schema)
@@ -71,4 +71,3 @@ async def load():
     errors = insert_rows(client, table)
     if errors is not None and errors != []:
         print(f"Errors inserting fixture data: {errors}")
-
