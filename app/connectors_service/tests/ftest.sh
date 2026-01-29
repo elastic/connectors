@@ -71,9 +71,16 @@ run_fips_connector() {
   # Set SYSTEM_DIR to the absolute path of the data directory
   local data_dir="$fixture_dir/data"
 
+  # Build docker run arguments
+  local env_file_arg=""
+  if [ -f "$NAME/.env" ]; then
+    env_file_arg="--env-file $NAME/.env"
+  fi
+
   docker run --rm -d \
     --name "$FIPS_CONTAINER_NAME" \
     --network host \
+    $env_file_arg \
     -e ELASTICSEARCH_CONNECTORS_FIPS_MODE=true \
     -e DATA_SIZE="$DATA_SIZE" \
     -e SYSTEM_DIR="$data_dir" \
