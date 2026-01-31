@@ -14,6 +14,7 @@ executes the `main` function of this module, which starts the service.
 import asyncio
 import json
 import os
+import sys
 
 import click
 import yaml
@@ -46,6 +47,11 @@ def load_config(ctx, config):
 
 
 # Main group
+def _is_help_requested():
+    """Check if help is being requested via command line args."""
+    return any(arg in sys.argv for arg in ["-h", "--help"])
+
+
 @click.group(
     invoke_without_command=True,
     context_settings={"help_option_names": ["-h", "--help"]},
@@ -59,12 +65,17 @@ def cli(ctx, config):
         click.echo(ctx.get_help())
         return
 
+    # Skip config loading when in help/completion mode
+    if ctx.resilient_parsing or _is_help_requested():
+        ctx.ensure_object(dict)
+        return
+
     ctx.ensure_object(dict)
     try:
         ctx.obj["config"] = load_config(ctx, config)
     except FileNotFoundError as e:
         click.echo(
-            f"{e} Make sure that the config is either present at the default location ({CONFIG_FILE_PATH}) or it's passed via the '-c' or '--config' option."
+            f"{e} Please run 'connectors login' first, or provide a config file via the '-c' or '--config' option."
         )
         ctx.exit(1)
 
