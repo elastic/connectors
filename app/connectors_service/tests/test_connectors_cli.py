@@ -59,6 +59,41 @@ def test_help_page(commands):
     assert "Commands:" in result.output
 
 
+@pytest.mark.parametrize(
+    "commands",
+    [
+        ["connector", "--help"],
+        ["connector", "-h"],
+        ["index", "--help"],
+        ["index", "-h"],
+        ["job", "--help"],
+        ["job", "-h"],
+    ],
+)
+def test_subcommand_help_without_config(commands, tmp_path, mock_cli_config):
+    """Test that --help works for subcommands even without config file.
+
+    Regression test for https://github.com/elastic/connectors/issues/3700
+    """
+    # Stop the autouse mock so we can test real behavior
+    mock_cli_config.stop()
+
+    runner = CliRunner()
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        # Ensure no config file exists
+        assert not os.path.isfile(CONFIG_FILE_PATH)
+
+        result = runner.invoke(cli, commands)
+
+        # Help should work without requiring config
+        assert result.exit_code == 0, f"Failed with: {result.output}"
+        assert "Usage:" in result.output
+        assert "Options:" in result.output
+
+    # Restart the mock for subsequent tests
+    mock_cli_config.start()
+
+
 @patch("connectors.cli.auth.Auth._Auth__ping_es_client", AsyncMock(return_value=False))
 def test_login_unsuccessful(tmp_path):
     runner = CliRunner()
