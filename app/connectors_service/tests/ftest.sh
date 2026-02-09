@@ -82,6 +82,7 @@ run_fips_connector() {
     --network host \
     $env_file_arg \
     -e ELASTICSEARCH_CONNECTORS_FIPS_MODE=true \
+    -e RUNNING_FTEST=True \
     -e DATA_SIZE="$DATA_SIZE" \
     -e SYSTEM_DIR="$data_dir" \
     -v "$temp_config:/app/config.yml:ro" \
