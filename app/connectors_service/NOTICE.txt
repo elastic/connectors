@@ -172,8 +172,8 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
 PyJWT
-2.10.1
-MIT License
+2.11.0
+UNKNOWN
 The MIT License (MIT)
 
 Copyright (c) 2015-2022 José Padilla
@@ -5053,7 +5053,7 @@ Apache Software License
 
 
 google-auth
-2.40.3
+2.48.0
 Apache Software License
                                  Apache License
                            Version 2.0, January 2004

@@ -18,6 +18,12 @@ definitions:
         - exit_status: 2  # Flaky test
           signal_reason: none
           limit: 2
+  ftest_defaults: &ftest_defaults
+    command:
+      - ".buildkite/run_functional_test.sh"
+    timeout_in_minutes: 45
+    artifact_paths:
+      - "perf8-report-*/**/*"
 
 notify:
   - if: 'build.branch =~ /^((main)|([0-9]+\.[0-9]+))\$/ && (build.state == "failed" || pipeline.started_passing)'
@@ -65,18 +71,14 @@ steps:
 
   - label: ":shipit: Smoke test"
     <<: *retries
+    <<: *test-agents
+    <<: *ftest_defaults
     key: "smoke_test"
-    command: ".buildkite/run_functional_test.sh"
     env:
       PYTHON_VERSION: "3.11" # TODO: can actually do a matrix too
       CONNECTOR: "dir"
       DATA_SIZE: "small"
-    timeout_in_minutes: 45
-    agents:
-      machineType: "n1-standard-8"
-      provider: "gcp"
-      useVault: true
-      image: family/enterprise-search-ubuntu-2204-connectors-py
+
 
   - label: ":pytest: FIPS Unit tests"
     <<: *retries
@@ -112,14 +114,11 @@ steps:
               label: "🔨 MySQL"
               <<: *test-agents
               <<: *retries
+              <<: *ftest_defaults
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
                 - CONNECTOR=mysql
-              command:
-                - ".buildkite/run_functional_test.sh"
-              artifact_paths:
-                - "perf8-report-*/**/*"
 
           - path:
             - "app/connectors_service/connectors/sources/network_drive/**"
@@ -132,14 +131,11 @@ steps:
               label: "🔨 Network Drive"
               <<: *test-agents
               <<: *retries
+              <<: *ftest_defaults
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
                 - CONNECTOR=network_drive
-              command:
-                - ".buildkite/run_functional_test.sh"
-              artifact_paths:
-                - "perf8-report-*/**/*"
 
           - path:
             - "app/connectors_service/connectors/sources/s3/**"
@@ -152,14 +148,11 @@ steps:
               label: "🔨 Amazon S3"
               <<: *test-agents
               <<: *retries
+              <<: *ftest_defaults
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
                 - CONNECTOR=s3
-              command:
-                - ".buildkite/run_functional_test.sh"
-              artifact_paths:
-                - "perf8-report-*/**/*"
 
           - path:
             - "app/connectors_service/connectors/sources/google_cloud_storage/**"
@@ -172,14 +165,11 @@ steps:
               label: "🔨 Google Cloud Storage"
               <<: *test-agents
               <<: *retries
+              <<: *ftest_defaults
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
                 - CONNECTOR=google_cloud_storage
-              command:
-                - ".buildkite/run_functional_test.sh"
-              artifact_paths:
-                - "perf8-report-*/**/*"
 
           - path:
             - "app/connectors_service/connectors/sources/azure_blob_storage/**"
@@ -192,14 +182,11 @@ steps:
               label: "🔨 Azure Blob Storage"
               <<: *test-agents
               <<: *retries
+              <<: *ftest_defaults
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
                 - CONNECTOR=azure_blob_storage
-              command:
-                - ".buildkite/run_functional_test.sh"
-              artifact_paths:
-                - "perf8-report-*/**/*"
 
           - path:
             - "app/connectors_service/connectors/sources/postgresql/**"
@@ -212,14 +199,11 @@ steps:
               label: "🔨 Postgresql"
               <<: *test-agents
               <<: *retries
+              <<: *ftest_defaults
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
                 - CONNECTOR=postgresql
-              command:
-                - ".buildkite/run_functional_test.sh"
-              artifact_paths:
-                - "perf8-report-*/**/*"
 
           - path:
             - "app/connectors_service/connectors/sources/directory/**"
@@ -232,14 +216,11 @@ steps:
               label: "🔨 System Directory"
               <<: *test-agents
               <<: *retries
+              <<: *ftest_defaults
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
                 - CONNECTOR=dir
-              command:
-                - ".buildkite/run_functional_test.sh"
-              artifact_paths:
-                - "perf8-report-*/**/*"
 
           - path:
             - "app/connectors_service/connectors/sources/oracle/**"
@@ -252,14 +233,12 @@ steps:
               label: "🔨 Oracle Database"
               <<: *test-agents
               <<: *retries
+              <<: *ftest_defaults
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
                 - CONNECTOR=oracle
-              command:
-                - ".buildkite/run_functional_test.sh"
-              artifact_paths:
-                - "perf8-report-*/**/*"
+
 
           - path:
             - "app/connectors_service/connectors/sources/sharepoint/sharepoint_server/**"
@@ -272,14 +251,11 @@ steps:
               label: "🔨 Sharepoint Server"
               <<: *test-agents
               <<: *retries
+              <<: *ftest_defaults
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
                 - CONNECTOR=sharepoint_server
-              command:
-                - ".buildkite/run_functional_test.sh"
-              artifact_paths:
-                - "perf8-report-*/**/*"
 
           - path:
             - "app/connectors_service/connectors/sources/sharepoint/sharepoint_online/**"
@@ -292,14 +268,11 @@ steps:
               label: "🔨 Sharepoint Online"
               <<: *test-agents
               <<: *retries
+              <<: *ftest_defaults
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
                 - CONNECTOR=sharepoint_online
-              command:
-                - ".buildkite/run_functional_test.sh"
-              artifact_paths:
-                - "perf8-report-*/**/*"
 
           - path:
             - "app/connectors_service/connectors/sources/mssql/**"
@@ -312,14 +285,11 @@ steps:
               label: "🔨 Microsoft SQL"
               <<: *test-agents
               <<: *retries
+              <<: *ftest_defaults
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
                 - CONNECTOR=mssql
-              command:
-                - ".buildkite/run_functional_test.sh"
-              artifact_paths:
-                - "perf8-report-*/**/*"
 
           - path:
             - "app/connectors_service/connectors/sources/atlassian/**"
@@ -332,14 +302,11 @@ steps:
               label: "🔨 Jira"
               <<: *test-agents
               <<: *retries
+              <<: *ftest_defaults
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
                 - CONNECTOR=jira
-              command:
-                - ".buildkite/run_functional_test.sh"
-              artifact_paths:
-                - "perf8-report-*/**/*"
 
           - path:
             - "app/connectors_service/connectors/sources/atlassian/**"
@@ -352,14 +319,11 @@ steps:
               label: "🔨 Confluence"
               <<: *test-agents
               <<: *retries
+              <<: *ftest_defaults
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
                 - CONNECTOR=confluence
-              command:
-                - ".buildkite/run_functional_test.sh"
-              artifact_paths:
-                - "perf8-report-*/**/*"
 
           - path:
             - "app/connectors_service/connectors/sources/servicenow.py"
@@ -372,14 +336,11 @@ steps:
               label: "🔨 ServiceNow"
               <<: *test-agents
               <<: *retries
+              <<: *ftest_defaults
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
                 - CONNECTOR=servicenow
-              command:
-                - ".buildkite/run_functional_test.sh"
-              artifact_paths:
-                - "perf8-report-*/**/*"
 
           - path:
             - "app/connectors_service/connectors/sources/mongo/**"
@@ -392,14 +353,11 @@ steps:
               label: "🔨 MongoDB"
               <<: *test-agents
               <<: *retries
+              <<: *ftest_defaults
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
                 - CONNECTOR=mongodb
-              command:
-                - ".buildkite/run_functional_test.sh"
-              artifact_paths:
-                - "perf8-report-*/**/*"
 
           - path:
             - "app/connectors_service/connectors/sources/github/**"
@@ -412,14 +370,11 @@ steps:
               label: "🔨 GitHub"
               <<: *test-agents
               <<: *retries
+              <<: *ftest_defaults
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
                 - CONNECTOR=github
-              command:
-                - ".buildkite/run_functional_test.sh"
-              artifact_paths:
-                - "perf8-report-*/**/*"
 
           - path:
             - "app/connectors_service/connectors/sources/google_drive/**"
@@ -432,14 +387,11 @@ steps:
               label: "🔨 Google Drive"
               <<: *test-agents
               <<: *retries
+              <<: *ftest_defaults
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
                 - CONNECTOR=google_drive
-              command:
-                - ".buildkite/run_functional_test.sh"
-              artifact_paths:
-                - "perf8-report-*/**/*"
 
           - path:
             - "app/connectors_service/connectors/sources/dropbox.py"
@@ -452,14 +404,11 @@ steps:
               label: "🔨 Dropbox"
               <<: *test-agents
               <<: *retries
+              <<: *ftest_defaults
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
                 - CONNECTOR=dropbox
-              command:
-                - ".buildkite/run_functional_test.sh"
-              artifact_paths:
-                - "perf8-report-*/**/*"
 
           - path:
             - "app/connectors_service/connectors/sources/onedrive/**"
@@ -472,14 +421,11 @@ steps:
               label: "🔨 OneDrive"
               <<: *test-agents
               <<: *retries
+              <<: *ftest_defaults
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
                 - CONNECTOR=onedrive
-              command:
-                - ".buildkite/run_functional_test.sh"
-              artifact_paths:
-                - "perf8-report-*/**/*"
 
           - path:
             - "app/connectors_service/connectors/sources/salesforce/**"
@@ -492,14 +438,11 @@ steps:
               label: "🔨 Salesforce"
               <<: *test-agents
               <<: *retries
+              <<: *ftest_defaults
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
                 - CONNECTOR=salesforce
-              command:
-                - ".buildkite/run_functional_test.sh"
-              artifact_paths:
-                - "perf8-report-*/**/*"
 
           - path:
             - "app/connectors_service/connectors/sources/zoom/**"
@@ -512,14 +455,11 @@ steps:
               label: "🔨 Zoom"
               <<: *test-agents
               <<: *retries
+              <<: *ftest_defaults
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
                 - CONNECTOR=zoom
-              command:
-                - ".buildkite/run_functional_test.sh"
-              artifact_paths:
-                - "perf8-report-*/**/*"
 
           - path:
             - "app/connectors_service/connectors/sources/box/**"
@@ -532,14 +472,11 @@ steps:
               label: "🔨 Box"
               <<: *test-agents
               <<: *retries
+              <<: *ftest_defaults
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
                 - CONNECTOR=box
-              command:
-                - ".buildkite/run_functional_test.sh"
-              artifact_paths:
-                - "perf8-report-*/**/*"
 
           - path:
             - "app/connectors_service/connectors/sources/microsoft_teams.py"
@@ -552,14 +489,11 @@ steps:
               label: "🔨 Microsoft Teams"
               <<: *test-agents
               <<: *retries
+              <<: *ftest_defaults
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
                 - CONNECTOR=microsoft_teams
-              command:
-                - ".buildkite/run_functional_test.sh"
-              artifact_paths:
-                - "perf8-report-*/**/*"
 
           - path:
             - "app/connectors_service/connectors/sources/notion/**"
@@ -572,14 +506,11 @@ steps:
               label: "🔨 Notion"
               <<: *test-agents
               <<: *retries
+              <<: *ftest_defaults
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
                 - CONNECTOR=notion
-              command:
-                - ".buildkite/run_functional_test.sh"
-              artifact_paths:
-                - "perf8-report-*/**/*"
 
           - path:
             - "app/connectors_service/connectors/sources/redis/**"
@@ -592,14 +523,11 @@ steps:
               label: "🔨 Redis"
               <<: *test-agents
               <<: *retries
+              <<: *ftest_defaults
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
                 - CONNECTOR=redis
-              command:
-                - ".buildkite/run_functional_test.sh"
-              artifact_paths:
-                - "perf8-report-*/**/*"
 
           - path:
             - "app/connectors_service/connectors/sources/graphql.py"
@@ -612,14 +540,11 @@ steps:
               label: "🔨 GraphQL"
               <<: *test-agents
               <<: *retries
+              <<: *ftest_defaults
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
                 - CONNECTOR=graphql
-              command:
-                - ".buildkite/run_functional_test.sh"
-              artifact_paths:
-                - "perf8-report-*/**/*"
 
           - path:
             - "app/connectors_service/connectors/sources/sandfly/**"
@@ -632,14 +557,11 @@ steps:
               label: "🔨 Sandfly"
               <<: *test-agents
               <<: *retries
+              <<: *ftest_defaults
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
                 - CONNECTOR=sandfly
-              command:
-                - ".buildkite/run_functional_test.sh"
-              artifact_paths:
-                - "perf8-report-*/**/*"
 
           - path:
             - "app/connectors_service/connectors/sources/gitlab/**"
@@ -651,14 +573,11 @@ steps:
               label: "🔨 GitLab"
               <<: *test-agents
               <<: *retries
+              <<: *ftest_defaults
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
                 - CONNECTOR=gitlab
-              command:
-                - ".buildkite/run_functional_test.sh"
-              artifact_paths:
-                - "perf8-report-*/**/*"
 
   - group: ":building_construction: Build and Test Python Packages"
     key: "test_packages"
@@ -684,7 +603,7 @@ steps:
   # ----
   - group: ":truck: Packaging and DRA"
     key: "mbp_dra_group"
-    if: "(build.branch == \"main\" || build.branch == \"9.3\" || build.branch == \"9.2\" || build.branch == \"9.1\" || build.branch == \"8.19\" || build.pull_request.labels includes \"ci:packaging\")" # Add new maintenance branches here
+    if: "(build.branch == \"main\" || build.branch == \"9.3\" || build.branch == \"9.2\" || build.branch == \"8.19\" || build.pull_request.labels includes \"ci:packaging\")" # Add new maintenance branches here
     depends_on:
       - "lint"
       - "unit_tests"
