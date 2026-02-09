@@ -26,6 +26,12 @@ from connectors_sdk.logger import logger, set_logger
 from connectors import __version__
 from connectors.build_info import __build_info__
 from connectors.config import load_config
+from connectors.fips import (
+    FIPSConfig,
+    FIPSModeError,
+    filter_fips_compliant_sources,
+    validate_fips_mode,
+)
 from connectors.preflight_check import PreflightCheck
 from connectors.services import get_services
 from connectors.utils import get_source_klass, get_source_klasses
@@ -125,6 +131,22 @@ def run(action, config_file, log_level, filebeat, service_type, uvloop):
         set_logger(logging.INFO, filebeat=filebeat)
         msg = f"Could not parse {config_file}. Check logs for more information"
         logger.exception(f"{msg}.\n{e}")
+        raise ClickException(msg) from e
+
+    # Initialize FIPS mode from config
+    fips_enabled = config.get("service", {}).get("fips_mode", False)
+    FIPSConfig.set_fips_mode(fips_enabled)
+
+    # Enable FIPS mode if configured (validates OpenSSL)
+    try:
+        validate_fips_mode()
+        if fips_enabled:
+            # Filter out non-FIPS-compliant connectors
+            config["sources"] = filter_fips_compliant_sources(config.get("sources", {}))
+    except FIPSModeError as e:
+        set_logger(logging.ERROR, filebeat=filebeat)
+        msg = f"FIPS validation failed: {e}"
+        logger.error(msg)
         raise ClickException(msg) from e
 
     # Precedence: CLI args >> Config Setting >> INFO

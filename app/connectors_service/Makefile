@@ -1,4 +1,4 @@
-.PHONY: install clean typecheck lint autoformat test ftest ftrace install run default-config docker-build docker-run docker-push
+.PHONY: install clean typecheck lint autoformat test ftest ftrace install run default-config docker-build docker-run docker-push fips-ftest
 
 # Default to python3, but if its version is >3.11, try using python3.11 or python3.10.
 PYTHON ?= python3
@@ -102,3 +102,12 @@ deps-csv: .venv/bin/pip-licenses
 	mkdir -p dist
 	.venv/bin/pip-licenses --format=csv --with-urls > dist/dependencies.csv
 	.venv/bin/python scripts/deps-csv.py dist/dependencies.csv
+
+NON_FIPS_CONNECTORS := network_drive sharepoint_server
+
+fips-ftest: .venv/bin/pytest
+	@if echo "$(NON_FIPS_CONNECTORS)" | grep -qw "$(NAME)"; then \
+		echo "SKIPPING: $(NAME) is not FIPS-compliant (uses NTLM authentication)"; \
+	else \
+		FIPS_MODE=true tests/ftest.sh $(NAME) $(PERF8); \
+	fi

@@ -70,6 +70,13 @@ def _parser():
 
     parser.add_argument("--pid", type=int, help="process id to kill", default=0)
 
+    parser.add_argument(
+        "--container",
+        type=str,
+        help="Docker container name to stop (for FIPS mode)",
+        default=None,
+    )
+
     return parser
 
 
@@ -133,7 +140,7 @@ async def _fetch_connector_metadata(es_client):
     return (connector_id, last_synced)
 
 
-async def _monitor_service(pid):
+async def _monitor_service(pid, container=None):
     es_client = _es_client()
     sync_job_timeout = 20 * 60  # 20 minutes timeout
 
@@ -158,9 +165,14 @@ async def _monitor_service(pid):
         logger.error(f"Failed to monitor the sync job. Something bad happened: {e}")
         raise
     finally:
-        # the process should always be killed, no matter the monitor succeeds, times out or raises errors.
-        logger.debug(f"Trying to kill the process with PID '{pid}'")
-        os.kill(pid, signal.SIGINT)
+        if container:
+            # Stop Docker container (for FIPS mode)
+            logger.debug(f"Stopping Docker container '{container}'")
+            await _exec_shell(f"docker stop {container}")
+        else:
+            # the process should always be killed, no matter the monitor succeeds, times out or raises errors.
+            logger.debug(f"Trying to kill the process with PID '{pid}'")
+            os.kill(pid, signal.SIGINT)
         await es_client.close()
 
 
@@ -189,10 +201,10 @@ async def main(args=None):
         return
 
     if action == "monitor":
-        if args.pid == 0:
-            logger.error(f"Invalid pid {args.pid} specified, exit the monitor process.")
+        if args.pid == 0 and not args.container:
+            logger.error("Must specify either --pid or --container for monitor action.")
             return
-        await _monitor_service(args.pid)
+        await _monitor_service(args.pid, container=args.container)
         return
 
     fixture_file = os.path.join(os.path.dirname(__file__), args.name, "fixture.py")
@@ -218,7 +230,7 @@ async def main(args=None):
                     print("3000")
         elif action == "description":
             logger.info(
-                f'Running an e2e test for {args.name} with a {os.environ.get("DATA_SIZE", "medium")} corpus.'
+                f"Running an e2e test for {args.name} with a {os.environ.get('DATA_SIZE', 'medium')} corpus."
             )
         elif action == "check_stack":
             # default behavior: we wait until elasticsearch is responding
