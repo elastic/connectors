@@ -183,7 +183,7 @@ class MultiService:
 
         for task in pending:
             service = task_to_service[task]
-            logger.debug(f"Stopping {service.__class__.__name__}...")
+            logger.info(f"Stopping {service.__class__.__name__}...")
             service.stop()
             task.cancel()
             try:
