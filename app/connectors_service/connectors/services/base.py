@@ -172,11 +172,19 @@ class MultiService:
 
     async def run(self):
         """Runs every service in a task and wait for all tasks."""
-        tasks = [asyncio.create_task(service.run()) for service in self._services]
+        task_to_service = {}
+        for service in self._services:
+            task = asyncio.create_task(service.run())
+            task_to_service[task] = service
 
-        _, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_EXCEPTION)
+        _, pending = await asyncio.wait(
+            task_to_service.keys(), return_when=asyncio.FIRST_EXCEPTION
+        )
 
         for task in pending:
+            service = task_to_service[task]
+            logger.info(f"Stopping {service.__class__.__name__}...")
+            service.stop()
             task.cancel()
             try:
                 await task
