@@ -18,7 +18,7 @@ elif which python > /dev/null; then
     PYTHON_EXECUTABLE="python"
 fi
 
-pushd $PROJECT_ROOT
+pushd $PROJECT_ROOT/app/connectors_service
     if [[ "${CONFIG_FILE:-}" == "" ]]; then
         CONFIG_FILE="${PROJECT_ROOT}/scripts/stack/connectors-config/config.yml"
     fi
@@ -35,7 +35,7 @@ elasticsearch:
         echo "${cliConfigText}" > "$CLI_CONFIG"
     fi
 
-    CONNECTORS_EXE="${PROJECT_ROOT}/bin/connectors"
+    CONNECTORS_EXE="${PROJECT_ROOT}/app/connectors_service/.venv/bin/connectors"
     if [ ! -f "$CONNECTORS_EXE" ]; then
         echo "Could not find a connectors executable, running 'make clean install'"
 
