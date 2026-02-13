@@ -50,8 +50,11 @@ clean:
 	cd $(app_dir); make clean
 	rm -rf .coverage
 
-run:
-	cd $(app_dir); make run
+config.yml:
+	- cp -n $(app_dir)/config.yml.example config.yml
+
+run: config.yml
+	cd $(app_dir); make run CONFIG_FILE=$(CURDIR)/config.yml
 
 build-connectors-base-image:
 	docker build . -f ${DOCKERFILE_PATH} -t connectors-base

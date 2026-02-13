@@ -89,8 +89,10 @@ ftest: .venv/bin/pytest
 ftrace: .venv/bin/pytest $(DOCKERFILE_FTEST_PATH)
 	PERF8_TRACE=true tests/ftest.sh $(NAME) $(PERF8)
 
+CONFIG_FILE ?= config.yml
+
 run: install
-	.venv/bin/elastic-ingest
+	.venv/bin/elastic-ingest -c $(CONFIG_FILE)
 
 default-config: install
 	.venv/bin/elastic-ingest --action config --service-type $(SERVICE_TYPE)
