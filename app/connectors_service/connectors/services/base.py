@@ -177,7 +177,9 @@ class MultiService:
             task = asyncio.create_task(service.run())
             task_to_service[task] = service
 
-        _, pending = await asyncio.wait(task_to_service.keys(), return_when=asyncio.FIRST_EXCEPTION)
+        _, pending = await asyncio.wait(
+            task_to_service.keys(), return_when=asyncio.FIRST_EXCEPTION
+        )
 
         for task in pending:
             service = task_to_service[task]
