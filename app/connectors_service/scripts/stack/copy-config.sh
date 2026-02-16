@@ -17,7 +17,7 @@ fi
 
 is_example_config=false
 if [[ "${CONFIG_PATH:-}" == "" ]]; then
-    CONFIG_PATH="$PROJECT_ROOT/app/connectors_service/config.yml.example"
+    CONFIG_PATH="$PROJECT_ROOT/config.yml.example"
     is_example_config=true
 fi
 

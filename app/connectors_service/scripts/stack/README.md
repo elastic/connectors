@@ -28,14 +28,14 @@ These scripts can also be used as a starting place for adding Connectors to your
 The scripts use a default password for the `elastic` user, however, if you wish to use a different password, you can specify the environment variable `ELASTIC_PASSWORD` before running the script. E.g.:
 
 ```bash
-ELASTIC_PASSWORD="my_new_password" ./scripts/stack/run-stack.sh
+ELASTIC_PASSWORD="my_new_password" ./app/connectors_service/scripts/stack/run-stack.sh
 ```
 
 Note that this method of setting the password, or using the default password, is not secure and should not be used in a production environment without proper steps taken to ensure the password is secured.
 This can include editing the `docker-compose.yml` file and the `set-env.sh` script to hardcode a different password amongst other ways.
 
 Alternatively, if you do not wish to use a different set of credentials, or an API key for authentication, you can run the `./copy-config.sh` script to create a
-copy of the default [config.yml.example](../../config.yml.example) file, and edit the resulting file that will be created in the `scripts/stack/connectors-config` folder.
+copy of the default [config.yml.example](../../config.yml.example) file, and edit the resulting file that will be created in the `app/connectors_service/scripts/stack/connectors-config` folder.
 
 By default, these Connector scripts will use a `SNAPSHOT` version of the Docker image.
 The version is defined in the [VERSION file](../../connectors/VERSION).
@@ -43,22 +43,22 @@ If you do not wish to use a `SNAPSHOT` version, add the `--no-snapshot` flag whe
 You can also specify an alternative base version by setting the environment variable `CONNECTORS_VERSION` before running the script. e.g.:
 
 ```bash
-CONNECTORS_VERSION=8.11.2.0 ./scripts/stack/run-stack.sh --no-snapshot
+CONNECTORS_VERSION=8.11.2.0 ./app/connectors_service/scripts/stack/run-stack.sh --no-snapshot
 ```
 
 When running the script, the Elasticsearch and Kibana versions will use the same stack version as the `CONNECTORS_VERSION`, however, you can additionally specify these before running:
 
 ```bash
-ELASTICSEARCH_VERSION=8.11.2 KIBANA_VERSION=8.11.2 CONNECTORS_VERSION=8.11.2.0 ./scripts/stack/run-stack.sh
+ELASTICSEARCH_VERSION=8.11.2 KIBANA_VERSION=8.11.2 CONNECTORS_VERSION=8.11.2.0 ./app/connectors_service/scripts/stack/run-stack.sh
 ```
 
 Once the stack is running, you can monitor the logs from the Connectors instance by running:
 ```bash
-./scripts/stack/view-connectors-logs.sh
+./app/connectors_service/scripts/stack/view-connectors-logs.sh
 ```
 or:
 ```bash
-docker-compose -f ./scripts/stack/docker/docker-compose.yml logs -f elastic-connectors
+docker-compose -f ./app/connectors_service/scripts/stack/docker/docker-compose.yml logs -f elastic-connectors
 ```
 
 ## Prompted Configuration
@@ -68,9 +68,9 @@ ask if you want to set up the connectors configuration. If you enter "y" to run
 the configurator, it will take you through a set of prompts using the
 [Connectors CLI](../../connectors/connectors_cli.py) to create a new index and connector.
 
-The resulting configuration will be saved to the `scripts/stack/connectors-config/config.yml`
+The resulting configuration will be saved to the `app/connectors_service/scripts/stack/connectors-config/config.yml`
 file that is used to start the Connectors container. Note that using the configurator,
-it will modify the `scripts/stack/connectors-config/config.yml` file. You can restore it
+it will modify the `app/connectors_service/scripts/stack/connectors-config/config.yml` file. You can restore it
 by copying over the [example config.yml.example](./connectors-config/config.yml.example) file
 to `config.yml` in the directory.
 
@@ -95,16 +95,16 @@ script, you can choose to manually provide your connectors configurations and
 use those instead. To do this and still use the `run-stack.sh` script:
 
 1. Run the stack without the connectors service:
-    1. Run `./scripts/stack/run-stack.sh --no-connectors` to run the full stack without the Connectors service
+    1. Run `./app/connectors_service/scripts/stack/run-stack.sh --no-connectors` to run the full stack without the Connectors service
     2. From the main menu of Kibana, go to "Content", "Indices", and create a new index for your connector
     3. Choose the "Connector" index type
     4. Select the connector type
     5. Set the index name
     6. Generate a new API Key, and copy it somewhere safe
     7. Set Connector name and description (optional)
-    8. Copy the resulting connector_id, service_type, and api_key into a new entry in the `scripts/stack/connectors-config/config.yml` file
+    8. Copy the resulting connector_id, service_type, and api_key into a new entry in the `app/connectors_service/scripts/stack/connectors-config/config.yml` file
     9. Repeat as necessary for all the connectors you wish to create
-3. run `./scripts/stack/run-stack.sh --no-configuration --connectors-only` again to run the Connectors service without prompting for configuration. Once running:
+3. run `./app/connectors_service/scripts/stack/run-stack.sh --no-configuration --connectors-only` again to run the Connectors service without prompting for configuration. Once running:
     1. From the main menu of Kibana, click _Search_ > _Content_ > _Connectors_
     2. Click on your connector
     3. Click on the "Configuration" tab
@@ -118,7 +118,7 @@ use those instead. To do this and still use the `run-stack.sh` script:
 This is the main script that sets up and runs an Elasticsearch, Kibana, and Connectors stack.
 
 ```bash
-./scripts/stack/run-stack.sh
+./app/connectors_service/scripts/stack/run-stack.sh
 ```
 
 By default, the script will start an Elasticsearch and Kibana instance, then it will ask the user if they want
@@ -137,7 +137,7 @@ Command line options:
 This script is used to stop the stack, and optionally remove any data volumes and reset the configuration file.
 
 ```bash
-./scripts/stack/stop-stack.sh
+./app/connectors_service/scripts/stack/stop-stack.sh
 ```
 
 Command line options:
@@ -149,7 +149,7 @@ Command line options:
 Views the Connectors Docker container logs, optionally continously watching the log output.
 
 ```bash
-./scripts/stack/view-connectors-logs.sh
+./app/connectors_service/scripts/stack/view-connectors-logs.sh
 ```
 
 Command line options:
