@@ -100,9 +100,6 @@ class BaseService(metaclass=_Registry):
         self.running = True
         try:
             await self._run()
-        except asyncio.CancelledError:
-            if self.running:
-                raise
         finally:
             self.stop()
 

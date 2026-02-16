@@ -46,7 +46,10 @@ async def run_service_with_stop_after(service, stop_after=0):
 
         await asyncio.sleep(0)
 
-    await asyncio.gather(service.run(), _terminate())
+    try:
+        await asyncio.gather(service.run(), _terminate())
+    except asyncio.CancelledError:
+        pass
 
 
 async def create_and_run_service(
