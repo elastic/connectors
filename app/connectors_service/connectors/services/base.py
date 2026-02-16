@@ -100,6 +100,9 @@ class BaseService(metaclass=_Registry):
         self.running = True
         try:
             await self._run()
+        except asyncio.CancelledError:
+            if self.running:
+                raise
         finally:
             self.stop()
 
@@ -189,7 +192,7 @@ class MultiService:
             try:
                 await task
             except asyncio.CancelledError:
-                logger.error("Service did not handle cancellation gracefully.")
+                pass
 
     def shutdown(self, sig):
         logger.info(f"Caught {sig}. Graceful shutdown.")

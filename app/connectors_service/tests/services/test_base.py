@@ -106,6 +106,8 @@ async def test_multiservice_run_stops_all_services_when_one_raises_exception():
     assert not service_1.cancelled
     assert service_2.cancelled
     assert service_3.cancelled
+    assert service_2.stopped
+    assert service_3.stopped
 
 
 @pytest.mark.asyncio
