@@ -46,7 +46,10 @@ async def run_service_with_stop_after(service, stop_after=0):
 
         await asyncio.sleep(0)
 
-    await asyncio.gather(service.run(), _terminate())
+    try:
+        await asyncio.gather(service.run(), _terminate())
+    except asyncio.CancelledError:
+        pass
 
 
 async def create_and_run_service(
@@ -106,6 +109,8 @@ async def test_multiservice_run_stops_all_services_when_one_raises_exception():
     assert not service_1.cancelled
     assert service_2.cancelled
     assert service_3.cancelled
+    assert service_2.stopped
+    assert service_3.stopped
 
 
 @pytest.mark.asyncio
