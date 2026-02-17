@@ -190,7 +190,7 @@ class CancellableSleeps:
                 return await task
             except asyncio.CancelledError:
                 logger.debug("Sleep canceled")
-                return result
+                raise
             finally:
                 self._sleeps.remove(task)
 
