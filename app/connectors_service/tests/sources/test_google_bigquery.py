@@ -5,6 +5,13 @@
 #
 """Tests the Google Bigquery source."""
 
+# Python 3.10 id deprecated in google.api_core and will be unsupported
+# on 2026-10-04, causing test failures on that version.  Suppress
+# these for now.
+import warnings
+
+warnings.simplefilter(action="ignore", category=FutureWarning)
+
 import json
 from contextlib import asynccontextmanager
 from unittest.mock import Mock, patch
