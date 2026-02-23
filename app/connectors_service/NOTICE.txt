@@ -8520,7 +8520,7 @@ POSSIBILITY OF SUCH DAMAGE.
 
 
 xmltodict
-1.0.3
+1.0.4
 UNKNOWN
 Copyright (C) 2012 Martin Blech and individual contributors.
 
