@@ -248,3 +248,45 @@ spec:
           search-eng: {}
           everyone:
             access_level: "READ_ONLY"
+
+########
+# Version Bump Automation Pipeline
+########
+---
+apiVersion: backstage.io/v1alpha1
+kind: Resource
+metadata:
+  name: connectors-version-bump-pipeline
+  description: Buildkite pipeline for connectors version bump
+  links:
+    - title: Pipeline
+      url: https://buildkite.com/elastic/connectors-version-bump
+spec:
+  type: buildkite-pipeline
+  owner: "group:search-extract-and-transform"
+  system: buildkite
+  implementation:
+    apiVersion: buildkite.elastic.dev/v1
+    kind: Pipeline
+    metadata:
+      name: connectors-version-bump-pipeline
+      description: Buildkite pipeline for connectors version bump
+    spec:
+      repository: elastic/connectors
+      pipeline_file: ".buildkite/version-bump-pipeline.yml"
+      branch_configuration: "main"
+      cancel_intermediate_builds: false
+      skip_intermediate_builds: false
+      provider_settings:
+        build_branches: false
+        build_pull_requests: false
+        trigger_mode: none
+      teams:
+        everyone:
+          access_level: "READ_ONLY"
+        search-extract-and-transform: {}
+        search-productivity-team: {}
+        search-inference-team: {}
+        enterprise-search: {}
+        release-eng:
+          access_level: BUILD_AND_READ
