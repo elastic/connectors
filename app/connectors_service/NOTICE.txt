@@ -2072,7 +2072,7 @@ SOFTWARE.
 
 
 azure-core
-1.38.2
+1.38.0
 MIT License
 Copyright (c) Microsoft Corporation.
 
@@ -6492,7 +6492,7 @@ SOFTWARE.
 
 
 greenlet
-3.3.2
+3.3.1
 UNKNOWN
 The following files are derived from Stackless Python and are subject to the
 same license as Stackless Python:
@@ -21384,8 +21384,8 @@ POSSIBILITY OF SUCH DAMAGE.
 
 
 xmltodict
-1.0.3
-UNKNOWN
+1.0.2
+MIT License
 Copyright (C) 2012 Martin Blech and individual contributors.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
