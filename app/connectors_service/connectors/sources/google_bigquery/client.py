@@ -7,10 +7,10 @@
 
 import os
 
+import google.cloud.bigquery as bigquery
 from connectors_sdk.logger import logger
 from google.api_core.client_options import ClientOptions
 from google.auth.credentials import AnonymousCredentials
-from google.cloud import bigquery
 from google.oauth2 import service_account
 
 RUNNING_FTEST = (
