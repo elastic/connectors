@@ -131,6 +131,8 @@ addopts = [
 ]
 filterwarnings = [
     "error",
+    # google.api_core warns about Python 3.10 EOL; we still support 3.10
+    "ignore::FutureWarning:google.api_core._python_version_support",
     # botocore has this warning that is reported by them to be irrelevant
     "ignore:.*urllib3.contrib.pyopenssl.*:DeprecationWarning:botocore.*",
     # latest main of aioresponses does not have this problem, but current package uses deprecated pkg_resources API
