@@ -24,6 +24,13 @@ definitions:
     timeout_in_minutes: 45
     artifact_paths:
       - "perf8-report-*/**/*"
+  fips_ftest_defaults: &fips_ftest_defaults
+    command:
+      - ".buildkite/run_fips_functional_test.sh"
+    depends_on: "build_fips_image"
+    timeout_in_minutes: 45
+    artifact_paths:
+      - "perf8-report-*/**/*"
 
 notify:
   - if: 'build.branch =~ /^((main)|([0-9]+\.[0-9]+))\$/ && (build.state == "failed" || pipeline.started_passing)'
@@ -80,9 +87,19 @@ steps:
       DATA_SIZE: "small"
 
 
+  - label: ":docker: Build FIPS Docker image"
+    <<: *retries
+    <<: *test-agents
+    key: "build_fips_image"
+    command: ".buildkite/run_fips_build.sh"
+    timeout_in_minutes: 45
+    artifact_paths:
+      - ".artifacts/connectors-fips-*.tar.gz"
+
   - label: ":pytest: FIPS Unit tests"
     <<: *retries
     key: "fips_unit_tests"
+    depends_on: "build_fips_image"
     commands: ".buildkite/run_fips_unit_tests.sh"
     env:
       PYTHON_VERSION: "{{ matrix }}"
@@ -95,6 +112,16 @@ steps:
     matrix:
       - "3.10"
       - "3.11"
+
+  - label: ":shipit: FIPS Smoke test"
+    <<: *retries
+    <<: *test-agents
+    <<: *fips_ftest_defaults
+    key: "fips_smoke_test"
+    env:
+      PYTHON_VERSION: "3.11"
+      CONNECTOR: "dir"
+      DATA_SIZE: "small"
 
   - label: ":sweating: Checking for changes in connectors"
     key: "relevant_ftests"
@@ -574,6 +601,455 @@ steps:
               <<: *test-agents
               <<: *retries
               <<: *ftest_defaults
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=gitlab
+
+  - label: ":lock: Checking for changes in connectors (FIPS)"
+    key: "relevant_fips_ftests"
+    plugins:
+      monorepo-diff#v1.1.0:
+        diff: ".buildkite/diff ${BUILDKITE_COMMIT}"
+        wait: false
+        watch:
+          - path:
+            - "app/connectors_service/connectors/sources/mysql/**"
+            - "app/connectors_service/tests/sources/fixtures/mysql/**"
+            - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "Dockerfile.fips"
+            - "app/connectors_service/tests/Dockerfile.fips-ftest"
+            - "app/connectors_service/pyproject.toml"
+            config:
+              label: "🔒 FIPS MySQL"
+              <<: *test-agents
+              <<: *retries
+              <<: *fips_ftest_defaults
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=mysql
+
+          - path:
+            - "app/connectors_service/connectors/sources/s3/**"
+            - "app/connectors_service/tests/sources/fixtures/s3/**"
+            - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "Dockerfile.fips"
+            - "app/connectors_service/tests/Dockerfile.fips-ftest"
+            - "app/connectors_service/pyproject.toml"
+            config:
+              label: "🔒 FIPS Amazon S3"
+              <<: *test-agents
+              <<: *retries
+              <<: *fips_ftest_defaults
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=s3
+
+          - path:
+            - "app/connectors_service/connectors/sources/google_cloud_storage/**"
+            - "app/connectors_service/tests/sources/fixtures/google_cloud_storage/**"
+            - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "Dockerfile.fips"
+            - "app/connectors_service/tests/Dockerfile.fips-ftest"
+            - "app/connectors_service/pyproject.toml"
+            config:
+              label: "🔒 FIPS Google Cloud Storage"
+              <<: *test-agents
+              <<: *retries
+              <<: *fips_ftest_defaults
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=google_cloud_storage
+
+          - path:
+            - "app/connectors_service/connectors/sources/azure_blob_storage/**"
+            - "app/connectors_service/tests/sources/fixtures/azure_blob_storage/**"
+            - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "Dockerfile.fips"
+            - "app/connectors_service/tests/Dockerfile.fips-ftest"
+            - "app/connectors_service/pyproject.toml"
+            config:
+              label: "🔒 FIPS Azure Blob Storage"
+              <<: *test-agents
+              <<: *retries
+              <<: *fips_ftest_defaults
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=azure_blob_storage
+
+          - path:
+            - "app/connectors_service/connectors/sources/postgresql/**"
+            - "app/connectors_service/tests/sources/fixtures/postgresql/**"
+            - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "Dockerfile.fips"
+            - "app/connectors_service/tests/Dockerfile.fips-ftest"
+            - "app/connectors_service/pyproject.toml"
+            config:
+              label: "🔒 FIPS Postgresql"
+              <<: *test-agents
+              <<: *retries
+              <<: *fips_ftest_defaults
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=postgresql
+
+          - path:
+            - "app/connectors_service/connectors/sources/directory/**"
+            - "app/connectors_service/tests/sources/fixtures/dir/**"
+            - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "Dockerfile.fips"
+            - "app/connectors_service/tests/Dockerfile.fips-ftest"
+            - "app/connectors_service/pyproject.toml"
+            config:
+              label: "🔒 FIPS System Directory"
+              <<: *test-agents
+              <<: *retries
+              <<: *fips_ftest_defaults
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=dir
+
+          - path:
+            - "app/connectors_service/connectors/sources/oracle/**"
+            - "app/connectors_service/tests/sources/fixtures/oracle/**"
+            - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "Dockerfile.fips"
+            - "app/connectors_service/tests/Dockerfile.fips-ftest"
+            - "app/connectors_service/pyproject.toml"
+            config:
+              label: "🔒 FIPS Oracle Database"
+              <<: *test-agents
+              <<: *retries
+              <<: *fips_ftest_defaults
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=oracle
+
+          - path:
+            - "app/connectors_service/connectors/sources/sharepoint/sharepoint_online/**"
+            - "app/connectors_service/tests/sources/fixtures/sharepoint_online/**"
+            - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "Dockerfile.fips"
+            - "app/connectors_service/tests/Dockerfile.fips-ftest"
+            - "app/connectors_service/pyproject.toml"
+            config:
+              label: "🔒 FIPS Sharepoint Online"
+              <<: *test-agents
+              <<: *retries
+              <<: *fips_ftest_defaults
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=sharepoint_online
+
+          - path:
+            - "app/connectors_service/connectors/sources/mssql/**"
+            - "app/connectors_service/tests/sources/fixtures/mssql/**"
+            - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "Dockerfile.fips"
+            - "app/connectors_service/tests/Dockerfile.fips-ftest"
+            - "app/connectors_service/pyproject.toml"
+            config:
+              label: "🔒 FIPS Microsoft SQL"
+              <<: *test-agents
+              <<: *retries
+              <<: *fips_ftest_defaults
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=mssql
+
+          - path:
+            - "app/connectors_service/connectors/sources/atlassian/**"
+            - "app/connectors_service/tests/sources/fixtures/jira/**"
+            - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "Dockerfile.fips"
+            - "app/connectors_service/tests/Dockerfile.fips-ftest"
+            - "app/connectors_service/pyproject.toml"
+            config:
+              label: "🔒 FIPS Jira"
+              <<: *test-agents
+              <<: *retries
+              <<: *fips_ftest_defaults
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=jira
+
+          - path:
+            - "app/connectors_service/connectors/sources/atlassian/**"
+            - "app/connectors_service/tests/sources/fixtures/confluence/**"
+            - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "Dockerfile.fips"
+            - "app/connectors_service/tests/Dockerfile.fips-ftest"
+            - "app/connectors_service/pyproject.toml"
+            config:
+              label: "🔒 FIPS Confluence"
+              <<: *test-agents
+              <<: *retries
+              <<: *fips_ftest_defaults
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=confluence
+
+          - path:
+            - "app/connectors_service/connectors/sources/servicenow.py"
+            - "app/connectors_service/tests/sources/fixtures/servicenow/**"
+            - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "Dockerfile.fips"
+            - "app/connectors_service/tests/Dockerfile.fips-ftest"
+            - "app/connectors_service/pyproject.toml"
+            config:
+              label: "🔒 FIPS ServiceNow"
+              <<: *test-agents
+              <<: *retries
+              <<: *fips_ftest_defaults
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=servicenow
+
+          - path:
+            - "app/connectors_service/connectors/sources/mongo/**"
+            - "app/connectors_service/tests/sources/fixtures/mongodb/**"
+            - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "Dockerfile.fips"
+            - "app/connectors_service/tests/Dockerfile.fips-ftest"
+            - "app/connectors_service/pyproject.toml"
+            config:
+              label: "🔒 FIPS MongoDB"
+              <<: *test-agents
+              <<: *retries
+              <<: *fips_ftest_defaults
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=mongodb
+
+          - path:
+            - "app/connectors_service/connectors/sources/github/**"
+            - "app/connectors_service/tests/sources/fixtures/github/**"
+            - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "Dockerfile.fips"
+            - "app/connectors_service/tests/Dockerfile.fips-ftest"
+            - "app/connectors_service/pyproject.toml"
+            config:
+              label: "🔒 FIPS GitHub"
+              <<: *test-agents
+              <<: *retries
+              <<: *fips_ftest_defaults
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=github
+
+          - path:
+            - "app/connectors_service/connectors/sources/google_drive/**"
+            - "app/connectors_service/tests/sources/fixtures/google_drive/**"
+            - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "Dockerfile.fips"
+            - "app/connectors_service/tests/Dockerfile.fips-ftest"
+            - "app/connectors_service/pyproject.toml"
+            config:
+              label: "🔒 FIPS Google Drive"
+              <<: *test-agents
+              <<: *retries
+              <<: *fips_ftest_defaults
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=google_drive
+
+          - path:
+            - "app/connectors_service/connectors/sources/dropbox.py"
+            - "app/connectors_service/tests/sources/fixtures/dropbox/**"
+            - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "Dockerfile.fips"
+            - "app/connectors_service/tests/Dockerfile.fips-ftest"
+            - "app/connectors_service/pyproject.toml"
+            config:
+              label: "🔒 FIPS Dropbox"
+              <<: *test-agents
+              <<: *retries
+              <<: *fips_ftest_defaults
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=dropbox
+
+          - path:
+            - "app/connectors_service/connectors/sources/onedrive/**"
+            - "app/connectors_service/tests/sources/fixtures/onedrive/**"
+            - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "Dockerfile.fips"
+            - "app/connectors_service/tests/Dockerfile.fips-ftest"
+            - "app/connectors_service/pyproject.toml"
+            config:
+              label: "🔒 FIPS OneDrive"
+              <<: *test-agents
+              <<: *retries
+              <<: *fips_ftest_defaults
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=onedrive
+
+          - path:
+            - "app/connectors_service/connectors/sources/salesforce/**"
+            - "app/connectors_service/tests/sources/fixtures/salesforce/**"
+            - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "Dockerfile.fips"
+            - "app/connectors_service/tests/Dockerfile.fips-ftest"
+            - "app/connectors_service/pyproject.toml"
+            config:
+              label: "🔒 FIPS Salesforce"
+              <<: *test-agents
+              <<: *retries
+              <<: *fips_ftest_defaults
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=salesforce
+
+          - path:
+            - "app/connectors_service/connectors/sources/zoom/**"
+            - "app/connectors_service/tests/sources/fixtures/zoom/**"
+            - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "Dockerfile.fips"
+            - "app/connectors_service/tests/Dockerfile.fips-ftest"
+            - "app/connectors_service/pyproject.toml"
+            config:
+              label: "🔒 FIPS Zoom"
+              <<: *test-agents
+              <<: *retries
+              <<: *fips_ftest_defaults
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=zoom
+
+          - path:
+            - "app/connectors_service/connectors/sources/box/**"
+            - "app/connectors_service/tests/sources/fixtures/box/**"
+            - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "Dockerfile.fips"
+            - "app/connectors_service/tests/Dockerfile.fips-ftest"
+            - "app/connectors_service/pyproject.toml"
+            config:
+              label: "🔒 FIPS Box"
+              <<: *test-agents
+              <<: *retries
+              <<: *fips_ftest_defaults
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=box
+
+          - path:
+            - "app/connectors_service/connectors/sources/microsoft_teams.py"
+            - "app/connectors_service/tests/sources/fixtures/microsoft_teams/**"
+            - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "Dockerfile.fips"
+            - "app/connectors_service/tests/Dockerfile.fips-ftest"
+            - "app/connectors_service/pyproject.toml"
+            config:
+              label: "🔒 FIPS Microsoft Teams"
+              <<: *test-agents
+              <<: *retries
+              <<: *fips_ftest_defaults
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=microsoft_teams
+
+          - path:
+            - "app/connectors_service/connectors/sources/notion/**"
+            - "app/connectors_service/tests/sources/fixtures/notion/**"
+            - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "Dockerfile.fips"
+            - "app/connectors_service/tests/Dockerfile.fips-ftest"
+            - "app/connectors_service/pyproject.toml"
+            config:
+              label: "🔒 FIPS Notion"
+              <<: *test-agents
+              <<: *retries
+              <<: *fips_ftest_defaults
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=notion
+
+          - path:
+            - "app/connectors_service/connectors/sources/redis/**"
+            - "app/connectors_service/tests/sources/fixtures/redis/**"
+            - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "Dockerfile.fips"
+            - "app/connectors_service/tests/Dockerfile.fips-ftest"
+            - "app/connectors_service/pyproject.toml"
+            config:
+              label: "🔒 FIPS Redis"
+              <<: *test-agents
+              <<: *retries
+              <<: *fips_ftest_defaults
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=redis
+
+          - path:
+            - "app/connectors_service/connectors/sources/graphql.py"
+            - "app/connectors_service/tests/sources/fixtures/graphql/**"
+            - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "Dockerfile.fips"
+            - "app/connectors_service/tests/Dockerfile.fips-ftest"
+            - "app/connectors_service/pyproject.toml"
+            config:
+              label: "🔒 FIPS GraphQL"
+              <<: *test-agents
+              <<: *retries
+              <<: *fips_ftest_defaults
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=graphql
+
+          - path:
+            - "app/connectors_service/connectors/sources/sandfly/**"
+            - "app/connectors_service/tests/sources/fixtures/sandfly/**"
+            - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "Dockerfile.fips"
+            - "app/connectors_service/tests/Dockerfile.fips-ftest"
+            - "app/connectors_service/pyproject.toml"
+            config:
+              label: "🔒 FIPS Sandfly"
+              <<: *test-agents
+              <<: *retries
+              <<: *fips_ftest_defaults
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=sandfly
+
+          - path:
+            - "app/connectors_service/connectors/sources/gitlab/**"
+            - "app/connectors_service/tests/sources/fixtures/gitlab/**"
+            - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "Dockerfile.fips"
+            - "app/connectors_service/tests/Dockerfile.fips-ftest"
+            - "app/connectors_service/pyproject.toml"
+            config:
+              label: "🔒 FIPS GitLab"
+              <<: *test-agents
+              <<: *retries
+              <<: *fips_ftest_defaults
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
