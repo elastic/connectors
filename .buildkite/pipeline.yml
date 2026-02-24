@@ -126,7 +126,7 @@ steps:
   - label: ":sweating: Checking for changes in connectors"
     key: "relevant_ftests"
     plugins:
-      monorepo-diff#v1.1.0:
+      monorepo-diff#v1.5.2:
         diff: ".buildkite/diff ${BUILDKITE_COMMIT}"
         wait: false
         watch:
@@ -609,7 +609,7 @@ steps:
   - label: ":lock: Checking for changes in connectors (FIPS)"
     key: "relevant_fips_ftests"
     plugins:
-      monorepo-diff#v1.1.0:
+      monorepo-diff#v1.5.2:
         diff: ".buildkite/diff ${BUILDKITE_COMMIT}"
         wait: false
         watch:
