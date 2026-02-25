@@ -37,4 +37,4 @@ if [ -v BUILDKITE ]; then
   sudo sysctl -w vm.max_map_count=262144
 fi
 
-PERF8=yes NAME=$CONNECTOR DATA_SIZE=$DATA_SIZE make fips-ftest
+PERF8=no NAME=$CONNECTOR DATA_SIZE=$DATA_SIZE make fips-ftest
