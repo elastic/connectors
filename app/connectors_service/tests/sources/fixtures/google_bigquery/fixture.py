@@ -31,6 +31,10 @@ match DATA_SIZE:
         RECORD_COUNT = 25000
 
 
+def get_num_docs():
+    print(RECORD_COUNT)
+
+
 def partition_all(iterable, chunk_size):
     iterator = iter(iterable)
     while chunk := tuple(islice(iterator, chunk_size)):
