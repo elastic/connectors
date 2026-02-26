@@ -3645,7 +3645,7 @@ these terms.
 
 
 elasticsearch-connectors-sdk
-9.3.1
+9.3.2
 UNKNOWN
 UNKNOWN
 
