@@ -47,24 +47,23 @@ if [[ "${connectors_only}" != true ]]; then
   source $CURDIR/wait-for-kibana.sh
 fi
 
-source ./copy-config.sh
-
-run_configurator="no"
-if [[ "${bypass_config:-}" == false ]]; then
-  while true; do
-    read -p "Do you want to run the configurator? (y/n) " yn
-    case $yn in
-      [yY] ) run_configurator="yes"; break;;
-      [nN] ) break;;
-      * ) echo "invalid response";;
-    esac
-  done
-  if [ $run_configurator == "yes" ]; then
-    source ./configure-connectors.sh
-  fi
-fi
-
 if [ "${no_connectors:-}" == false ]; then
+  source ./copy-config.sh
+
+  run_configurator="no"
+  if [[ "${bypass_config:-}" == false ]]; then
+    while true; do
+      read -p "Do you want to run the configurator? (y/n) " yn
+      case $yn in
+        [yY] ) run_configurator="yes"; break;;
+        [nN] ) break;;
+        * ) echo "invalid response";;
+      esac
+    done
+    if [ $run_configurator == "yes" ]; then
+      source ./configure-connectors.sh
+    fi
+  fi
   echo "Starting Elastic Connectors..."
 
   config_dir="$PROJECT_ROOT/scripts/stack/connectors-config"
