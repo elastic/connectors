@@ -1906,7 +1906,7 @@ SOFTWARE.
 
 
 azure-core
-1.38.1
+1.38.2
 MIT License
 Copyright (c) Microsoft Corporation.
 
@@ -3547,7 +3547,7 @@ Apache Software License
 
 
 elasticsearch-connectors
-9.3.1
+9.3.2
 UNKNOWN
 Elastic License 2.0
 
@@ -4380,7 +4380,7 @@ SOFTWARE.
 
 
 greenlet
-3.3.1
+3.3.2
 UNKNOWN
 The following files are derived from Stackless Python and are subject to the
 same license as Stackless Python:
@@ -8520,7 +8520,7 @@ POSSIBILITY OF SUCH DAMAGE.
 
 
 xmltodict
-1.0.3
+1.0.4
 UNKNOWN
 Copyright (C) 2012 Martin Blech and individual contributors.
 
