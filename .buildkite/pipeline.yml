@@ -96,7 +96,7 @@ steps:
     artifact_paths:
       - ".artifacts/connectors-fips-*.tar.gz"
 
-  - label: ":pytest: FIPS Unit tests"
+  - label: ":pytest: FIPS Unit tests {{ matrix }}"
     <<: *retries
     key: "fips_unit_tests"
     depends_on: "build_fips_image"
