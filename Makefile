@@ -40,7 +40,16 @@ typecheck: install
 	cd $(connectors_sdk_dir); make typecheck
 	cd $(app_dir); make typecheck
 
-lint: install
+check-versions:
+	@if ! diff -q $(app_dir)/connectors/VERSION $(connectors_sdk_dir)/connectors_sdk/VERSION > /dev/null 2>&1; then \
+		echo "ERROR: VERSION files do not match!"; \
+		echo "  $(app_dir)/connectors/VERSION: $$(cat $(app_dir)/connectors/VERSION)"; \
+		echo "  $(connectors_sdk_dir)/connectors_sdk/VERSION: $$(cat $(connectors_sdk_dir)/connectors_sdk/VERSION)"; \
+		exit 1; \
+	fi
+	@echo "VERSION files match: $$(cat $(app_dir)/connectors/VERSION)"
+
+lint: install check-versions
 	cd $(connectors_sdk_dir); make lint
 	cd $(app_dir); make lint
 
@@ -53,8 +62,11 @@ clean:
 	cd $(app_dir); make clean
 	rm -rf .coverage
 
-run:
-	cd $(app_dir); make run
+config.yml:
+	- cp -n $(app_dir)/config.yml.example config.yml
+
+run: config.yml
+	cd $(app_dir); make run CONFIG_FILE=$(CURDIR)/config.yml
 
 build-connectors-base-image:
 	docker build . -f ${DOCKERFILE_PATH} -t connectors-base

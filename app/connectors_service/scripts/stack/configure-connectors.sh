@@ -35,7 +35,7 @@ elasticsearch:
         echo "${cliConfigText}" > "$CLI_CONFIG"
     fi
 
-    CONNECTORS_EXE="${PROJECT_ROOT}/bin/connectors"
+    CONNECTORS_EXE="${PROJECT_ROOT}/.venv/bin/connectors"
     if [ ! -f "$CONNECTORS_EXE" ]; then
         echo "Could not find a connectors executable, running 'make clean install'"
 
