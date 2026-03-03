@@ -15,7 +15,7 @@ These connectors are available to be self-managed on your own infrastructure.
 
 ℹ️ For an overview of the steps involved in deploying connectors refer to [**Self-managed connectors**](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-build-connector.html) in the official Elastic documentation.
 
-To get started quickly with self-managed connectors using Docker Compose, check out this [README file](./scripts/stack/README.md).
+To get started quickly with self-managed connectors using Docker Compose, check out this [README file](./app/connectors_service/scripts/stack/README.md).
 
 ### Connector documentation
 
@@ -69,9 +69,9 @@ The framework ensures compatibility, makes it easier for our team to review PRs,
 
 ## Running a self-managed stack
 
-This repo provides a [set of scripts](./scripts/stack) to allow a user to set up a full Elasticsearch, Kibana, and Connectors service stack using Docker.
+This repo provides a [set of scripts](./app/connectors_service/scripts/stack) to allow a user to set up a full Elasticsearch, Kibana, and Connectors service stack using Docker.
 This is useful to get up and running with the Connectors framework with minimal effort, and provides a guided set of prompts for setup and configuration.
-For more information, instructions, and options, see the [README file](./scripts/stack/README.md) in the stack folder.
+For more information, instructions, and options, see the [README file](./app/connectors_service/scripts/stack/README.md) in the stack folder.
 
 ### Framework use cases
 
