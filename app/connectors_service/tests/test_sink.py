@@ -1216,14 +1216,14 @@ async def test_batch_bulk_with_error_monitor():
 
         for id_ in range(num_noop):
             call_result["items"].append(
-                {OP_UPDATE: {"_id": str(id_ + num_successful + 1), "result": "noop"}}
+                {OP_UPDATE: {"_id": str(id_ + num_successful), "result": "noop"}}
             )
 
         for id_ in range(num_failed):
             call_result["items"].append(
                 {
                     OP_UPDATE: {
-                        "_id": str(id_ + num_successful + num_noop + 2),
+                        "_id": str(id_ + num_successful + num_noop),
                         "result": "failed",
                         "error": "something went wrong",
                     }
