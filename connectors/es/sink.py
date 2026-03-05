@@ -86,7 +86,7 @@ ID_CHANGED_AFTER_REQUEST = "_ids_changed_after_request"
 ID_DUPLICATE = "_id_duplicates"
 
 # Successful results according to the docs: https://www.elastic.co/guide/en/elasticsearch/reference/current/docs-bulk.html#bulk-api-response-body
-SUCCESSFUL_RESULTS = ("created", "deleted", "updated")
+SUCCESSFUL_RESULTS = ("created", "deleted", "updated", "noop")
 
 
 def get_mib_size(obj):

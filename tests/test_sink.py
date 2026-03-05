@@ -1207,18 +1207,23 @@ async def test_batch_bulk_with_error_monitor():
         retry_interval=10,
     )
 
-    def _create_response(num_successful, num_failed):
+    def _create_response(num_successful, num_noop, num_failed):
         call_result = {"items": []}
         for id_ in range(num_successful):
             call_result["items"].append(
                 {OP_UPDATE: {"_id": str(id_), "result": "updated"}}
             )
 
+        for id_ in range(num_noop):
+            call_result["items"].append(
+                {OP_UPDATE: {"_id": str(id_ + num_successful), "result": "noop"}}
+            )
+
         for id_ in range(num_failed):
             call_result["items"].append(
                 {
                     OP_UPDATE: {
-                        "_id": str(num_successful + id_),
+                        "_id": str(id_ + num_successful + num_noop),
                         "result": "failed",
                         "error": "something went wrong",
                     }
@@ -1227,24 +1232,28 @@ async def test_batch_bulk_with_error_monitor():
 
         return call_result
 
-    # First add 45 successful items and 5 failed
-    first_call_result = _create_response(45, 5)
+    # First add 40 successful items, 5 noop and 5 failed
+    first_call_result = _create_response(40, 5, 5)
 
-    # Then add 40 successful items and 10 failed
-    second_call_result = _create_response(40, 10)
+    # Then add 30 successful items, 10 noop and 10 failed
+    second_call_result = _create_response(30, 10, 10)
 
     # Lastly add 0 successful items and 1 failed
     # This should fail the test as max consecutive_error_count=10
     # 10 errors came last in second call, and this one just triggers it
-    third_call_result = _create_response(0, 1)
+    third_call_result = _create_response(0, 0, 1)
 
     client.client.bulk = AsyncMock(
         side_effect=[first_call_result, second_call_result, third_call_result]
     )
 
+    # call 1
     await sink._batch_bulk([], {OP_INDEX: {}, OP_UPDATE: {}, OP_DELETE: {}})
+    # call 2
     await sink._batch_bulk([], {OP_INDEX: {}, OP_UPDATE: {}, OP_DELETE: {}})
+
     with pytest.raises(TooManyErrors):
+        # call 3
         await sink._batch_bulk([], {OP_INDEX: {}, OP_UPDATE: {}, OP_DELETE: {}})
 
 
