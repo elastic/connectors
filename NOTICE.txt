@@ -2687,7 +2687,7 @@ documentation is licensed as follows:
 
 
 charset-normalizer
-3.4.4
+3.4.5
 MIT
 MIT License
 
