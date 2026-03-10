@@ -7,6 +7,9 @@ DOCKER_IMAGE_NAME?=docker.elastic.co/integrations/elastic-connectors
 DOCKERFILE_PATH?=Dockerfile
 DOCKERFILE_FTEST_PATH?=app/connectors_service/tests/Dockerfile.ftest
 
+FIPS_DOCKERFILE_PATH?=Dockerfile.fips
+FIPS_DOCKERFILE_FTEST_PATH?=app/connectors_service/tests/Dockerfile.fips-ftest
+
 PACKAGE_NAME_VERSION="elasticsearch_connectors-$(VERSION)"
 
 install:
@@ -23,8 +26,8 @@ test: install
 	cd $(connectors_sdk_dir); make test
 	cd $(app_dir); make test
 
-ftest: install $(DOCKERFILE_FTEST_PATH) build-connectors-base-image
-	cd $(app_dir); make ftest
+ftest: install build-connectors-base-image
+	cd $(app_dir); make ftest NAME=$(NAME)
 
 ftrace:
 	cd $(app_dir); make ftrace
@@ -37,7 +40,16 @@ typecheck: install
 	cd $(connectors_sdk_dir); make typecheck
 	cd $(app_dir); make typecheck
 
-lint: install
+check-versions:
+	@if ! diff -q $(app_dir)/connectors/VERSION $(connectors_sdk_dir)/connectors_sdk/VERSION > /dev/null 2>&1; then \
+		echo "ERROR: VERSION files do not match!"; \
+		echo "  $(app_dir)/connectors/VERSION: $$(cat $(app_dir)/connectors/VERSION)"; \
+		echo "  $(connectors_sdk_dir)/connectors_sdk/VERSION: $$(cat $(connectors_sdk_dir)/connectors_sdk/VERSION)"; \
+		exit 1; \
+	fi
+	@echo "VERSION files match: $$(cat $(app_dir)/connectors/VERSION)"
+
+lint: install check-versions
 	cd $(connectors_sdk_dir); make lint
 	cd $(app_dir); make lint
 
@@ -73,6 +85,48 @@ zip: clean
 		$(PACKAGE_NAME_VERSION).zip \
 		./* \
 		-x  *htmlcov*/* *docs*/* Dockerfile* *ruff_cache*/* *pytest_cache*/* *__pycache__*/* *build*/* *egg-info*/*
+
+## FIPS Zone
+# Build FIPS images
+fips-build-base:
+	docker build -f $(FIPS_DOCKERFILE_PATH) -t connectors-fips-base .
+
+fips-build-test: fips-build-base
+	docker build -f $(FIPS_DOCKERFILE_FTEST_PATH) -t connectors-fips-test .
+
+fips-ftest:
+	@if ! docker image inspect connectors-fips-test >/dev/null 2>&1; then \
+		echo "connectors-fips-test image not found, building..."; \
+		$(MAKE) fips-build-test; \
+	fi
+	cd $(app_dir); make fips-ftest NAME=$(NAME)
+
+fips-test:
+	@if ! docker image inspect connectors-fips-base >/dev/null 2>&1; then \
+		echo "connectors-fips-base image not found, building..."; \
+		$(MAKE) fips-build-base; \
+	fi
+	@echo "=== Running unit tests in FIPS mode ==="
+	docker run --rm --user root \
+		-v $(PWD):/workspace \
+		-w /workspace \
+		connectors-fips-base \
+		/bin/sh -c '\
+			apk add --no-cache git && \
+			pip install -e libs/connectors_sdk[tests] -e app/connectors_service[tests] && \
+			cd libs/connectors_sdk && python -m pytest tests -sv && \
+			cd /workspace/app/connectors_service && python -m pytest --cov-report term-missing --cov-fail-under 90 --cov-report html --cov=connectors -sv tests'
+
+fips-verify: fips-build-base
+	@echo "=== Verifying FIPS mode in container ==="
+	@docker run --rm connectors-fips-base /bin/sh -c '\
+		echo "OpenSSL version:" && openssl version && \
+		echo "" && echo "FIPS providers:" && openssl list -providers && \
+		echo "" && echo "Python SSL version:" && python3 -c "import ssl; print(ssl.OPENSSL_VERSION)" && \
+		echo "" && echo "FIPS cipher test:" && \
+		python3 -c "import ssl; ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT); ctx.set_ciphers(\"RC4-SHA\")" 2>&1 | grep -q "No cipher" && \
+		echo "FIPS ENABLED: RC4 correctly rejected" || echo "WARNING: RC4 not rejected"'
+## End FIPS Zone
 
 ## Agent Docker Zone
 # Only use it for local testing, that's it
