@@ -3547,7 +3547,7 @@ Apache Software License
 
 
 elasticsearch-connectors
-9.3.2
+9.3.3
 UNKNOWN
 Elastic License 2.0
 
@@ -3645,7 +3645,7 @@ these terms.
 
 
 elasticsearch-connectors-sdk
-9.3.2
+9.3.3
 UNKNOWN
 UNKNOWN
 
