@@ -714,7 +714,7 @@ Apache License
 
 
 attrs
-25.4.0
+26.1.0
 MIT
 The MIT License (MIT)
 
