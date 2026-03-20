@@ -475,21 +475,18 @@ class NASDataSource(BaseDataSource):
         return document
 
     async def _user_access_control_doc(self, user, sid, groups_info=None):
-        rid = str(sid).split("-")[-1]
+        sid_str = str(sid)
         prefixed_username = _prefix_user(user)
-        rid_user = _prefix_rid(rid)
-        rid_groups = []
+        prefixed_sid = _prefix_sid(sid_str)
+        sid_groups = [_prefix_sid(group_sid) for group_sid in (groups_info or [])]
 
-        for group_sid in groups_info or []:
-            rid_groups.append(_prefix_rid(group_sid.split("-")[-1]))
-
-        access_control = [rid_user, prefixed_username, *rid_groups]
+        access_control = [prefixed_sid, prefixed_username, *sid_groups]
 
         return {
-            "_id": rid,
+            "_id": sid_str,
             "identity": {
                 "username": prefixed_username,
-                "user_id": rid_user,
+                "user_id": prefixed_sid,
             },
             "created_at": iso_utc(),
         } | es_access_control_query(access_control)
@@ -522,8 +519,7 @@ class NASDataSource(BaseDataSource):
 
         groups_members = {}
         for group_name, group_sid in groups_info.items():
-            rid = group_sid.split("-")[-1]
-            groups_members[rid] = await asyncio.to_thread(
+            groups_members[group_sid] = await asyncio.to_thread(
                 self.security_info.fetch_members, group_name
             )
 
@@ -602,18 +598,18 @@ class NASDataSource(BaseDataSource):
             # Determine the type of ACE (access control entry), i.e, allow or deny
             ace_type = permission["ace_type"].value
 
-            # Extract RID from SID. RID uniquely identifying a user or group within a domain.
-            rid = str(permission["sid"]).split("-")[-1]
+            # Use the full SID to avoid cross-domain RID collisions.
+            sid = str(permission["sid"])
 
-            if groups_info.get(rid):
-                # If the RID corresponds to a group, get the RIDs of all members of that group
+            if groups_info.get(sid):
+                # If the SID corresponds to a group, get the SIDs of all members of that group
                 permissions = [
-                    _prefix_rid(member_id.split("-")[-1])
-                    for member_id in groups_info[rid].values()
+                    _prefix_sid(member_sid)
+                    for member_sid in groups_info[sid].values()
                 ]
             else:
-                # Else the RID corresponds to a user, hence we use it directly.
-                permissions = [_prefix_rid(rid)]
+                # Else the SID corresponds to a user, hence we use it directly.
+                permissions = [_prefix_sid(sid)]
             if (
                 ace_type == ACCESS_ALLOWED_TYPE
                 or mask == ACCESS_MASK_DENIED_WRITE_PERMISSION
@@ -672,5 +668,5 @@ def _prefix_user(user):
     return prefix_identity("user", user)
 
 
-def _prefix_rid(rid):
-    return prefix_identity("rid", rid)
+def _prefix_sid(sid):
+    return prefix_identity("sid", sid)
