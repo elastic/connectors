@@ -1880,7 +1880,7 @@ Copyright (C) 2016-present the asyncpg authors and contributors.
 
 
 attrs
-25.4.0
+26.1.0
 UNKNOWN
 The MIT License (MIT)
 
