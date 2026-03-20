@@ -1116,7 +1116,9 @@ async def test_deny_permission_has_precedence_over_allow(mock_list_file_permissi
 async def test_group_allow_ace_member1_allow_member2_deny_ace_then_member1_has_access(
     mock_list_file_permission,
 ):
-    mock_groups_info = {"S-1-11-11": {"user-1": "S-2-21-211-411", "user-2": "S-3-23-222-221"}}
+    mock_groups_info = {
+        "S-1-11-11": {"user-1": "S-2-21-211-411", "user-2": "S-3-23-222-221"}
+    }
     expected_result = ["sid:S-2-21-211-411"]  # Only User-1 should have access
     async with create_source(NASDataSource) as source:
         source._dls_enabled = MagicMock(return_value=True)
@@ -1188,7 +1190,9 @@ async def test_traverse_diretory_with_invalid_path_for_syncrule(dir_mock):
 # Using full SIDs as identities prevents one user from inheriting another's permissions.
 
 DOMAIN_A_USER_SID = "S-1-5-21-111111111-222222222-333333333-1001"
-DOMAIN_B_USER_SID = "S-1-5-21-444444444-555555555-666666666-1001"  # same RID, different domain
+DOMAIN_B_USER_SID = (
+    "S-1-5-21-444444444-555555555-666666666-1001"  # same RID, different domain
+)
 
 
 @pytest.mark.asyncio
@@ -1199,9 +1203,7 @@ async def test_cross_domain_users_with_same_rid_have_distinct_identity_docs():
         doc_a = await source._user_access_control_doc(
             user="alice", sid=DOMAIN_A_USER_SID
         )
-        doc_b = await source._user_access_control_doc(
-            user="bob", sid=DOMAIN_B_USER_SID
-        )
+        doc_b = await source._user_access_control_doc(user="bob", sid=DOMAIN_B_USER_SID)
 
     assert doc_a["_id"] == DOMAIN_A_USER_SID
     assert doc_b["_id"] == DOMAIN_B_USER_SID

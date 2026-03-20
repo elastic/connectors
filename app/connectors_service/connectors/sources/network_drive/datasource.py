@@ -604,8 +604,7 @@ class NASDataSource(BaseDataSource):
             if groups_info.get(sid):
                 # If the SID corresponds to a group, get the SIDs of all members of that group
                 permissions = [
-                    _prefix_sid(member_sid)
-                    for member_sid in groups_info[sid].values()
+                    _prefix_sid(member_sid) for member_sid in groups_info[sid].values()
                 ]
             else:
                 # Else the SID corresponds to a user, hence we use it directly.
