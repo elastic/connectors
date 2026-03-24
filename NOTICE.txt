@@ -1602,8 +1602,8 @@ Apache License
 
 
 anyio
-4.12.0
-MIT
+4.13.0
+UNKNOWN
 The MIT License (MIT)
 
 Copyright (c) 2018 Alex Grönholm
