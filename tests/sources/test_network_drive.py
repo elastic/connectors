@@ -811,7 +811,7 @@ async def test_fetch_groups_info():
         "Administrator": "S-1-5-21-227823342-1368486282-703244805-500"
     }
     excepted_result = {
-        "546": {"Administrator": "S-1-5-21-227823342-1368486282-703244805-500"}
+        "S-1-5-32-546": {"Administrator": "S-1-5-21-227823342-1368486282-703244805-500"}
     }
     async with create_source(NASDataSource) as source:
         with mock.patch.object(SecurityInfo, "fetch_groups", return_value=mock_groups):
@@ -826,11 +826,11 @@ async def test_fetch_groups_info():
 async def test_get_access_control_dls_enabled():
     expected_user_access_control = [
         [
-            "rid:500",
+            "sid:S-1-5-21-227823342-1368486282-703244805-500",
             "user:Administrator",
         ],
         [
-            "rid:501",
+            "sid:S-1-5-21-227823342-1368486282-703244805-501",
             "user:Guest",
         ],
     ]
@@ -1091,7 +1091,7 @@ async def test_list_file_permissions_with_inaccessible_file():
     ],
 )
 async def test_deny_permission_has_precedence_over_allow(mock_list_file_permission):
-    mock_groups_info = {"10": {"admin": "S-2-21-211-411"}}
+    mock_groups_info = {"S-1-11-10": {"admin": "S-2-21-211-411"}}
     expected_result = []
     async with create_source(NASDataSource) as source:
         source._dls_enabled = MagicMock(return_value=True)
@@ -1117,8 +1117,10 @@ async def test_deny_permission_has_precedence_over_allow(mock_list_file_permissi
 async def test_group_allow_ace_member1_allow_member2_deny_ace_then_member1_has_access(
     mock_list_file_permission,
 ):
-    mock_groups_info = {"11": {"user-1": "S-2-21-211-411", "user-2": "S-3-23-222-221"}}
-    expected_result = ["rid:411"]  # Only User-1 should have access
+    mock_groups_info = {
+        "S-1-11-11": {"user-1": "S-2-21-211-411", "user-2": "S-3-23-222-221"}
+    }
+    expected_result = ["sid:S-2-21-211-411"]  # Only User-1 should have access
     async with create_source(NASDataSource) as source:
         source._dls_enabled = MagicMock(return_value=True)
         document_permissions = await source._decorate_with_access_control(
@@ -1182,3 +1184,83 @@ async def test_traverse_diretory_with_invalid_path_for_syncrule(dir_mock):
             path=path, glob_pattern="/a*", indexed_rules=[]
         ):
             assert file == []
+
+
+# Cross-domain SID collision tests
+# Two users from different domains can share the same RID (last SID segment).
+# Using full SIDs as identities prevents one user from inheriting another's permissions.
+
+DOMAIN_A_USER_SID = "S-1-5-21-111111111-222222222-333333333-1001"
+DOMAIN_B_USER_SID = (
+    "S-1-5-21-444444444-555555555-666666666-1001"  # same RID, different domain
+)
+
+
+@pytest.mark.asyncio
+async def test_cross_domain_users_with_same_rid_have_distinct_identity_docs():
+    """Users from different domains with the same RID must produce separate identity
+    documents, each keyed by their full SID."""
+    async with create_source(NASDataSource) as source:
+        doc_a = await source._user_access_control_doc(
+            user="alice", sid=DOMAIN_A_USER_SID
+        )
+        doc_b = await source._user_access_control_doc(user="bob", sid=DOMAIN_B_USER_SID)
+
+    assert doc_a["_id"] == DOMAIN_A_USER_SID
+    assert doc_b["_id"] == DOMAIN_B_USER_SID
+    assert doc_a["_id"] != doc_b["_id"]
+    assert doc_a["identity"]["user_id"] == f"sid:{DOMAIN_A_USER_SID}"
+    assert doc_b["identity"]["user_id"] == f"sid:{DOMAIN_B_USER_SID}"
+
+
+@pytest.mark.asyncio
+@mock.patch.object(
+    NASDataSource,
+    "list_file_permission",
+    return_value=[
+        mock_permission(sid=DOMAIN_A_USER_SID, ace=0),  # allow for domain-A user only
+    ],
+)
+async def test_cross_domain_file_acl_does_not_grant_wrong_domain_user_access(
+    mock_list_file_permission,
+):
+    """A file ACE targeting a user in domain A must not grant access to a different
+    user in domain B who happens to share the same RID."""
+    async with create_source(NASDataSource) as source:
+        source._dls_enabled = MagicMock(return_value=True)
+        document_permissions = await source._decorate_with_access_control(
+            document={"id": "file1", "title": "secret.txt"},
+            file_path="dummy_url/secret.txt",
+            file_type="file",
+            groups_info={},
+        )
+
+    assert f"sid:{DOMAIN_A_USER_SID}" in document_permissions[ACCESS_CONTROL]
+    assert f"sid:{DOMAIN_B_USER_SID}" not in document_permissions[ACCESS_CONTROL]
+
+
+@pytest.mark.asyncio
+@mock.patch.object(
+    NASDataSource,
+    "list_file_permission",
+    return_value=[
+        mock_permission(sid=DOMAIN_A_USER_SID, ace=0),  # allow for domain-A user
+        mock_permission(sid=DOMAIN_B_USER_SID, ace=1),  # deny for domain-B user
+    ],
+)
+async def test_cross_domain_deny_does_not_spill_to_same_rid_user(
+    mock_list_file_permission,
+):
+    """A deny ACE for a user in domain B must not deny access to a user in domain A
+    who shares the same RID."""
+    async with create_source(NASDataSource) as source:
+        source._dls_enabled = MagicMock(return_value=True)
+        document_permissions = await source._decorate_with_access_control(
+            document={"id": "file2", "title": "report.txt"},
+            file_path="dummy_url/report.txt",
+            file_type="file",
+            groups_info={},
+        )
+
+    assert f"sid:{DOMAIN_A_USER_SID}" in document_permissions[ACCESS_CONTROL]
+    assert f"sid:{DOMAIN_B_USER_SID}" not in document_permissions[ACCESS_CONTROL]
