@@ -97,8 +97,8 @@ def _prefix_user(user):
     return prefix_identity("user", user)
 
 
-def _prefix_rid(rid):
-    return prefix_identity("rid", rid)
+def _prefix_sid(sid):
+    return prefix_identity("sid", sid)
 
 
 class InvalidRulesError(Exception):
@@ -924,11 +924,3 @@ class NASDataSource(BaseDataSource):
                         else None
                     ),
                 )
-
-
-def _prefix_user(user):
-    return prefix_identity("user", user)
-
-
-def _prefix_sid(sid):
-    return prefix_identity("sid", sid)
