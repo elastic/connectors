@@ -947,7 +947,7 @@ Apache Software License
 
 
 build
-1.4.0
+1.4.1
 MIT
 Copyright © 2019 Filipe Laíns <filipe.lains@gmail.com>
 
