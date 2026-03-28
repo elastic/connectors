@@ -2615,7 +2615,7 @@ SOFTWARE.
 
 
 build
-1.4.0
+1.4.2
 UNKNOWN
 Copyright © 2019 Filipe Laíns <filipe.lains@gmail.com>
 
