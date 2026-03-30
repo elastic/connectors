@@ -855,10 +855,24 @@ class SharepointOnlineClient:
             if "value" in response and len(response["value"]) > 0:
                 yield DriveItemsPage(response["value"], delta_link)
 
-    async def drive_items(self, drive_id, url=None):
+    async def drive_items(self, drive_id, url=None, site=None, metadata_enricher=None):
+        # Build field list with conditional ODC properties
+        fields = DRIVE_ITEMS_FIELDS
+
+        # Add ODC managed properties if this is an ODC site
+        is_odc = False
+        if metadata_enricher and hasattr(
+            metadata_enricher, "should_include_odc_properties"
+        ):
+            is_odc = metadata_enricher.should_include_odc_properties(site)
+
+        if is_odc and metadata_enricher:
+            odc_properties = metadata_enricher.get_odc_managed_properties()
+            fields = f"{DRIVE_ITEMS_FIELDS},{odc_properties}"
+
         url = (
             (
-                f"{GRAPH_API_URL}/drives/{drive_id}/root/delta?$select={DRIVE_ITEMS_FIELDS}"
+                f"{GRAPH_API_URL}/drives/{drive_id}/root/delta?$select={fields}"
             )
             if not url
             else url
