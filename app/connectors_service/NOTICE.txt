@@ -140,8 +140,8 @@ SOFTWARE.
 
 
 Pygments
-2.19.2
-BSD License
+2.20.0
+UNKNOWN
 Copyright (c) 2006-2022 by the respective authors (see AUTHORS file).
 All rights reserved.
 
@@ -2615,7 +2615,7 @@ SOFTWARE.
 
 
 build
-1.4.0
+1.4.2
 UNKNOWN
 Copyright © 2019 Filipe Laíns <filipe.lains@gmail.com>
 
@@ -2713,7 +2713,7 @@ documentation is licensed as follows:
 
 
 charset-normalizer
-3.4.6
+3.4.7
 MIT
 MIT License
 
