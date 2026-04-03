@@ -65,7 +65,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
 PyJWT
-2.11.0
+2.12.1
 UNKNOWN
 The MIT License (MIT)
 
@@ -140,8 +140,8 @@ SOFTWARE.
 
 
 Pygments
-2.19.2
-BSD License
+2.20.0
+UNKNOWN
 Copyright (c) 2006-2022 by the respective authors (see AUTHORS file).
 All rights reserved.
 
@@ -1628,7 +1628,7 @@ SOFTWARE.
 
 
 anyio
-4.12.1
+4.13.0
 UNKNOWN
 The MIT License (MIT)
 
@@ -1880,7 +1880,7 @@ Copyright (C) 2016-present the asyncpg authors and contributors.
 
 
 attrs
-25.4.0
+26.1.0
 UNKNOWN
 The MIT License (MIT)
 
@@ -1906,8 +1906,8 @@ SOFTWARE.
 
 
 azure-core
-1.38.2
-MIT License
+1.39.0
+UNKNOWN
 Copyright (c) Microsoft Corporation.
 
 MIT License
@@ -2615,7 +2615,7 @@ SOFTWARE.
 
 
 build
-1.4.0
+1.4.2
 UNKNOWN
 Copyright © 2019 Filipe Laíns <filipe.lains@gmail.com>
 
@@ -2713,7 +2713,7 @@ documentation is licensed as follows:
 
 
 charset-normalizer
-3.4.4
+3.4.7
 MIT
 MIT License
 
@@ -4146,7 +4146,7 @@ Apache Software License
 
 
 google-auth
-2.48.0
+2.49.1
 Apache Software License
                                  Apache License
                            Version 2.0, January 2004
@@ -6834,7 +6834,7 @@ THE SOFTWARE.
 
 
 pyspnego
-0.12.0
+0.12.1
 UNKNOWN
 MIT License
 
@@ -7234,24 +7234,6 @@ ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
 WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
 ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
-
-
-rsa
-4.9.1
-Apache Software License
-Copyright 2011 Sybren A. Stüvel <sybren@stuvel.eu>
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-   https://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
 
 
 s3transfer
@@ -8532,8 +8514,8 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 
 yarl
-1.22.0
-Apache Software License
+1.23.0
+Apache-2.0
 
                                  Apache License
                            Version 2.0, January 2004
