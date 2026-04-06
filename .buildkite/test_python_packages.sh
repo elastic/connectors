@@ -21,7 +21,7 @@ if [[ "$PACKAGE_PATH" == *app/connectors_service* ]]; then
   python -m build "$LIB_PATH"
   python -m pip install "$LIB_PATH"/dist/*.whl
 
-  python -m pip install "$PACKAGE_PATH"/dist/*.whl
+  cd "$PACKAGE_PATH" && python -m pip install dist/*.whl && cd -
   connectors --help
   elastic-ingest --help
 #  elastic-agent-connectors --help
