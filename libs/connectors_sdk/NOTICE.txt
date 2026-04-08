@@ -977,7 +977,7 @@ Apache Software License
 UNKNOWN
 
 elasticsearch-connectors-sdk
-9.3.3
+9.3.4
 Elastic-2.0
 UNKNOWN
 
