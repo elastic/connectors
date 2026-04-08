@@ -52,7 +52,7 @@ dependencies = [
     "msal==1.30.0",
     "notion-client==2.2.1",
     "oracledb==2.3.0",
-    "pip-licenses==5.0.0",
+    "pip-licenses==5.5.5",
     "pymongo==4.6.3; platform_machine=='x86_64'",
     "pymongo[srv]==4.6.3; platform_machine=='aarch64' or platform_machine=='arm64'",
     "smbprotocol==1.10.1",
@@ -75,7 +75,7 @@ dependencies = [
     "tzcron==1.0.0",
     "uvloop==0.20.0; sys_platform != 'win32'",
     "wcmatch==8.4.1",
-    "elasticsearch-connectors-sdk"
+    "elasticsearch-connectors-sdk @ file:../../libs/connectors_sdk"
 ]
 
 [project.optional-dependencies]
