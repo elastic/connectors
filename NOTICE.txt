@@ -140,8 +140,8 @@ SOFTWARE.
 
 
 Pygments
-2.19.2
-BSD License
+2.20.0
+BSD-2-Clause
 Copyright (c) 2006-2022 by the respective authors (see AUTHORS file).
 All rights reserved.
 
@@ -2662,7 +2662,7 @@ documentation is licensed as follows:
 
 
 charset-normalizer
-3.4.6
+3.4.7
 MIT
 MIT License
 
@@ -3496,7 +3496,7 @@ Apache-2.0
 
 
 elasticsearch-connectors
-9.2.8
+9.2.9
 Apache Software License
 Elastic License 2.0
 
@@ -4324,7 +4324,7 @@ SOFTWARE.
 
 
 greenlet
-3.3.2
+3.4.0
 MIT AND PSF-2.0
 The following files are derived from Stackless Python and are subject to the
 same license as Stackless Python:
@@ -8027,7 +8027,7 @@ Apache Software License
 UNKNOWN
 
 tzdata
-2025.3
+2026.1
 Apache-2.0
 Apache Software License 2.0
 
