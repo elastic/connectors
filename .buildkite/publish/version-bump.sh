@@ -43,29 +43,21 @@ PIPELINE_YML="${PROJECT_ROOT}/.buildkite/pipeline.yml"
 git config --local user.email 'elasticmachine@users.noreply.github.com'
 git config --local user.name 'Elastic Machine'
 
-# Bumps the version in all VERSION files, commits, and pushes to the given branch.
-bump_version() {
+# The Buildkite environment hook provides VAULT_GITHUB_TOKEN (ephemeral PAT
+# generated from the GithubPermissionSet in elastic/terrazzo). gh CLI needs
+# it exported as GH_TOKEN.
+export GH_TOKEN="${VAULT_GITHUB_TOKEN:?VAULT_GITHUB_TOKEN is not set}"
+
+PR_MERGE_TIMEOUT=3600  # 60 minutes
+PR_POLL_INTERVAL=30    # seconds
+
+# Writes the given version to all VERSION files and stages them.
+write_version_files() {
   local version="$1"
-  local branch="$2"
-
-  echo "Bumping version to ${version} on branch ${branch}"
-
   for version_file in "${VERSION_FILES[@]}"; do
-    if [[ "${DRY_RUN}" == "true" ]]; then
-      echo "[dry-run] Would write '${version}' to ${version_file}"
-    else
-      echo "${version}" > "${version_file}"
-      git add "${version_file}"
-    fi
+    echo "${version}" > "${version_file}"
+    git add "${version_file}"
   done
-
-  if [[ "${DRY_RUN}" == "true" ]]; then
-    echo "[dry-run] Would commit: 'Bump version to ${version}'"
-    echo "[dry-run] Would push to origin/${branch}"
-  else
-    git commit -m "Bump version to ${version}"
-    push_with_retry "${branch}"
-  fi
 }
 
 # Adds a branch to the DRA branch list in pipeline.yml.
@@ -119,30 +111,77 @@ print("Updated DRA branch list successfully")
 ' "${PIPELINE_YML}" "${new_branch}"
 }
 
-MAX_PUSH_RETRIES=3
+# Creates a PR with auto-merge enabled and waits for it to merge.
+create_pr_and_wait() {
+  local title="$1"
+  local target_branch="$2"
+  local source_branch="$3"
 
-# Push with retry to handle concurrent commits landing on the target branch.
-push_with_retry() {
-  local branch="$1"
-  local attempt
+  if [[ "${DRY_RUN}" == "true" ]]; then
+    echo "[dry-run] Would create PR: '${title}' (${source_branch} -> ${target_branch})"
+    echo "[dry-run] Would enable auto-merge and wait for merge"
+    return 0
+  fi
 
-  for attempt in $(seq 1 "${MAX_PUSH_RETRIES}"); do
-    if git push origin "${branch}"; then
+  echo "Creating PR: ${title} (${source_branch} -> ${target_branch})"
+
+  local pr_url
+  pr_url=$(gh pr create \
+    --title "${title}" \
+    --body "Automated version bump PR created by the version bump pipeline." \
+    --base "${target_branch}" \
+    --head "${source_branch}" \
+    --label "ci:version-bump")
+
+  echo "Created PR: ${pr_url}"
+
+  gh pr merge "${pr_url}" --auto --squash
+  echo "Auto-merge enabled for ${pr_url}"
+
+  # Poll until the PR is merged or closed
+  local elapsed=0
+  while [[ $elapsed -lt $PR_MERGE_TIMEOUT ]]; do
+    local state
+    state=$(gh pr view "${pr_url}" --json state --jq '.state')
+    if [[ "${state}" == "MERGED" ]]; then
+      echo "PR merged: ${pr_url}"
       return 0
+    elif [[ "${state}" == "CLOSED" ]]; then
+      echo "Error: PR was closed without merging: ${pr_url}"
+      return 1
     fi
-    echo "Push to ${branch} failed (attempt ${attempt}/${MAX_PUSH_RETRIES}), rebasing and retrying..."
-    git pull --rebase origin "${branch}"
+    echo "Waiting for PR to merge (${elapsed}s elapsed)..."
+    sleep "${PR_POLL_INTERVAL}"
+    elapsed=$((elapsed + PR_POLL_INTERVAL))
   done
 
-  echo "Error: failed to push to ${branch} after ${MAX_PUSH_RETRIES} attempts"
+  echo "Error: timed out waiting for PR to merge after ${PR_MERGE_TIMEOUT}s: ${pr_url}"
   return 1
 }
 
 if [[ "${WORKFLOW}" == "patch" ]]; then
   echo "=== Patch version bump: ${NEW_VERSION} on branch ${BRANCH} ==="
+
   git checkout "${BRANCH}"
   git pull origin "${BRANCH}"
-  bump_version "${NEW_VERSION}" "${BRANCH}"
+
+  pr_branch="automations/bump-${BRANCH}-to-${NEW_VERSION}"
+
+  if [[ "${DRY_RUN}" == "true" ]]; then
+    echo "[dry-run] Would create branch ${pr_branch}"
+    echo "[dry-run] Would bump VERSION files to ${NEW_VERSION}"
+    echo "[dry-run] Would create PR targeting ${BRANCH} and wait for merge"
+  else
+    git checkout -b "${pr_branch}"
+    write_version_files "${NEW_VERSION}"
+    git commit -m "Bump version to ${NEW_VERSION}"
+    git push origin "${pr_branch}"
+
+    create_pr_and_wait \
+      "Bump version to ${NEW_VERSION}" \
+      "${BRANCH}" \
+      "${pr_branch}"
+  fi
 
 elif [[ "${WORKFLOW}" == "minor" ]]; then
   echo "=== Minor version bump: creating branch ${BRANCH} with version ${NEW_VERSION} ==="
@@ -150,35 +189,65 @@ elif [[ "${WORKFLOW}" == "minor" ]]; then
   git checkout main
   git pull origin main
 
+  # Step 1: PR to add the new branch to pipeline.yml's DRA condition.
+  # This must merge before we create the release branch so the branch
+  # inherits the updated pipeline.yml.
+  pr_branch="automations/add-${BRANCH}-to-dra-list"
+
   if [[ "${DRY_RUN}" == "true" ]]; then
+    echo "[dry-run] Would create branch ${pr_branch}"
     echo "[dry-run] Would add ${BRANCH} to DRA branch list in pipeline.yml"
-    echo "[dry-run] Would commit: 'Add ${BRANCH} to DRA branch list'"
+    echo "[dry-run] Would create PR targeting main and wait for merge"
   else
+    git checkout -b "${pr_branch}"
     add_branch_to_dra_list "${BRANCH}"
     git add "${PIPELINE_YML}"
     git commit -m "Add ${BRANCH} to DRA branch list"
+    git push origin "${pr_branch}"
+
+    create_pr_and_wait \
+      "Add ${BRANCH} to DRA branch list" \
+      "main" \
+      "${pr_branch}"
   fi
 
-  # Create the new release branch from main.
-  # It inherits the pipeline.yml change and the current VERSION.
+  # Step 2: Create the release branch from the updated main.
+  # The branch inherits the pipeline.yml change and the current VERSION.
   if [[ "${DRY_RUN}" == "true" ]]; then
-    echo "[dry-run] Would create and push branch ${BRANCH}"
+    echo "[dry-run] Would create and push release branch ${BRANCH} from main"
   else
+    git checkout main
+    git pull origin main
     git checkout -b "${BRANCH}"
     git push origin "${BRANCH}"
+    echo "Created release branch: ${BRANCH}"
   fi
 
-  # Bump main to the next minor version
-  # e.g. if NEW_VERSION is 9.5.0, main should become 9.6.0
+  # Step 3: PR to bump main to the next minor version.
   IFS='.' read -ra VERSION_PARTS <<< "${NEW_VERSION}"
   NEXT_MINOR=$(( ${VERSION_PARTS[1]} + 1 ))
   NEXT_VERSION="${VERSION_PARTS[0]}.${NEXT_MINOR}.0"
 
   echo "=== Bumping main to next minor: ${NEXT_VERSION} ==="
-  if [[ "${DRY_RUN}" != "true" ]]; then
+
+  pr_branch="automations/bump-main-to-${NEXT_VERSION}"
+
+  if [[ "${DRY_RUN}" == "true" ]]; then
+    echo "[dry-run] Would create branch ${pr_branch}"
+    echo "[dry-run] Would bump VERSION files to ${NEXT_VERSION}"
+    echo "[dry-run] Would create PR targeting main and wait for merge"
+  else
     git checkout main
+    git checkout -b "${pr_branch}"
+    write_version_files "${NEXT_VERSION}"
+    git commit -m "Bump version to ${NEXT_VERSION}"
+    git push origin "${pr_branch}"
+
+    create_pr_and_wait \
+      "Bump version to ${NEXT_VERSION}" \
+      "main" \
+      "${pr_branch}"
   fi
-  bump_version "${NEXT_VERSION}" "main"
 fi
 
 echo "Version bump complete."

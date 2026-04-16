@@ -37,7 +37,20 @@ env:
   DRA_PYTHON_VERSION: "3.11"
 
 steps:
+  # Version bump PRs only touch VERSION files and carry minimal risk.
+  # Skip the full CI suite to keep them fast (PSI requirement: <2-3h total).
+  - label: ":white_check_mark: Version bump gate"
+    key: "version_bump_gate"
+    if: build.pull_request.labels includes "ci:version-bump"
+    command: echo "Version bump PR -- skipping full CI"
+    agents:
+      image: docker.elastic.co/ci-agent-images/ubuntu-build-essential:latest
+      cpu: 250m
+      memory: 512Mi
+      ephemeralStorage: 1Gi
+
   - label: ":eyes: Notice check"
+    if: build.pull_request.labels not includes "ci:version-bump"
     <<: *test-agents
     <<: *retries
     key: "notice_check"
@@ -46,9 +59,11 @@ steps:
       PYTHON_VERSION: "3.11" # We don't really care about notice on multiple versions
     timeout_in_minutes: 5
 
-  - wait # we wait so that there was no race between fixing notice and make autoformat
+  - wait: ~
+    if: build.pull_request.labels not includes "ci:version-bump"
 
   - label: ":face_with_peeking_eye: Lint"
+    if: build.pull_request.labels not includes "ci:version-bump"
     <<: *test-agents
     <<: *retries
     key: "lint"
@@ -58,6 +73,7 @@ steps:
     timeout_in_minutes: 5
 
   - label: ":pytest: Test with Python {{ matrix }}"
+    if: build.pull_request.labels not includes "ci:version-bump"
     <<: *test-agents
     <<: *retries
     key: "unit_tests"
@@ -70,6 +86,7 @@ steps:
       - "3.11"
 
   - label: ":shipit: Smoke test"
+    if: build.pull_request.labels not includes "ci:version-bump"
     <<: *retries
     <<: *test-agents
     <<: *ftest_defaults
@@ -81,6 +98,7 @@ steps:
 
 
   - label: ":sweating: Checking for changes in connectors"
+    if: build.pull_request.labels not includes "ci:version-bump"
     key: "relevant_ftests"
     plugins:
       monorepo-diff#v1.1.0:
@@ -564,6 +582,7 @@ steps:
                 - CONNECTOR=gitlab
 
   - group: ":building_construction: Build and Test Python Packages"
+    if: build.pull_request.labels not includes "ci:version-bump"
     key: "test_packages"
     steps:
       - label: ":python: Build Python {{matrix.python_version}} {{matrix.package_path}} package"

@@ -13,7 +13,7 @@ steps:
       ephemeralStorage: 1Gi
     command:
       - ".buildkite/publish/version-bump.sh"
-    timeout_in_minutes: 10
+    timeout_in_minutes: 90
 
   - label: "Fetch DRA Staging Artifacts"
     key: fetch-dra-staging-artifacts
