@@ -686,7 +686,7 @@ class SharepointOnlineDataSource(BaseDataSource):
             async for site in self.sites(
                 site_collection["siteCollection"]["hostname"],
                 self.configuration["site_collections"],
-                check_timestamp=True,
+                check_timestamp=False,
             ):
                 (
                     site_access_control,
