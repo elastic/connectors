@@ -54,14 +54,14 @@ spec:
           branch: main
           cronline: '@daily'
           message: "Builds, tests, and pushes daily `main` DRA artifacts"
+        Daily 9.4:
+          branch: "9.4"
+          cronline: '@daily'
+          message: "Builds, tests, and pushes daily `9.4` DRA artifacts"
         Daily 9.3:
           branch: "9.3"
           cronline: '@daily'
           message: "Builds, tests, and pushes daily `9.3` DRA artifacts"
-        Daily 9.2:
-          branch: "9.2"
-          cronline: '@daily'
-          message: "Builds, tests, and pushes daily `9.2` DRA artifacts"
         Daily 8.19:
           branch: "8.19"
           cronline: '@daily'
@@ -112,14 +112,14 @@ spec:
           branch: '8.19'
           cronline: '@daily'
           message: "Runs daily `8.19` e2e test"
-        Daily 9_2:
-          branch: '9.2'
-          cronline: '@daily'
-          message: "Runs daily `9.2` e2e test"
         Daily 9_3:
           branch: '9.3'
           cronline: '@daily'
           message: "Runs daily `9.3` e2e test"
+        Daily 9_4:
+          branch: '9.4'
+          cronline: '@daily'
+          message: "Runs daily `9.4` e2e test"
         Daily main:
           branch: main
           cronline: '@daily'
@@ -164,14 +164,14 @@ spec:
           branch: '8.19'
           cronline: '@daily'
           message: "Runs daily `8.19` e2e aarch64 test"
-        Daily 9_2:
-          branch: '9.2'
-          cronline: '@daily'
-          message: "Runs daily `9.2` e2e aarch64 test"
         Daily 9_3:
           branch: '9.3'
           cronline: '@daily'
           message: "Runs daily `9.3` e2e aarch64 test"
+        Daily 9_4:
+          branch: '9.4'
+          cronline: '@daily'
+          message: "Runs daily `9.4` e2e aarch64 test"
         Daily main:
           branch: main
           cronline: '@daily'
