@@ -37,8 +37,7 @@ env:
   DRA_PYTHON_VERSION: "3.11"
 
 steps:
-  # Version bump PRs only touch VERSION files and carry minimal risk.
-  # Skip the full CI suite to keep them fast (PSI requirement: <2-3h total).
+  # Version bump PRs only touch VERSION files -- skip the full CI suite.
   - label: ":white_check_mark: Version bump gate"
     key: "version_bump_gate"
     if: build.pull_request.labels includes "ci:version-bump"
