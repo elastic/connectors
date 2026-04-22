@@ -2615,7 +2615,7 @@ SOFTWARE.
 
 
 build
-1.4.2
+1.4.3
 MIT
 Copyright © 2019 Filipe Laíns <filipe.lains@gmail.com>
 
@@ -4146,7 +4146,7 @@ Apache Software License
 
 
 google-auth
-2.49.1
+2.49.2
 Apache Software License
                                  Apache License
                            Version 2.0, January 2004
@@ -5131,11 +5131,11 @@ OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 
 idna
-3.11
+3.12
 BSD-3-Clause
 BSD 3-Clause License
 
-Copyright (c) 2013-2025, Kim Davies and contributors.
+Copyright (c) 2013-2026, Kim Davies and contributors.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -5996,7 +5996,7 @@ END OF TERMS AND CONDITIONS
 
 
 packaging
-26.0
+26.1
 Apache-2.0 OR BSD-2-Clause
 This software is made available under the terms of *either* of the licenses
 found in LICENSE.APACHE or LICENSE.BSD. Contributions to this software is made
