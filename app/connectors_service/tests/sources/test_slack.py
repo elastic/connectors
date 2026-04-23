@@ -207,9 +207,10 @@ async def test_slack_data_source_get_docs(slack_data_source, mock_responses):
 
     current_timestamp = time.time()
     with mock.patch("time.time", return_value=current_timestamp):
-        old_timestamp = (
+        old_timestamp = int(
             current_timestamp - configuration["fetch_last_n_days"] * 24 * 3600
         )
+        current_timestamp = int(current_timestamp)
         docs = []
         async for doc, _ in slack_data_source.get_docs():
             docs.append(doc)
@@ -233,3 +234,31 @@ async def test_slack_data_source_convert_usernames(slack_data_source):
     remapped_message = slack_data_source.remap_message(message, channel)
 
     assert remapped_message["text"] == "<@user_one> Hello, <@USERID2>"
+
+@pytest.mark.asyncio
+async def test_channels_and_messages_uses_integer_timestamps(slack_data_source):
+    """
+    Regression test for #3032
+    Slack conversations.history API returns no messages when timestamps
+    include decimal places. Verify timestamps are truncated to int.
+    """
+    original_client = slack_data_source.slack_client
+    await original_client.close()
+
+    mock_client = AsyncMock()
+    mock_client.list_channels = AsyncIterator([{"id": "1", "name": "channel1", "is_member": True}])
+    mock_client.list_messages = AsyncIterator([])
+    mock_client.close = AsyncMock()
+    slack_data_source.slack_client = mock_client
+
+    float_timestamp = 1745123456.561659
+    with mock.patch("time.time", return_value=float_timestamp):
+        async for _ in slack_data_source.channels_and_messages():
+            pass
+
+        call_args = mock_client.list_messages.call_args
+        oldest = call_args[0][1]
+        latest = call_args[0][2]
+
+        assert isinstance(oldest, int), f"oldest timestamp should be int, got {type(oldest)}"
+        assert isinstance(latest, int), f"latest timestamp should be int, got {type(latest)}"
