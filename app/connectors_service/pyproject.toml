@@ -44,6 +44,7 @@ dependencies = [
     "exchangelib==5.4.0",
     "fastjsonschema==2.16.2",
     "gidgethub==5.2.1",
+    "google-cloud-bigquery==3.39.0",
     "graphql-core==3.2.3",
     "httpx-ntlm==1.4.0",
     "httpx==0.27.0",
@@ -130,6 +131,8 @@ addopts = [
 ]
 filterwarnings = [
     "error",
+    # google.api_core warns about Python 3.10 EOL; we still support 3.10
+    "ignore::FutureWarning:google.api_core._python_version_support",
     # botocore has this warning that is reported by them to be irrelevant
     "ignore:.*urllib3.contrib.pyopenssl.*:DeprecationWarning:botocore.*",
     # latest main of aioresponses does not have this problem, but current package uses deprecated pkg_resources API
