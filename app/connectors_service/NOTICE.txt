@@ -2615,7 +2615,7 @@ SOFTWARE.
 
 
 build
-1.4.3
+1.4.4
 MIT
 Copyright © 2019 Filipe Laíns <filipe.lains@gmail.com>
 
@@ -5131,7 +5131,7 @@ OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 
 idna
-3.12
+3.13
 BSD-3-Clause
 BSD 3-Clause License
 
