@@ -8161,7 +8161,7 @@ Apache Software License
 UNKNOWN
 
 tzdata
-2026.1
+2026.2
 Apache-2.0
 Apache Software License 2.0
 
