@@ -54,7 +54,7 @@ if [[ "${DRY_RUN}" != "true" ]]; then
   export GH_TOKEN="${VAULT_GITHUB_TOKEN:?VAULT_GITHUB_TOKEN is not set}"
 fi
 
-PR_MERGE_TIMEOUT=3600  # 60 minutes
+PR_MERGE_TIMEOUT=5400  # 90 minutes -- accommodates full PR CI (~30 min) plus retries/flakes
 PR_POLL_INTERVAL=30    # seconds
 
 # Checks if the first VERSION file already contains the given version.
@@ -169,8 +169,7 @@ create_pr_and_wait() {
       --title "${title}" \
       --body "Automated version bump PR created by the [version bump pipeline](${BUILDKITE_BUILD_URL:-})." \
       --base "${target_branch}" \
-      --head "${source_branch}" \
-      --label "ci:version-bump")
+      --head "${source_branch}")
     echo "Created PR: ${pr_url}"
   fi
 
