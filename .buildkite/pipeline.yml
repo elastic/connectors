@@ -1095,6 +1095,9 @@ steps:
   # ----
   # DRA publishing
   # ----
+  # NOTE: the `if:` line below is auto-updated by .buildkite/publish/version-bump.sh
+  # during minor version bumps. Keep the `# Add new maintenance branches here`
+  # trailing comment -- it is used as an anchor to locate this exact line.
   - group: ":truck: Packaging and DRA"
     key: "mbp_dra_group"
     if: "(build.branch == \"main\" || build.branch == \"9.4\" || build.branch == \"9.3\" || build.branch == \"8.19\" || build.pull_request.labels includes \"ci:packaging\")" # Add new maintenance branches here

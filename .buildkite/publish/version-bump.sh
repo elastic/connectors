@@ -96,16 +96,29 @@ new_branch = sys.argv[2]
 with open(pipeline_yml) as f:
     pipeline = f.read()
 
+# Anchor on multiple distinctive signals in the target line so accidental
+# future `if:` conditions mentioning "ci:packaging" do not get rewritten.
+# The trailing comment is load-bearing -- keep it if you edit pipeline.yml.
+anchor_comment = "# Add new maintenance branches here"
 dra_marker = "ci:packaging"
 lines = pipeline.splitlines(True)
 target_idx = None
 for i, line in enumerate(lines):
-    if dra_marker in line and line.strip().startswith("if:"):
+    stripped = line.strip()
+    if (
+        stripped.startswith("if:")
+        and dra_marker in line
+        and anchor_comment in line
+    ):
         target_idx = i
         break
 
 if target_idx is None:
-    print("Error: could not find DRA branch condition in pipeline.yml", file=sys.stderr)
+    print(
+        "Error: could not find DRA branch condition in pipeline.yml "
+        f"(expected `if:` line containing both {dra_marker!r} and {anchor_comment!r})",
+        file=sys.stderr,
+    )
     sys.exit(1)
 
 line = lines[target_idx]
