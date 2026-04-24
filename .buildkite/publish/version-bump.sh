@@ -10,11 +10,15 @@
 #
 # Optional:
 #   DRY_RUN      - Set to "true" to print what would happen without pushing or committing
+#   AUTO_MERGE   - Set to "false" to create PRs but skip enabling auto-merge and the
+#                  merge-wait loop. Useful for testing: PRs stay open for inspection
+#                  and closure. Defaults to "true".
 ########
 
 set -euo pipefail
 
 DRY_RUN="${DRY_RUN:-false}"
+AUTO_MERGE="${AUTO_MERGE:-true}"
 
 # Validate required environment variables
 for var in NEW_VERSION BRANCH WORKFLOW; do
@@ -155,6 +159,11 @@ create_pr_and_wait() {
       --head "${source_branch}" \
       --label "ci:version-bump")
     echo "Created PR: ${pr_url}"
+  fi
+
+  if [[ "${AUTO_MERGE}" != "true" ]]; then
+    echo "AUTO_MERGE=false -- leaving PR open without enabling auto-merge: ${pr_url}"
+    return 0
   fi
 
   gh pr merge "${pr_url}" --auto --squash --delete-branch
