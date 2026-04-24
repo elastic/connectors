@@ -15,9 +15,22 @@ steps:
       - ".buildkite/publish/version-bump.sh"
     timeout_in_minutes: 180
 
+  # The `connectors` pipeline is gated via `branch_configuration: "main"`, so
+  # pushes to release branches don't auto-trigger builds. Explicitly trigger a
+  # DRA build on the target branch so the DRA manifest reflects the new version
+  # and the json-watcher steps below can confirm it.
+  - label: ":rocket: Trigger DRA build on ${BRANCH}"
+    key: trigger-dra-build
+    depends_on: version-bump
+    trigger: connectors
+    async: true
+    build:
+      branch: "${BRANCH}"
+      message: "DRA build triggered by version bump to ${NEW_VERSION}"
+
   - label: "Fetch DRA Staging Artifacts"
     key: fetch-dra-staging-artifacts
-    depends_on: version-bump
+    depends_on: trigger-dra-build
     if: build.env("BRANCH") =~ /^[0-9]+\.[0-9x]+\$/
     agents:
       image: docker.elastic.co/release-eng/wolfi-build-essential-release-eng:latest
@@ -42,7 +55,7 @@ steps:
 
   - label: "Fetch DRA Snapshot Artifacts"
     key: fetch-dra-snapshot-artifacts
-    depends_on: version-bump
+    depends_on: trigger-dra-build
     agents:
       image: docker.elastic.co/release-eng/wolfi-build-essential-release-eng:latest
       cpu: 250m

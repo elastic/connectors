@@ -57,12 +57,28 @@ fi
 PR_MERGE_TIMEOUT=5400  # 90 minutes -- accommodates full PR CI (~30 min) plus retries/flakes
 PR_POLL_INTERVAL=30    # seconds
 
+# Reads the current version string from the first VERSION file.
+current_version() {
+  cat "${VERSION_FILES[0]}" 2>/dev/null || echo ""
+}
+
 # Checks if the first VERSION file already contains the given version.
 version_already_bumped() {
-  local version="$1"
+  [[ "$(current_version)" == "$1" ]]
+}
+
+# Returns 0 if bumping to the given target would be a downgrade
+# (i.e. the current version is strictly greater than the target).
+# Uses `sort -V` for semver-aware comparison.
+version_is_downgrade() {
+  local target="$1"
   local current
-  current=$(cat "${VERSION_FILES[0]}" 2>/dev/null || echo "")
-  [[ "${current}" == "${version}" ]]
+  current="$(current_version)"
+  [[ -z "${current}" ]] && return 1
+  [[ "${current}" == "${target}" ]] && return 1
+  # sort -V -C exits 0 iff input is already sorted (current <= target).
+  # Negate: true iff current > target.
+  ! printf '%s\n%s\n' "${current}" "${target}" | sort -V -C 2>/dev/null
 }
 
 # Checks if a remote branch exists.
@@ -82,66 +98,11 @@ write_version_files() {
 
 # Adds a branch to the DRA branch list in pipeline.yml.
 # The list is the `if:` condition on the "Packaging and DRA" group step.
+# Delegates to add_branch_to_dra_list.py so the logic can be unit tested.
 add_branch_to_dra_list() {
   local new_branch="$1"
-
   echo "Adding ${new_branch} to DRA branch list in pipeline.yml"
-
-  python3 -c '
-import sys
-
-pipeline_yml = sys.argv[1]
-new_branch = sys.argv[2]
-
-with open(pipeline_yml) as f:
-    pipeline = f.read()
-
-# Anchor on multiple distinctive signals in the target line so accidental
-# future `if:` conditions mentioning "ci:packaging" do not get rewritten.
-# The trailing comment is load-bearing -- keep it if you edit pipeline.yml.
-anchor_comment = "# Add new maintenance branches here"
-dra_marker = "ci:packaging"
-lines = pipeline.splitlines(True)
-target_idx = None
-for i, line in enumerate(lines):
-    stripped = line.strip()
-    if (
-        stripped.startswith("if:")
-        and dra_marker in line
-        and anchor_comment in line
-    ):
-        target_idx = i
-        break
-
-if target_idx is None:
-    print(
-        "Error: could not find DRA branch condition in pipeline.yml "
-        f"(expected `if:` line containing both {dra_marker!r} and {anchor_comment!r})",
-        file=sys.stderr,
-    )
-    sys.exit(1)
-
-line = lines[target_idx]
-
-# Check if branch is already listed (quotes are escaped as \" in YAML)
-escaped = "\\\""
-if f"{escaped}{new_branch}{escaped}" in line:
-    print(f"Branch {new_branch} already in DRA list, skipping")
-    sys.exit(0)
-
-# Insert new branch condition before the pull_request.labels clause
-pr_label_marker = "build.pull_request.labels"
-if pr_label_marker not in line:
-    print("Error: could not find pull_request.labels marker in condition", file=sys.stderr)
-    sys.exit(1)
-
-insertion = f"build.branch == {escaped}{new_branch}{escaped} || "
-lines[target_idx] = line.replace(pr_label_marker, insertion + pr_label_marker)
-
-with open(pipeline_yml, "w") as f:
-    f.write("".join(lines))
-print("Updated DRA branch list successfully")
-' "${PIPELINE_YML}" "${new_branch}"
+  python3 "${SCRIPT_DIR}/add_branch_to_dra_list.py" "${PIPELINE_YML}" "${new_branch}"
 }
 
 # Creates a PR with auto-merge enabled and waits for it to merge.
@@ -210,7 +171,10 @@ if [[ "${WORKFLOW}" == "patch" ]]; then
 
   pr_branch="automations/bump-${BRANCH}-to-${NEW_VERSION}"
 
-  if version_already_bumped "${NEW_VERSION}"; then
+  if version_is_downgrade "${NEW_VERSION}"; then
+    echo "Error: ${BRANCH} is already at $(current_version), refusing to downgrade to ${NEW_VERSION}"
+    exit 1
+  elif version_already_bumped "${NEW_VERSION}"; then
     echo "Version already at ${NEW_VERSION} on ${BRANCH}, nothing to do"
   elif [[ "${DRY_RUN}" == "true" ]]; then
     echo "[dry-run] Would create branch ${pr_branch}"
@@ -291,7 +255,10 @@ elif [[ "${WORKFLOW}" == "minor" ]]; then
   git checkout main
   git pull origin main
 
-  if version_already_bumped "${NEXT_VERSION}"; then
+  if version_is_downgrade "${NEXT_VERSION}"; then
+    echo "Error: main is already at $(current_version), refusing to downgrade to ${NEXT_VERSION}"
+    exit 1
+  elif version_already_bumped "${NEXT_VERSION}"; then
     echo "Main already at ${NEXT_VERSION}, nothing to do"
   elif [[ "${DRY_RUN}" == "true" ]]; then
     echo "[dry-run] Would create branch ${pr_branch}"
