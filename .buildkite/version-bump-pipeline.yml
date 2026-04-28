@@ -4,8 +4,25 @@ notify:
         - "#search-et-alerts"
     if: (build.branch == 'main' || build.branch =~ /^[0-9]+\.[0-9x]+\$/) && (build.state == 'passed' || build.state == 'failed')
 steps:
+  # Fail fast on missing trigger params. Otherwise empty `${BRANCH}` /
+  # `${NEW_VERSION}` interpolate silently and surface only as a 4-hour
+  # json-watcher timeout.
+  - label: ":lock: Validate trigger params"
+    key: validate-params
+    agents:
+      image: docker.elastic.co/ci-agent-images/ubuntu-build-essential:latest
+      cpu: 100m
+      memory: 128Mi
+    command: |
+      : "$${BRANCH:?BRANCH must be set by the triggering pipeline}"
+      : "$${NEW_VERSION:?NEW_VERSION must be set by the triggering pipeline}"
+      : "$${WORKFLOW:?WORKFLOW must be set by the triggering pipeline}"
+      echo "BRANCH=$$BRANCH NEW_VERSION=$$NEW_VERSION WORKFLOW=$$WORKFLOW"
+    timeout_in_minutes: 5
+
   - label: ":arrow_up: Bump version"
     key: version-bump
+    depends_on: validate-params
     agents:
       image: docker.elastic.co/ci-agent-images/ubuntu-build-essential:latest
       cpu: 250m
