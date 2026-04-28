@@ -119,9 +119,11 @@ create_pr_and_wait() {
 
   echo "Creating PR: ${title} (${source_branch} -> ${target_branch})"
 
-  # Check if a PR already exists for this branch (idempotency on re-run)
+  # Reuse an existing open PR if there is one. `--state open` is required:
+  # branch names get recycled across runs, so we'd otherwise match a stale
+  # merged PR and then fail trying to auto-merge it.
   local pr_url
-  pr_url=$(gh pr view "${source_branch}" --json url --jq '.url' 2>/dev/null || echo "")
+  pr_url=$(gh pr list --head "${source_branch}" --state open --json url --jq '.[0].url // empty' 2>/dev/null || echo "")
 
   if [[ -n "${pr_url}" ]]; then
     echo "PR already exists: ${pr_url}"
