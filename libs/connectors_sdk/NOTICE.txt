@@ -947,7 +947,7 @@ Apache Software License
 
 
 build
-1.4.2
+1.4.4
 MIT
 Copyright © 2019 Filipe Laíns <filipe.lains@gmail.com>
 
@@ -1220,11 +1220,11 @@ Apache License
 
 
 idna
-3.11
+3.13
 BSD-3-Clause
 BSD 3-Clause License
 
-Copyright (c) 2013-2025, Kim Davies and contributors.
+Copyright (c) 2013-2026, Kim Davies and contributors.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -1274,7 +1274,7 @@ Apache License 2.0
 
 
 packaging
-26.0
+26.2
 Apache-2.0 OR BSD-2-Clause
 This software is made available under the terms of *either* of the licenses
 found in LICENSE.APACHE or LICENSE.BSD. Contributions to this software is made
