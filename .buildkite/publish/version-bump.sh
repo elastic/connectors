@@ -37,10 +37,22 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
-VERSION_FILES=(
-  "${PROJECT_ROOT}/app/connectors_service/connectors/VERSION"
-  "${PROJECT_ROOT}/libs/connectors_sdk/connectors_sdk/VERSION"
-)
+# Pre-9.3 branches predate the monorepo split and have a single VERSION file
+# at a different path. Select the layout up front based on the target branch
+# so the rest of the script can stay layout-agnostic.
+case "${BRANCH}" in
+  8.*|9.0|9.1|9.2)
+    VERSION_FILES=(
+      "${PROJECT_ROOT}/connectors/VERSION"
+    )
+    ;;
+  *)
+    VERSION_FILES=(
+      "${PROJECT_ROOT}/app/connectors_service/connectors/VERSION"
+      "${PROJECT_ROOT}/libs/connectors_sdk/connectors_sdk/VERSION"
+    )
+    ;;
+esac
 
 PIPELINE_YML="${PROJECT_ROOT}/.buildkite/pipeline.yml"
 
