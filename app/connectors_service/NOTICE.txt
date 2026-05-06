@@ -2615,7 +2615,7 @@ SOFTWARE.
 
 
 build
-1.4.4
+1.5.0
 MIT
 Copyright © 2019 Filipe Laíns <filipe.lains@gmail.com>
 
