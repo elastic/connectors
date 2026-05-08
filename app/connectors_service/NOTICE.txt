@@ -1906,7 +1906,7 @@ SOFTWARE.
 
 
 azure-core
-1.40.0
+1.41.0
 MIT
 Copyright (c) Microsoft Corporation.
 
@@ -4146,7 +4146,7 @@ Apache Software License
 
 
 google-auth
-2.50.0
+2.52.0
 Apache Software License
                                  Apache License
                            Version 2.0, January 2004
@@ -8213,7 +8213,7 @@ made under the terms of *both* these licenses.
 
 
 urllib3
-2.6.3
+2.7.0
 MIT
 MIT License
 
