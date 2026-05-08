@@ -35,7 +35,7 @@ async def test_access_control_query():
                             },
                             {
                                 "terms": {
-                                    "_allow_access_control.enum": {{#toJson}}access_control{{/toJson}}
+                                    "_allow_access_control.keyword": {{#toJson}}access_control{{/toJson}}
                                 }
                             }
                         ]
