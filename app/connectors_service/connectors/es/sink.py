@@ -49,6 +49,7 @@ from connectors.utils import (
     DEFAULT_CONCURRENT_DOWNLOADS,
     DEFAULT_DISPLAY_EVERY,
     DEFAULT_MAX_CONCURRENCY,
+    DEFAULT_MAX_DOCUMENT_SIZE,
     DEFAULT_QUEUE_MEM_SIZE,
     DEFAULT_QUEUE_SIZE,
     ConcurrentTasks,
@@ -82,6 +83,7 @@ DELETES_QUEUED = "doc_deletes_queued"
 DOCS_EXTRACTED = "docs_extracted"
 DOCS_FILTERED = "docs_filtered"
 DOCS_DROPPED = "docs_dropped"
+DOCS_DROPPED_TOO_LARGE = "docs_dropped_too_large"
 ID_MISSING = "_ids_missing"
 RESULT_ERROR = "result_errors"
 RESULT_SUCCESS = "result_successes"
@@ -135,6 +137,9 @@ class Sink:
     - `pipeline` -- ingest pipeline settings to pass to the bulk API
     - `chunk_mem_size` -- a maximum size in MiB for each bulk request
     - `max_concurrency` -- a maximum number of concurrent bulk requests
+    - `max_document_size` -- a hard per-document size cap in MiB; documents
+      whose serialized bulk-op size exceeds this are dropped (skipped, logged,
+      counted) instead of being sent. Falsy values (``0``/``None``) disable the cap.
     """
 
     def __init__(
@@ -150,6 +155,7 @@ class Sink:
         error_monitor,
         logger_=None,
         enable_bulk_operations_logging=False,
+        max_document_size=None,
     ):
         self.client = client
         self.queue = queue
@@ -164,6 +170,10 @@ class Sink:
         self._logger = logger_ or logger
         self._canceled = False
         self._enable_bulk_operations_logging = enable_bulk_operations_logging
+        # Stored in bytes for direct comparison with doc_size; falsy disables the cap.
+        self.max_document_size = (
+            max_document_size * 1024 * 1024 if max_document_size else max_document_size
+        )
         self.counters = Counters()
 
     def _bulk_op(self, doc, operation=OP_INDEX):
@@ -382,6 +392,18 @@ class Sink:
                 doc_id = doc["_id"]
                 if not doc_id:
                     self._logger.warning(f"Skip document {doc} as '_id' is missing.")
+                    continue
+                if (
+                    operation != OP_DELETE
+                    and self.max_document_size
+                    and doc_size > self.max_document_size
+                ):
+                    self._logger.warning(
+                        f"Dropping doc id={doc_id} index={doc['_index']} op={operation}: "
+                        f"size {doc_size}B exceeds elasticsearch.bulk.max_document_size "
+                        f"({self.max_document_size}B)"
+                    )
+                    self.counters.increment(DOCS_DROPPED_TOO_LARGE)
                     continue
                 if operation == OP_DELETE:
                     stats[operation][doc_id] = 0
@@ -1024,6 +1046,7 @@ class SyncOrchestrator:
         )
         mem_queue_refresh_timeout = options.get("queue_refresh_timeout", 60)
         mem_queue_refresh_interval = options.get("queue_refresh_interval", 1)
+        max_document_size = options.get("max_document_size", DEFAULT_MAX_DOCUMENT_SIZE)
 
         stream = MemQueue(
             maxsize=queue_size,
@@ -1066,6 +1089,7 @@ class SyncOrchestrator:
             error_monitor=self.error_monitor,
             logger_=self._logger,
             enable_bulk_operations_logging=enable_bulk_operations_logging,
+            max_document_size=max_document_size,
         )
         self._sink_task = asyncio.create_task(
             self._sink.run(), name=f"Sink for {job_type} sync to {index}"

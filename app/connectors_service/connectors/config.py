@@ -13,6 +13,7 @@ DEFAULT_ELASTICSEARCH_MAX_RETRIES = 5
 DEFAULT_ELASTICSEARCH_RETRY_INTERVAL = 10
 
 DEFAULT_MAX_FILE_SIZE = 10485760  # 10MB
+DEFAULT_MAX_DOCUMENT_SIZE = 3  # 3 MiB
 
 
 def load_config(config_file):
@@ -73,6 +74,7 @@ def _default_config():
                 "chunk_size": 1000,
                 "max_concurrency": 5,
                 "chunk_max_mem_size": 5,
+                "max_document_size": DEFAULT_MAX_DOCUMENT_SIZE,
                 "max_retries": DEFAULT_ELASTICSEARCH_MAX_RETRIES,
                 "retry_interval": DEFAULT_ELASTICSEARCH_RETRY_INTERVAL,
                 "concurrent_downloads": 10,
