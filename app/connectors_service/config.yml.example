@@ -120,10 +120,10 @@
 #
 #
 ##  Maximal interval of time during which MemQueue does not dequeue a single document
-##  For example, if no documents were sent to Elasticsearch within 60 seconds because of
+##  For example, if no documents were sent to Elasticsearch within 700 seconds because of
 ##  Elasticsearch being overloaded, then an error will be raised.
 ##  This mechanism exists to be a circuit-breaker for stuck jobs and stuck Elasticsearch.
-#elasticsearch.bulk.queue_refresh_timeout: 60
+#elasticsearch.bulk.queue_refresh_timeout: 700
 #
 #
 ##  The max size in MB of a bulk request.
