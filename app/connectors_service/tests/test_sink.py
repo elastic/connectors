@@ -22,6 +22,7 @@ from connectors.es.sink import (
     CREATES_QUEUED,
     DELETES_QUEUED,
     DOCS_EXTRACTED,
+    END_DOCS,
     OP_DELETE,
     OP_INDEX,
     OP_UPDATE,
@@ -1750,3 +1751,126 @@ async def test_should_log_error_when_unknown_action_item_returned(patch_logger):
     patch_logger.assert_present(
         successful_action_log_message(DOC_ONE_ID, "create", "created")
     )
+
+
+MIB = 1024 * 1024
+
+
+def _index_doc(doc_id):
+    return {
+        "_op_type": OP_INDEX,
+        "_index": INDEX,
+        "_id": doc_id,
+        "doc": {"id": doc_id},
+    }
+
+
+def _make_run_queue(items):
+    """Build a queue mock whose `get` yields `(doc_size, doc)` items in order,
+    terminating with the END_DOCS sentinel so `Sink._run` exits cleanly."""
+    queue = Mock()
+    queue.get = AsyncMock(side_effect=[*items, (0, END_DOCS)])
+    return queue
+
+
+def _make_sink(queue, *, chunk_size, chunk_mem_size, max_concurrency=2):
+    sink = Sink(
+        client=None,
+        queue=queue,
+        chunk_size=chunk_size,
+        pipeline={"name": "pipeline"},
+        chunk_mem_size=chunk_mem_size,
+        max_concurrency=max_concurrency,
+        max_retries=3,
+        retry_interval=0,
+        error_monitor=Mock(),
+    )
+    sink._batch_bulk = AsyncMock(return_value={"items": []})
+    return sink
+
+
+def _dispatched_batches(sink):
+    return [call_args.args[0] for call_args in sink._batch_bulk.await_args_list]
+
+
+@pytest.mark.asyncio
+async def test_sink_run_flushes_before_memory_overflow():
+    # Mirrors the bug-report scenario: docs sized 1, 1, 1, 1, 2 MiB with a
+    # 5 MiB chunk_mem_size must never produce a >5 MiB bulk request.
+    items = [
+        (1 * MIB, _index_doc("1")),
+        (1 * MIB, _index_doc("2")),
+        (1 * MIB, _index_doc("3")),
+        (1 * MIB, _index_doc("4")),
+        (2 * MIB, _index_doc("5")),
+    ]
+    queue = _make_run_queue(items)
+    sink = _make_sink(queue, chunk_size=1000, chunk_mem_size=5)
+
+    await sink._run()
+
+    batches = _dispatched_batches(sink)
+    assert len(batches) == 2
+
+    # OP_INDEX produces 2 entries per doc via Sink._bulk_op, so 4 docs -> 8 entries.
+    assert len(batches[0]) == 8
+    first_ids = [entry[OP_INDEX]["_id"] for entry in batches[0] if OP_INDEX in entry]
+    assert first_ids == ["1", "2", "3", "4"]
+
+    assert len(batches[1]) == 2
+    second_ids = [entry[OP_INDEX]["_id"] for entry in batches[1] if OP_INDEX in entry]
+    assert second_ids == ["5"]
+
+
+@pytest.mark.asyncio
+async def test_sink_run_flushes_at_chunk_size_boundary():
+    # chunk_size is measured in batch entries (OP_INDEX adds 2 per doc).
+    # With chunk_size=4 the flush should trigger after every 2 docs without
+    # being driven by chunk_mem_size.
+    items = [(1, _index_doc(str(i))) for i in range(1, 5)]
+    queue = _make_run_queue(items)
+    sink = _make_sink(queue, chunk_size=4, chunk_mem_size=1024)
+
+    await sink._run()
+
+    batches = _dispatched_batches(sink)
+    assert len(batches) == 2
+    assert all(len(batch) == 4 for batch in batches)
+
+    ids_per_batch = [
+        [entry[OP_INDEX]["_id"] for entry in batch if OP_INDEX in entry]
+        for batch in batches
+    ]
+    assert ids_per_batch == [["1", "2"], ["3", "4"]]
+
+
+@pytest.mark.asyncio
+async def test_sink_run_oversized_single_doc_not_double_flushed():
+    # An oversized doc must still be sent (no way to split it) and the
+    # `if batch` guard must prevent dispatching an empty batch first.
+    items = [(10 * MIB, _index_doc("big"))]
+    queue = _make_run_queue(items)
+    sink = _make_sink(queue, chunk_size=1000, chunk_mem_size=5)
+
+    await sink._run()
+
+    batches = _dispatched_batches(sink)
+    assert len(batches) == 1
+    assert len(batches[0]) == 2
+    assert batches[0][0][OP_INDEX]["_id"] == "big"
+
+
+@pytest.mark.asyncio
+async def test_sink_run_final_flush_unchanged():
+    # With thresholds large enough to never trigger an in-loop flush, the
+    # trailing `if len(batch) > 0` flush must still deliver pending docs.
+    items = [(1, _index_doc("1")), (1, _index_doc("2"))]
+    queue = _make_run_queue(items)
+    sink = _make_sink(queue, chunk_size=1000, chunk_mem_size=1024)
+
+    await sink._run()
+
+    batches = _dispatched_batches(sink)
+    assert len(batches) == 1
+    ids = [entry[OP_INDEX]["_id"] for entry in batches[0] if OP_INDEX in entry]
+    assert ids == ["1", "2"]
