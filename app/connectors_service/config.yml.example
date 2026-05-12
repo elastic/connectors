@@ -132,6 +132,15 @@
 #elasticsearch.bulk.chunk_max_mem_size: 5
 #
 #
+##  Hard per-document size limit in MiB. Documents whose serialized
+##    bulk-operation size exceeds this threshold are dropped (skipped, logged,
+##    and counted) instead of being sent to Elasticsearch. This protects small
+##    Elasticsearch nodes from being overwhelmed by huge documents extracted
+##    e.g. via the Data Extraction Service, which bypasses
+##    service.max_file_download_size. Set to 0 to disable.
+#elasticsearch.bulk.max_document_size: 3
+#
+#
 ##  The max size of the bulk operation to Elasticsearch.
 #elasticsearch.bulk.chunk_size: 500
 #
