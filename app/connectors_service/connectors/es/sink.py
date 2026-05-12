@@ -383,6 +383,28 @@ class Sink:
                 if not doc_id:
                     self._logger.warning(f"Skip document {doc} as '_id' is missing.")
                     continue
+                # Flush the current batch *before* adding the new doc if doing so
+                # would push the batch past its size or memory ceiling. This keeps
+                # any single dispatched bulk request at or below `chunk_mem_size`.
+                # An oversized single doc is still sent on its own (no batch to
+                # split it from) thanks to the `if batch` guard.
+                prospective_size = bulk_size + doc_size
+                if batch and (
+                    len(batch) >= self.chunk_size
+                    or prospective_size > self.chunk_mem_size
+                ):
+                    await self.bulk_tasks.put(
+                        functools.partial(
+                            self._batch_bulk,
+                            copy.copy(batch),
+                            copy.copy(stats),
+                        ),
+                        name=f"Elasticsearch Sink: _bulk batch #{batch_num}",
+                    )
+                    batch.clear()
+                    stats = {OP_INDEX: {}, OP_UPDATE: {}, OP_DELETE: {}}
+                    bulk_size = 0
+
                 if operation == OP_DELETE:
                     stats[operation][doc_id] = 0
                 else:
@@ -398,20 +420,7 @@ class Sink:
                     stats[operation][doc_id] = max(doc_size - overhead_size, 0)
                 self.counters.increment(operation, namespace=BULK_OPERATIONS)
                 batch.extend(self._bulk_op(doc, operation))
-
                 bulk_size += doc_size
-                if len(batch) >= self.chunk_size or bulk_size > self.chunk_mem_size:
-                    await self.bulk_tasks.put(
-                        functools.partial(
-                            self._batch_bulk,
-                            copy.copy(batch),
-                            copy.copy(stats),
-                        ),
-                        name=f"Elasticsearch Sink: _bulk batch #{batch_num}",
-                    )
-                    batch.clear()
-                    stats = {OP_INDEX: {}, OP_UPDATE: {}, OP_DELETE: {}}
-                    bulk_size = 0
 
                 await asyncio.sleep(0)
                 self.bulk_tasks.raise_any_exception()
