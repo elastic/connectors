@@ -33,6 +33,11 @@ def test_config(set_env):
     assert config["elasticsearch"]["user"] == "elastic"
 
 
+def test_default_max_document_size(set_env):
+    config = load_config(CONFIG_FILE)
+    assert config["elasticsearch"]["bulk"]["max_document_size"] == 3
+
+
 def test_config_with_ent_search(set_env):
     with mock.patch.dict(os.environ, {"ENT_SEARCH_CONFIG_PATH": ES_CONFIG_FILE}):
         config = load_config(CONFIG_FILE)
