@@ -11,8 +11,11 @@ from envyaml import EnvYAML
 
 DEFAULT_ELASTICSEARCH_MAX_RETRIES = 5
 DEFAULT_ELASTICSEARCH_RETRY_INTERVAL = 10
+# Must outlast the worst-case bulk request: 5 attempts × 120s request_timeout,
+# plus 10 + 20 + 30 + 40s of retry backoff between them = 700s.
+DEFAULT_BULK_QUEUE_REFRESH_TIMEOUT = 700
 
-DEFAULT_MAX_FILE_SIZE = 10485760  # 10MB
+DEFAULT_MAX_FILE_SIZE = 10485760  # 10MiB
 
 
 def load_config(config_file):
@@ -68,7 +71,7 @@ def _default_config():
                 "queue_max_size": 1024,
                 "queue_max_mem_size": 25,
                 "queue_refresh_interval": 1,
-                "queue_refresh_timeout": 600,
+                "queue_refresh_timeout": DEFAULT_BULK_QUEUE_REFRESH_TIMEOUT,
                 "display_every": 100,
                 "chunk_size": 1000,
                 "max_concurrency": 5,
