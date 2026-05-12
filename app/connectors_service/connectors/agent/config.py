@@ -28,12 +28,29 @@ class ConnectorsAgentConfigurationWrapper:
         There's default config that allows us to run connectors service. When final
         configuration is reported these defaults will be merged with defaults from
         Connectors Service config and specific config coming from Agent.
+
+        The `elasticsearch` block contains Agentless-specific overrides. In Agentless
+        mode users have no access to the underlying host or `config.yml`, so they
+        cannot tune these values themselves. The defaults below trade some throughput
+        for ingestion stability (smaller bulk batches and a longer request timeout)
+        to reduce the chance of bulk requests timing out for content-heavy connectors
+        such as GMail. Self-managed connectors are unaffected and continue to use the
+        defaults defined in `connectors.config`.
         """
         self._default_config = {
             "service": {
                 "log_level": "INFO",
             },
             "connectors": [],
+            "elasticsearch": {
+                "request_timeout": 240,
+                "max_wait_duration": 240,
+                "bulk": {
+                    "queue_refresh_timeout": 1300,
+                    "chunk_max_mem_size": 3,
+                    "chunk_size": 500,
+                },
+            },
         }
 
         self.specific_config = {}
@@ -138,9 +155,12 @@ class ConnectorsAgentConfigurationWrapper:
             return current_config_log_level != new_config_log_level
 
         def _elasticsearch_config_changed():
-            return current_config.get("elasticsearch") != new_config.get(
-                "elasticsearch"
-            )
+            new_elasticsearch = new_config.get("elasticsearch")
+            if new_elasticsearch is None:
+                # Partial Agent updates often omit `elasticsearch`; do not treat that
+                # as a diff against `_default_config` (e.g. Agentless bulk defaults).
+                return False
+            return current_config.get("elasticsearch") != new_elasticsearch
 
         def _connectors_config_changes():
             current_connectors = current_config.get("connectors", [])
