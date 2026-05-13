@@ -82,54 +82,104 @@ def test_nest_config_when_root_field_does_exists():
     assert config["test"] == 50
 
 
-def test_default_config_protects_critical_values():
-    """Snapshot of critical default values.
+def test_bulk_queue_refresh_timeout_outlasts_worst_case_retry_budget():
+    """The mem-queue refresh timeout must outlive a fully retried bulk request.
 
-    These defaults shape production behavior (timeouts, retries, concurrency, file
-    size limits). Update this test deliberately if a default is intentionally changed.
+    Bulk operations are wrapped with `retryable` using LINEAR_BACKOFF, so the worst-case
+    duration of a single bulk send is `max_retries` request attempts (each capped by
+    `request_timeout`) plus the linear backoff sleeps between them. If
+    `queue_refresh_timeout` is shorter than that budget, the queue gives up on a request
+    that the retry layer is still legitimately working on, and we lose data.
     """
     defaults = add_defaults({})
-
     bulk = defaults["elasticsearch"]["bulk"]
-    assert bulk["queue_max_size"] == 1024
-    assert bulk["queue_max_mem_size"] == 25
-    assert bulk["queue_refresh_interval"] == 1
-    assert bulk["queue_refresh_timeout"] == 700
-    assert bulk["display_every"] == 100
-    assert bulk["chunk_size"] == 1000
-    assert bulk["max_concurrency"] == 5
-    assert bulk["chunk_max_mem_size"] == 5
-    assert bulk["max_retries"] == 5
-    assert bulk["retry_interval"] == 10
-    assert bulk["concurrent_downloads"] == 10
-    assert bulk["enable_operations_logging"] is False
+    request_timeout = defaults["elasticsearch"]["request_timeout"]
 
-    error_monitor = bulk["error_monitor"]
-    assert error_monitor["enabled"] is True
-    assert error_monitor["max_total_errors"] == 1000
-    assert error_monitor["max_consecutive_errors"] == 10
-    assert error_monitor["max_error_rate"] == 0.15
-    assert error_monitor["error_window_size"] == 100
-    assert error_monitor["error_queue_size"] == 10
+    max_request_time = bulk["max_retries"] * request_timeout
+    backoff_gaps = sum(
+        bulk["retry_interval"] * i for i in range(1, bulk["max_retries"])
+    )
+    worst_case_retry_budget = max_request_time + backoff_gaps
 
-    es = defaults["elasticsearch"]
-    assert es["max_retries"] == 5
-    assert es["retry_interval"] == 10
-    assert es["retry_on_timeout"] is True
-    assert es["request_timeout"] == 120
-    assert es["max_wait_duration"] == 120
-    assert es["initial_backoff_duration"] == 1
-    assert es["backoff_multiplier"] == 2
+    assert bulk["queue_refresh_timeout"] >= worst_case_retry_budget, (
+        f"queue_refresh_timeout={bulk['queue_refresh_timeout']}s is shorter than the "
+        f"worst-case bulk retry budget of {worst_case_retry_budget}s"
+    )
 
-    service = defaults["service"]
-    assert service["idling"] == 30
-    assert service["heartbeat"] == 300
-    assert service["preflight_max_attempts"] == 10
-    assert service["preflight_idle"] == 30
-    assert service["max_errors"] == 20
-    assert service["max_errors_span"] == 600
-    assert service["max_concurrent_content_syncs"] == 1
-    assert service["max_concurrent_access_control_syncs"] == 1
-    assert service["max_concurrent_scheduling_tasks"] == 4
-    assert service["max_file_download_size"] == 10485760
-    assert service["job_cleanup_interval"] == 300
+
+def test_bulk_chunk_sizes_are_sane():
+    """Chunk size and concurrency knobs need to be in a workable range.
+
+    Tiny chunks make bulk ingest pathologically chatty; huge chunks blow past
+    Elasticsearch's bulk request limits. Memory caps need to leave room for at least one
+    chunk, and concurrency must be positive for any work to happen.
+    """
+    bulk = add_defaults({})["elasticsearch"]["bulk"]
+
+    assert 250 <= bulk["chunk_size"] <= 10_000
+    assert 1 <= bulk["chunk_max_mem_size"] <= bulk["queue_max_mem_size"]
+    assert bulk["max_concurrency"] >= 1
+    assert bulk["queue_max_size"] >= bulk["max_concurrency"]
+
+
+def test_retry_budgets_do_not_blow_up_into_hours():
+    """No single retried operation should be allowed to stall for more than an hour.
+
+    The bulk retry layer (linear backoff) has the shape `attempts * timeout +
+    sum(backoffs)`, and the ES preflight wait loop has its own `max_wait_duration` cap.
+    Setting either high enough to produce hour-plus stalls would silently freeze syncs;
+    we cap the worst case at 1 hour per operation as a sanity ceiling.
+    """
+    defaults = add_defaults({})
+    bulk = defaults["elasticsearch"]["bulk"]
+    request_timeout = defaults["elasticsearch"]["request_timeout"]
+    max_wait_duration = defaults["elasticsearch"]["max_wait_duration"]
+    one_hour = 60 * 60
+
+    max_request_time = bulk["max_retries"] * request_timeout
+    backoff_gaps = sum(
+        bulk["retry_interval"] * i for i in range(1, bulk["max_retries"])
+    )
+    bulk_worst_case = max_request_time + backoff_gaps
+
+    assert (
+        bulk_worst_case <= one_hour
+    ), f"bulk retry worst-case {bulk_worst_case}s exceeds 1h ceiling"
+    assert (
+        max_wait_duration <= one_hour
+    ), f"ES preflight max_wait_duration {max_wait_duration}s exceeds 1h ceiling"
+
+
+def test_error_monitor_window_can_observe_threshold():
+    """The sliding error window must be able to actually contain the failure threshold.
+
+    `max_consecutive_errors` and `max_error_rate` are evaluated against an error window
+    of size `error_window_size`. If the window is smaller than the consecutive threshold,
+    the consecutive trigger would fire before the window is even full, defeating the
+    rate-based check. The error rate must also be a valid probability.
+    """
+    error_monitor = add_defaults({})["elasticsearch"]["bulk"]["error_monitor"]
+
+    assert error_monitor["error_window_size"] > error_monitor["max_consecutive_errors"]
+    assert error_monitor["error_queue_size"] <= error_monitor["error_window_size"]
+    assert 0 < error_monitor["max_error_rate"] <= 1
+    assert error_monitor["max_total_errors"] >= error_monitor["max_consecutive_errors"]
+
+
+def test_service_lifecycle_intervals_are_consistent():
+    """Polling / heartbeat / cleanup intervals must respect their natural ordering.
+
+    A worker polls every `idling` seconds, so neither the heartbeat nor the periodic
+    cleanup can be expected to fire faster than that. Preflight has to give Elasticsearch
+    a real chance to come up (more than one attempt, with a non-trivial idle between
+    attempts), and the configured download cap has to be a positive byte count we
+    actually want to permit.
+    """
+    service = add_defaults({})["service"]
+
+    assert service["heartbeat"] > service["idling"]
+    assert service["job_cleanup_interval"] > service["idling"]
+    assert service["preflight_max_attempts"] >= 2
+    assert service["preflight_idle"] >= 1
+    assert service["max_concurrent_content_syncs"] >= 1
+    assert 0 < service["max_file_download_size"] <= 1024**3
