@@ -91,47 +91,6 @@ def test_try_update_with_non_encoded_api_key_auth_data():
     assert config_wrapper.get()["elasticsearch"]["api_key"] == encoded
 
 
-def test_agentless_bulk_defaults_are_applied():
-    """Agentless mode cannot expose `config.yml`, so the wrapper must inject
-    conservative bulk/timeout defaults that protect content-heavy connectors
-    (e.g. GMail) from bulk request timeouts."""
-    config_wrapper = ConnectorsAgentConfigurationWrapper()
-
-    config = config_wrapper.get()
-
-    assert_elasticsearch_agentless_defaults(config)
-
-
-def test_agentless_bulk_defaults_survive_agent_supplied_credentials():
-    """Credentials reported by Agent must not wipe out the Agentless ingestion
-    defaults — the deep-merge in `get()` should preserve them alongside host/api_key."""
-    hosts = ["https://localhost:9200"]
-    api_key = "lemme_in"
-
-    config_wrapper = ConnectorsAgentConfigurationWrapper()
-    unit_mock = prepare_unit_mock({"hosts": hosts, "api_key": api_key}, None)
-
-    config_wrapper.try_update(
-        connector_id=CONNECTOR_ID,
-        service_type=SERVICE_TYPE,
-        output_unit=unit_mock,
-    )
-
-    config = config_wrapper.get()
-
-    assert config["elasticsearch"]["host"] == hosts[0]
-    assert config["elasticsearch"]["api_key"] == api_key
-    assert_elasticsearch_agentless_defaults(config)
-
-
-def assert_elasticsearch_agentless_defaults(config):
-    assert config["elasticsearch"]["request_timeout"] == 240
-    assert config["elasticsearch"]["max_wait_duration"] == 240
-    assert config["elasticsearch"]["bulk"]["queue_refresh_timeout"] == 1300
-    assert config["elasticsearch"]["bulk"]["chunk_max_mem_size"] == 3
-    assert config["elasticsearch"]["bulk"]["chunk_size"] == 500
-
-
 def test_try_update_with_basic_auth_auth_data():
     hosts = ["https://localhost:9200"]
     username = "elastic"
