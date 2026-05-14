@@ -1808,9 +1808,8 @@ async def test_sink_drops_doc_exceeding_max_document_size(patch_logger):
     client.bulk_insert.assert_not_awaited()
     patch_logger.assert_present(
         f"Dropping doc id={big_doc['_id']} index={INDEX} op={OP_INDEX}: "
-        f"in-memory size estimate {5 * 1024 * 1024}B exceeds "
-        f"elasticsearch.bulk.max_document_size "
-        f"(3MiB / {3 * 1024 * 1024}B)"
+        f"size {5 * 1024 * 1024}B exceeds elasticsearch.bulk.max_document_size "
+        f"({3 * 1024 * 1024}B)"
     )
 
 
