@@ -62,7 +62,7 @@ class ESClient:
 
         options = {
             "hosts": [self.host],
-            "request_timeout": config.get("request_timeout", 120),
+            "request_timeout": config.get("request_timeout", 240),
             "retry_on_timeout": config.get("retry_on_timeout", True),
         }
         logger.debug(f"Initial Elasticsearch node configuration is {self.host}")
@@ -103,7 +103,7 @@ class ESClient:
             log_level=logging.getLevelName(level),
             filebeat=logger.filebeat,  # pyright: ignore
         )
-        self.max_wait_duration = config.get("max_wait_duration", 60)
+        self.max_wait_duration = config.get("max_wait_duration", 240)
         self.initial_backoff_duration = config.get("initial_backoff_duration", 5)
         self.backoff_multiplier = config.get("backoff_multiplier", 2)
 
