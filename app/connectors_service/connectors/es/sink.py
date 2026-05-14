@@ -385,12 +385,17 @@ class Sink:
                     continue
                 # Flush the current batch *before* adding the new doc if doing so
                 # would push the batch past its size or memory ceiling. This keeps
-                # any single dispatched bulk request at or below `chunk_mem_size`.
+                # any single dispatched bulk request at or below `chunk_size` /
+                # `chunk_mem_size`. Note that `_bulk_op` emits 1 entry for deletes
+                # and 2 entries for index/update, so we compare against the
+                # *prospective* entry count rather than the current length.
                 # An oversized single doc is still sent on its own (no batch to
                 # split it from) thanks to the `if batch` guard.
+                entries_for_next_doc = 1 if operation == OP_DELETE else 2
+                prospective_len = len(batch) + entries_for_next_doc
                 prospective_size = bulk_size + doc_size
                 if batch and (
-                    len(batch) >= self.chunk_size
+                    prospective_len > self.chunk_size
                     or prospective_size > self.chunk_mem_size
                 ):
                     await self.bulk_tasks.put(

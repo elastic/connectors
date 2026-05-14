@@ -1765,6 +1765,23 @@ def _index_doc(doc_id):
     }
 
 
+def _update_doc(doc_id):
+    return {
+        "_op_type": OP_UPDATE,
+        "_index": INDEX,
+        "_id": doc_id,
+        "doc": {"id": doc_id},
+    }
+
+
+def _delete_doc(doc_id):
+    return {
+        "_op_type": OP_DELETE,
+        "_index": INDEX,
+        "_id": doc_id,
+    }
+
+
 def _make_run_queue(items):
     """Build a queue mock whose `get` yields `(doc_size, doc)` items in order,
     terminating with the END_DOCS sentinel so `Sink._run` exits cleanly."""
@@ -1842,6 +1859,43 @@ async def test_sink_run_flushes_at_chunk_size_boundary():
         for batch in batches
     ]
     assert ids_per_batch == [["1", "2"], ["3", "4"]]
+
+
+@pytest.mark.asyncio
+async def test_sink_run_chunk_size_with_mixed_operations():
+    # `_bulk_op` emits 1 entry for OP_DELETE and 2 entries for OP_INDEX /
+    # OP_UPDATE. A naive `len(batch) >= chunk_size` pre-flush check would
+    # allow `delete (1) + index (2) + index (2)` to grow the batch to 5
+    # entries before flushing, exceeding the configured chunk_size of 4.
+    # The prospective-length check must dispatch the existing 3-entry batch
+    # before the second index is appended.
+    items = [
+        (1, _delete_doc("1")),
+        (1, _index_doc("2")),
+        (1, _update_doc("3")),
+        (1, _index_doc("4")),
+    ]
+    queue = _make_run_queue(items)
+    sink = _make_sink(queue, chunk_size=4, chunk_mem_size=1024)
+
+    await sink._run()
+
+    batches = _dispatched_batches(sink)
+    assert all(
+        len(batch) <= 4 for batch in batches
+    ), f"chunk_size cap violated: {[len(b) for b in batches]}"
+
+    # delete + first index (1 + 2 entries) is dispatched, then update + last
+    # index (2 + 2 entries) is sent by the trailing flush.
+    assert [len(batch) for batch in batches] == [3, 4]
+
+    def _ids(batch, op):
+        return [entry[op]["_id"] for entry in batch if op in entry]
+
+    assert _ids(batches[0], OP_DELETE) == ["1"]
+    assert _ids(batches[0], OP_INDEX) == ["2"]
+    assert _ids(batches[1], OP_UPDATE) == ["3"]
+    assert _ids(batches[1], OP_INDEX) == ["4"]
 
 
 @pytest.mark.asyncio
