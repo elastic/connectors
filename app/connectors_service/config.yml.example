@@ -84,7 +84,7 @@
 #
 #
 ##  Elasticsearch log level
-#elasticsearch.log_level: INFO
+#elasticsearch.log_level: info
 #
 #
 ##  Maximum number of times failed Elasticsearch requests are retried, except bulk requests
@@ -187,6 +187,10 @@
 #
 ##  Number of last operations used for tracking the error rate.
 #elasticsearch.bulk.error_monitor.error_window_size: 100
+#
+##  Maximum number of most-recent errors retained in memory for diagnostics.
+##  When the queue grows past this size, the oldest entry is dropped.
+#elasticsearch.bulk.error_monitor.error_queue_size: 10
 #
 ## ------------------------------- Elasticsearch: Experimental ------------------------
 #
