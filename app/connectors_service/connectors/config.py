@@ -9,6 +9,22 @@ import os
 from connectors_sdk.logger import logger
 from envyaml import EnvYAML
 
+DEFAULT_ELASTICSEARCH_RETRY_ON_TIMEOUT = True
+
+DEFAULT_ELASTICSEARCH_MAX_WAIT_DURATION = 240
+
+DEFAULT_ELASTICSEARCH_REQUEST_TIMEOUT = 240
+
+DEFAULT_CHUNK_SIZE = 500
+DEFAULT_QUEUE_MAX_SIZE = 1024
+DEFAULT_DISPLAY_EVERY = 100
+
+DEFAULT_QUEUE_MAX_MEM_SIZE = 25
+DEFAULT_QUEUE_MEM_SIZE = 5
+DEFAULT_CHUNK_MAX_MEM_SIZE = 3
+DEFAULT_MAX_CONCURRENCY = 5
+DEFAULT_CONCURRENT_DOWNLOADS = 10
+
 DEFAULT_ELASTICSEARCH_MAX_RETRIES = 5
 DEFAULT_ELASTICSEARCH_RETRY_INTERVAL = 10
 
@@ -72,17 +88,17 @@ def _default_config():
             "ssl": True,
             "verify_certs": True,
             "bulk": {
-                "queue_max_size": 1024,
-                "queue_max_mem_size": 25,
+                "queue_max_size": DEFAULT_QUEUE_MAX_SIZE,
+                "queue_max_mem_size": DEFAULT_QUEUE_MAX_MEM_SIZE,
                 "queue_refresh_interval": 1,
                 "queue_refresh_timeout": DEFAULT_BULK_QUEUE_REFRESH_TIMEOUT,
-                "display_every": 100,
-                "chunk_size": 500,
-                "max_concurrency": 5,
-                "chunk_max_mem_size": 3,
+                "display_every": DEFAULT_DISPLAY_EVERY,
+                "chunk_size": DEFAULT_CHUNK_SIZE,
+                "max_concurrency": DEFAULT_MAX_CONCURRENCY,
+                "chunk_max_mem_size": DEFAULT_CHUNK_MAX_MEM_SIZE,
                 "max_retries": DEFAULT_ELASTICSEARCH_MAX_RETRIES,
                 "retry_interval": DEFAULT_ELASTICSEARCH_RETRY_INTERVAL,
-                "concurrent_downloads": 10,
+                "concurrent_downloads": DEFAULT_CONCURRENT_DOWNLOADS,
                 "enable_operations_logging": False,
                 "error_monitor": {
                     "enabled": True,
@@ -95,9 +111,9 @@ def _default_config():
             },
             "max_retries": DEFAULT_ELASTICSEARCH_MAX_RETRIES,
             "retry_interval": DEFAULT_ELASTICSEARCH_RETRY_INTERVAL,
-            "retry_on_timeout": True,
-            "request_timeout": 240,
-            "max_wait_duration": 240,
+            "retry_on_timeout": DEFAULT_ELASTICSEARCH_RETRY_ON_TIMEOUT,
+            "request_timeout": DEFAULT_ELASTICSEARCH_REQUEST_TIMEOUT,
+            "max_wait_duration": DEFAULT_ELASTICSEARCH_MAX_WAIT_DURATION,
             "initial_backoff_duration": 1,
             "backoff_multiplier": 2,
             "log_level": "info",

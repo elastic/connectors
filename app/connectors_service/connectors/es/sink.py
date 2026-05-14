@@ -33,8 +33,15 @@ from connectors_sdk.utils import (
 
 from connectors.config import (
     DEFAULT_BULK_QUEUE_REFRESH_TIMEOUT,
+    DEFAULT_CHUNK_MAX_MEM_SIZE,
+    DEFAULT_CHUNK_SIZE,
+    DEFAULT_CONCURRENT_DOWNLOADS,
+    DEFAULT_DISPLAY_EVERY,
     DEFAULT_ELASTICSEARCH_MAX_RETRIES,
     DEFAULT_ELASTICSEARCH_RETRY_INTERVAL,
+    DEFAULT_MAX_CONCURRENCY,
+    DEFAULT_QUEUE_MAX_MEM_SIZE,
+    DEFAULT_QUEUE_MAX_SIZE,
 )
 from connectors.es import TIMESTAMP_FIELD
 from connectors.es.management_client import ESManagementClient
@@ -45,13 +52,6 @@ from connectors.protocol.connectors import (
     INDEXED_DOCUMENT_VOLUME,
 )
 from connectors.utils import (
-    DEFAULT_CHUNK_MEM_SIZE,
-    DEFAULT_CHUNK_SIZE,
-    DEFAULT_CONCURRENT_DOWNLOADS,
-    DEFAULT_DISPLAY_EVERY,
-    DEFAULT_MAX_CONCURRENCY,
-    DEFAULT_QUEUE_MEM_SIZE,
-    DEFAULT_QUEUE_SIZE,
     ConcurrentTasks,
     Counters,
     ErrorMonitor,
@@ -1010,10 +1010,10 @@ class SyncOrchestrator:
             filter_ = Filter()
         if options is None:
             options = {}
-        queue_size = options.get("queue_max_size", DEFAULT_QUEUE_SIZE)
+        queue_size = options.get("queue_max_size", DEFAULT_QUEUE_MAX_SIZE)
         display_every = options.get("display_every", DEFAULT_DISPLAY_EVERY)
-        queue_mem_size = options.get("queue_max_mem_size", DEFAULT_QUEUE_MEM_SIZE)
-        chunk_mem_size = options.get("chunk_max_mem_size", DEFAULT_CHUNK_MEM_SIZE)
+        queue_mem_size = options.get("queue_max_mem_size", DEFAULT_QUEUE_MAX_MEM_SIZE)
+        chunk_mem_size = options.get("chunk_max_mem_size", DEFAULT_CHUNK_MAX_MEM_SIZE)
         max_concurrency = options.get("max_concurrency", DEFAULT_MAX_CONCURRENCY)
         chunk_size = options.get("chunk_size", DEFAULT_CHUNK_SIZE)
         concurrent_downloads = options.get(
