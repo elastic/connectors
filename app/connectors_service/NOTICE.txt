@@ -6918,7 +6918,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 The above BSD License Applies to all code, even that also covered by Apache 2.0.
 
 python-tds
-1.12.0
+1.15.0
 MIT
 The MIT License (MIT)
 
