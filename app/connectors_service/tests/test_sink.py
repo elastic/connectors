@@ -1757,15 +1757,31 @@ MIB = 1024 * 1024
 
 
 def _doc(doc_id, op=OP_INDEX):
+    """Build the minimal doc shape `Sink._run` reads: `_op_type`/`_index`/`_id`
+    metadata at the top level, plus a `doc` body for index/update."""
     doc = {"_op_type": op, "_index": INDEX, "_id": doc_id}
     if op != OP_DELETE:
         doc["doc"] = {"id": doc_id}
     return doc
 
 
-def _run_queue(items):
-    """Mock queue whose `get` yields the given `(size, doc)` items, then
-    END_DOCS so `Sink._run` exits."""
+def _doc_ids(batch):
+    """Return the doc IDs in a dispatched bulk batch, in original order.
+
+    A bulk batch is a flat list of action/source lines. Each doc contributes
+    exactly one action line (`{"index"|"update"|"delete": {"_id": ...}}`),
+    so we pull `_id` off those and skip the body payload lines."""
+    return [
+        entry[op]["_id"]
+        for entry in batch
+        for op in (OP_INDEX, OP_UPDATE, OP_DELETE)
+        if op in entry
+    ]
+
+
+def _queue_yielding(items):
+    """Mock queue whose `get` yields the given `(size, doc)` items in order,
+    then `END_DOCS` so `Sink._run` exits cleanly."""
     queue = Mock()
     queue.get = AsyncMock(side_effect=[*items, (0, END_DOCS)])
     return queue
@@ -1787,14 +1803,15 @@ def _make_sink(queue, *, chunk_size, chunk_mem_size):
     return sink
 
 
-def _batches(sink):
+def _dispatched_batches(sink):
+    """All batches the sink ever dispatched (in-loop + trailing flush)."""
     return [call_args.args[0] for call_args in sink._batch_bulk.await_args_list]
 
 
-def _spy_put(sink):
-    """Replace `sink.bulk_tasks.put` with a spy so tests can tell in-loop
-    dispatches (via `put`) apart from the trailing `_batch_bulk` flush, and
-    inspect the assigned task names. Returns the captured names list."""
+def _capture_in_loop_dispatch_names(sink):
+    """Spy on `sink.bulk_tasks.put` so tests can tell in-loop dispatches
+    (which go through `put`) apart from the trailing END_DOCS flush (which
+    calls `_batch_bulk` directly), and assert on the bulk-request names."""
     names = []
 
     async def _put(callable_, name):
@@ -1806,80 +1823,87 @@ def _spy_put(sink):
 
 
 @pytest.mark.asyncio
-async def test_sink_pre_flush_respects_chunk_mem_size():
-    # Reproduces the original bug: 5 docs at 1/1/1/1/2 MiB with
-    # chunk_mem_size=5 must never produce a >5 MiB bulk request. The
-    # pre-append check must flush the first 4 docs before the 2 MiB one is
-    # appended; the trailing END_DOCS flush then ships the remaining doc.
-    items = [(1 * MIB, _doc(str(i))) for i in range(1, 5)] + [(2 * MIB, _doc("5"))]
-    sink = _make_sink(_run_queue(items), chunk_size=1000, chunk_mem_size=5)
+async def test_sink_flushes_before_overflowing_chunk_mem_size():
+    # Original bug: 5 docs at 1/1/1/1/2 MiB with chunk_mem_size=5 used to
+    # dispatch a single 6 MiB batch. The pre-flush must ship the first 4
+    # docs together (4 MiB) and the trailing flush ships the 2 MiB doc alone.
+    items = [
+        (1 * MIB, _doc("1")),
+        (1 * MIB, _doc("2")),
+        (1 * MIB, _doc("3")),
+        (1 * MIB, _doc("4")),
+        (2 * MIB, _doc("5")),
+    ]
+    sink = _make_sink(_queue_yielding(items), chunk_size=1000, chunk_mem_size=5)
 
     await sink._run()
 
-    batches = _batches(sink)
-    assert [len(b) for b in batches] == [8, 2]  # 4 docs, then 1 doc (2 entries each)
-    assert [e[OP_INDEX]["_id"] for e in batches[0] if OP_INDEX in e] == [
-        "1",
-        "2",
-        "3",
-        "4",
+    assert [_doc_ids(b) for b in _dispatched_batches(sink)] == [
+        ["1", "2", "3", "4"],
+        ["5"],
     ]
-    assert [e[OP_INDEX]["_id"] for e in batches[1] if OP_INDEX in e] == ["5"]
 
 
 @pytest.mark.asyncio
-async def test_sink_pre_flush_respects_chunk_size_with_mixed_ops():
-    # `_bulk_op` emits 1 entry per delete and 2 per index/update, so a
-    # naive `len(batch) >= chunk_size` check lets `delete(1)+index(2)+
-    # update(2)` grow to 5 entries before flushing -- exceeding chunk_size=4.
-    # The prospective-length pre-flush must keep every dispatched batch <= 4.
+async def test_sink_flushes_before_overflowing_chunk_size_with_mixed_ops():
+    # `_bulk_op` emits 1 entry per delete and 2 per index/update. With a
+    # naive `len(batch) >= chunk_size` check, `delete + index + update` would
+    # grow the batch to 5 entries before any flush -- exceeding chunk_size=4.
+    # The prospective pre-flush must split the run so every batch stays <= 4.
     items = [
         (1, _doc("1", OP_DELETE)),
         (1, _doc("2")),
         (1, _doc("3", OP_UPDATE)),
         (1, _doc("4")),
     ]
-    sink = _make_sink(_run_queue(items), chunk_size=4, chunk_mem_size=1024)
+    sink = _make_sink(_queue_yielding(items), chunk_size=4, chunk_mem_size=1024)
 
     await sink._run()
 
-    batches = _batches(sink)
-    assert [len(b) for b in batches] == [3, 4]
+    # First batch: delete + index = 1 + 2 = 3 entries.
+    # Second batch: update + index = 2 + 2 = 4 entries (exactly chunk_size).
+    assert [_doc_ids(b) for b in _dispatched_batches(sink)] == [
+        ["1", "2"],
+        ["3", "4"],
+    ]
 
 
 @pytest.mark.asyncio
-async def test_sink_post_flush_dispatches_full_batch_immediately():
-    # A batch that fills exactly to chunk_size must be dispatched in-loop
-    # (via bulk_tasks.put) rather than waiting for the next doc or the
-    # trailing END_DOCS flush. Also pins that `batch_num` in the task name
-    # counts dispatches (#1, #2), not fetched docs.
-    items = [(1, _doc(str(i))) for i in range(1, 5)]  # 4 * 2 entries == 2 * chunk_size
-    sink = _make_sink(_run_queue(items), chunk_size=4, chunk_mem_size=1024)
-    names = _spy_put(sink)
+async def test_sink_dispatches_full_batch_without_waiting_for_next_doc():
+    # When a doc fills the batch exactly to chunk_size, it must be shipped
+    # immediately via `bulk_tasks.put` -- not held until the next doc or the
+    # trailing END_DOCS flush. Also pins that the dispatched-task names
+    # count batches (#1, #2), not fetched docs.
+    items = [(1, _doc(str(i))) for i in range(1, 5)]  # 4 docs -> 2 full batches of 4
+    sink = _make_sink(_queue_yielding(items), chunk_size=4, chunk_mem_size=1024)
+    in_loop_names = _capture_in_loop_dispatch_names(sink)
 
     await sink._run()
 
-    assert names == [
+    assert in_loop_names == [
         "Elasticsearch Sink: _bulk batch #1",
         "Elasticsearch Sink: _bulk batch #2",
     ]
-    assert [len(b) for b in _batches(sink)] == [4, 4]
+    assert [_doc_ids(b) for b in _dispatched_batches(sink)] == [
+        ["1", "2"],
+        ["3", "4"],
+    ]
 
 
 @pytest.mark.asyncio
-async def test_sink_oversized_single_doc_dispatched_alone():
-    # An oversized doc has no batch to split it from; the `if batch` guard
-    # must skip the pre-flush (no empty dispatch) and the post-append check
-    # must still ship the doc immediately (bulk_size > chunk_mem_size).
+async def test_sink_dispatches_oversized_single_doc_alone():
+    # A single 10 MiB doc against a 5 MiB cap has no batch to split it from.
+    # The pre-flush must skip (the `if batch` guard prevents an empty bulk
+    # dispatch) and the post-append flush must still ship the doc, so the
+    # loop doesn't stall on a bigger-than-cap document.
     sink = _make_sink(
-        _run_queue([(10 * MIB, _doc("big"))]),
+        _queue_yielding([(10 * MIB, _doc("big"))]),
         chunk_size=1000,
         chunk_mem_size=5,
     )
-    names = _spy_put(sink)
+    in_loop_names = _capture_in_loop_dispatch_names(sink)
 
     await sink._run()
 
-    assert names == ["Elasticsearch Sink: _bulk batch #1"]
-    batches = _batches(sink)
-    assert len(batches) == 1 and batches[0][0][OP_INDEX]["_id"] == "big"
+    assert in_loop_names == ["Elasticsearch Sink: _bulk batch #1"]
+    assert [_doc_ids(b) for b in _dispatched_batches(sink)] == [["big"]]
