@@ -138,8 +138,11 @@ class Sink:
     - `chunk_mem_size` -- a maximum size in MiB for each bulk request
     - `max_concurrency` -- a maximum number of concurrent bulk requests
     - `max_document_size` -- a hard per-document size cap in MiB; documents
-      whose serialized bulk-op size exceeds this are dropped (skipped, logged,
-      counted) instead of being sent. Falsy values (``0``/``None``) disable the cap.
+      whose in-memory size estimate (``pympler.asizeof``, as reported by
+      ``MemQueue.put``) exceeds this cap are dropped (skipped, logged, counted)
+      instead of being sent. Note this is an upper-bound estimate of the Python
+      object footprint, not the exact serialized bulk-op byte size on the wire.
+      Falsy values (``0``/``None``) disable the cap.
     """
 
     def __init__(
@@ -170,8 +173,11 @@ class Sink:
         self._logger = logger_ or logger
         self._canceled = False
         self._enable_bulk_operations_logging = enable_bulk_operations_logging
-        # Stored in bytes for direct comparison with doc_size; falsy disables the cap.
-        self.max_document_size = (
+        # Keep the original MiB value for logging/introspection, and pre-compute
+        # the byte-equivalent for direct comparison with doc_size (also in bytes).
+        # A falsy value (``0``/``None``) disables the cap.
+        self.max_document_size = max_document_size
+        self.max_document_size_bytes = (
             max_document_size * 1024 * 1024 if max_document_size else max_document_size
         )
         self.counters = Counters()
@@ -395,13 +401,18 @@ class Sink:
                     continue
                 if (
                     operation != OP_DELETE
-                    and self.max_document_size
-                    and doc_size > self.max_document_size
+                    and self.max_document_size_bytes
+                    and doc_size > self.max_document_size_bytes
                 ):
+                    # ``doc_size`` is the in-memory size estimate produced by
+                    # ``pympler.asizeof`` in ``MemQueue.put`` (see
+                    # ``connectors.utils.get_size``), not the exact serialized
+                    # bulk-op byte size on the wire.
                     self._logger.warning(
                         f"Dropping doc id={doc_id} index={doc['_index']} op={operation}: "
-                        f"size {doc_size}B exceeds elasticsearch.bulk.max_document_size "
-                        f"({self.max_document_size}B)"
+                        f"in-memory size estimate {doc_size}B exceeds "
+                        f"elasticsearch.bulk.max_document_size "
+                        f"({self.max_document_size}MiB / {self.max_document_size_bytes}B)"
                     )
                     self.counters.increment(DOCS_DROPPED_TOO_LARGE)
                     continue
