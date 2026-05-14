@@ -123,6 +123,10 @@
 ##  For example, if no documents were sent to Elasticsearch within 1300 seconds because of
 ##  Elasticsearch being overloaded, then an error will be raised.
 ##  This mechanism exists to be a circuit-breaker for stuck jobs and stuck Elasticsearch.
+##  The default is sized for the default `elasticsearch.request_timeout`,
+##  `elasticsearch.max_retries`, and `elasticsearch.retry_interval`. If you raise any of
+##  those, raise this value too -- otherwise the queue may give up on a bulk request that
+##  the retry layer is still legitimately working on.
 #elasticsearch.bulk.queue_refresh_timeout: 1300
 #
 #

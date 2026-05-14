@@ -12,8 +12,11 @@ from envyaml import EnvYAML
 DEFAULT_ELASTICSEARCH_MAX_RETRIES = 5
 DEFAULT_ELASTICSEARCH_RETRY_INTERVAL = 10
 
-# Must outlast the worst-case bulk request: 5 attempts × 240s request_timeout,
-# plus 10 + 20 + 30 + 40s of retry backoff between them = 1300s.
+# Sized for the default `elasticsearch.request_timeout` (240s) and the default
+# `elasticsearch.max_retries` / `elasticsearch.retry_interval` (5 attempts with linear
+# backoff): 5 × 240 + (10 + 20 + 30 + 40) = 1300s. If any of those defaults change,
+# this value must change too -- otherwise the mem-queue circuit breaker can fire
+# before the retry layer has exhausted its budget.
 DEFAULT_BULK_QUEUE_REFRESH_TIMEOUT = 1300
 
 DEFAULT_MAX_FILE_SIZE = 10485760  # 10MiB

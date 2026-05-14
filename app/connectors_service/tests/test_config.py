@@ -85,24 +85,26 @@ def test_nest_config_when_root_field_does_exists():
 def test_bulk_queue_refresh_timeout_outlasts_worst_case_retry_budget():
     """The mem-queue refresh timeout must outlive a fully retried bulk request.
 
-    Bulk operations are wrapped with `retryable` using LINEAR_BACKOFF, so the worst-case
-    duration of a single bulk send is `max_retries` request attempts (each capped by
-    `request_timeout`) plus the linear backoff sleeps between them. If
-    `queue_refresh_timeout` is shorter than that budget, the queue gives up on a request
-    that the retry layer is still legitimately working on, and we lose data.
+    `ESManagementClient.bulk_insert` retries through
+    `TransientElasticsearchRetrier.execute_with_retry`, which uses LINEAR_BACKOFF on the
+    top-level `elasticsearch.max_retries` and `elasticsearch.retry_interval`. The
+    worst-case duration of a single bulk send is therefore `max_retries` request
+    attempts (each capped by `request_timeout`) plus the linear backoff sleeps between
+    them. If `queue_refresh_timeout` is shorter than that budget, the queue gives up on
+    a request the retrier is still legitimately working on, and we lose data.
     """
-    defaults = add_defaults({})
-    bulk = defaults["elasticsearch"]["bulk"]
-    request_timeout = defaults["elasticsearch"]["request_timeout"]
+    es = add_defaults({})["elasticsearch"]
+    max_retries = es["max_retries"]
+    retry_interval = es["retry_interval"]
+    request_timeout = es["request_timeout"]
+    queue_refresh_timeout = es["bulk"]["queue_refresh_timeout"]
 
-    max_request_time = bulk["max_retries"] * request_timeout
-    backoff_gaps = sum(
-        bulk["retry_interval"] * i for i in range(1, bulk["max_retries"])
-    )
+    max_request_time = max_retries * request_timeout
+    backoff_gaps = sum(retry_interval * i for i in range(1, max_retries))
     worst_case_retry_budget = max_request_time + backoff_gaps
 
-    assert bulk["queue_refresh_timeout"] >= worst_case_retry_budget, (
-        f"queue_refresh_timeout={bulk['queue_refresh_timeout']}s is shorter than the "
+    assert queue_refresh_timeout >= worst_case_retry_budget, (
+        f"queue_refresh_timeout={queue_refresh_timeout}s is shorter than the "
         f"worst-case bulk retry budget of {worst_case_retry_budget}s"
     )
 
@@ -125,21 +127,22 @@ def test_bulk_chunk_sizes_are_sane():
 def test_retry_budgets_do_not_blow_up_into_hours():
     """No single retried operation should be allowed to stall for more than an hour.
 
-    The bulk retry layer (linear backoff) has the shape `attempts * timeout +
-    sum(backoffs)`, and the ES preflight wait loop has its own `max_wait_duration` cap.
-    Setting either high enough to produce hour-plus stalls would silently freeze syncs;
-    we cap the worst case at 1 hour per operation as a sanity ceiling.
+    `TransientElasticsearchRetrier` (used by `bulk_insert`) applies LINEAR_BACKOFF on
+    `elasticsearch.max_retries` and `elasticsearch.retry_interval`, so the worst-case
+    bulk has the shape `attempts * request_timeout + sum(backoffs)`. The ES preflight
+    wait loop has its own `max_wait_duration` cap. Setting either high enough to
+    produce hour-plus stalls would silently freeze syncs; we cap the worst case at 1
+    hour per operation as a sanity ceiling.
     """
-    defaults = add_defaults({})
-    bulk = defaults["elasticsearch"]["bulk"]
-    request_timeout = defaults["elasticsearch"]["request_timeout"]
-    max_wait_duration = defaults["elasticsearch"]["max_wait_duration"]
+    es = add_defaults({})["elasticsearch"]
+    max_retries = es["max_retries"]
+    retry_interval = es["retry_interval"]
+    request_timeout = es["request_timeout"]
+    max_wait_duration = es["max_wait_duration"]
     one_hour = 60 * 60
 
-    max_request_time = bulk["max_retries"] * request_timeout
-    backoff_gaps = sum(
-        bulk["retry_interval"] * i for i in range(1, bulk["max_retries"])
-    )
+    max_request_time = max_retries * request_timeout
+    backoff_gaps = sum(retry_interval * i for i in range(1, max_retries))
     bulk_worst_case = max_request_time + backoff_gaps
 
     assert (
