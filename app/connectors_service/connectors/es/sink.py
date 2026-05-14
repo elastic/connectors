@@ -32,7 +32,6 @@ from connectors_sdk.utils import (
 )
 
 from connectors.config import (
-    DEFAULT_BULK_QUEUE_REFRESH_TIMEOUT,
     DEFAULT_CHUNK_MAX_MEM_SIZE,
     DEFAULT_CHUNK_SIZE,
     DEFAULT_CONCURRENT_DOWNLOADS,
@@ -42,6 +41,8 @@ from connectors.config import (
     DEFAULT_MAX_CONCURRENCY,
     DEFAULT_QUEUE_MAX_MEM_SIZE,
     DEFAULT_QUEUE_MAX_SIZE,
+    DEFAULT_QUEUE_REFRESH_INTERVAL,
+    DEFAULT_QUEUE_REFRESH_TIMEOUT,
 )
 from connectors.es import TIMESTAMP_FIELD
 from connectors.es.management_client import ESManagementClient
@@ -1024,9 +1025,11 @@ class SyncOrchestrator:
             "retry_interval", DEFAULT_ELASTICSEARCH_RETRY_INTERVAL
         )
         mem_queue_refresh_timeout = options.get(
-            "queue_refresh_timeout", DEFAULT_BULK_QUEUE_REFRESH_TIMEOUT
+            "queue_refresh_timeout", DEFAULT_QUEUE_REFRESH_TIMEOUT
         )
-        mem_queue_refresh_interval = options.get("queue_refresh_interval", 1)
+        mem_queue_refresh_interval = options.get(
+            "queue_refresh_interval", DEFAULT_QUEUE_REFRESH_INTERVAL
+        )
 
         stream = MemQueue(
             maxsize=queue_size,

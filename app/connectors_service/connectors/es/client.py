@@ -18,6 +18,9 @@ from elasticsearch import (
 
 from connectors import __version__
 from connectors.config import (
+    DEFAULT_ELASTICSEARCH_BACKOFF_MULTIPLIER,
+    DEFAULT_ELASTICSEARCH_HOST,
+    DEFAULT_ELASTICSEARCH_INITIAL_BACKOFF_DURATION,
     DEFAULT_ELASTICSEARCH_MAX_RETRIES,
     DEFAULT_ELASTICSEARCH_MAX_WAIT_DURATION,
     DEFAULT_ELASTICSEARCH_REQUEST_TIMEOUT,
@@ -51,7 +54,7 @@ class ESClient:
     def __init__(self, config):
         self.serverless = config.get("serverless", False)
         self.config = config
-        self.configured_host = config.get("host", "http://localhost:9200")
+        self.configured_host = config.get("host", DEFAULT_ELASTICSEARCH_HOST)
         self.host = url_to_node_config(
             self.configured_host,
             use_default_ports_for_scheme=True,
@@ -113,8 +116,12 @@ class ESClient:
         self.max_wait_duration = config.get(
             "max_wait_duration", DEFAULT_ELASTICSEARCH_MAX_WAIT_DURATION
         )
-        self.initial_backoff_duration = config.get("initial_backoff_duration", 5)
-        self.backoff_multiplier = config.get("backoff_multiplier", 2)
+        self.initial_backoff_duration = config.get(
+            "initial_backoff_duration", DEFAULT_ELASTICSEARCH_INITIAL_BACKOFF_DURATION
+        )
+        self.backoff_multiplier = config.get(
+            "backoff_multiplier", DEFAULT_ELASTICSEARCH_BACKOFF_MULTIPLIER
+        )
 
         options["headers"] = config.get("headers", {})
         options["headers"]["user-agent"] = self.__class__.user_agent
