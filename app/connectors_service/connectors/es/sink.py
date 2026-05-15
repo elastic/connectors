@@ -373,10 +373,24 @@ class Sink:
             stats = {OP_INDEX: {}, OP_UPDATE: {}, OP_DELETE: {}}
             bulk_size = 0
             overhead_size = None
-            batch_num = 0
+            batch_num = 0  # incremented per dispatched batch
+
+            async def _dispatch_batch():
+                nonlocal batch_num, stats, bulk_size
+                batch_num += 1
+                await self.bulk_tasks.put(
+                    functools.partial(
+                        self._batch_bulk,
+                        copy.copy(batch),
+                        copy.copy(stats),
+                    ),
+                    name=f"Elasticsearch Sink: _bulk batch #{batch_num}",
+                )
+                batch.clear()
+                stats = {OP_INDEX: {}, OP_UPDATE: {}, OP_DELETE: {}}
+                bulk_size = 0
 
             while True:
-                batch_num += 1
                 doc_size, doc = await self.fetch_doc()
                 if doc in (END_DOCS, EXTRACTOR_ERROR):
                     break
@@ -385,6 +399,16 @@ class Sink:
                 if not doc_id:
                     self._logger.warning(f"Skip document {doc} as '_id' is missing.")
                     continue
+                # Flush before adding if this doc would overflow either cap.
+                # `_bulk_op` emits 1 entry for deletes and 2 for index/update,
+                # so we compare prospective rather than current entry count.
+                entries = 1 if operation == OP_DELETE else 2
+                if batch and (
+                    len(batch) + entries > self.chunk_size
+                    or bulk_size + doc_size > self.chunk_mem_size
+                ):
+                    await _dispatch_batch()
+
                 if operation == OP_DELETE:
                     stats[operation][doc_id] = 0
                 else:
@@ -400,20 +424,12 @@ class Sink:
                     stats[operation][doc_id] = max(doc_size - overhead_size, 0)
                 self.counters.increment(operation, namespace=BULK_OPERATIONS)
                 batch.extend(self._bulk_op(doc, operation))
-
                 bulk_size += doc_size
-                if len(batch) >= self.chunk_size or bulk_size > self.chunk_mem_size:
-                    await self.bulk_tasks.put(
-                        functools.partial(
-                            self._batch_bulk,
-                            copy.copy(batch),
-                            copy.copy(stats),
-                        ),
-                        name=f"Elasticsearch Sink: _bulk batch #{batch_num}",
-                    )
-                    batch.clear()
-                    stats = {OP_INDEX: {}, OP_UPDATE: {}, OP_DELETE: {}}
-                    bulk_size = 0
+
+                # Also flush when this doc fills the batch up to (or past) the
+                # cap, so a full batch isn't held waiting for the next doc.
+                if len(batch) >= self.chunk_size or bulk_size >= self.chunk_mem_size:
+                    await _dispatch_batch()
 
                 await asyncio.sleep(0)
                 self.bulk_tasks.raise_any_exception()
