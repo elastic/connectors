@@ -1872,6 +1872,16 @@ async def test_sink_does_not_drop_doc_within_max_text_document_size():
     client.bulk_insert.assert_awaited_once()
 
 
+@pytest.mark.parametrize("bad_value", [-1, -3, -1024])
+def test_sink_rejects_negative_max_text_document_size(bad_value):
+    # Without explicit validation, a negative cap would be truthy and every
+    # serialized_size > cap, so every non-attachment doc would be dropped
+    # silently. Refuse the config at construction instead.
+    queue = _queue_yielding([])
+    with pytest.raises(ValueError, match="max_text_document_size must be >= 0"):
+        _make_cap_sink(Mock(), queue, max_text_document_size=bad_value)
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("disabled_value", [None, 0])
 async def test_sink_max_text_document_size_disabled(disabled_value):
@@ -1951,6 +1961,46 @@ async def test_sink_does_not_drop_doc_with_attachment_even_if_oversized():
 
     assert sink.counters.get(DOCS_DROPPED_TOO_LARGE) == 0
     client.bulk_insert.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("attachment_value", ["", None, 0, False, []])
+async def test_sink_attachment_gate_uses_key_presence_not_value(attachment_value):
+    # The cap exempts any doc carrying an `_attachment` key, regardless of
+    # the value. Connectors only ever set `_attachment` to a base64 string
+    # for real binary content, but the gate must not drop docs that pass an
+    # empty/None/falsy `_attachment` -- those still belong on the binary path.
+    doc = _inflate_body(_make_index_doc(DOC_ONE_ID), 5 * 1024 * 1024)
+    doc["doc"]["_attachment"] = attachment_value
+    client = Mock()
+    client.bulk_insert = AsyncMock(return_value={"items": []})
+    queue = _queue_yielding([(10 * 1024 * 1024, doc)])
+
+    sink = _make_cap_sink(client, queue, max_text_document_size=3)  # MiB
+
+    await sink.run()
+
+    assert sink.counters.get(DOCS_DROPPED_TOO_LARGE) == 0
+    client.bulk_insert.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_sink_drops_oversized_doc_when_attachment_key_absent():
+    # Mirror of the gate from the other side: oversized doc with NO
+    # `_attachment` key at all (neither set to None, nor "") goes through
+    # the text-cap path and is dropped.
+    doc = _inflate_body(_make_index_doc(DOC_ONE_ID), 5 * 1024 * 1024)
+    assert "_attachment" not in doc["doc"]  # sanity check
+    client = Mock()
+    client.bulk_insert = AsyncMock(return_value={"items": []})
+    queue = _queue_yielding([(10 * 1024 * 1024, doc)])
+
+    sink = _make_cap_sink(client, queue, max_text_document_size=3)  # MiB
+
+    await sink.run()
+
+    assert sink.counters.get(DOCS_DROPPED_TOO_LARGE) == 1
+    client.bulk_insert.assert_not_awaited()
 
 
 @pytest.mark.asyncio

@@ -141,9 +141,10 @@ class Sink:
     - `chunk_mem_size` -- a maximum size in MiB for each bulk request
     - `max_concurrency` -- a maximum number of concurrent bulk requests
     - `max_text_document_size` -- hard per-document cap in MiB for docs
-      without an `_attachment`, measured against the serialized bulk-op JSON.
-      Falsy values (``0``/``None``) disable the cap. Binary attachments are
-      governed by ``service.max_file_download_size``.
+      whose `doc` body has no `_attachment` key, measured against the
+      serialized bulk-op JSON. Must be ``>= 0``; ``0`` and ``None`` disable
+      the cap. Binary attachments (any doc carrying an `_attachment` key)
+      are governed by ``service.max_file_download_size``.
     """
 
     def __init__(
@@ -174,6 +175,12 @@ class Sink:
         self._logger = logger_ or logger
         self._canceled = False
         self._enable_bulk_operations_logging = enable_bulk_operations_logging
+        if max_text_document_size is not None and max_text_document_size < 0:
+            msg = (
+                "elasticsearch.bulk.max_text_document_size must be >= 0 "
+                f"(got {max_text_document_size}); use 0 to disable the cap."
+            )
+            raise ValueError(msg)
         self.max_text_document_size = (
             max_text_document_size * 1024 * 1024
             if max_text_document_size
@@ -416,7 +423,7 @@ class Sink:
                 if (
                     self.max_text_document_size
                     and operation != OP_DELETE
-                    and doc["doc"].get("_attachment") is None
+                    and "_attachment" not in doc["doc"]
                 ):
                     # Mirror `elastic_transport._serializer.JsonSerializer` so the
                     # measured size matches the actual bytes on the wire even for
