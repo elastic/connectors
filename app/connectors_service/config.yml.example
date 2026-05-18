@@ -136,6 +136,21 @@
 #elasticsearch.bulk.chunk_max_mem_size: 3
 #
 #
+##  Per-document cap in MiB for docs whose `doc` body has no `_attachment`
+##    key (i.e. text extracted by the Data Extraction Service, or
+##    structured-only docs). Compared against the serialized bulk-op JSON
+##    (UTF-8 wire bytes); oversized docs are dropped, logged, and counted.
+##    Binary attachments (any doc carrying an `_attachment` key) are governed
+##    by `service.max_file_download_size`. Set to 0 to disable.
+##
+##    UPGRADE NOTE: this cap is new and active by default. Earlier connectors
+##    versions had no per-document text cap, so a sync that previously
+##    succeeded with multi-MiB structured/text docs may begin reporting
+##    `docs_dropped_too_large`. Set to 0 to preserve previous behavior, or
+##    raise the value to fit your largest legitimate doc.
+#elasticsearch.bulk.max_text_document_size: 3
+#
+#
 ##  The max size of the bulk operation to Elasticsearch.
 #elasticsearch.bulk.chunk_size: 500
 #

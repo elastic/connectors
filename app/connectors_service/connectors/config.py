@@ -31,6 +31,7 @@ DEFAULT_QUEUE_REFRESH_INTERVAL = 1
 DEFAULT_QUEUE_REFRESH_TIMEOUT = 1300
 DEFAULT_CHUNK_SIZE = 500
 DEFAULT_CHUNK_MAX_MEM_SIZE = 3
+DEFAULT_MAX_TEXT_DOCUMENT_SIZE = 3
 DEFAULT_DISPLAY_EVERY = 100
 DEFAULT_MAX_CONCURRENCY = 5
 DEFAULT_CONCURRENT_DOWNLOADS = 10
@@ -97,6 +98,7 @@ def _default_config():
                 "chunk_size": DEFAULT_CHUNK_SIZE,
                 "max_concurrency": DEFAULT_MAX_CONCURRENCY,
                 "chunk_max_mem_size": DEFAULT_CHUNK_MAX_MEM_SIZE,
+                "max_text_document_size": DEFAULT_MAX_TEXT_DOCUMENT_SIZE,
                 "max_retries": DEFAULT_ELASTICSEARCH_MAX_RETRIES,
                 "retry_interval": DEFAULT_ELASTICSEARCH_RETRY_INTERVAL,
                 "concurrent_downloads": DEFAULT_CONCURRENT_DOWNLOADS,
