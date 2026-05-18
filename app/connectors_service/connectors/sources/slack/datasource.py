@@ -96,7 +96,9 @@ class SlackDataSource(BaseDataSource):
 
     async def channels_and_messages(self):
         current_unix_timestamp = int(time.time())
-        past_unix_timestamp = int(current_unix_timestamp - self.n_days_to_fetch * 24 * 3600)
+        past_unix_timestamp = int(
+            current_unix_timestamp - self.n_days_to_fetch * 24 * 3600
+        )
         async for channel in self.slack_client.list_channels(
             not self.auto_join_channels
         ):

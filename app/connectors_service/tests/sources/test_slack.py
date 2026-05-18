@@ -235,6 +235,7 @@ async def test_slack_data_source_convert_usernames(slack_data_source):
 
     assert remapped_message["text"] == "<@user_one> Hello, <@USERID2>"
 
+
 @pytest.mark.asyncio
 async def test_channels_and_messages_uses_integer_timestamps(slack_data_source):
     """
@@ -246,7 +247,9 @@ async def test_channels_and_messages_uses_integer_timestamps(slack_data_source):
     await original_client.close()
 
     mock_client = AsyncMock()
-    mock_client.list_channels = AsyncIterator([{"id": "1", "name": "channel1", "is_member": True}])
+    mock_client.list_channels = AsyncIterator(
+        [{"id": "1", "name": "channel1", "is_member": True}]
+    )
     mock_client.list_messages = AsyncIterator([])
     mock_client.close = AsyncMock()
     slack_data_source.slack_client = mock_client
@@ -260,5 +263,9 @@ async def test_channels_and_messages_uses_integer_timestamps(slack_data_source):
         oldest = call_args[0][1]
         latest = call_args[0][2]
 
-        assert isinstance(oldest, int), f"oldest timestamp should be int, got {type(oldest)}"
-        assert isinstance(latest, int), f"latest timestamp should be int, got {type(latest)}"
+        assert isinstance(
+            oldest, int
+        ), f"oldest timestamp should be int, got {type(oldest)}"
+        assert isinstance(
+            latest, int
+        ), f"latest timestamp should be int, got {type(latest)}"
