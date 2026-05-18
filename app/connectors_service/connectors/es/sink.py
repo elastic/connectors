@@ -21,7 +21,6 @@ Elasticsearch <== Sink <== queue <== Extractor <== generator
 import asyncio
 import copy
 import functools
-import json
 import logging
 import time
 
@@ -31,6 +30,7 @@ from connectors_sdk.logger import logger, tracer
 from connectors_sdk.utils import (
     iso_utc,
 )
+from elastic_transport import JsonSerializer
 
 from connectors.config import (
     DEFAULT_CHUNK_MAX_MEM_SIZE,
@@ -96,6 +96,11 @@ ID_DUPLICATE = "_id_duplicates"
 
 # Successful results according to the docs: https://www.elastic.co/guide/en/elasticsearch/reference/current/docs-bulk.html#bulk-api-response-body
 SUCCESSFUL_RESULTS = ("created", "deleted", "updated", "noop")
+
+# Reuse the same serializer the elasticsearch client uses to send bulk
+# requests, so the cap check below sees byte-for-byte the wire payload
+# (incl. its `default()` handling for `datetime`/`UUID`/`Decimal`).
+_BULK_JSON_SERIALIZER = JsonSerializer()
 
 
 def get_mib_size(obj):
@@ -425,18 +430,12 @@ class Sink:
                     and operation != OP_DELETE
                     and "_attachment" not in doc["doc"]
                 ):
-                    # Mirror `elastic_transport._serializer.JsonSerializer` so the
-                    # measured size matches the actual bytes on the wire even for
-                    # i18n / emoji content. `json.dumps` defaults to
-                    # `ensure_ascii=True`, which would over-count non-ASCII chars
-                    # (e.g. 6 ASCII bytes for `\u00e9` vs 2 UTF-8 bytes for `é`).
+                    # Reuse the elasticsearch client's own JSON serializer so
+                    # the measured size matches the actual bulk payload on the
+                    # wire, including its `default()` handling for non-JSON
+                    # native types like `datetime`/`UUID`/`Decimal`.
                     serialized_size = sum(
-                        len(
-                            json.dumps(
-                                op, ensure_ascii=False, separators=(",", ":")
-                            ).encode("utf-8", "surrogatepass")
-                        )
-                        for op in ops
+                        len(_BULK_JSON_SERIALIZER.json_dumps(op)) for op in ops
                     )
                     if serialized_size > self.max_text_document_size:
                         self._logger.warning(

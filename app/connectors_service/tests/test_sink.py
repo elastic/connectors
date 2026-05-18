@@ -7,11 +7,14 @@ import asyncio
 import datetime
 import itertools
 import json
+import uuid
 from copy import deepcopy
+from decimal import Decimal
 from unittest import mock
 from unittest.mock import ANY, AsyncMock, Mock, call, patch
 
 import pytest
+from elastic_transport import JsonSerializer
 from elasticsearch import ApiError, BadRequestError
 
 from connectors.es.management_client import ESManagementClient
@@ -1837,15 +1840,11 @@ async def test_sink_drops_doc_exceeding_max_text_document_size(patch_logger):
 
     await sink.run()
 
-    # Match `Sink._run`'s wire-byte measurement (mirrors elastic_transport's
-    # `JsonSerializer`: ensure_ascii=False + compact separators + UTF-8).
+    # Match `Sink._run`'s wire-byte measurement: reuse the same
+    # elastic_transport `JsonSerializer` it uses in production.
+    serializer = JsonSerializer()
     expected_serialized = sum(
-        len(
-            json.dumps(op, ensure_ascii=False, separators=(",", ":")).encode(
-                "utf-8", "surrogatepass"
-            )
-        )
-        for op in sink._bulk_op(big_doc, OP_INDEX)
+        len(serializer.json_dumps(op)) for op in sink._bulk_op(big_doc, OP_INDEX)
     )
     assert sink.counters.get(DOCS_DROPPED_TOO_LARGE) == 1
     client.bulk_insert.assert_not_awaited()
@@ -2058,6 +2057,37 @@ async def test_sink_measures_serialized_size_in_wire_utf8_bytes():
 
     await sink.run()
 
+    assert sink.counters.get(DOCS_DROPPED_TOO_LARGE) == 0
+    client.bulk_insert.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "field_value",
+    [
+        datetime.datetime(2024, 1, 2, 3, 4, 5, tzinfo=datetime.timezone.utc),
+        datetime.date(2024, 1, 2),
+        uuid.UUID("12345678-1234-5678-1234-567812345678"),
+        Decimal("3.14"),
+    ],
+    ids=["datetime", "date", "uuid", "decimal"],
+)
+async def test_sink_cap_handles_non_json_native_types(field_value):
+    # Regression: connectors (e.g. the directory source) may yield docs
+    # containing types that bare `json.dumps` can't serialize. The cap path
+    # must use the same `default()` handling as the wire serializer so it
+    # doesn't crash the sink before any doc is indexed.
+    doc = _make_index_doc(DOC_ONE_ID)
+    doc["doc"]["timestamp_field"] = field_value
+    client = Mock()
+    client.bulk_insert = AsyncMock(return_value={"items": []})
+    queue = _queue_yielding([(1024, doc)])
+
+    sink = _make_cap_sink(client, queue, max_text_document_size=3)  # MiB
+
+    await sink.run()
+
+    assert sink.error is None
     assert sink.counters.get(DOCS_DROPPED_TOO_LARGE) == 0
     client.bulk_insert.assert_awaited_once()
 
