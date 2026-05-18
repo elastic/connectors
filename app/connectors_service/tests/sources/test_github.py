@@ -859,6 +859,14 @@ def get_json_mock(mock_response, status):
 
 
 @pytest.mark.asyncio
+async def test_github_app_id_stored_as_string():
+    """app_id arrives as int from the config layer but must be a string for JWT iss claim (RFC 7519 §4.1.1)."""
+    async with create_github_source(auth_method=GITHUB_APP) as source:
+        assert isinstance(source.github_client.app_id, str)
+        assert source.github_client.app_id == "10"
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("field", ["repositories", "token"])
 async def test_validate_config_missing_fields_then_raise(field):
     async with create_github_source() as source:
