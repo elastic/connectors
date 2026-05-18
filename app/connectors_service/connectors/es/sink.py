@@ -418,7 +418,19 @@ class Sink:
                     and operation != OP_DELETE
                     and doc["doc"].get("_attachment") is None
                 ):
-                    serialized_size = sum(len(json.dumps(op)) for op in ops)
+                    # Mirror `elastic_transport._serializer.JsonSerializer` so the
+                    # measured size matches the actual bytes on the wire even for
+                    # i18n / emoji content. `json.dumps` defaults to
+                    # `ensure_ascii=True`, which would over-count non-ASCII chars
+                    # (e.g. 6 ASCII bytes for `\u00e9` vs 2 UTF-8 bytes for `é`).
+                    serialized_size = sum(
+                        len(
+                            json.dumps(
+                                op, ensure_ascii=False, separators=(",", ":")
+                            ).encode("utf-8", "surrogatepass")
+                        )
+                        for op in ops
+                    )
                     if serialized_size > self.max_text_document_size:
                         self._logger.warning(
                             f"Dropping doc id={doc_id} index={doc['_index']} op={operation}: "

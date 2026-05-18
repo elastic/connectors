@@ -1837,8 +1837,15 @@ async def test_sink_drops_doc_exceeding_max_text_document_size(patch_logger):
 
     await sink.run()
 
+    # Match `Sink._run`'s wire-byte measurement (mirrors elastic_transport's
+    # `JsonSerializer`: ensure_ascii=False + compact separators + UTF-8).
     expected_serialized = sum(
-        len(json.dumps(op)) for op in sink._bulk_op(big_doc, OP_INDEX)
+        len(
+            json.dumps(op, ensure_ascii=False, separators=(",", ":")).encode(
+                "utf-8", "surrogatepass"
+            )
+        )
+        for op in sink._bulk_op(big_doc, OP_INDEX)
     )
     assert sink.counters.get(DOCS_DROPPED_TOO_LARGE) == 1
     client.bulk_insert.assert_not_awaited()
@@ -1977,6 +1984,32 @@ async def test_sink_drops_structured_only_doc_when_oversized():
 
     assert sink.counters.get(DOCS_DROPPED_TOO_LARGE) == 1
     client.bulk_insert.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_sink_measures_serialized_size_in_wire_utf8_bytes():
+    # Regression: the cap must be measured against the bytes the ES client
+    # actually sends, which is `ensure_ascii=False` + UTF-8. Building a body
+    # under the cap in wire bytes but over it in default `json.dumps` chars
+    # (e.g. each `é` is 2 wire bytes vs 6 ASCII-escaped chars) must NOT drop.
+    #
+    # cap = 1 MiB. Pick a count of `é` chars whose ASCII-escape (`\u00e9`,
+    # 6 chars) exceeds the cap, but whose UTF-8 encoding (2 bytes) does not.
+    # 200_000 * 6 = 1_200_000 bytes (over) vs 200_000 * 2 = 400_000 bytes
+    # (well under), so the wire-byte cap must let this through.
+    cap_mib = 1
+    doc = _make_index_doc(DOC_ONE_ID)
+    doc["doc"]["body"] = "é" * 200_000
+    client = Mock()
+    client.bulk_insert = AsyncMock(return_value={"items": []})
+    queue = _queue_yielding([(1024, doc)])
+
+    sink = _make_cap_sink(client, queue, max_text_document_size=cap_mib)
+
+    await sink.run()
+
+    assert sink.counters.get(DOCS_DROPPED_TOO_LARGE) == 0
+    client.bulk_insert.assert_awaited_once()
 
 
 def _make_sink(queue, *, chunk_size, chunk_mem_size):
