@@ -1778,7 +1778,7 @@ def _queue_with_items(items):
     return queue
 
 
-def _make_sink(client, queue, max_document_size=None):
+def _make_sink(client, queue, max_text_document_size=None):
     return Sink(
         client=client,
         queue=queue,
@@ -1789,38 +1789,48 @@ def _make_sink(client, queue, max_document_size=None):
         max_concurrency=1,
         max_retries=3,
         retry_interval=10,
-        max_document_size=max_document_size,
+        max_text_document_size=max_text_document_size,
     )
 
 
+def _inflate_body(doc, payload_bytes):
+    """Pad doc['doc']['body'] so that the bulk-op pair serializes above payload_bytes."""
+    doc["doc"]["body"] = "x" * payload_bytes
+    return doc
+
+
 @pytest.mark.asyncio
-async def test_sink_drops_doc_exceeding_max_document_size(patch_logger):
-    big_doc = _make_index_doc(DOC_ONE_ID)
+async def test_sink_drops_doc_exceeding_max_text_document_size(patch_logger):
+    big_doc = _inflate_body(_make_index_doc(DOC_ONE_ID), 5 * 1024 * 1024)
     client = Mock()
     client.bulk_insert = AsyncMock(return_value={"items": []})
     queue = _queue_with_items([(5 * 1024 * 1024, big_doc)])
 
-    sink = _make_sink(client, queue, max_document_size=3)  # MiB
+    sink = _make_sink(client, queue, max_text_document_size=3)  # MiB
 
     await sink.run()
 
+    expected_serialized = sum(
+        len(json.dumps(op)) for op in sink._bulk_op(big_doc, OP_INDEX)
+    )
     assert sink.counters.get(DOCS_DROPPED_TOO_LARGE) == 1
     client.bulk_insert.assert_not_awaited()
     patch_logger.assert_present(
         f"Dropping doc id={big_doc['_id']} index={INDEX} op={OP_INDEX}: "
-        f"size {5 * 1024 * 1024}B exceeds elasticsearch.bulk.max_document_size "
+        f"serialized text size {expected_serialized}B exceeds "
+        f"elasticsearch.bulk.max_text_document_size "
         f"({3 * 1024 * 1024}B)"
     )
 
 
 @pytest.mark.asyncio
-async def test_sink_does_not_drop_doc_within_max_document_size():
+async def test_sink_does_not_drop_doc_within_max_text_document_size():
     small_doc = _make_index_doc(DOC_ONE_ID)
     client = Mock()
     client.bulk_insert = AsyncMock(return_value={"items": []})
     queue = _queue_with_items([(1024, small_doc)])
 
-    sink = _make_sink(client, queue, max_document_size=3)  # MiB
+    sink = _make_sink(client, queue, max_text_document_size=3)  # MiB
 
     await sink.run()
 
@@ -1830,13 +1840,13 @@ async def test_sink_does_not_drop_doc_within_max_document_size():
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("disabled_value", [None, 0])
-async def test_sink_max_document_size_disabled(disabled_value):
-    big_doc = _make_index_doc(DOC_ONE_ID)
+async def test_sink_max_text_document_size_disabled(disabled_value):
+    big_doc = _inflate_body(_make_index_doc(DOC_ONE_ID), 5 * 1024 * 1024)
     client = Mock()
     client.bulk_insert = AsyncMock(return_value={"items": []})
     queue = _queue_with_items([(10 * 1024 * 1024, big_doc)])
 
-    sink = _make_sink(client, queue, max_document_size=disabled_value)
+    sink = _make_sink(client, queue, max_text_document_size=disabled_value)
 
     await sink.run()
 
@@ -1852,7 +1862,7 @@ async def test_sink_does_not_drop_delete_op_even_if_oversized():
     client.bulk_insert = AsyncMock(return_value={"items": []})
     queue = _queue_with_items([(10 * 1024 * 1024, delete_doc)])
 
-    sink = _make_sink(client, queue, max_document_size=3)  # MiB
+    sink = _make_sink(client, queue, max_text_document_size=3)  # MiB
 
     await sink.run()
 
@@ -1863,7 +1873,7 @@ async def test_sink_does_not_drop_delete_op_even_if_oversized():
 @pytest.mark.asyncio
 async def test_sink_drops_only_oversized_doc_in_mixed_batch():
     doc_small_1 = _make_index_doc(DOC_ONE_ID)
-    doc_big = _make_index_doc(DOC_TWO_ID)
+    doc_big = _inflate_body(_make_index_doc(DOC_TWO_ID), 5 * 1024 * 1024)
     doc_small_2 = _make_index_doc(DOC_THREE_ID)
     client = Mock()
     client.bulk_insert = AsyncMock(return_value={"items": []})
@@ -1875,7 +1885,7 @@ async def test_sink_drops_only_oversized_doc_in_mixed_batch():
         ]
     )
 
-    sink = _make_sink(client, queue, max_document_size=3)  # MiB
+    sink = _make_sink(client, queue, max_text_document_size=3)  # MiB
 
     await sink.run()
 
@@ -1888,3 +1898,55 @@ async def test_sink_drops_only_oversized_doc_in_mixed_batch():
         if isinstance(op, dict) and OP_INDEX in op
     }
     assert sent_ids == {str(DOC_ONE_ID), str(DOC_THREE_ID)}
+
+
+@pytest.mark.asyncio
+async def test_sink_does_not_drop_doc_with_attachment_even_if_oversized():
+    # Binary attachments are governed by service.max_file_download_size,
+    # not by elasticsearch.bulk.max_text_document_size. Even if the doc's
+    # serialized size exceeds the cap, presence of `_attachment` exempts it.
+    big_attachment_doc = _make_index_doc(DOC_ONE_ID)
+    big_attachment_doc["doc"]["_attachment"] = "x" * (5 * 1024 * 1024)
+    client = Mock()
+    client.bulk_insert = AsyncMock(return_value={"items": []})
+    queue = _queue_with_items([(10 * 1024 * 1024, big_attachment_doc)])
+
+    sink = _make_sink(client, queue, max_text_document_size=3)  # MiB
+
+    await sink.run()
+
+    assert sink.counters.get(DOCS_DROPPED_TOO_LARGE) == 0
+    client.bulk_insert.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_sink_drops_doc_with_body_only_when_oversized():
+    # DES-text shape: doc has `body` but no `_attachment` -> cap applies.
+    doc = _inflate_body(_make_index_doc(DOC_ONE_ID), 5 * 1024 * 1024)
+    client = Mock()
+    client.bulk_insert = AsyncMock(return_value={"items": []})
+    queue = _queue_with_items([(5 * 1024 * 1024, doc)])
+
+    sink = _make_sink(client, queue, max_text_document_size=3)  # MiB
+
+    await sink.run()
+
+    assert sink.counters.get(DOCS_DROPPED_TOO_LARGE) == 1
+    client.bulk_insert.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_sink_drops_structured_only_doc_when_oversized():
+    # Structured-only shape: no `_attachment`, no `body`. Cap still applies.
+    doc = _make_index_doc(DOC_ONE_ID)
+    doc["doc"]["title"] = "x" * (5 * 1024 * 1024)
+    client = Mock()
+    client.bulk_insert = AsyncMock(return_value={"items": []})
+    queue = _queue_with_items([(5 * 1024 * 1024, doc)])
+
+    sink = _make_sink(client, queue, max_text_document_size=3)  # MiB
+
+    await sink.run()
+
+    assert sink.counters.get(DOCS_DROPPED_TOO_LARGE) == 1
+    client.bulk_insert.assert_not_awaited()

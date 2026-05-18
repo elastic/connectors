@@ -33,9 +33,9 @@ def test_config(set_env):
     assert config["elasticsearch"]["user"] == "elastic"
 
 
-def test_default_max_document_size(set_env):
+def test_default_max_text_document_size(set_env):
     config = load_config(CONFIG_FILE)
-    assert config["elasticsearch"]["bulk"]["max_document_size"] == 3
+    assert config["elasticsearch"]["bulk"]["max_text_document_size"] == 3
 
 
 def test_config_with_ent_search(set_env):

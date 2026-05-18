@@ -136,13 +136,11 @@
 #elasticsearch.bulk.chunk_max_mem_size: 3
 #
 #
-##  Hard per-document size limit in MiB. Documents whose size exceeds this
-##    threshold are dropped (skipped, logged, and counted) instead of being
-##    sent to Elasticsearch. This protects small Elasticsearch nodes from
-##    being overwhelmed by huge documents extracted e.g. via the Data
-##    Extraction Service, which bypasses service.max_file_download_size.
-##    Set to 0 to disable.
-#elasticsearch.bulk.max_document_size: 3
+##  Per-document cap in MiB for non-binary docs (no `_attachment`). Compared
+##    against the serialized bulk-op JSON; oversized docs are dropped, logged,
+##    and counted. Binary attachments are governed by
+##    `service.max_file_download_size`. Set to 0 to disable.
+#elasticsearch.bulk.max_text_document_size: 3
 #
 #
 ##  The max size of the bulk operation to Elasticsearch.

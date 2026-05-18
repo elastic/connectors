@@ -21,6 +21,7 @@ Elasticsearch <== Sink <== queue <== Extractor <== generator
 import asyncio
 import copy
 import functools
+import json
 import logging
 import time
 
@@ -39,7 +40,7 @@ from connectors.config import (
     DEFAULT_ELASTICSEARCH_MAX_RETRIES,
     DEFAULT_ELASTICSEARCH_RETRY_INTERVAL,
     DEFAULT_MAX_CONCURRENCY,
-    DEFAULT_MAX_DOCUMENT_SIZE,
+    DEFAULT_MAX_TEXT_DOCUMENT_SIZE,
     DEFAULT_QUEUE_MAX_MEM_SIZE,
     DEFAULT_QUEUE_MAX_SIZE,
     DEFAULT_QUEUE_REFRESH_INTERVAL,
@@ -139,9 +140,10 @@ class Sink:
     - `pipeline` -- ingest pipeline settings to pass to the bulk API
     - `chunk_mem_size` -- a maximum size in MiB for each bulk request
     - `max_concurrency` -- a maximum number of concurrent bulk requests
-    - `max_document_size` -- a hard per-document size cap in MiB; documents
-      whose size exceeds this cap are dropped (skipped, logged, counted)
-      instead of being sent. Falsy values (``0``/``None``) disable the cap.
+    - `max_text_document_size` -- hard per-document cap in MiB for docs
+      without an `_attachment`, measured against the serialized bulk-op JSON.
+      Falsy values (``0``/``None``) disable the cap. Binary attachments are
+      governed by ``service.max_file_download_size``.
     """
 
     def __init__(
@@ -157,7 +159,7 @@ class Sink:
         error_monitor,
         logger_=None,
         enable_bulk_operations_logging=False,
-        max_document_size=None,
+        max_text_document_size=None,
     ):
         self.client = client
         self.queue = queue
@@ -172,8 +174,10 @@ class Sink:
         self._logger = logger_ or logger
         self._canceled = False
         self._enable_bulk_operations_logging = enable_bulk_operations_logging
-        self.max_document_size = (
-            max_document_size * 1024 * 1024 if max_document_size else max_document_size
+        self.max_text_document_size = (
+            max_text_document_size * 1024 * 1024
+            if max_text_document_size
+            else max_text_document_size
         )
         self.counters = Counters()
 
@@ -394,18 +398,22 @@ class Sink:
                 if not doc_id:
                     self._logger.warning(f"Skip document {doc} as '_id' is missing.")
                     continue
+                ops = self._bulk_op(doc, operation)
                 if (
-                    operation != OP_DELETE
-                    and self.max_document_size
-                    and doc_size > self.max_document_size
+                    self.max_text_document_size
+                    and operation != OP_DELETE
+                    and doc["doc"].get("_attachment") is None
                 ):
-                    self._logger.warning(
-                        f"Dropping doc id={doc_id} index={doc['_index']} op={operation}: "
-                        f"size {doc_size}B exceeds elasticsearch.bulk.max_document_size "
-                        f"({self.max_document_size}B)"
-                    )
-                    self.counters.increment(DOCS_DROPPED_TOO_LARGE)
-                    continue
+                    serialized_size = sum(len(json.dumps(op)) for op in ops)
+                    if serialized_size > self.max_text_document_size:
+                        self._logger.warning(
+                            f"Dropping doc id={doc_id} index={doc['_index']} op={operation}: "
+                            f"serialized text size {serialized_size}B exceeds "
+                            f"elasticsearch.bulk.max_text_document_size "
+                            f"({self.max_text_document_size}B)"
+                        )
+                        self.counters.increment(DOCS_DROPPED_TOO_LARGE)
+                        continue
                 if operation == OP_DELETE:
                     stats[operation][doc_id] = 0
                 else:
@@ -420,7 +428,7 @@ class Sink:
                         overhead_size = get_size(overhead)
                     stats[operation][doc_id] = max(doc_size - overhead_size, 0)
                 self.counters.increment(operation, namespace=BULK_OPERATIONS)
-                batch.extend(self._bulk_op(doc, operation))
+                batch.extend(ops)
 
                 bulk_size += doc_size
                 if len(batch) >= self.chunk_size or bulk_size > self.chunk_mem_size:
@@ -1051,7 +1059,9 @@ class SyncOrchestrator:
         mem_queue_refresh_interval = options.get(
             "queue_refresh_interval", DEFAULT_QUEUE_REFRESH_INTERVAL
         )
-        max_document_size = options.get("max_document_size", DEFAULT_MAX_DOCUMENT_SIZE)
+        max_text_document_size = options.get(
+            "max_text_document_size", DEFAULT_MAX_TEXT_DOCUMENT_SIZE
+        )
 
         stream = MemQueue(
             maxsize=queue_size,
@@ -1094,7 +1104,7 @@ class SyncOrchestrator:
             error_monitor=self.error_monitor,
             logger_=self._logger,
             enable_bulk_operations_logging=enable_bulk_operations_logging,
-            max_document_size=max_document_size,
+            max_text_document_size=max_text_document_size,
         )
         self._sink_task = asyncio.create_task(
             self._sink.run(), name=f"Sink for {job_type} sync to {index}"
