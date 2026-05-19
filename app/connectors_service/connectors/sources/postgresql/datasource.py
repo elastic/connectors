@@ -25,6 +25,7 @@ from asyncpg.types import (
     Polygon,
 )
 from connectors_sdk.source import BaseDataSource
+from connectors_sdk.utils import iso_utc
 from sqlalchemy.exc import ProgrammingError
 
 from connectors.sources.postgresql.client import PostgreSQLClient
@@ -242,6 +243,36 @@ class PostgreSQLDataSource(BaseDataSource):
         )
         return row
 
+    def _resolve_table_timestamp(self, last_update_times, track_enabled, label):
+        """Pick the per-table `_timestamp` for the documents about to be emitted.
+
+        - If `MAX(pg_xact_commit_timestamp(xmin))` returned a real value, use it.
+        - If it returned NULL but `track_commit_timestamp` is on, return None: this
+          is a stable value, so the sink will dedup unchanged documents on later
+          syncs. Once any DML happens, MAX flips to a real timestamp and the table
+          gets reindexed.
+        - If `track_commit_timestamp` is off, fall back to `iso_utc()`. We have no
+          way to detect row-level changes, so we must reindex on every sync (this
+          matches the behavior the docs promise when the setting is off).
+        """
+        if last_update_times:
+            return max(last_update_times)
+        if track_enabled:
+            self._logger.warning(
+                f"No commit timestamp available for {label}. "
+                "'track_commit_timestamp' is on but no transactions have committed "
+                "since it was enabled - documents will use a stable null timestamp "
+                "until then."
+            )
+            return None
+        self._logger.warning(
+            f"'track_commit_timestamp' is off; cannot detect row-level changes for "
+            f"{label}. All documents will be reindexed on every sync. Enable "
+            "'track_commit_timestamp = on' on the PostgreSQL server to get "
+            "incremental syncs."
+        )
+        return iso_utc()
+
     async def get_primary_key(self, tables):
         self._logger.debug(f"Extracting primary keys for tables: {tables}")
         primary_key_columns = []
@@ -312,6 +343,8 @@ class PostgreSQLDataSource(BaseDataSource):
             )
             return
 
+        track_enabled = await self.postgresql_client.is_track_commit_timestamp_enabled()
+
         last_update_times = []
         for table in tables:
             try:
@@ -326,16 +359,11 @@ class PostgreSQLDataSource(BaseDataSource):
             if last_update_time is not None:
                 last_update_times.append(last_update_time)
 
-        # `MAX(pg_xact_commit_timestamp(xmin))` is NULL when `track_commit_timestamp`
-        # is off or no transactions have committed since enabling it. Keep `_timestamp`
-        # stable (None) - falling back to `iso_utc()` would force a reindex every sync.
-        last_update_time = max(last_update_times) if last_update_times else None
-        if last_update_time is None:
-            self._logger.warning(
-                f"No commit timestamp available for tables: {', '.join(tables)}. "
-                "Ensure 'track_commit_timestamp = on' is set on the PostgreSQL server "
-                "and that data has been committed since enabling it."
-            )
+        last_update_time = self._resolve_table_timestamp(
+            last_update_times=last_update_times,
+            track_enabled=track_enabled,
+            label=f"tables: {', '.join(tables)}",
+        )
 
         async for row in self.yield_rows_for_query(
             primary_key_columns=primary_key_columns, tables=tables, query=query
@@ -358,6 +386,9 @@ class PostgreSQLDataSource(BaseDataSource):
             self._logger.debug(f"Total '{row_count}' rows found in table '{table}'")
             keys, order_by_columns = await self.get_primary_key(tables=[table])
             if keys:
+                track_enabled = (
+                    await self.postgresql_client.is_track_commit_timestamp_enabled()
+                )
                 try:
                     last_update_time = (
                         await self.postgresql_client.get_table_last_update_time(
@@ -369,17 +400,13 @@ class PostgreSQLDataSource(BaseDataSource):
                         f"Unable to fetch last_updated_time for table '{table}'"
                     )
                     last_update_time = None
-                # `MAX(pg_xact_commit_timestamp(xmin))` is NULL when `track_commit_timestamp`
-                # is off or no transactions have committed since enabling it. Keep
-                # `_timestamp` stable (None) - falling back to `iso_utc()` would force a
-                # reindex every sync.
-                if last_update_time is None:
-                    self._logger.warning(
-                        f"No commit timestamp available for table '{table}'. "
-                        "Ensure 'track_commit_timestamp = on' is set on the PostgreSQL "
-                        "server and that data has been committed in this table since "
-                        "enabling it."
-                    )
+                last_update_time = self._resolve_table_timestamp(
+                    last_update_times=[last_update_time]
+                    if last_update_time is not None
+                    else [],
+                    track_enabled=track_enabled,
+                    label=f"table '{table}'",
+                )
                 async for row in self.yield_rows_for_query(
                     primary_key_columns=keys,
                     tables=[table],

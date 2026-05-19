@@ -153,6 +153,8 @@ class CursorAsync:
                 schema=SCHEMA, table=CUSTOMER_TABLE
             ):
                 return [("2023-02-21T08:37:15+00:00",)]
+            elif self.query == query_object.track_commit_timestamp_setting():
+                return [("on",)]
             elif self.query.lower() == "select * from customer":
                 return [(1, "customer_1"), (2, "customer_2")]
             elif self.query == query_object.ping():
@@ -478,14 +480,18 @@ async def test_get_docs():
 
 @freeze_time(TIME)
 @pytest.mark.asyncio
-async def test_get_docs_when_last_update_time_is_none_does_not_fall_back_to_iso_utc():
-    """When `MAX(pg_xact_commit_timestamp(xmin))` is NULL (track_commit_timestamp off,
-    or just enabled with no commits since), docs must use a stable `_timestamp = None`
-    instead of a fresh `iso_utc()` that would force a full reindex every sync.
+async def test_get_docs_when_track_commit_timestamp_on_and_max_is_null_uses_stable_none():
+    """`track_commit_timestamp = on` but no DML has committed since: MAX returns NULL.
+    Docs must use a stable `_timestamp = None` so the sink can dedup unchanged
+    docs on subsequent syncs. The previous `iso_utc()` fallback caused a full
+    reindex every sync, which is the customer-reported bug.
     """
     async with create_postgresql_source() as source:
         with patch.object(AsyncEngine, "connect", return_value=ConnectionAsync()):
             source.engine = create_async_engine(POSTGRESQL_CONNECTION_STRING)
+            source.postgresql_client.is_track_commit_timestamp_enabled = AsyncMock(
+                return_value=True
+            )
             source.postgresql_client.get_table_last_update_time = AsyncMock(
                 return_value=None
             )
@@ -500,15 +506,46 @@ async def test_get_docs_when_last_update_time_is_none_does_not_fall_back_to_iso_
 
 @freeze_time(TIME)
 @pytest.mark.asyncio
-async def test_get_docs_when_last_update_time_raises_does_not_fall_back_to_iso_utc():
-    """If `get_table_last_update_time` raises, fall back to a stable `_timestamp = None`
-    rather than a fresh `iso_utc()` that would force a full reindex every sync.
+async def test_get_docs_when_track_commit_timestamp_off_falls_back_to_iso_utc():
+    """When `track_commit_timestamp` is off, the connector cannot detect row-level
+    changes. To match the documented contract ("all data will be indexed in every
+    sync"), it must keep using `iso_utc()` so existing-doc dedup never matches and
+    every row is reindexed. Returning a stable null here would silently drop row
+    updates.
     """
     async with create_postgresql_source() as source:
         with patch.object(AsyncEngine, "connect", return_value=ConnectionAsync()):
             source.engine = create_async_engine(POSTGRESQL_CONNECTION_STRING)
+            source.postgresql_client.is_track_commit_timestamp_enabled = AsyncMock(
+                return_value=False
+            )
             source.postgresql_client.get_table_last_update_time = AsyncMock(
-                side_effect=Exception("track_commit_timestamp is off")
+                return_value=None
+            )
+
+            actual_response = []
+            async for doc in source.get_docs():
+                actual_response.append(doc[0])
+
+            assert len(actual_response) == 2
+            assert all(doc["_timestamp"] == TIME for doc in actual_response)
+
+
+@freeze_time(TIME)
+@pytest.mark.asyncio
+async def test_get_docs_when_last_update_time_raises_with_track_on_uses_stable_none():
+    """If `get_table_last_update_time` raises but `track_commit_timestamp` is on,
+    fall back to a stable `_timestamp = None` rather than a fresh `iso_utc()` that
+    would force a full reindex every sync.
+    """
+    async with create_postgresql_source() as source:
+        with patch.object(AsyncEngine, "connect", return_value=ConnectionAsync()):
+            source.engine = create_async_engine(POSTGRESQL_CONNECTION_STRING)
+            source.postgresql_client.is_track_commit_timestamp_enabled = AsyncMock(
+                return_value=True
+            )
+            source.postgresql_client.get_table_last_update_time = AsyncMock(
+                side_effect=Exception("transient failure")
             )
 
             actual_response = []
@@ -521,7 +558,7 @@ async def test_get_docs_when_last_update_time_raises_does_not_fall_back_to_iso_u
 
 @freeze_time(TIME)
 @pytest.mark.asyncio
-async def test_get_docs_with_advanced_rules_when_last_update_time_is_none_does_not_fall_back_to_iso_utc():
+async def test_get_docs_with_advanced_rules_when_track_on_and_max_is_null_uses_stable_none():
     """Same `_timestamp = None` guarantee for the advanced sync rules / custom query path."""
     async with create_source(
         PostgreSQLDataSource,
@@ -531,6 +568,9 @@ async def test_get_docs_with_advanced_rules_when_last_update_time_is_none_does_n
         port=5432,
     ) as source:
         with patch.object(AsyncEngine, "connect", return_value=ConnectionAsync()):
+            source.postgresql_client.is_track_commit_timestamp_enabled = AsyncMock(
+                return_value=True
+            )
             source.postgresql_client.get_table_last_update_time = AsyncMock(
                 return_value=None
             )

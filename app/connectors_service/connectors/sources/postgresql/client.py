@@ -95,6 +95,32 @@ class PostgreSQLClient:
             )
         )
 
+    async def is_track_commit_timestamp_enabled(self):
+        """Return True iff `track_commit_timestamp` is `on` on the server.
+
+        When this setting is off, `pg_xact_commit_timestamp(xmin)` returns NULL for
+        every row, so the connector has no signal for detecting row-level changes
+        and must fall back to reindexing on every sync.
+        """
+        try:
+            [value] = await anext(
+                fetch(
+                    cursor_func=partial(
+                        self.get_cursor,
+                        self.queries.track_commit_timestamp_setting(),
+                    ),
+                    fetch_size=1,
+                    retry_count=self.retry_count,
+                )
+            )
+        except Exception as exception:
+            self._logger.warning(
+                f"Could not read 'track_commit_timestamp' setting: {exception}. "
+                "Assuming it is off and reindexing on every sync."
+            )
+            return False
+        return str(value).strip().lower() == "on"
+
     async def get_tables_to_fetch(self, is_filtering=False):
         tables = configured_tables(self.tables)
         if is_wildcard(tables) or is_filtering:

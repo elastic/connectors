@@ -13,6 +13,10 @@ class PostgreSQLQueries(Queries):
         """Query to ping source"""
         return "SELECT 1+1"
 
+    def track_commit_timestamp_setting(self):
+        """Query the server-wide value of `track_commit_timestamp` ('on' or 'off')."""
+        return "SHOW track_commit_timestamp"
+
     def all_tables(self, **kwargs):
         """Query to get all tables"""
         return f"SELECT table_name FROM information_schema.tables WHERE table_catalog = '{kwargs['database']}' and table_schema = '{kwargs['schema']}'"
