@@ -17,7 +17,7 @@ from ipaddress import (
     IPv6Interface,
     IPv6Network,
 )
-from unittest.mock import ANY, Mock, patch
+from unittest.mock import ANY, AsyncMock, Mock, patch
 from uuid import UUID
 
 import pytest
@@ -474,6 +474,86 @@ async def test_get_docs():
 
             # Assert
             assert actual_response == expected_response
+
+
+@freeze_time(TIME)
+@pytest.mark.asyncio
+async def test_get_docs_when_last_update_time_is_none_does_not_fall_back_to_iso_utc():
+    """When `MAX(pg_xact_commit_timestamp(xmin))` is NULL (track_commit_timestamp off,
+    or just enabled with no commits since), docs must use a stable `_timestamp = None`
+    instead of a fresh `iso_utc()` that would force a full reindex every sync.
+    """
+    async with create_postgresql_source() as source:
+        with patch.object(AsyncEngine, "connect", return_value=ConnectionAsync()):
+            source.engine = create_async_engine(POSTGRESQL_CONNECTION_STRING)
+            source.postgresql_client.get_table_last_update_time = AsyncMock(
+                return_value=None
+            )
+
+            actual_response = []
+            async for doc in source.get_docs():
+                actual_response.append(doc[0])
+
+            assert len(actual_response) == 2
+            assert all(doc["_timestamp"] is None for doc in actual_response)
+
+
+@freeze_time(TIME)
+@pytest.mark.asyncio
+async def test_get_docs_when_last_update_time_raises_does_not_fall_back_to_iso_utc():
+    """If `get_table_last_update_time` raises, fall back to a stable `_timestamp = None`
+    rather than a fresh `iso_utc()` that would force a full reindex every sync.
+    """
+    async with create_postgresql_source() as source:
+        with patch.object(AsyncEngine, "connect", return_value=ConnectionAsync()):
+            source.engine = create_async_engine(POSTGRESQL_CONNECTION_STRING)
+            source.postgresql_client.get_table_last_update_time = AsyncMock(
+                side_effect=Exception("track_commit_timestamp is off")
+            )
+
+            actual_response = []
+            async for doc in source.get_docs():
+                actual_response.append(doc[0])
+
+            assert len(actual_response) == 2
+            assert all(doc["_timestamp"] is None for doc in actual_response)
+
+
+@freeze_time(TIME)
+@pytest.mark.asyncio
+async def test_get_docs_with_advanced_rules_when_last_update_time_is_none_does_not_fall_back_to_iso_utc():
+    """Same `_timestamp = None` guarantee for the advanced sync rules / custom query path."""
+    async with create_source(
+        PostgreSQLDataSource,
+        database="xe",
+        tables="*",
+        schema="public",
+        port=5432,
+    ) as source:
+        with patch.object(AsyncEngine, "connect", return_value=ConnectionAsync()):
+            source.postgresql_client.get_table_last_update_time = AsyncMock(
+                return_value=None
+            )
+
+            filtering = Filter(
+                {
+                    ADVANCED_SNIPPET: {
+                        "value": [
+                            {
+                                "tables": ["emp_table"],
+                                "query": "select * from emp_table",
+                            },
+                        ]
+                    }
+                }
+            )
+
+            actual_response = []
+            async for doc in source.get_docs(filtering=filtering):
+                actual_response.append(doc[0])
+
+            assert len(actual_response) > 0
+            assert all(doc["_timestamp"] is None for doc in actual_response)
 
 
 @freeze_time(TIME)
