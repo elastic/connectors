@@ -131,7 +131,6 @@ _NOISY_HEADERS = (
     "Return-Path",
     "Authentication-Results",
     "List-Unsubscribe",
-    "Message-ID",
 )
 
 # Reusable block of noisy headers mirroring what Gmail prepends to a raw message.
@@ -282,7 +281,22 @@ _WINDOWS_1252_BODY = (
     + b"Smart quote: \x93hello\x94 world.\r\n"
 )
 
-# Fixture 8: DSN - no textual body part, headers-only output expected.
+# Fixture 8: Reply-To and Bcc present; both should survive the trim.
+_WITH_REPLY_TO_AND_BCC = _to_eml_bytes(
+    _NOISY_HEADER_BLOCK
+    + "Subject: Newsletter with reply-to\r\n"
+    + "From: news@example.com\r\n"
+    + "Reply-To: support@example.com\r\n"
+    + "To: recipient@example.com\r\n"
+    + "Bcc: archive@example.com\r\n"
+    + "Date: Wed, 13 May 2026 10:00:00 +0000\r\n"
+    + "MIME-Version: 1.0\r\n"
+    + "Content-Type: text/plain; charset=utf-8\r\n"
+    + "\r\n"
+    + "Body with reply-to and bcc headers.\r\n"
+)
+
+# Fixture 9: DSN - no textual body part, headers-only output expected.
 _DSN = _to_eml_bytes(
     _NOISY_HEADER_BLOCK
     + "Subject: Delivery Status Notification (Failure)\r\n"
@@ -400,11 +414,32 @@ class TestGMailDataSource:
         assert rebuilt["From"] == "sender@example.com"
         assert rebuilt["To"] == "recipient@example.com"
         assert rebuilt["Date"] is not None
+        assert rebuilt["Message-ID"] == "<abc123@example.com>"
 
         body = rebuilt.get_body(preferencelist=("plain", "html"))
         assert body is not None
         assert body.get_content_subtype() == expected_subtype
         assert expected_body_substring in body.get_content()
+
+    @pytest.mark.asyncio
+    async def test_message_doc_keeps_reply_to_and_bcc(self):
+        raw_b64url = _b64url(_WITH_REPLY_TO_AND_BCC)
+        message = {
+            "id": MESSAGE_ID,
+            "raw": raw_b64url,
+            "internalDate": CREATION_DATE,
+        }
+
+        async with create_gmail_source() as source:
+            doc = source._message_doc(message)
+
+        rebuilt = _decode_attachment(doc["_attachment"])
+
+        assert rebuilt["Reply-To"] == "support@example.com"
+        assert rebuilt["Bcc"] == "archive@example.com"
+
+        for noisy in _NOISY_HEADERS:
+            assert rebuilt[noisy] is None
 
     @pytest.mark.asyncio
     async def test_message_doc_handles_dsn_with_no_textual_body(self):

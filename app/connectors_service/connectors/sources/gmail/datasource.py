@@ -34,9 +34,17 @@ SERVICE_ACCOUNT_CREDENTIALS_LABEL = "GMail service account JSON"
 SUBJECT_LABEL = "Google Workspace admin email"
 CUSTOMER_ID_LABEL = "Google customer id"
 
-# Headers kept when trimming; everything else (Received, ARC-*, DKIM-*, X-*, ...)
-# is dropped so it doesn't pollute Tika's extracted text.
-_KEPT_HEADERS = ("Subject", "From", "To", "Cc", "Date")
+# Headers kept when trimming; everything else is dropped.
+_KEPT_HEADERS = (
+    "Subject",
+    "From",
+    "Reply-To",
+    "To",
+    "Cc",
+    "Bcc",
+    "Date",
+    "Message-ID",
+)
 
 _DEFAULT_POLICY = policy.default
 
