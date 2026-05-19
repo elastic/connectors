@@ -34,46 +34,40 @@ SERVICE_ACCOUNT_CREDENTIALS_LABEL = "GMail service account JSON"
 SUBJECT_LABEL = "Google Workspace admin email"
 CUSTOMER_ID_LABEL = "Google customer id"
 
-# Headers preserved when rewriting the message into a header-light .eml. Everything
-# else (Received, ARC-*, DKIM-Signature, X-*, List-*, Authentication-Results, ...)
-# is dropped so it does not pollute the text extracted by Tika.
+# Headers kept when trimming; everything else (Received, ARC-*, DKIM-*, X-*, ...)
+# is dropped so it doesn't pollute Tika's extracted text.
 _KEPT_HEADERS = ("Subject", "From", "To", "Cc", "Date")
+
+_DEFAULT_POLICY = policy.default
 
 
 def _extract_body_eml(raw_base64url):
-    """Best-effort parse of a Gmail base64url-encoded RFC 822 message into a small
-    .eml that only contains a curated set of headers and a single body part
-    (``text/plain`` preferred, ``text/html`` fallback). The result is returned as a
-    standard base64 string ready to drop into the ``_attachment`` field.
-
-    Returns ``None`` on any parsing failure so the caller can fall back to the
-    legacy raw payload. Returns the input unchanged when it is empty/``None``.
+    """Trim a Gmail base64url RFC 822 message to a small .eml with only the kept
+    headers and one body part (``text/plain`` preferred, ``text/html`` fallback).
+    Returns standard base64 ready for ``_attachment``, ``None`` on parse failure
+    (caller falls back to the legacy payload), or the input unchanged when empty.
     """
     if not raw_base64url:
         return raw_base64url
 
     try:
-        # urlsafe_b64decode requires correct padding; Gmail's raw field may omit it.
-        padded = raw_base64url + "=" * (-len(raw_base64url) % 4)
-        raw_bytes = base64.urlsafe_b64decode(padded)
-        # The typeshed stub for `parsebytes` declares the return as the legacy
-        # `Message` regardless of policy/_class, but at runtime `policy.default`
-        # yields an `EmailMessage` (which is what `get_body` lives on). Cast so
-        # pyright sees the actual runtime type.
+        # Gmail omits padding; appending 3 '=' covers every valid input length.
+        raw_bytes = base64.urlsafe_b64decode(raw_base64url + "===")
+        # typeshed declares `parsebytes` / `get_body` as `Message`, but with
+        # `policy.default` they return `EmailMessage`. The casts below are
+        # runtime no-ops that align pyright with reality.
         original = cast(
             EmailMessage,
-            BytesParser(_class=EmailMessage, policy=policy.default).parsebytes(
+            BytesParser(_class=EmailMessage, policy=_DEFAULT_POLICY).parsebytes(
                 raw_bytes
             ),
         )
 
-        rebuilt = EmailMessage(policy=policy.default)
+        rebuilt = EmailMessage(policy=_DEFAULT_POLICY)
         for header in _KEPT_HEADERS:
             if original[header] is not None:
                 rebuilt[header] = original[header]
 
-        # Same stub gap as above: `get_body` is typed to return the legacy
-        # `Message`, but with `policy.default` it actually yields an `EmailMessage`.
         body = cast(
             "EmailMessage | None",
             original.get_body(preferencelist=("plain", "html")),
@@ -151,14 +145,13 @@ class GMailDataSource(BaseDataSource):
                 "label": "Index full raw email (including headers)",
                 "order": 5,
                 "tooltip": (
-                    "When disabled, only the email body is sent to the "
-                    "attachment processor for text extraction. Enable to index the "
-                    "full raw message, including all routing and "
-                    "authentication headers, which is useful for edge cases where "
-                    "best-effort body extraction misses content."
+                    "When disabled (default), only the email body is indexed. "
+                    "Enable to keep the full raw message including routing and "
+                    "authentication headers - useful for edge cases where body "
+                    "extraction misses content."
                 ),
                 "type": "bool",
-                "value": True,
+                "value": False,
             },
             "use_document_level_security": {
                 "display": "toggle",
@@ -325,24 +318,19 @@ class GMailDataSource(BaseDataSource):
         raw = message.get(MessageFields.FULL_MESSAGE.value)
         timestamp = message.get(MessageFields.CREATION_DATE.value)
 
-        # The attachment processor on the ES side decodes the base64 value in `_attachment`
-        # and hands the bytes to Tika. By default, we trim the raw RFC 822 down to a
-        # header-light .eml before encoding, so Tika's output is dominated by the body
-        # instead of the routing/auth headers.
-        attachment = None
-        if not self.configuration["include_full_raw_message"]:
-            attachment = _extract_body_eml(raw)
-            if attachment is None and raw is not None:
-                self._logger.warning(
-                    "Best-effort email body extraction failed for message %s; "
-                    "falling back to the full raw payload.",
-                    message_id,
-                )
-
-        if attachment is None:
-            # Legacy behavior: forward the entire raw email. The attachment processor
-            # cannot handle base64url encoded values (only ordinary base64).
+        if self.configuration["include_full_raw_message"]:
+            # Legacy path: forward the raw email; ES attachment processor needs standard base64.
             attachment = base64url_to_base64(raw)
+        else:
+            # Default: trim to a header-light .eml so Tika extracts body, not headers.
+            attachment = _extract_body_eml(raw)
+            if attachment is None:
+                if raw is not None:
+                    self._logger.warning(
+                        "Body extraction failed for %s; falling back to raw payload.",
+                        message_id,
+                    )
+                attachment = base64url_to_base64(raw)
 
         return {
             "_id": message_id,

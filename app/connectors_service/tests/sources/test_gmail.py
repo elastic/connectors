@@ -118,9 +118,7 @@ class TestGMailAdvancedRulesValidator:
 MESSAGE_ID = 1
 CREATION_DATE = "2023-01-01T13:37:00"
 
-# Headers that Gmail attaches to every `format=raw` response and that we want gone
-# from the trimmed `_attachment` payload. Used both to build realistic fixtures and
-# to assert they have been stripped.
+# Headers Gmail attaches to raw responses that we want stripped from `_attachment`.
 _NOISY_HEADERS = (
     "Delivered-To",
     "Received",
@@ -136,7 +134,7 @@ _NOISY_HEADERS = (
     "Message-ID",
 )
 
-# A reusable block of noisy headers that mirrors what Gmail prepends to a raw message.
+# Reusable block of noisy headers mirroring what Gmail prepends to a raw message.
 _NOISY_HEADER_BLOCK = (
     "Delivered-To: recipient@example.com\r\n"
     "Received: by 2002:a17:abc with SMTP id xyz; Wed, 13 May 2026 03:00:00 -0700 (PDT)\r\n"
@@ -154,7 +152,7 @@ _NOISY_HEADER_BLOCK = (
 
 
 def _to_eml_bytes(text):
-    """Normalize line endings to CRLF, which is what RFC 822 expects on the wire."""
+    """Normalize line endings to CRLF as RFC 822 expects on the wire."""
     return text.replace("\r\n", "\n").replace("\n", "\r\n").encode("utf-8")
 
 
@@ -162,7 +160,7 @@ def _b64url(raw_bytes):
     return base64.urlsafe_b64encode(raw_bytes).decode("ascii")
 
 
-# Fixture 1: text/plain only with the noisy Gmail header block prepended.
+# Fixture 1: text/plain only with noisy Gmail header block.
 _PLAIN_ONLY = _to_eml_bytes(
     _NOISY_HEADER_BLOCK
     + "Subject: Plain only test\r\n"
@@ -175,7 +173,7 @@ _PLAIN_ONLY = _to_eml_bytes(
     + "This is the plain text body of the message.\r\n"
 )
 
-# Fixture 2: multipart/alternative with both text/plain and text/html. Plain wins.
+# Fixture 2: multipart/alternative; plain wins over html.
 _ALTERNATIVE = _to_eml_bytes(
     _NOISY_HEADER_BLOCK
     + "Subject: Both parts\r\n"
@@ -196,7 +194,7 @@ _ALTERNATIVE = _to_eml_bytes(
     + "--alt--\r\n"
 )
 
-# Fixture 3: text/html only. Body survives as HTML in the trimmed .eml.
+# Fixture 3: text/html only; body survives as HTML in the trimmed .eml.
 _HTML_ONLY = _to_eml_bytes(
     _NOISY_HEADER_BLOCK
     + "Subject: HTML only\r\n"
@@ -209,7 +207,7 @@ _HTML_ONLY = _to_eml_bytes(
     + "<html><body><p>HTML only body content.</p></body></html>\r\n"
 )
 
-# Fixture 4: multipart/mixed with body + PDF attachment. Attachment dropped, body kept.
+# Fixture 4: multipart/mixed; attachment dropped, body kept.
 _MIXED_WITH_ATTACHMENT = _to_eml_bytes(
     _NOISY_HEADER_BLOCK
     + "Subject: With attachment\r\n"
@@ -232,7 +230,7 @@ _MIXED_WITH_ATTACHMENT = _to_eml_bytes(
     + "--mix--\r\n"
 )
 
-# Fixture 5: multipart/related, HTML + inline image. Image part dropped.
+# Fixture 5: multipart/related; inline image dropped, HTML body kept.
 _RELATED_INLINE_IMAGE = _to_eml_bytes(
     _NOISY_HEADER_BLOCK
     + "Subject: HTML with inline image\r\n"
@@ -256,8 +254,7 @@ _RELATED_INLINE_IMAGE = _to_eml_bytes(
     + "--rel--\r\n"
 )
 
-# Fixture 6: RFC 2047 encoded subject (Japanese "konnichiwa"). policy.default decodes
-# on read; we want to see the decoded subject in the rebuilt message.
+# Fixture 6: RFC 2047 encoded subject (Japanese "konnichiwa"); decoded on rewrite.
 _ENCODED_SUBJECT = _to_eml_bytes(
     _NOISY_HEADER_BLOCK
     + "Subject: =?UTF-8?B?44GT44KT44Gr44Gh44Gv?=\r\n"
@@ -270,8 +267,7 @@ _ENCODED_SUBJECT = _to_eml_bytes(
     + "Body with an encoded subject.\r\n"
 )
 
-# Fixture 7: Body declared as Windows-1252. Should be re-encoded as UTF-8 in output.
-# The byte 0x93 is a Windows-1252 left double quotation mark; 0x94 is the right one.
+# Fixture 7: Windows-1252 body (0x93/0x94 are smart quotes); re-encoded as UTF-8.
 _WINDOWS_1252_BODY = (
     _to_eml_bytes(
         _NOISY_HEADER_BLOCK
@@ -286,7 +282,7 @@ _WINDOWS_1252_BODY = (
     + b"Smart quote: \x93hello\x94 world.\r\n"
 )
 
-# Fixture 8: Delivery Status Notification - no textual body part, headers only.
+# Fixture 8: DSN - no textual body part, headers-only output expected.
 _DSN = _to_eml_bytes(
     _NOISY_HEADER_BLOCK
     + "Subject: Delivery Status Notification (Failure)\r\n"
@@ -308,8 +304,7 @@ _DSN = _to_eml_bytes(
 )
 
 
-# Shared base64url fixture used by the broader sync tests so they exercise the new
-# trim path with a realistic Gmail-shaped raw payload.
+# Shared base64url payload used by the broader sync tests to exercise the trim path.
 SAMPLE_RAW_BASE64URL = _b64url(_PLAIN_ONLY)
 
 
@@ -322,7 +317,7 @@ async def setup_messages_and_users_apis(
 
 
 def _decode_attachment(attachment):
-    """Decode an `_attachment` payload (standard base64) into an EmailMessage."""
+    """Decode a standard base64 `_attachment` payload into an EmailMessage."""
     return email.message_from_bytes(base64.b64decode(attachment), policy=policy.default)
 
 
@@ -430,8 +425,7 @@ class TestGMailDataSource:
             assert rebuilt[noisy] is None
 
         assert rebuilt["Subject"] == "Delivery Status Notification (Failure)"
-        # No usable body part - the rebuilt message is allowed to have an empty body,
-        # but the trimmed payload must remain a valid email with the kept headers.
+        # No usable body part; output is headers-only with empty body.
         body = rebuilt.get_body(preferencelist=("plain", "html"))
         assert body is None or body.get_content().strip() == ""
 
@@ -454,7 +448,7 @@ class TestGMailDataSource:
 
         assert doc["_id"] == MESSAGE_ID
         assert doc["_timestamp"] == CREATION_DATE
-        # Falls back to today's behavior: legacy base64url -> base64.
+        # Falls back to legacy base64url -> base64.
         assert doc["_attachment"] == base64url_to_base64(raw_b64url)
 
     @pytest.mark.asyncio
@@ -469,10 +463,9 @@ class TestGMailDataSource:
         async with create_gmail_source(include_full_raw_message=True) as source:
             doc = source._message_doc(message)
 
-        # Legacy path: payload is the raw message with base64url -> base64 conversion.
+        # Legacy path: payload is raw message with base64url -> base64 conversion.
         assert doc["_attachment"] == base64url_to_base64(raw_b64url)
-        # Sanity check: the noisy headers ARE still present when the toggle is on,
-        # which is the entire point of providing the toggle.
+        # Noisy headers ARE still present when the toggle is on - that's the point.
         rebuilt = _decode_attachment(doc["_attachment"])
         assert rebuilt["Received"] is not None
         assert rebuilt["DKIM-Signature"] is not None
@@ -519,9 +512,7 @@ class TestGMailDataSource:
         ],
     )
     def test_extract_body_eml_never_raises_on_garbage_input(self, raw_b64url):
-        # The helper is best-effort: on garbage input it must either return None
-        # (so the caller falls back to the legacy payload) or a valid base64
-        # string. It must never raise.
+        # Best-effort: garbage input must yield None or a valid base64 string, never raise.
         result = _extract_body_eml(raw_b64url)
         assert result is None or isinstance(result, str)
 
