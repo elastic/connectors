@@ -288,5 +288,5 @@ spec:
         search-productivity-team: {}
         search-inference-team: {}
         enterprise-search: {}
-        release-eng:
+        artifact-management:
           access_level: BUILD_AND_READ
