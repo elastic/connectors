@@ -50,7 +50,8 @@ services:
     volumes:
       - ${CURDIR}/connectors-config:/config
     command: /app/bin/elastic-ingest -c /config/config.yml
-    network_mode: "elastic"
+    networks:
+      - elastic
 
 volumes:
   conn-es-data:
