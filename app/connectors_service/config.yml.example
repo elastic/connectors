@@ -30,7 +30,7 @@
 ## ------------------------------- Elasticsearch -------------------------------
 #
 ## The host of the Elasticsearch deployment.
-#elasticsearch.host: http://localhost:9200
+#elasticsearch.host: http://elasticsearch:9200
 #
 #
 ## The API key for Elasticsearch connection.
