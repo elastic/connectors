@@ -33,6 +33,7 @@ if [[ "$is_example_config" == true ]]; then
     fi
     $sed_cmd '/connectors:/s/^#//g' "$script_config"
     $sed_cmd '/elasticsearch.host/s/^#//g' "$script_config"
+    $sed_cmd '/^elasticsearch\.host:/s|localhost|elasticsearch|g' "$script_config"
     $sed_cmd '/elasticsearch.username/s/^#//g' "$script_config"
     $sed_cmd '/elasticsearch.password/s/^#//g' "$script_config"
 
