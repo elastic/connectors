@@ -206,7 +206,7 @@ Apache License
 
 
 aiohappyeyeballs
-2.6.1
+2.6.2
 Python Software Foundation License
 A. HISTORY OF THE SOFTWARE
 ==========================
@@ -1220,7 +1220,7 @@ Apache License
 
 
 idna
-3.15
+3.16
 BSD-3-Clause
 BSD 3-Clause License
 
@@ -1799,7 +1799,7 @@ PERFORMANCE OF THIS SOFTWARE.
 
 
 yarl
-1.23.0
+1.24.2
 Apache-2.0
 
                                  Apache License
