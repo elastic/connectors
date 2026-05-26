@@ -3,8 +3,11 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+import base64
+import email
 import json
 from contextlib import asynccontextmanager
+from email import policy
 from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
@@ -17,7 +20,9 @@ from freezegun import freeze_time
 
 from connectors.access_control import ACCESS_CONTROL
 from connectors.sources.gmail import GMailAdvancedRulesValidator, GMailDataSource
+from connectors.sources.gmail.datasource import _extract_body_eml
 from connectors.sources.shared.google import MessageFields, UserFields
+from connectors.utils import base64url_to_base64
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
 
@@ -45,7 +50,11 @@ def dls_enabled(value):
 
 
 @asynccontextmanager
-async def create_gmail_source(dls_enabled=False, include_spam_and_trash=False):
+async def create_gmail_source(
+    dls_enabled=False,
+    include_spam_and_trash=False,
+    include_full_raw_message=False,
+):
     async with create_source(
         GMailDataSource,
         service_account_credentials=json.dumps(JSON_CREDENTIALS),
@@ -53,6 +62,7 @@ async def create_gmail_source(dls_enabled=False, include_spam_and_trash=False):
         customer_id="foo",
         use_document_level_security=dls_enabled,
         include_spam_and_trash=include_spam_and_trash,
+        include_full_raw_message=include_full_raw_message,
     ) as source:
         source.set_features(
             Features({"document_level_security": {"enabled": dls_enabled}})
@@ -106,8 +116,210 @@ class TestGMailAdvancedRulesValidator:
 
 
 MESSAGE_ID = 1
-FULL_MESSAGE = "some message"
 CREATION_DATE = "2023-01-01T13:37:00"
+
+# Headers Gmail attaches to raw responses that we want stripped from `_attachment`.
+_NOISY_HEADERS = (
+    "Delivered-To",
+    "Received",
+    "ARC-Seal",
+    "ARC-Message-Signature",
+    "ARC-Authentication-Results",
+    "DKIM-Signature",
+    "X-Google-Smtp-Source",
+    "X-Received",
+    "Return-Path",
+    "Authentication-Results",
+    "List-Unsubscribe",
+)
+
+# Reusable block of noisy headers mirroring what Gmail prepends to a raw message.
+_NOISY_HEADER_BLOCK = (
+    "Delivered-To: recipient@example.com\r\n"
+    "Received: by 2002:a17:abc with SMTP id xyz; Wed, 13 May 2026 03:00:00 -0700 (PDT)\r\n"
+    "X-Google-Smtp-Source: ABC123source\r\n"
+    "X-Received: by 2002:a17:def; Wed, 13 May 2026 03:00:01 -0700 (PDT)\r\n"
+    "ARC-Seal: i=1; a=rsa-sha256; t=1747130400; cv=none; d=google.com; s=arc-20240605\r\n"
+    "ARC-Message-Signature: i=1; a=rsa-sha256; c=relaxed/relaxed; d=google.com; s=arc-20240605\r\n"
+    "ARC-Authentication-Results: i=1; mx.google.com; dkim=pass header.i=@example.com\r\n"
+    "Return-Path: <bounce@example.com>\r\n"
+    "Authentication-Results: mx.google.com; dkim=pass header.i=@example.com\r\n"
+    "DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=example.com; s=selector\r\n"
+    "List-Unsubscribe: <mailto:unsubscribe@example.com>\r\n"
+    "Message-ID: <abc123@example.com>\r\n"
+)
+
+
+def _to_eml_bytes(text):
+    """Normalize line endings to CRLF as RFC 822 expects on the wire."""
+    return text.replace("\r\n", "\n").replace("\n", "\r\n").encode("utf-8")
+
+
+def _b64url(raw_bytes):
+    return base64.urlsafe_b64encode(raw_bytes).decode("ascii")
+
+
+# Fixture 1: text/plain only with noisy Gmail header block.
+_PLAIN_ONLY = _to_eml_bytes(
+    _NOISY_HEADER_BLOCK
+    + "Subject: Plain only test\r\n"
+    + "From: sender@example.com\r\n"
+    + "To: recipient@example.com\r\n"
+    + "Date: Wed, 13 May 2026 10:00:00 +0000\r\n"
+    + "MIME-Version: 1.0\r\n"
+    + "Content-Type: text/plain; charset=utf-8\r\n"
+    + "\r\n"
+    + "This is the plain text body of the message.\r\n"
+)
+
+# Fixture 2: multipart/alternative; plain wins over html.
+_ALTERNATIVE = _to_eml_bytes(
+    _NOISY_HEADER_BLOCK
+    + "Subject: Both parts\r\n"
+    + "From: sender@example.com\r\n"
+    + "To: recipient@example.com\r\n"
+    + "Date: Wed, 13 May 2026 10:00:00 +0000\r\n"
+    + "MIME-Version: 1.0\r\n"
+    + 'Content-Type: multipart/alternative; boundary="alt"\r\n'
+    + "\r\n"
+    + "--alt\r\n"
+    + "Content-Type: text/plain; charset=utf-8\r\n"
+    + "\r\n"
+    + "Plain version of the body.\r\n"
+    + "--alt\r\n"
+    + "Content-Type: text/html; charset=utf-8\r\n"
+    + "\r\n"
+    + "<html><body>HTML version of the body.</body></html>\r\n"
+    + "--alt--\r\n"
+)
+
+# Fixture 3: text/html only; body survives as HTML in the trimmed .eml.
+_HTML_ONLY = _to_eml_bytes(
+    _NOISY_HEADER_BLOCK
+    + "Subject: HTML only\r\n"
+    + "From: sender@example.com\r\n"
+    + "To: recipient@example.com\r\n"
+    + "Date: Wed, 13 May 2026 10:00:00 +0000\r\n"
+    + "MIME-Version: 1.0\r\n"
+    + "Content-Type: text/html; charset=utf-8\r\n"
+    + "\r\n"
+    + "<html><body><p>HTML only body content.</p></body></html>\r\n"
+)
+
+# Fixture 4: multipart/mixed; attachment dropped, body kept.
+_MIXED_WITH_ATTACHMENT = _to_eml_bytes(
+    _NOISY_HEADER_BLOCK
+    + "Subject: With attachment\r\n"
+    + "From: sender@example.com\r\n"
+    + "To: recipient@example.com\r\n"
+    + "Date: Wed, 13 May 2026 10:00:00 +0000\r\n"
+    + "MIME-Version: 1.0\r\n"
+    + 'Content-Type: multipart/mixed; boundary="mix"\r\n'
+    + "\r\n"
+    + "--mix\r\n"
+    + "Content-Type: text/plain; charset=utf-8\r\n"
+    + "\r\n"
+    + "Body with a PDF attached.\r\n"
+    + "--mix\r\n"
+    + 'Content-Type: application/pdf; name="doc.pdf"\r\n'
+    + 'Content-Disposition: attachment; filename="doc.pdf"\r\n'
+    + "Content-Transfer-Encoding: base64\r\n"
+    + "\r\n"
+    + "JVBERi0xLjQKJcOkw7zDtsOfCjIgMCBvYmoKPDwvVHlwZS9YT2JqZWN0Pj4KZW5kb2JqCg==\r\n"
+    + "--mix--\r\n"
+)
+
+# Fixture 5: multipart/related; inline image dropped, HTML body kept.
+_RELATED_INLINE_IMAGE = _to_eml_bytes(
+    _NOISY_HEADER_BLOCK
+    + "Subject: HTML with inline image\r\n"
+    + "From: sender@example.com\r\n"
+    + "To: recipient@example.com\r\n"
+    + "Date: Wed, 13 May 2026 10:00:00 +0000\r\n"
+    + "MIME-Version: 1.0\r\n"
+    + 'Content-Type: multipart/related; boundary="rel"\r\n'
+    + "\r\n"
+    + "--rel\r\n"
+    + "Content-Type: text/html; charset=utf-8\r\n"
+    + "\r\n"
+    + '<html><body><img src="cid:img1">Inline image body.</body></html>\r\n'
+    + "--rel\r\n"
+    + "Content-Type: image/png\r\n"
+    + "Content-Transfer-Encoding: base64\r\n"
+    + "Content-ID: <img1>\r\n"
+    + "\r\n"
+    + "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABAQMAAAAl21bKAAAAA1BMVEX/AAAZ4gk3AAAAAXRSTlPM\r\n"
+    + "0jdYAAAACklEQVQI12NgAAAAAgAB4iG8MwAAAABJRU5ErkJggg==\r\n"
+    + "--rel--\r\n"
+)
+
+# Fixture 6: RFC 2047 encoded subject (Japanese "konnichiwa"); decoded on rewrite.
+_ENCODED_SUBJECT = _to_eml_bytes(
+    _NOISY_HEADER_BLOCK
+    + "Subject: =?UTF-8?B?44GT44KT44Gr44Gh44Gv?=\r\n"
+    + "From: sender@example.com\r\n"
+    + "To: recipient@example.com\r\n"
+    + "Date: Wed, 13 May 2026 10:00:00 +0000\r\n"
+    + "MIME-Version: 1.0\r\n"
+    + "Content-Type: text/plain; charset=utf-8\r\n"
+    + "\r\n"
+    + "Body with an encoded subject.\r\n"
+)
+
+# Fixture 7: Windows-1252 body (0x93/0x94 are smart quotes); re-encoded as UTF-8.
+_WINDOWS_1252_BODY = (
+    _to_eml_bytes(
+        _NOISY_HEADER_BLOCK
+        + "Subject: Windows-1252 body\r\n"
+        + "From: sender@example.com\r\n"
+        + "To: recipient@example.com\r\n"
+        + "Date: Wed, 13 May 2026 10:00:00 +0000\r\n"
+        + "MIME-Version: 1.0\r\n"
+        + "Content-Type: text/plain; charset=Windows-1252\r\n"
+        + "\r\n"
+    )
+    + b"Smart quote: \x93hello\x94 world.\r\n"
+)
+
+# Fixture 8: Reply-To and Bcc present; both should survive the trim.
+_WITH_REPLY_TO_AND_BCC = _to_eml_bytes(
+    _NOISY_HEADER_BLOCK
+    + "Subject: Newsletter with reply-to\r\n"
+    + "From: news@example.com\r\n"
+    + "Reply-To: support@example.com\r\n"
+    + "To: recipient@example.com\r\n"
+    + "Bcc: archive@example.com\r\n"
+    + "Date: Wed, 13 May 2026 10:00:00 +0000\r\n"
+    + "MIME-Version: 1.0\r\n"
+    + "Content-Type: text/plain; charset=utf-8\r\n"
+    + "\r\n"
+    + "Body with reply-to and bcc headers.\r\n"
+)
+
+# Fixture 9: DSN - no textual body part, headers-only output expected.
+_DSN = _to_eml_bytes(
+    _NOISY_HEADER_BLOCK
+    + "Subject: Delivery Status Notification (Failure)\r\n"
+    + "From: mailer-daemon@example.com\r\n"
+    + "To: sender@example.com\r\n"
+    + "Date: Wed, 13 May 2026 10:00:00 +0000\r\n"
+    + "MIME-Version: 1.0\r\n"
+    + 'Content-Type: multipart/report; report-type=delivery-status; boundary="dsn"\r\n'
+    + "\r\n"
+    + "--dsn\r\n"
+    + "Content-Type: message/delivery-status\r\n"
+    + "\r\n"
+    + "Reporting-MTA: dns; mx.example.com\r\n"
+    + "\r\n"
+    + "Final-Recipient: rfc822; bad@example.com\r\n"
+    + "Action: failed\r\n"
+    + "Status: 5.1.1\r\n"
+    + "--dsn--\r\n"
+)
+
+
+# Shared base64url payload used by the broader sync tests to exercise the trim path.
+SAMPLE_RAW_BASE64URL = _b64url(_PLAIN_ONLY)
 
 
 async def setup_messages_and_users_apis(
@@ -116,6 +328,11 @@ async def setup_messages_and_users_apis(
     patch_google_directory_client.users = AsyncIterator(users)
     patch_gmail_client.messages = AsyncIterator(messages)
     patch_gmail_client.message = AsyncMock(side_effect=messages)
+
+
+def _decode_attachment(attachment):
+    """Decode a standard base64 `_attachment` payload into an EmailMessage."""
+    return email.message_from_bytes(base64.b64decode(attachment), policy=policy.default)
 
 
 class TestGMailDataSource:
@@ -136,36 +353,207 @@ class TestGMailDataSource:
             client = mock.return_value
             yield client
 
-    # @pytest.mark.asyncio
+    @pytest.mark.asyncio
     @pytest.mark.parametrize(
-        "message, expected_doc",
+        "raw_bytes, expected_subject, expected_body_substring, expected_subtype",
         [
+            (_PLAIN_ONLY, "Plain only test", "plain text body", "plain"),
+            (_ALTERNATIVE, "Both parts", "Plain version of the body.", "plain"),
+            (_HTML_ONLY, "HTML only", "HTML only body content", "html"),
             (
-                {"id": MESSAGE_ID, "raw": FULL_MESSAGE, "internalDate": CREATION_DATE},
-                {
-                    "_id": MESSAGE_ID,
-                    "_attachment": FULL_MESSAGE,
-                    "_timestamp": CREATION_DATE,
-                },
+                _MIXED_WITH_ATTACHMENT,
+                "With attachment",
+                "Body with a PDF attached.",
+                "plain",
             ),
             (
-                {"id": None, "raw": FULL_MESSAGE, "internalDate": CREATION_DATE},
-                {"_id": None, "_attachment": FULL_MESSAGE, "_timestamp": CREATION_DATE},
+                _RELATED_INLINE_IMAGE,
+                "HTML with inline image",
+                "Inline image body.",
+                "html",
             ),
             (
-                {"id": MESSAGE_ID, "raw": None, "internalDate": CREATION_DATE},
-                {"_id": MESSAGE_ID, "_attachment": None, "_timestamp": CREATION_DATE},
+                _ENCODED_SUBJECT,
+                "\u3053\u3093\u306b\u3061\u306f",
+                "Body with an encoded subject.",
+                "plain",
             ),
             (
-                # timestamp is added, if it's `None`
-                {"id": MESSAGE_ID, "raw": FULL_MESSAGE, "internalDate": None},
-                {"_id": MESSAGE_ID, "_attachment": FULL_MESSAGE, "_timestamp": DATE},
+                _WINDOWS_1252_BODY,
+                "Windows-1252 body",
+                "Smart quote: \u201chello\u201d world.",
+                "plain",
             ),
         ],
     )
+    async def test_message_doc_extracts_body_into_minimal_eml(
+        self, raw_bytes, expected_subject, expected_body_substring, expected_subtype
+    ):
+        raw_b64url = _b64url(raw_bytes)
+        message = {
+            "id": MESSAGE_ID,
+            "raw": raw_b64url,
+            "internalDate": CREATION_DATE,
+        }
+
+        async with create_gmail_source() as source:
+            doc = source._message_doc(message)
+
+        assert doc["_id"] == MESSAGE_ID
+        assert doc["_timestamp"] == CREATION_DATE
+        assert doc["_attachment"], "Expected non-empty _attachment payload"
+
+        rebuilt = _decode_attachment(doc["_attachment"])
+
+        for noisy in _NOISY_HEADERS:
+            assert (
+                rebuilt[noisy] is None
+            ), f"Noisy header {noisy!r} leaked into the trimmed _attachment"
+
+        assert rebuilt["Subject"] == expected_subject
+        assert rebuilt["From"] == "sender@example.com"
+        assert rebuilt["To"] == "recipient@example.com"
+        assert rebuilt["Date"] is not None
+        assert rebuilt["Message-ID"] == "<abc123@example.com>"
+
+        body = rebuilt.get_body(preferencelist=("plain", "html"))
+        assert body is not None
+        assert body.get_content_subtype() == expected_subtype
+        assert expected_body_substring in body.get_content()
+
+    @pytest.mark.asyncio
+    async def test_message_doc_keeps_reply_to_and_bcc(self):
+        raw_b64url = _b64url(_WITH_REPLY_TO_AND_BCC)
+        message = {
+            "id": MESSAGE_ID,
+            "raw": raw_b64url,
+            "internalDate": CREATION_DATE,
+        }
+
+        async with create_gmail_source() as source:
+            doc = source._message_doc(message)
+
+        rebuilt = _decode_attachment(doc["_attachment"])
+
+        assert rebuilt["Reply-To"] == "support@example.com"
+        assert rebuilt["Bcc"] == "archive@example.com"
+
+        for noisy in _NOISY_HEADERS:
+            assert rebuilt[noisy] is None
+
+    @pytest.mark.asyncio
+    async def test_message_doc_handles_dsn_with_no_textual_body(self):
+        raw_b64url = _b64url(_DSN)
+        message = {
+            "id": MESSAGE_ID,
+            "raw": raw_b64url,
+            "internalDate": CREATION_DATE,
+        }
+
+        async with create_gmail_source() as source:
+            doc = source._message_doc(message)
+
+        assert doc["_attachment"]
+        rebuilt = _decode_attachment(doc["_attachment"])
+
+        for noisy in _NOISY_HEADERS:
+            assert rebuilt[noisy] is None
+
+        assert rebuilt["Subject"] == "Delivery Status Notification (Failure)"
+        # No usable body part; output is headers-only with empty body.
+        body = rebuilt.get_body(preferencelist=("plain", "html"))
+        assert body is None or body.get_content().strip() == ""
+
+    @pytest.mark.asyncio
+    async def test_message_doc_falls_back_when_extraction_fails(self, monkeypatch):
+        monkeypatch.setattr(
+            "connectors.sources.gmail.datasource._extract_body_eml",
+            lambda _raw: None,
+        )
+
+        raw_b64url = _b64url(_PLAIN_ONLY)
+        message = {
+            "id": MESSAGE_ID,
+            "raw": raw_b64url,
+            "internalDate": CREATION_DATE,
+        }
+
+        async with create_gmail_source() as source:
+            doc = source._message_doc(message)
+
+        assert doc["_id"] == MESSAGE_ID
+        assert doc["_timestamp"] == CREATION_DATE
+        # Falls back to legacy base64url -> base64.
+        assert doc["_attachment"] == base64url_to_base64(raw_b64url)
+
+    @pytest.mark.asyncio
+    async def test_message_doc_with_full_raw_toggle_passes_through_unchanged(self):
+        raw_b64url = _b64url(_PLAIN_ONLY)
+        message = {
+            "id": MESSAGE_ID,
+            "raw": raw_b64url,
+            "internalDate": CREATION_DATE,
+        }
+
+        async with create_gmail_source(include_full_raw_message=True) as source:
+            doc = source._message_doc(message)
+
+        # Legacy path: payload is raw message with base64url -> base64 conversion.
+        assert doc["_attachment"] == base64url_to_base64(raw_b64url)
+        # Noisy headers ARE still present when the toggle is on - that's the point.
+        rebuilt = _decode_attachment(doc["_attachment"])
+        assert rebuilt["Received"] is not None
+        assert rebuilt["DKIM-Signature"] is not None
+
+    @pytest.mark.asyncio
     @freeze_time(DATE)
-    async def test_message_doc(self, message, expected_doc):
-        assert GMailDataSource._message_doc(message) == expected_doc
+    @pytest.mark.parametrize(
+        "raw, expected_timestamp",
+        [
+            (None, DATE),
+            ("", DATE),
+        ],
+    )
+    async def test_message_doc_passes_through_empty_or_none_raw(
+        self, raw, expected_timestamp
+    ):
+        async with create_gmail_source() as source:
+            doc = source._message_doc(
+                {"id": MESSAGE_ID, "raw": raw, "internalDate": None}
+            )
+
+        assert doc["_id"] == MESSAGE_ID
+        assert doc["_attachment"] == raw
+        assert doc["_timestamp"] == expected_timestamp
+
+    @pytest.mark.asyncio
+    @freeze_time(DATE)
+    async def test_message_doc_defaults_timestamp_when_missing(self):
+        raw_b64url = _b64url(_PLAIN_ONLY)
+
+        async with create_gmail_source() as source:
+            doc = source._message_doc(
+                {"id": MESSAGE_ID, "raw": raw_b64url, "internalDate": None}
+            )
+
+        assert doc["_timestamp"] == DATE
+
+    @pytest.mark.parametrize(
+        "raw_b64url",
+        [
+            "not!valid?base64",
+            "!@#$%^&*",
+            "###",
+        ],
+    )
+    def test_extract_body_eml_never_raises_on_garbage_input(self, raw_b64url):
+        # Best-effort: garbage input must yield None or a valid base64 string, never raise.
+        result = _extract_body_eml(raw_b64url)
+        assert result is None or isinstance(result, str)
+
+    def test_extract_body_eml_passes_through_empty_input(self):
+        assert _extract_body_eml(None) is None
+        assert _extract_body_eml("") == ""
 
     @pytest.mark.asyncio
     async def test_ping_successful(
@@ -330,7 +718,7 @@ class TestGMailDataSource:
         users = [{UserFields.EMAIL.value: "user@google.com"}]
         message = {
             MessageFields.ID.value: "1",
-            MessageFields.FULL_MESSAGE.value: "abcd",
+            MessageFields.FULL_MESSAGE.value: SAMPLE_RAW_BASE64URL,
             MessageFields.CREATION_DATE.value: iso_utc(),
         }
         messages = [message]
@@ -361,7 +749,7 @@ class TestGMailDataSource:
         users = [{UserFields.EMAIL.value: "user@google.com"}]
         message = {
             MessageFields.ID.value: "1",
-            MessageFields.FULL_MESSAGE.value: "abcd",
+            MessageFields.FULL_MESSAGE.value: SAMPLE_RAW_BASE64URL,
             MessageFields.CREATION_DATE.value: iso_utc(),
         }
         messages = [message]
@@ -401,7 +789,7 @@ class TestGMailDataSource:
         users = [{UserFields.EMAIL.value: email}]
         message = {
             MessageFields.ID.value: "1",
-            MessageFields.FULL_MESSAGE.value: "abcd",
+            MessageFields.FULL_MESSAGE.value: SAMPLE_RAW_BASE64URL,
             MessageFields.CREATION_DATE.value: iso_utc(),
         }
         messages = [message]
@@ -436,7 +824,7 @@ class TestGMailDataSource:
         users = [{UserFields.EMAIL.value: email}]
         message = {
             MessageFields.ID.value: "1",
-            MessageFields.FULL_MESSAGE.value: "abcd",
+            MessageFields.FULL_MESSAGE.value: SAMPLE_RAW_BASE64URL,
             MessageFields.CREATION_DATE.value: iso_utc(),
         }
         messages = [message]
@@ -480,7 +868,7 @@ class TestGMailDataSource:
         users = [{UserFields.EMAIL.value: email}]
         message = {
             MessageFields.ID.value: "1",
-            MessageFields.FULL_MESSAGE.value: "abcd",
+            MessageFields.FULL_MESSAGE.value: SAMPLE_RAW_BASE64URL,
             MessageFields.CREATION_DATE.value: iso_utc(),
         }
         messages = [message]
@@ -515,7 +903,7 @@ class TestGMailDataSource:
         users = [{UserFields.EMAIL.value: email}]
         message = {
             MessageFields.ID.value: "1",
-            MessageFields.FULL_MESSAGE.value: "abcd",
+            MessageFields.FULL_MESSAGE.value: SAMPLE_RAW_BASE64URL,
             MessageFields.CREATION_DATE.value: iso_utc(),
         }
         messages = [message]

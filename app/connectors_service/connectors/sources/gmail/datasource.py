@@ -3,7 +3,12 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+import base64
+from email import policy
+from email.message import EmailMessage
+from email.parser import BytesParser
 from functools import cached_property
+from typing import cast
 
 from aiogoogle import AuthError
 from connectors_sdk.source import BaseDataSource, ConfigurableFieldValueError
@@ -28,6 +33,66 @@ from connectors.utils import (
 SERVICE_ACCOUNT_CREDENTIALS_LABEL = "GMail service account JSON"
 SUBJECT_LABEL = "Google Workspace admin email"
 CUSTOMER_ID_LABEL = "Google customer id"
+
+# Headers kept when trimming; everything else is dropped.
+_KEPT_HEADERS = (
+    "Subject",
+    "From",
+    "Reply-To",
+    "To",
+    "Cc",
+    "Bcc",
+    "Date",
+    "Message-ID",
+)
+
+_DEFAULT_POLICY = policy.default
+
+
+def _extract_body_eml(raw_base64url):
+    """Trim a Gmail base64url RFC 822 message to a small .eml with only the kept
+    headers and one body part (``text/plain`` preferred, ``text/html`` fallback).
+    Returns standard base64 ready for ``_attachment``, ``None`` on parse failure
+    (caller falls back to the legacy payload), or the input unchanged when empty.
+    """
+    if not raw_base64url:
+        return raw_base64url
+
+    try:
+        # Gmail omits padding; appending 3 '=' covers every valid input length.
+        raw_bytes = base64.urlsafe_b64decode(raw_base64url + "===")
+        # typeshed declares `parsebytes` / `get_body` as `Message`, but with
+        # `policy.default` they return `EmailMessage`. The casts below are
+        # runtime no-ops that align pyright with reality.
+        original = cast(
+            EmailMessage,
+            BytesParser(_class=EmailMessage, policy=_DEFAULT_POLICY).parsebytes(
+                raw_bytes
+            ),
+        )
+
+        rebuilt = EmailMessage(policy=_DEFAULT_POLICY)
+        for header in _KEPT_HEADERS:
+            if original[header] is not None:
+                rebuilt[header] = original[header]
+
+        body = cast(
+            "EmailMessage | None",
+            original.get_body(preferencelist=("plain", "html")),
+        )
+        if body is not None:
+            rebuilt.set_content(
+                body.get_content(),
+                subtype=body.get_content_subtype(),
+                charset=body.get_content_charset() or "utf-8",
+            )
+        else:
+            # DSN / calendar invite / encrypted: headers-only output, no crash.
+            rebuilt.set_content("", subtype="plain", charset="utf-8")
+
+        return base64.b64encode(rebuilt.as_bytes()).decode("ascii")
+    except Exception:
+        return None
 
 
 class GMailDataSource(BaseDataSource):
@@ -83,10 +148,23 @@ class GMailDataSource(BaseDataSource):
                 "type": "bool",
                 "value": False,
             },
+            "include_full_raw_message": {
+                "display": "toggle",
+                "label": "Index full raw email (including headers)",
+                "order": 5,
+                "tooltip": (
+                    "When disabled (default), only the email body is indexed. "
+                    "Enable to keep the full raw message including routing and "
+                    "authentication headers - useful for edge cases where body "
+                    "extraction misses content."
+                ),
+                "type": "bool",
+                "value": False,
+            },
             "use_document_level_security": {
                 "display": "toggle",
                 "label": "Enable document level security",
-                "order": 5,
+                "order": 6,
                 "tooltip": "Document level security ensures identities and permissions set in GMail are maintained in Elasticsearch. This enables you to restrict and personalize read-access users have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
                 "type": "bool",
                 "value": True,
@@ -243,29 +321,30 @@ class GMailDataSource(BaseDataSource):
 
                 yield self._user_access_control_doc(user, access_control)
 
-    @staticmethod
-    def _message_doc(message):
-        timestamp_field = "_timestamp"
+    def _message_doc(self, message):
+        message_id = message.get(MessageFields.ID.value)
+        raw = message.get(MessageFields.FULL_MESSAGE.value)
+        timestamp = message.get(MessageFields.CREATION_DATE.value)
 
-        # We're using the `_attachment` field here so the attachment processor on the ES side decodes the base64 value
-        message_fields_to_es_doc_mappings = {
-            MessageFields.ID: "_id",
-            MessageFields.FULL_MESSAGE: "_attachment",
-            MessageFields.CREATION_DATE: timestamp_field,
+        if self.configuration["include_full_raw_message"]:
+            # Legacy path: forward the raw email; ES attachment processor needs standard base64.
+            attachment = base64url_to_base64(raw)
+        else:
+            # Default: trim to a header-light .eml so Tika extracts body, not headers.
+            attachment = _extract_body_eml(raw)
+            if attachment is None:
+                if raw is not None:
+                    self._logger.warning(
+                        "Body extraction failed for %s; falling back to raw payload.",
+                        message_id,
+                    )
+                attachment = base64url_to_base64(raw)
+
+        return {
+            "_id": message_id,
+            "_attachment": attachment,
+            "_timestamp": timestamp if timestamp is not None else iso_utc(),
         }
-
-        es_doc = {
-            es_doc_field: message.get(message_field.value)
-            for message_field, es_doc_field in message_fields_to_es_doc_mappings.items()
-        }
-
-        # The attachment processor cannot handle base64url encoded values (only ordinary base64)
-        es_doc["_attachment"] = base64url_to_base64(es_doc["_attachment"])
-
-        if es_doc.get(timestamp_field) is None:
-            es_doc[timestamp_field] = iso_utc()
-
-        return es_doc
 
     async def _message_doc_with_access_control(
         self, access_control, gmail_client, message
