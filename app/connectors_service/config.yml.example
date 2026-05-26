@@ -68,11 +68,11 @@
 #
 #
 ##  The request timeout to be passed to transport in options.
-#elasticsearch.request_timeout: 120
+#elasticsearch.request_timeout: 240
 #
 #
 ##  The maximum wait duration (in seconds) for the Elasticsearch connection.
-#elasticsearch.max_wait_duration: 60
+#elasticsearch.max_wait_duration: 240
 #
 #
 ##  The initial backoff duration (in seconds).
@@ -84,7 +84,7 @@
 #
 #
 ##  Elasticsearch log level
-#elasticsearch.log_level: INFO
+#elasticsearch.log_level: info
 #
 #
 ##  Maximum number of times failed Elasticsearch requests are retried, except bulk requests
@@ -120,16 +120,35 @@
 #
 #
 ##  Maximal interval of time during which MemQueue does not dequeue a single document
-##  For example, if no documents were sent to Elasticsearch within 60 seconds because of
+##  For example, if no documents were sent to Elasticsearch within 1300 seconds because of
 ##  Elasticsearch being overloaded, then an error will be raised.
 ##  This mechanism exists to be a circuit-breaker for stuck jobs and stuck Elasticsearch.
-#elasticsearch.bulk.queue_refresh_timeout: 60
+##  The default is sized for the default `elasticsearch.request_timeout`,
+##  `elasticsearch.max_retries`, and `elasticsearch.retry_interval`. If you raise any of
+##  those, raise this value too -- otherwise the queue may give up on a bulk request that
+##  the retry layer is still legitimately working on.
+#elasticsearch.bulk.queue_refresh_timeout: 1300
 #
 #
 ##  The max size in MB of a bulk request.
 ##    When the next request being prepared reaches that size, the query is
 ##    emitted even if `chunk_size` is not yet reached.
-#elasticsearch.bulk.chunk_max_mem_size: 5
+#elasticsearch.bulk.chunk_max_mem_size: 3
+#
+#
+##  Per-document cap in MiB for docs whose `doc` body has no `_attachment`
+##    key (i.e. text extracted by the Data Extraction Service, or
+##    structured-only docs). Compared against the serialized bulk-op JSON
+##    (UTF-8 wire bytes); oversized docs are dropped, logged, and counted.
+##    Binary attachments (any doc carrying an `_attachment` key) are governed
+##    by `service.max_file_download_size`. Set to 0 to disable.
+##
+##    UPGRADE NOTE: this cap is new and active by default. Earlier connectors
+##    versions had no per-document text cap, so a sync that previously
+##    succeeded with multi-MiB structured/text docs may begin reporting
+##    `docs_dropped_too_large`. Set to 0 to preserve previous behavior, or
+##    raise the value to fit your largest legitimate doc.
+#elasticsearch.bulk.max_text_document_size: 3
 #
 #
 ##  The max size of the bulk operation to Elasticsearch.
@@ -183,6 +202,10 @@
 #
 ##  Number of last operations used for tracking the error rate.
 #elasticsearch.bulk.error_monitor.error_window_size: 100
+#
+##  Maximum number of most-recent errors retained in memory for diagnostics.
+##  When the queue grows past this size, the oldest entry is dropped.
+#elasticsearch.bulk.error_monitor.error_queue_size: 10
 #
 ## ------------------------------- Elasticsearch: Experimental ------------------------
 #

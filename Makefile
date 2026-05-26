@@ -113,7 +113,9 @@ fips-test:
 		connectors-fips-base \
 		/bin/sh -c '\
 			apk add --no-cache git && \
-			pip install -e libs/connectors_sdk[tests] -e app/connectors_service[tests] && \
+			pip install --upgrade pip && \
+			pip install -e libs/connectors_sdk[tests] && \
+			cd app/connectors_service && pip install -e .[tests] && cd /workspace && \
 			cd libs/connectors_sdk && python -m pytest tests -sv && \
 			cd /workspace/app/connectors_service && python -m pytest --cov-report term-missing --cov-fail-under 90 --cov-report html --cov=connectors -sv tests'
 

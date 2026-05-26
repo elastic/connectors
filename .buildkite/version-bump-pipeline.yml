@@ -1,0 +1,95 @@
+notify:
+  - slack:
+      channels:
+        - "#search-et-alerts"
+    if: (build.branch == 'main' || build.branch =~ /^[0-9]+\.[0-9x]+\$/) && (build.state == 'passed' || build.state == 'failed')
+steps:
+  # Fail fast on missing trigger params. Otherwise empty `${BRANCH}` /
+  # `${NEW_VERSION}` interpolate silently and surface only as a 4-hour
+  # json-watcher timeout.
+  - label: ":lock: Validate trigger params"
+    key: validate-params
+    agents:
+      image: docker.elastic.co/ci-agent-images/ubuntu-build-essential:latest
+      cpu: 100m
+      memory: 128Mi
+    command: |
+      : "$${BRANCH:?BRANCH must be set by the triggering pipeline}"
+      : "$${NEW_VERSION:?NEW_VERSION must be set by the triggering pipeline}"
+      : "$${WORKFLOW:?WORKFLOW must be set by the triggering pipeline}"
+      echo "BRANCH=$$BRANCH NEW_VERSION=$$NEW_VERSION WORKFLOW=$$WORKFLOW"
+    timeout_in_minutes: 5
+
+  - label: ":arrow_up: Bump version"
+    key: version-bump
+    depends_on: validate-params
+    agents:
+      image: docker.elastic.co/ci-agent-images/ubuntu-build-essential:latest
+      cpu: 250m
+      memory: 512Mi
+      ephemeralStorage: 1Gi
+    command:
+      - ".buildkite/publish/version-bump.sh"
+    timeout_in_minutes: 180
+
+  # The `connectors` pipeline is gated via `branch_configuration: "main"`, so
+  # pushes to release branches don't auto-trigger builds. Explicitly trigger a
+  # DRA build on the target branch so the DRA manifest reflects the new version
+  # and the json-watcher steps below can confirm it.
+  - label: ":rocket: Trigger DRA build on ${BRANCH}"
+    key: trigger-dra-build
+    depends_on: version-bump
+    trigger: connectors
+    async: true
+    build:
+      branch: "${BRANCH}"
+      message: "DRA build triggered by version bump to ${NEW_VERSION}"
+
+  - label: "Fetch DRA Staging Artifacts"
+    key: fetch-dra-staging-artifacts
+    depends_on: trigger-dra-build
+    if: build.env("BRANCH") =~ /^[0-9]+\.[0-9x]+\$/
+    agents:
+      image: docker.elastic.co/release-eng/wolfi-build-essential-release-eng:latest
+      cpu: 250m
+      memory: 512Mi
+      ephemeralStorage: 1Gi
+    command:
+      - echo "Polling for staging artifacts..."
+    timeout_in_minutes: 240
+    retry:
+      automatic:
+        - exit_status: "*"
+          limit: 2
+      manual:
+        permit_on_passed: true
+    plugins:
+      - elastic/json-watcher#v1.0.0:
+          url: "https://artifacts-staging.elastic.co/connectors/latest/${BRANCH}.json"
+          field: ".version"
+          expected_value: "${NEW_VERSION}"
+          polling_interval: "30"
+
+  - label: "Fetch DRA Snapshot Artifacts"
+    key: fetch-dra-snapshot-artifacts
+    depends_on: trigger-dra-build
+    agents:
+      image: docker.elastic.co/release-eng/wolfi-build-essential-release-eng:latest
+      cpu: 250m
+      memory: 512Mi
+      ephemeralStorage: 1Gi
+    command:
+      - echo "Polling for snapshot artifacts..."
+    timeout_in_minutes: 240
+    retry:
+      automatic:
+        - exit_status: "*"
+          limit: 2
+      manual:
+        permit_on_passed: true
+    plugins:
+      - elastic/json-watcher#v1.0.0:
+          url: "https://storage.googleapis.com/elastic-artifacts-snapshot/connectors/latest/${BRANCH}.json"
+          field: ".version"
+          expected_value: "${NEW_VERSION}-SNAPSHOT"
+          polling_interval: "30"
