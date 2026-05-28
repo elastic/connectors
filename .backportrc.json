@@ -10,7 +10,7 @@
   "fork": false,
   "targetPRLabels": ["backport"],
   "branchLabelMapping": {
-    "^v9.4.0$": "main",
+    "^v9.5.0$": "main",
     "^v(\\d+).(\\d+)(.\\d+)*$": "$1.$2"
   },
   "upstream": "elastic/connectors"
