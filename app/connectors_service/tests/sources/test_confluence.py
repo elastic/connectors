@@ -975,9 +975,7 @@ async def test_fetch_spaces():
 async def test_fetch_spaces_uses_correct_query_for_data_source_type(
     data_source_type, expected_api_query
 ):
-    """`expand=permissions,history` is only used by the Cloud code path; DC/Server
-    must not send it because some Confluence DC/Server versions return HTTP 500
-    when that expansion is requested (e.g. CONFSERVER-99908)."""
+    """fetch_spaces uses the DC/Server-safe query off Cloud (CONFSERVER-99908)."""
     async with create_confluence_source(data_source=data_source_type) as source:
         source.confluence_client.paginated_api_call = MagicMock(
             return_value=AsyncIterator([RESPONSE_SPACE])
@@ -1004,9 +1002,7 @@ async def test_fetch_spaces_uses_correct_query_for_data_source_type(
 async def test_remote_validation_uses_correct_query_for_data_source_type(
     data_source_type, expected_api_query
 ):
-    """`_remote_validation` lists spaces to verify the configured space keys exist;
-    it must use the same DC/Server-safe query as `fetch_spaces` to avoid HTTP 500
-    on Confluence DC/Server versions affected by the `expand=permissions` bug."""
+    """_remote_validation uses the DC/Server-safe query off Cloud (CONFSERVER-99908)."""
     async with create_confluence_source(data_source=data_source_type) as source:
         source.spaces = ["DM"]
         source.confluence_client.ping = AsyncMock()

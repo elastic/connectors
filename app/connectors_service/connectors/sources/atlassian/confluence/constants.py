@@ -20,12 +20,9 @@ USERS_FOR_DATA_CENTER = "users_for_data_center"
 SEARCH_FOR_DATA_CENTER = "search_for_data_center"
 USERS_FOR_SERVER = "users_for_server"
 SPACE_QUERY = "limit=100&expand=permissions,history"
-# Confluence Data Center / Server intentionally omits expand=permissions,history:
-# - space permissions are fetched separately via the SPACE_PERMISSION (Extender) endpoint,
-# - space history fields are only consumed on the Confluence Cloud code path.
-# Sending these expansions on DC/Server is unnecessary and is known to trigger
-# server-side 500 errors on several Confluence DC/Server versions
-# (e.g. https://jira.atlassian.com/browse/CONFSERVER-99908).
+# DC/Server omits expand=permissions,history: permissions come from the
+# SPACE_PERMISSION (Extender) endpoint and history is Cloud-only. Avoids HTTP 500
+# on Confluence DC/Server versions affected by CONFSERVER-99908 and similar bugs.
 SPACE_QUERY_DATA_CENTER = "limit=100"
 ATTACHMENT_QUERY = "limit=100&expand=version,history"
 CONTENT_QUERY = "limit=50&expand=ancestors,children.attachment,history.lastUpdated,body.storage,space,space.permissions,restrictions.read.restrictions.user,restrictions.read.restrictions.group"
