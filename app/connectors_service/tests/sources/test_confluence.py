@@ -36,6 +36,8 @@ from connectors.sources.atlassian.confluence.constants import (
     CONFLUENCE_CLOUD,
     CONFLUENCE_DATA_CENTER,
     CONFLUENCE_SERVER,
+    SPACE_QUERY,
+    SPACE_QUERY_DATA_CENTER,
 )
 from connectors.utils import ssl_context
 from tests.commons import AsyncIterator
@@ -959,6 +961,65 @@ async def test_fetch_spaces():
         )
         async for response in source.confluence_client.fetch_spaces():
             assert response["id"] == EXPECTED_SPACE["_id"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "data_source_type, expected_api_query",
+    [
+        (CONFLUENCE_CLOUD, SPACE_QUERY),
+        (CONFLUENCE_DATA_CENTER, SPACE_QUERY_DATA_CENTER),
+        (CONFLUENCE_SERVER, SPACE_QUERY_DATA_CENTER),
+    ],
+)
+async def test_fetch_spaces_uses_correct_query_for_data_source_type(
+    data_source_type, expected_api_query
+):
+    """`expand=permissions,history` is only used by the Cloud code path; DC/Server
+    must not send it because some Confluence DC/Server versions return HTTP 500
+    when that expansion is requested (e.g. CONFSERVER-99908)."""
+    async with create_confluence_source(data_source=data_source_type) as source:
+        source.confluence_client.paginated_api_call = MagicMock(
+            return_value=AsyncIterator([RESPONSE_SPACE])
+        )
+
+        async for _ in source.confluence_client.fetch_spaces():
+            pass
+
+        source.confluence_client.paginated_api_call.assert_called_once_with(
+            url_name="space",
+            api_query=expected_api_query,
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "data_source_type, expected_api_query",
+    [
+        (CONFLUENCE_CLOUD, SPACE_QUERY),
+        (CONFLUENCE_DATA_CENTER, SPACE_QUERY_DATA_CENTER),
+        (CONFLUENCE_SERVER, SPACE_QUERY_DATA_CENTER),
+    ],
+)
+async def test_remote_validation_uses_correct_query_for_data_source_type(
+    data_source_type, expected_api_query
+):
+    """`_remote_validation` lists spaces to verify the configured space keys exist;
+    it must use the same DC/Server-safe query as `fetch_spaces` to avoid HTTP 500
+    on Confluence DC/Server versions affected by the `expand=permissions` bug."""
+    async with create_confluence_source(data_source=data_source_type) as source:
+        source.spaces = ["DM"]
+        source.confluence_client.ping = AsyncMock()
+        source.confluence_client.paginated_api_call = MagicMock(
+            return_value=AsyncIterator([RESPONSE_SPACE_KEYS])
+        )
+
+        await source._remote_validation()
+
+        source.confluence_client.paginated_api_call.assert_called_once_with(
+            url_name="space",
+            api_query=expected_api_query,
+        )
 
 
 @pytest.mark.asyncio
