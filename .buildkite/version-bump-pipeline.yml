@@ -28,6 +28,9 @@ steps:
       cpu: 250m
       memory: 512Mi
       ephemeralStorage: 1Gi
+    plugins:
+      - elastic/gh-cli#v0.1.1:
+          version: "2.88.0"
     command:
       - ".buildkite/publish/version-bump.sh"
     timeout_in_minutes: 180
