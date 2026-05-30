@@ -3547,7 +3547,7 @@ Apache-2.0
 
 
 elasticsearch-connectors
-9.3.5
+9.3.6
 Elastic-2.0
 Elastic License 2.0
 
@@ -3645,7 +3645,7 @@ these terms.
 
 
 elasticsearch-connectors-sdk
-9.3.5
+9.3.6
 Elastic-2.0
 UNKNOWN
 
@@ -5131,7 +5131,7 @@ OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 
 idna
-3.16
+3.17
 BSD-3-Clause
 BSD 3-Clause License
 
@@ -7524,7 +7524,7 @@ made under the terms of *both* these licenses.
 
 
 soupsieve
-2.8.3
+2.8.4
 MIT
 MIT License
 
