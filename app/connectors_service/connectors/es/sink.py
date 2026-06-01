@@ -229,19 +229,23 @@ class Sink:
         # TODO: retry 429s for individual items here
         res = await self.client.bulk_insert(operations, self.pipeline["name"])
         ids_to_ops = self._map_id_to_op(operations)
-        await self._process_bulk_response(
-            res, ids_to_ops, do_log=self._enable_bulk_operations_logging
-        )
+        # `_process_bulk_response` can raise `TooManyErrors` mid-response when
+        # the error monitor threshold is crossed. Always run `_populate_stats`
+        # so docs ES accepted earlier in the batch still get counted.
+        try:
+            await self._process_bulk_response(
+                res, ids_to_ops, do_log=self._enable_bulk_operations_logging
+            )
 
-        if res.get("errors"):
-            for item in res["items"]:
-                for op, data in item.items():
-                    if "error" in data:
-                        self._logger.error(
-                            f"operation {op} failed for doc {data['_id']}, {data['error']}"
-                        )
-
-        self._populate_stats(stats, res)
+            if res.get("errors"):
+                for item in res["items"]:
+                    for op, data in item.items():
+                        if "error" in data:
+                            self._logger.error(
+                                f"operation {op} failed for doc {data['_id']}, {data['error']}"
+                            )
+        finally:
+            self._populate_stats(stats, res)
 
         return res
 
@@ -920,7 +924,9 @@ class SyncOrchestrator:
         self.error = None
         self.canceled = False
         error_monitor_config = elastic_config.get("bulk", {}).get("error_monitor", {})
-        self.error_monitor = ErrorMonitor(error_monitor_config)
+        # Unpack as kwargs; passing the dict positionally would bind it to
+        # `enabled` and silently default every threshold.
+        self.error_monitor = ErrorMonitor(**error_monitor_config)
 
     async def close(self):
         await self.es_management_client.close()
