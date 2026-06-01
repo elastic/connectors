@@ -216,18 +216,13 @@ function download_docker_tarball {
 
   echo "Downloading Docker image tarball from $tar_url..."
 
-  # Redirect verbose curl output to a temp file rather than capturing it into a
-  # shell variable. Capturing into a variable causes `set -x` (enabled at the
-  # top of this script) to echo the entire value on every successful run,
-  # flooding CI logs with thousands of per-record TLS lines from `curl -v`.
-  # Writing to a file keeps the verbose output available for diagnosing real
-  # download failures (we `cat` it to stderr only in the error branch) without
-  # leaking it through the bash trace on the happy path.
+  # Send curl -v output to a temp file (not a variable) so `set -x` does not
+  # echo the whole verbose stream on every successful run; we `cat` it to
+  # stderr only in the error branch.
   local curl_log
   curl_log=$(mktemp "/tmp/ftest-curl-${NAME}-XXXXXX.log")
 
-  # Use `|| code=$?` so a curl failure is observable here without `set -e`
-  # aborting the script before we get a chance to inspect the exit code.
+  # `|| code=$?` captures curl's exit code without tripping `set -e`.
   local curl_exit_code=0
   curl -v --http1.1 --retry $CURL_MAX_RETRIES --retry-delay $CURL_RETRY_DELAY --retry-connrefused -O "$tar_url" >"$curl_log" 2>&1 || curl_exit_code=$?
 
@@ -492,8 +487,7 @@ fi
 # make sure the ingest processes are terminated
 set +e # if the PID disappears right before the kill, that's not an error
 
-# Sweep up any verbose curl logs left over by download_docker_tarball if the
-# script aborted between mktemp and the in-function `rm -f`.
+# Sweep up any curl logs left by download_docker_tarball after abnormal exits.
 rm -f /tmp/ftest-curl-${NAME}-*.log 2>/dev/null || true
 
 if [[ "$FIPS_MODE" == "true" ]]; then
