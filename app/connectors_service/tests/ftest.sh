@@ -216,26 +216,40 @@ function download_docker_tarball {
 
   echo "Downloading Docker image tarball from $tar_url..."
 
-  # Capture curl output and exit code
-  local curl_output
-  curl_output=$(curl -v --http1.1 --retry $CURL_MAX_RETRIES --retry-delay $CURL_RETRY_DELAY --retry-connrefused -O "$tar_url" 2>&1)
-  local curl_exit_code=$?
+  # Redirect verbose curl output to a temp file rather than capturing it into a
+  # shell variable. Capturing into a variable causes `set -x` (enabled at the
+  # top of this script) to echo the entire value on every successful run,
+  # flooding CI logs with thousands of per-record TLS lines from `curl -v`.
+  # Writing to a file keeps the verbose output available for diagnosing real
+  # download failures (we `cat` it to stderr only in the error branch) without
+  # leaking it through the bash trace on the happy path.
+  local curl_log
+  curl_log=$(mktemp "/tmp/ftest-curl-${NAME}-XXXXXX.log")
 
-  # Check curl exit code first
+  # Use `|| code=$?` so a curl failure is observable here without `set -e`
+  # aborting the script before we get a chance to inspect the exit code.
+  local curl_exit_code=0
+  curl -v --http1.1 --retry $CURL_MAX_RETRIES --retry-delay $CURL_RETRY_DELAY --retry-connrefused -O "$tar_url" >"$curl_log" 2>&1 || curl_exit_code=$?
+
   if [ $curl_exit_code -ne 0 ]; then
     echo "Error: curl failed with exit code $curl_exit_code" >&2
-    echo "Curl output: $curl_output" >&2
+    echo "Curl output:" >&2
+    cat "$curl_log" >&2
 
     # Check if it's a 404 (file not found) - these are expected and should allow fallback
-    if echo "$curl_output" | grep -q "404\|Not Found"; then
+    if grep -q "404\|Not Found" "$curl_log"; then
+      rm -f "$curl_log"
       echo "File not found (404) - this version may not be available yet" >&2
       return 2 # Special return code for 404s to allow fallback
     fi
 
     # For other errors (like SSL EOF, connection issues), fail fast
+    rm -f "$curl_log"
     echo "Network or download error - failing fast" >&2
     return 1
   fi
+
+  rm -f "$curl_log"
 
   # Secondary check: ensure file was actually created
   if [ ! -f "$tar_file" ]; then
@@ -477,6 +491,10 @@ fi
 
 # make sure the ingest processes are terminated
 set +e # if the PID disappears right before the kill, that's not an error
+
+# Sweep up any verbose curl logs left over by download_docker_tarball if the
+# script aborted between mktemp and the in-function `rm -f`.
+rm -f /tmp/ftest-curl-${NAME}-*.log 2>/dev/null || true
 
 if [[ "$FIPS_MODE" == "true" ]]; then
   # Clean up any remaining FIPS containers
