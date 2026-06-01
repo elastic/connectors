@@ -5,6 +5,11 @@ set -o pipefail
 NAME=$1
 PERF8=$2
 
+# Sweep curl -v logs from download_docker_tarball on any exit path (normal,
+# `exit` in the PERF8 branch, `set -e` abort, signal). Registered once here so
+# we don't need per-branch cleanup.
+trap 'rm -f /tmp/ftest-curl-${NAME}-*.log 2>/dev/null || true' EXIT
+
 SERVICE_TYPE=${NAME%"_serverless"}
 INDEX_NAME=search-${NAME%"_serverless"}
 
@@ -486,9 +491,6 @@ fi
 
 # make sure the ingest processes are terminated
 set +e # if the PID disappears right before the kill, that's not an error
-
-# Sweep up any curl logs left by download_docker_tarball after abnormal exits.
-rm -f /tmp/ftest-curl-${NAME}-*.log 2>/dev/null || true
 
 if [[ "$FIPS_MODE" == "true" ]]; then
   # Clean up any remaining FIPS containers
