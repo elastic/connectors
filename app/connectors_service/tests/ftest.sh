@@ -5,6 +5,11 @@ set -o pipefail
 NAME=$1
 PERF8=$2
 
+# Sweep curl -v logs from download_docker_tarball on any exit path (normal,
+# `exit` in the PERF8 branch, `set -e` abort, signal). Registered once here so
+# we don't need per-branch cleanup.
+trap 'rm -f /tmp/ftest-curl-${NAME}-*.log 2>/dev/null || true' EXIT
+
 SERVICE_TYPE=${NAME%"_serverless"}
 INDEX_NAME=search-${NAME%"_serverless"}
 
@@ -216,26 +221,35 @@ function download_docker_tarball {
 
   echo "Downloading Docker image tarball from $tar_url..."
 
-  # Capture curl output and exit code
-  local curl_output
-  curl_output=$(curl -v --http1.1 --retry $CURL_MAX_RETRIES --retry-delay $CURL_RETRY_DELAY --retry-connrefused -O "$tar_url" 2>&1)
-  local curl_exit_code=$?
+  # Send curl -v output to a temp file (not a variable) so `set -x` does not
+  # echo the whole verbose stream on every successful run; we `cat` it to
+  # stderr only in the error branch.
+  local curl_log
+  curl_log=$(mktemp "/tmp/ftest-curl-${NAME}-XXXXXX.log")
 
-  # Check curl exit code first
+  # `|| code=$?` captures curl's exit code without tripping `set -e`.
+  local curl_exit_code=0
+  curl -v --http1.1 --retry $CURL_MAX_RETRIES --retry-delay $CURL_RETRY_DELAY --retry-connrefused -O "$tar_url" >"$curl_log" 2>&1 || curl_exit_code=$?
+
   if [ $curl_exit_code -ne 0 ]; then
     echo "Error: curl failed with exit code $curl_exit_code" >&2
-    echo "Curl output: $curl_output" >&2
+    echo "Curl output:" >&2
+    cat "$curl_log" >&2
 
     # Check if it's a 404 (file not found) - these are expected and should allow fallback
-    if echo "$curl_output" | grep -q "404\|Not Found"; then
+    if grep -q "404\|Not Found" "$curl_log"; then
+      rm -f "$curl_log"
       echo "File not found (404) - this version may not be available yet" >&2
       return 2 # Special return code for 404s to allow fallback
     fi
 
     # For other errors (like SSL EOF, connection issues), fail fast
+    rm -f "$curl_log"
     echo "Network or download error - failing fast" >&2
     return 1
   fi
+
+  rm -f "$curl_log"
 
   # Secondary check: ensure file was actually created
   if [ ! -f "$tar_file" ]; then
