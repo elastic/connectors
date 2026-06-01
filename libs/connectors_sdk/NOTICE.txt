@@ -977,7 +977,7 @@ Apache Software License
 UNKNOWN
 
 elasticsearch-connectors-sdk
-9.4.2
+9.4.3
 Elastic-2.0
 UNKNOWN
 
@@ -1220,7 +1220,7 @@ Apache License
 
 
 idna
-3.16
+3.17
 BSD-3-Clause
 BSD 3-Clause License
 
