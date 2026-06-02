@@ -33,7 +33,7 @@ from connectors.sources.atlassian.confluence.constants import (
     QUEUE_SIZE,
     SPACE,
     SPACE_PERMISSION,
-    SPACE_QUERY,
+    SPACE_QUERY_CLOUD,
     SPACE_QUERY_DATA_CENTER,
     URLS,
     USER,
@@ -494,7 +494,7 @@ class ConfluenceDataSource(BaseDataSource):
             return
         space_keys = []
         api_query = (
-            SPACE_QUERY
+            SPACE_QUERY_CLOUD
             if self.confluence_client.data_source_type == CONFLUENCE_CLOUD
             else SPACE_QUERY_DATA_CENTER
         )

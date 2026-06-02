@@ -19,7 +19,7 @@ USER = "user"
 USERS_FOR_DATA_CENTER = "users_for_data_center"
 SEARCH_FOR_DATA_CENTER = "search_for_data_center"
 USERS_FOR_SERVER = "users_for_server"
-SPACE_QUERY = "limit=100&expand=permissions,history"
+SPACE_QUERY_CLOUD = "limit=100&expand=permissions,history"
 # DC/Server omits expand=permissions,history: permissions come from the
 # SPACE_PERMISSION (Extender) endpoint and history is Cloud-only. Avoids HTTP 500
 # on Confluence DC/Server versions affected by CONFSERVER-99908 and similar bugs.

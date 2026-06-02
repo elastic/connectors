@@ -36,7 +36,7 @@ from connectors.sources.atlassian.confluence.constants import (
     CONFLUENCE_CLOUD,
     CONFLUENCE_DATA_CENTER,
     CONFLUENCE_SERVER,
-    SPACE_QUERY,
+    SPACE_QUERY_CLOUD,
     SPACE_QUERY_DATA_CENTER,
 )
 from connectors.utils import ssl_context
@@ -967,7 +967,7 @@ async def test_fetch_spaces():
 @pytest.mark.parametrize(
     "data_source_type, expected_api_query",
     [
-        (CONFLUENCE_CLOUD, SPACE_QUERY),
+        (CONFLUENCE_CLOUD, SPACE_QUERY_CLOUD),
         (CONFLUENCE_DATA_CENTER, SPACE_QUERY_DATA_CENTER),
         (CONFLUENCE_SERVER, SPACE_QUERY_DATA_CENTER),
     ],
@@ -994,7 +994,7 @@ async def test_fetch_spaces_uses_correct_query_for_data_source_type(
 @pytest.mark.parametrize(
     "data_source_type, expected_api_query",
     [
-        (CONFLUENCE_CLOUD, SPACE_QUERY),
+        (CONFLUENCE_CLOUD, SPACE_QUERY_CLOUD),
         (CONFLUENCE_DATA_CENTER, SPACE_QUERY_DATA_CENTER),
         (CONFLUENCE_SERVER, SPACE_QUERY_DATA_CENTER),
     ],

@@ -29,7 +29,7 @@ from connectors.sources.atlassian.confluence.constants import (
     SEARCH_QUERY,
     SERVER_USER_BATCH,
     SPACE,
-    SPACE_QUERY,
+    SPACE_QUERY_CLOUD,
     SPACE_QUERY_DATA_CENTER,
     URLS,
     USERS_FOR_DATA_CENTER,
@@ -311,7 +311,7 @@ class ConfluenceClient:
 
     async def fetch_spaces(self):
         api_query = (
-            SPACE_QUERY
+            SPACE_QUERY_CLOUD
             if self.data_source_type == CONFLUENCE_CLOUD
             else SPACE_QUERY_DATA_CENTER
         )
