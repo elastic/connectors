@@ -29,7 +29,8 @@ from connectors.sources.atlassian.confluence.constants import (
     SEARCH_QUERY,
     SERVER_USER_BATCH,
     SPACE,
-    SPACE_QUERY,
+    SPACE_QUERY_CLOUD,
+    SPACE_QUERY_DATA_CENTER,
     URLS,
     USERS_FOR_DATA_CENTER,
     USERS_FOR_SERVER,
@@ -309,9 +310,14 @@ class ConfluenceClient:
                 yield entity
 
     async def fetch_spaces(self):
+        api_query = (
+            SPACE_QUERY_CLOUD
+            if self.data_source_type == CONFLUENCE_CLOUD
+            else SPACE_QUERY_DATA_CENTER
+        )
         async for response in self.paginated_api_call(
             url_name=SPACE,
-            api_query=SPACE_QUERY,
+            api_query=api_query,
         ):
             for space in response.get("results", []):
                 spaces = self.configuration.get("spaces", "")
