@@ -33,7 +33,8 @@ from connectors.sources.atlassian.confluence.constants import (
     QUEUE_SIZE,
     SPACE,
     SPACE_PERMISSION,
-    SPACE_QUERY,
+    SPACE_QUERY_CLOUD,
+    SPACE_QUERY_DATA_CENTER,
     URLS,
     USER,
     USER_QUERY,
@@ -492,8 +493,13 @@ class ConfluenceDataSource(BaseDataSource):
         if self.spaces == [WILDCARD]:
             return
         space_keys = []
+        api_query = (
+            SPACE_QUERY_CLOUD
+            if self.confluence_client.data_source_type == CONFLUENCE_CLOUD
+            else SPACE_QUERY_DATA_CENTER
+        )
         async for response in self.confluence_client.paginated_api_call(
-            url_name=SPACE, api_query=SPACE_QUERY
+            url_name=SPACE, api_query=api_query
         ):
             spaces = response.get("results", [])
             space_keys.extend([space.get("key", "") for space in spaces])
