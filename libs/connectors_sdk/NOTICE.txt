@@ -1220,7 +1220,7 @@ Apache License
 
 
 idna
-3.17
+3.18
 BSD-3-Clause
 BSD 3-Clause License
 
