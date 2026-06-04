@@ -8,7 +8,7 @@ PERF8=$2
 # Sweep curl -v logs from download_docker_tarball on any exit path (normal,
 # `exit` in the PERF8 branch, `set -e` abort, signal). Registered once here so
 # we don't need per-branch cleanup.
-trap 'rm -f /tmp/ftest-curl-${NAME}-*.log 2>/dev/null || true' EXIT
+trap 'rm -f /tmp/ftest-curl-${NAME}.log-* 2>/dev/null || true' EXIT
 
 SERVICE_TYPE=${NAME%"_serverless"}
 INDEX_NAME=search-${NAME%"_serverless"}
@@ -225,7 +225,7 @@ function download_docker_tarball {
   # echo the whole verbose stream on every successful run; we `cat` it to
   # stderr only in the error branch.
   local curl_log
-  curl_log=$(mktemp "/tmp/ftest-curl-${NAME}-XXXXXX.log")
+  curl_log=$(mktemp "/tmp/ftest-curl-${NAME}.log-XXXXXX")
 
   # `|| code=$?` captures curl's exit code without tripping `set -e`.
   local curl_exit_code=0
