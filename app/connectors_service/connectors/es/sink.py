@@ -229,14 +229,13 @@ class Sink:
         # TODO: retry 429s for individual items here
         res = await self.client.bulk_insert(operations, self.pipeline["name"])
         ids_to_ops = self._map_id_to_op(operations)
-        # `_process_bulk_response` can raise `TooManyErrors` mid-response when
-        # the error monitor threshold is crossed. Always run `_populate_stats`
-        # so docs ES accepted earlier in the batch still get counted.
+        # `_process_bulk_response` can raise mid-response, so log failures and
+        # populate stats in `finally` to still count already-accepted docs.
         try:
             await self._process_bulk_response(
                 res, ids_to_ops, do_log=self._enable_bulk_operations_logging
             )
-
+        finally:
             if res.get("errors"):
                 for item in res["items"]:
                     for op, data in item.items():
@@ -244,7 +243,6 @@ class Sink:
                             self._logger.error(
                                 f"operation {op} failed for doc {data['_id']}, {data['error']}"
                             )
-        finally:
             self._populate_stats(stats, res)
 
         return res
