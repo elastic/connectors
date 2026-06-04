@@ -1259,6 +1259,83 @@ async def test_batch_bulk_with_error_monitor():
 
 
 @pytest.mark.asyncio
+async def test_batch_bulk_still_counts_successful_docs_when_error_monitor_raises():
+    """When the error monitor raises mid-response, docs ES accepted in the same
+    batch must still be reflected in `INDEXED_DOCUMENT_COUNT`."""
+    config = {
+        "username": "elastic",
+        "password": "changeme",
+        "host": "http://nowhere.com:9200",
+    }
+    client = ESManagementClient(config)
+    client.client = AsyncMock()
+    sink = Sink(
+        client=client,
+        queue=None,
+        error_monitor=ErrorMonitor(max_consecutive_errors=10),
+        chunk_size=0,
+        pipeline={"name": "pipeline"},
+        chunk_mem_size=0,
+        max_concurrency=0,
+        max_retries=3,
+        retry_interval=10,
+    )
+
+    # 11 failures (one over the threshold) followed by 5 ES-accepted successes.
+    items = []
+    for i in range(11):
+        items.append({OP_INDEX: {"_id": f"fail_{i}", "error": "something went wrong"}})
+    for i in range(5):
+        items.append({OP_INDEX: {"_id": f"ok_{i}", "result": "created"}})
+
+    client.bulk_insert = AsyncMock(return_value={"items": items, "errors": True})
+
+    stats = {
+        OP_INDEX: {f"fail_{i}": 100 for i in range(11)},
+        OP_UPDATE: {},
+        OP_DELETE: {},
+    }
+    for i in range(5):
+        stats[OP_INDEX][f"ok_{i}"] = 50
+
+    with pytest.raises(TooManyErrors):
+        await sink._batch_bulk([], stats)
+
+    assert sink.counters.get(INDEXED_DOCUMENT_COUNT) == 5
+    assert sink.counters.get(INDEXED_DOCUMENT_VOLUME) == 5 * 50
+
+
+def test_sync_orchestrator_passes_error_monitor_config_as_kwargs():
+    """The `bulk.error_monitor` config block must reach individual `ErrorMonitor`
+    fields; passing it positionally used to bind the whole dict to `enabled`
+    and leave every threshold at its default."""
+    config = {
+        "host": "http://nowhere.com:9200",
+        "username": "elastic",
+        "password": "changeme",
+        "bulk": {
+            "error_monitor": {
+                "enabled": True,
+                "max_total_errors": 9999,
+                "max_consecutive_errors": 42,
+                "max_error_rate": 0.5,
+                "error_window_size": 50,
+                "error_queue_size": 7,
+            }
+        },
+    }
+
+    orchestrator = SyncOrchestrator(config)
+
+    assert orchestrator.error_monitor.enabled is True
+    assert orchestrator.error_monitor.max_total_errors == 9999
+    assert orchestrator.error_monitor.max_consecutive_errors == 42
+    assert orchestrator.error_monitor.max_error_rate == 0.5
+    assert orchestrator.error_monitor.error_window_size == 50
+    assert orchestrator.error_monitor.error_queue_size == 7
+
+
+@pytest.mark.asyncio
 async def test_batch_bulk_with_errors(patch_logger):
     config = {
         "username": "elastic",
