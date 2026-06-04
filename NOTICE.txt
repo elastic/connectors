@@ -65,7 +65,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
 PyJWT
-2.12.1
+2.13.0
 MIT
 The MIT License (MIT)
 
@@ -91,7 +91,7 @@ SOFTWARE.
 
 
 PyMySQL
-1.1.2
+1.2.0
 MIT
 Copyright (c) 2010, 2013 PyMySQL contributors
 
@@ -1044,7 +1044,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 aiohappyeyeballs
-2.6.1
+2.6.2
 Python Software Foundation License
 A. HISTORY OF THE SOFTWARE
 ==========================
@@ -1880,7 +1880,7 @@ SOFTWARE.
 
 
 azure-core
-1.39.0
+1.41.0
 MIT
 Copyright (c) Microsoft Corporation.
 
@@ -4090,7 +4090,7 @@ Apache Software License
 
 
 google-auth
-2.49.1
+2.53.0
 Apache Software License
                                  Apache License
                            Version 2.0, January 2004
@@ -4324,7 +4324,7 @@ SOFTWARE.
 
 
 greenlet
-3.4.0
+3.5.1
 MIT AND PSF-2.0
 The following files are derived from Stackless Python and are subject to the
 same license as Stackless Python:
@@ -5075,11 +5075,11 @@ OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 
 idna
-3.11
+3.18
 BSD-3-Clause
 BSD 3-Clause License
 
-Copyright (c) 2013-2025, Kim Davies and contributors.
+Copyright (c) 2013-2026, Kim Davies and contributors.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -5940,7 +5940,7 @@ END OF TERMS AND CONDITIONS
 
 
 packaging
-26.0
+26.2
 Apache-2.0 OR BSD-2-Clause
 This software is made available under the terms of *either* of the licenses
 found in LICENSE.APACHE or LICENSE.BSD. Contributions to this software is made
@@ -5953,7 +5953,7 @@ BSD
 UNKNOWN
 
 propcache
-0.4.1
+0.5.2
 Apache Software License
 
                                  Apache License
@@ -7390,7 +7390,7 @@ made under the terms of *both* these licenses.
 
 
 soupsieve
-2.8.3
+2.8.4
 MIT
 MIT License
 
@@ -8027,7 +8027,7 @@ Apache Software License
 UNKNOWN
 
 tzdata
-2026.1
+2026.2
 Apache-2.0
 Apache Software License 2.0
 
@@ -8079,7 +8079,7 @@ made under the terms of *both* these licenses.
 
 
 urllib3
-2.6.3
+2.7.0
 MIT
 MIT License
 
@@ -8380,7 +8380,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 
 yarl
-1.23.0
+1.24.2
 Apache-2.0
 
                                  Apache License
