@@ -31,10 +31,7 @@ from connectors.protocol.connectors import (
     INDEXED_DOCUMENT_COUNT,
     INDEXED_DOCUMENT_VOLUME,
 )
-from connectors.utils import (
-    trim_memory,
-    truncate_id,
-)
+from connectors.utils import truncate_id
 
 UTF_8 = "utf-8"
 
@@ -219,8 +216,6 @@ class SyncJobRunner:
                 await self.sync_orchestrator.close()
             if self.data_provider is not None:
                 await self.data_provider.close()
-            # Return freed heap to the OS so RSS recedes between syncs.
-            trim_memory(self.sync_job.logger)
 
     def _data_source_framework_config(self):
         return DataSourceFrameworkConfig(
