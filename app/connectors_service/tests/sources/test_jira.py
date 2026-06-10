@@ -1077,8 +1077,7 @@ async def test_get_issues_for_jql_none_uses_catch_all_for_server(data_source):
             source.jira_client._get_session(), "get", side_effect=server_side_effect
         ):
             _ = [
-                issue
-                async for issue in source.jira_client.get_issues_for_jql(jql=None)
+                issue async for issue in source.jira_client.get_issues_for_jql(jql=None)
             ]
 
     assert (
