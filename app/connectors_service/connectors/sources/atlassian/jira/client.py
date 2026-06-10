@@ -11,6 +11,7 @@ from connectors_sdk.logger import logger
 
 from connectors.sources.atlassian.jira.constants import (
     ALL_FIELDS,
+    ALL_ISSUES_JQL,
     DEFAULT_RETRY_SECONDS,
     FETCH_SIZE,
     ISSUE_DATA,
@@ -213,10 +214,6 @@ class JiraClient:
                 await self._handle_client_errors(url=url, exception=exception)
 
     async def _paginated_api_call_cursor_based(self, url_name, jql=None, **kwargs):
-        if not jql and url_name == ISSUES:
-            # only bound jql allowed, so using "key IS NOT EMPTY" as a catch-all for "all issues"
-            jql = "key%20IS%20NOT%20EMPTY"
-
         url = parse.urljoin(
             self.host_url,
             URLS[url_name].format(
@@ -259,11 +256,6 @@ class JiraClient:
                 break
 
     async def _paginated_api_call_offset_based(self, url_name, jql=None, **kwargs):
-        if not jql and url_name == ISSUES_FOR_SERVER:
-            # match cursor-based behaviour: use "key IS NOT EMPTY" as a catch-all for
-            # "all issues" so jql=None isn't formatted as the literal string "None"
-            jql = "key%20IS%20NOT%20EMPTY"
-
         start_at = 0
         self._logger.info(
             f"Started pagination for the API endpoint: {URLS[url_name]} to host: {self.host_url} with the parameters -> startAt: 0, maxResults: {FETCH_SIZE} and jql query: {jql}"
@@ -313,6 +305,11 @@ class JiraClient:
         Yields:
             response: Return api response.
         """
+        if not jql and url_name == ISSUES:
+            # Resolved once here so both pagination styles share a single source of the
+            # bounded "all issues" catch-all and never format jql=None into the URL.
+            jql = ALL_ISSUES_JQL
+
         use_cursor_pagination = (
             url_name == ISSUES and self.data_source_type == JIRA_CLOUD
         )

@@ -20,6 +20,7 @@ from connectors_sdk.utils import (
 from connectors.access_control import ACCESS_CONTROL
 from connectors.sources.atlassian.jira.client import JiraClient
 from connectors.sources.atlassian.jira.constants import (
+    ALL_ISSUES_JQL,
     ATLASSIAN,
     ATTACHMENT_CLOUD,
     ATTACHMENT_SERVER,
@@ -575,12 +576,11 @@ class JiraDataSource(BaseDataSource):
             Dictionary: Jira issue to get indexed
             issue (dict): Issue response to fetch the attachments
         """
-        wildcard_query = "key%20IS%20NOT%20EMPTY"
         comma_separated_projects = '"' + '","'.join(self.jira_client.projects) + '"'
         projects_query = f"project in ({comma_separated_projects})"
 
         jql = custom_query or (
-            wildcard_query
+            ALL_ISSUES_JQL
             if self.jira_client.projects == [WILDCARD]
             else projects_query
         )

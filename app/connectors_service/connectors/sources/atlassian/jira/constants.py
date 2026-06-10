@@ -51,3 +51,6 @@ JIRA_SERVER = "jira_server"
 JIRA_DATA_CENTER = "jira_data_center"
 ATLASSIAN = "atlassian"
 USER_QUERY = "expand=groups,applicationRoles"
+# Bounded JQL catch-all for "all issues". The newer Cloud issue-search API only accepts
+# bounded JQL (empty-string is rejected); every issue has a key, so this matches them all.
+ALL_ISSUES_JQL = "key%20IS%20NOT%20EMPTY"
