@@ -18,6 +18,7 @@ PING = "ping"
 PROJECT = "project"
 PROJECT_BY_KEY = "project_by_key"
 ISSUES = "all_issues"
+ISSUES_FOR_SERVER = "issues_for_server"
 ISSUE_DATA = "issue_data"
 ATTACHMENT_CLOUD = "attachment_cloud"
 ATTACHMENT_SERVER = "attachment_server"
@@ -33,6 +34,7 @@ URLS = {
     PROJECT: "rest/api/2/project?expand=description,lead,url",
     PROJECT_BY_KEY: "rest/api/2/project/{key}",
     ISSUES: "rest/api/3/search/jql?jql={jql}&fields=*all&maxResults={max_results}",
+    ISSUES_FOR_SERVER: "rest/api/2/search?jql={jql}&fields=*all&maxResults={max_results}&startAt={start_at}",
     ISSUE_DATA: "rest/api/2/issue/{id}",
     ATTACHMENT_CLOUD: "rest/api/2/attachment/content/{attachment_id}",
     ATTACHMENT_SERVER: "secure/attachment/{attachment_id}/{attachment_name}",
@@ -49,3 +51,6 @@ JIRA_SERVER = "jira_server"
 JIRA_DATA_CENTER = "jira_data_center"
 ATLASSIAN = "atlassian"
 USER_QUERY = "expand=groups,applicationRoles"
+# Bounded JQL catch-all for "all issues". The newer Cloud issue-search API only accepts
+# bounded JQL (empty-string is rejected); every issue has a key, so this matches them all.
+ALL_ISSUES_JQL = "key%20IS%20NOT%20EMPTY"
