@@ -11,11 +11,13 @@ from connectors_sdk.logger import logger
 
 from connectors.sources.atlassian.jira.constants import (
     ALL_FIELDS,
+    ALL_ISSUES_JQL,
     DEFAULT_RETRY_SECONDS,
     FETCH_SIZE,
     ISSUE_DATA,
     ISSUE_SECURITY_LEVEL,
     ISSUES,
+    ISSUES_FOR_SERVER,
     JIRA_CLOUD,
     JIRA_DATA_CENTER,
     JIRA_SERVER,
@@ -212,10 +214,6 @@ class JiraClient:
                 await self._handle_client_errors(url=url, exception=exception)
 
     async def _paginated_api_call_cursor_based(self, url_name, jql=None, **kwargs):
-        if not jql and url_name == ISSUES:
-            # only bound jql allowed, so using "key IS NOT EMPTY" as a catch-all for "all issues"
-            jql = "key%20IS%20NOT%20EMPTY"
-
         url = parse.urljoin(
             self.host_url,
             URLS[url_name].format(
@@ -295,7 +293,9 @@ class JiraClient:
 
     async def paginated_api_call(self, url_name, jql=None, **kwargs):
         """Make a paginated API call for Jira objects using the passed url_name with retry for the failed API calls.
-        Most Jira API endpoints use offset-based pagination. However, some endpoints use cursor-based pagination.
+        Most Jira API endpoints use offset-based pagination. However, the Jira Cloud issue search endpoint
+        (rest/api/3/search/jql) uses cursor-based pagination. Jira Server/Data Center do not expose that
+        endpoint, so issue searches there fall back to the deprecated offset-based rest/api/2/search endpoint.
         This method handles both.
 
         Args:
@@ -305,13 +305,24 @@ class JiraClient:
         Yields:
             response: Return api response.
         """
-        is_cursor_based_pagination = url_name == ISSUES
-        if is_cursor_based_pagination:
+        if not jql and url_name == ISSUES:
+            # Resolved once here so both pagination styles share a single source of the
+            # bounded "all issues" catch-all and never format jql=None into the URL.
+            jql = ALL_ISSUES_JQL
+
+        use_cursor_pagination = (
+            url_name == ISSUES and self.data_source_type == JIRA_CLOUD
+        )
+        if use_cursor_pagination:
             async for response in self._paginated_api_call_cursor_based(
                 url_name=url_name, jql=jql, **kwargs
             ):
                 yield response
         else:
+            if url_name == ISSUES:
+                # Server/DC (especially pre-v10) lack rest/api/3/search/jql; fall back
+                # to the deprecated offset-based rest/api/2/search endpoint.
+                url_name = ISSUES_FOR_SERVER
             async for response in self._paginated_api_call_offset_based(
                 url_name=url_name, jql=jql, **kwargs
             ):
