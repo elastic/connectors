@@ -1284,7 +1284,7 @@ def test_trim_memory_noop_on_non_linux():
     logger_ = Mock()
     with patch("connectors.utils.sys") as mock_sys:
         mock_sys.platform = "darwin"
-        # should return without attempting to load libc
+        # no-op off Linux
         trim_memory(logger_)
 
 
@@ -1292,5 +1292,5 @@ def test_trim_memory_does_not_raise_on_linux():
     logger_ = Mock()
     with patch("connectors.utils.sys") as mock_sys:
         mock_sys.platform = "linux"
-        # best-effort; must never raise regardless of libc availability
+        # must never raise
         trim_memory(logger_)

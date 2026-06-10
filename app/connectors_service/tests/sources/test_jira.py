@@ -846,8 +846,7 @@ async def test_put_issue():
 
 @pytest.mark.asyncio
 async def test_put_issue_emits_finished_on_error():
-    """FINISHED sentinel is enqueued even if fetching the issue fails, and the
-    error still propagates (we don't silently swallow it)."""
+    """FINISHED is still emitted on error, and the error propagates."""
 
     async with create_jira_source() as source:
         source.jira_client.get_issues_for_issue_key = Mock(
@@ -883,7 +882,7 @@ async def test_get_projects_emits_finished_on_error():
 
 @pytest.mark.asyncio
 async def test_get_issues_schedules_put_issue_with_key_only():
-    """_get_issues schedules _put_issue with the key string, not the full payload."""
+    """_get_issues schedules _put_issue with the key, not the full payload."""
 
     async with create_jira_source() as source:
         source.jira_client.get_issues_for_jql = Mock(
@@ -905,8 +904,7 @@ async def test_get_issues_schedules_put_issue_with_key_only():
 
 @pytest.mark.asyncio
 async def test_get_issues_emits_finished_on_error():
-    """FINISHED sentinel is enqueued even if listing issues fails, and the error
-    still propagates (we don't silently swallow it)."""
+    """FINISHED is still emitted on error, and the error propagates."""
 
     async with create_jira_source() as source:
         source.jira_client.get_issues_for_jql = Mock(side_effect=Exception("boom"))
@@ -1132,8 +1130,7 @@ async def test_get_issues_for_jql_uses_deprecated_v2_search_for_server(data_sour
         in requested_urls
     )
     assert all("rest/api/3/search/jql" not in url for url in requested_urls)
-    # get_issues_for_jql yields only issue keys (the full issue is re-fetched per
-    # key), so we assert on the keys of the mocked search results.
+    # get_issues_for_jql yields only keys.
     assert issues == [MOCK_ISSUE["key"], MOCK_ISSUE_TYPE_BUG["key"]]
 
 
@@ -1188,8 +1185,7 @@ async def test_get_issues_for_jql_uses_cursor_based_v3_search_for_cloud():
         in requested_urls
     )
     assert all("rest/api/2/search" not in url for url in requested_urls)
-    # get_issues_for_jql yields only issue keys (the full issue is re-fetched per
-    # key), so we assert on the key of the mocked search result.
+    # get_issues_for_jql yields only keys.
     assert issues == [MOCK_ISSUE["key"]]
 
 

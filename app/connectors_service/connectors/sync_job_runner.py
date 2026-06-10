@@ -219,9 +219,7 @@ class SyncJobRunner:
                 await self.sync_orchestrator.close()
             if self.data_provider is not None:
                 await self.data_provider.close()
-            # Best-effort: return freed heap arenas to the OS so process RSS
-            # returns toward baseline between syncs in a long-lived service.
-            # Safe no-op on non-glibc platforms; never raises.
+            # Return freed heap to the OS so RSS recedes between syncs.
             trim_memory(self.sync_job.logger)
 
     def _data_source_framework_config(self):

@@ -34,11 +34,9 @@ ACCESS_CONTROL_INDEX_PREFIX = ".search-acl-filter-"
 
 
 def trim_memory(logger_=None):
-    """Asks glibc to return freed heap arenas to the OS via `malloc_trim(0)`.
+    """Best-effort glibc malloc_trim(0) to return freed heap to the OS.
 
-    This is a best-effort mitigation for the process RSS not returning to
-    baseline after large syncs. It is a no-op on non-glibc platforms or if the
-    call fails for any reason.
+    No-op off glibc; never raises.
     """
     log = logger_ or logger
 

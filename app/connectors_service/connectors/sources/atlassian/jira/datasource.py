@@ -506,8 +506,7 @@ class JiraDataSource(BaseDataSource):
                 f"Skipping data for type: {PROJECT}. Error: {exception}"
             )
         finally:
-            # Always emit the sentinel so the consumer's task counter drains
-            # even if fetching projects failed partway through.
+            # Always signal completion so the consumer drains.
             await self.queue.put("FINISHED")  # pyright: ignore
 
     async def _put_issue(self, issue_key):
@@ -574,10 +573,7 @@ class JiraDataSource(BaseDataSource):
                         access_control=issue_access_control,
                     )
         finally:
-            # Always emit the sentinel so the consumer's task counter drains
-            # even if fetching this issue raised. We deliberately do not swallow
-            # the exception here: it propagates so it stays as visible (and as
-            # countable by the framework) as it was before.
+            # Always signal completion (even on error); the error still propagates.
             await self.queue.put("FINISHED")  # pyright: ignore
 
     async def _get_issues(self, custom_query=""):
@@ -601,9 +597,7 @@ class JiraDataSource(BaseDataSource):
                 await self.fetchers.put(partial(self._put_issue, issue_key))
                 self.tasks += 1
         finally:
-            # Always emit the sentinel so the consumer's task counter drains
-            # even if listing issues raised. The exception still propagates so
-            # it stays as visible as before.
+            # Always signal completion (even on error); the error still propagates.
             await self.queue.put("FINISHED")  # pyright: ignore
 
     async def _put_attachment(self, attachments, issue_key, access_control):

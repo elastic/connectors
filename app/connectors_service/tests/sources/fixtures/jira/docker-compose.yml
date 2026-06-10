@@ -29,12 +29,6 @@ services:
       context: ../../../../
       dockerfile: ${DOCKERFILE_FTEST_PATH}
     command: .venv/bin/python -m tests.sources.fixtures.jira.fixture
-    environment:
-      # Opt-in memory-stress knobs (see jira/README.md). Defaults keep the
-      # standard ftest corpus unchanged.
-      - DATA_SIZE=${DATA_SIZE:-medium}
-      - JIRA_ISSUES_COUNT=${JIRA_ISSUES_COUNT:-}
-      - JIRA_FIELD_PADDING_KB=${JIRA_FIELD_PADDING_KB:-0}
     ports:
       - "8080:8080"
     volumes:
