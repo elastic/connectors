@@ -27,6 +27,45 @@ match DATA_SIZE:
     case "large":
         projects_count = 10000
 
+# --- Memory-stress knobs (opt-in; default behavior is unchanged) ----------
+# These let you reproduce the agentless "RSS grows with every full sync" issue
+# locally. See README.md in this directory for how to run it.
+#
+# JIRA_ISSUES_COUNT: total number of issues to emit across paginated
+#   /search/jql responses. When unset/empty, the fixture keeps its original
+#   behavior (one full page of `maxResults` issues + one extra issue).
+# JIRA_FIELD_PADDING_KB: KiB of filler text appended to each issue's
+#   `description`, used to inflate per-issue payloads. 0 (default) = no padding.
+_issues_count_env = os.environ.get("JIRA_ISSUES_COUNT")
+ISSUES_COUNT = int(_issues_count_env) if _issues_count_env else None
+FIELD_PADDING_KB = int(os.environ.get("JIRA_FIELD_PADDING_KB") or "0")
+
+
+def _issue_fields():
+    """Build the `fields` dict for an issue, optionally padded to stress memory."""
+    fields = {
+        "issuetype": {"name": "Task"},
+        "project": {"key": "DP", "name": "Demo Project"},
+        "fixVersions": [],
+        "attachment": [
+            {
+                "id": 10001,
+                "filename": "dummy_file.txt",
+                "size": 200,
+                "created": "2023-02-09T08:33:57.284+0000",
+            }
+        ],
+        "priority": {"name": "Medium"},
+        "assignee": "Test User",
+        "updated": "2023-02-10T00:10:11.027+0530",
+        "status": {"name": "To Do"},
+        "summary": "Dummy Issue",
+        "reporter": {"emailAddress": "test.user@gmail.com", "displayName": "Test User"},
+    }
+    if FIELD_PADDING_KB > 0:
+        fields["description"] = "x" * (FIELD_PADDING_KB * 1024)
+    return fields
+
 
 app = Flask(__name__)
 
@@ -74,30 +113,24 @@ def get_all_issues():
 
     all_issues = {"maxResults": max_results, "issues": []}
 
-    fields = {
-        "issuetype": {"name": "Task"},
-        "project": {"key": "DP", "name": "Demo Project"},
-        "fixVersions": [],
-        "attachment": [
-            {
-                "id": 10001,
-                "filename": "dummy_file.txt",
-                "size": 200,
-                "created": "2023-02-09T08:33:57.284+0000",
-            }
-        ],
-        "priority": {"name": "Medium"},
-        "assignee": "Test User",
-        "updated": "2023-02-10T00:10:11.027+0530",
-        "status": {"name": "To Do"},
-        "summary": "Dummy Issue",
-        "reporter": {"emailAddress": "test.user@gmail.com", "displayName": "Test User"},
-    }
+    fields = _issue_fields()
 
     if next_page_token == "null":
         error_msg = "next_page_token should not be 'null' string"
         raise Exception(error_msg)
 
+    if ISSUES_COUNT is not None:
+        # Memory-stress mode: emit ISSUES_COUNT issues over many pages, using the
+        # token as a numeric offset so we can paginate an arbitrary corpus size.
+        start = 0 if next_page_token is None else int(next_page_token)
+        end = min(start + max_results, ISSUES_COUNT)
+        for i in range(start + 1, end + 1):
+            all_issues["issues"].append(_compose_issue(i, selected_fields, fields))
+        if end < ISSUES_COUNT:
+            all_issues["nextPageToken"] = str(end)
+        return all_issues
+
+    # Default behavior (unchanged): one full page plus a single extra issue.
     if next_page_token is None:
         for i in range(1, max_results + 1):
             all_issues["issues"].append(_compose_issue(i, selected_fields, fields))
@@ -137,28 +170,7 @@ def get_issue(issue_id):
     issue = {
         "id": issue_id,
         "key": f"DP-{issue_id}",
-        "fields": {
-            "issuetype": {"name": "Task"},
-            "project": {"key": "DP", "name": "Demo Project"},
-            "fixVersions": [],
-            "attachment": [
-                {
-                    "id": 10001,
-                    "filename": "dummy_file.txt",
-                    "size": 200,
-                    "created": "2023-02-09T08:33:57.284+0000",
-                }
-            ],
-            "priority": {"name": "Medium"},
-            "assignee": "Test User",
-            "updated": "2023-02-10T00:10:11.027+0530",
-            "status": {"name": "To Do"},
-            "summary": "Dummy Issue",
-            "reporter": {
-                "emailAddress": "test.user@gmail.com",
-                "displayName": "Test User",
-            },
-        },
+        "fields": _issue_fields(),
     }
     return issue
 

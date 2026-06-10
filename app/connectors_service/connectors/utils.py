@@ -5,6 +5,8 @@
 #
 import asyncio
 import base64
+import ctypes
+import ctypes.util
 import functools
 import importlib
 import inspect
@@ -12,6 +14,7 @@ import re
 import secrets
 import ssl
 import string
+import sys
 import time
 import urllib.parse
 from copy import deepcopy
@@ -28,6 +31,30 @@ from connectors_sdk.utils import iso_utc, with_utc_tz
 from pympler import asizeof
 
 ACCESS_CONTROL_INDEX_PREFIX = ".search-acl-filter-"
+
+
+def trim_memory(logger_=None):
+    """Asks glibc to return freed heap arenas to the OS via `malloc_trim(0)`.
+
+    This is a best-effort mitigation for the process RSS not returning to
+    baseline after large syncs. It is a no-op on non-glibc platforms or if the
+    call fails for any reason.
+    """
+    log = logger_ or logger
+
+    if not sys.platform.startswith("linux"):
+        return
+
+    try:
+        libc_name = ctypes.util.find_library("c") or "libc.so.6"
+        libc = ctypes.CDLL(libc_name)
+        if not hasattr(libc, "malloc_trim"):
+            return
+        libc.malloc_trim(0)
+        log.debug("[memory] malloc_trim(0) called")
+    except Exception as e:
+        log.debug(f"[memory] malloc_trim unavailable: {e}")
+
 
 # Regular expression pattern to match a basic email format (no whitespace, valid domain)
 EMAIL_REGEX_PATTERN = r"^\S+@\S+\.\S+$"

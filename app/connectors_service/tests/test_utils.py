@@ -45,6 +45,7 @@ from connectors.utils import (
     retryable,
     ssl_context,
     time_to_sleep_between_retries,
+    trim_memory,
     truncate_id,
     url_encode,
     validate_email_address,
@@ -1277,3 +1278,19 @@ def test_get_source_klasses():
 
     sources = list(get_source_klasses(settings))
     assert sources == [MyConnector, MyConnector]
+
+
+def test_trim_memory_noop_on_non_linux():
+    logger_ = Mock()
+    with patch("connectors.utils.sys") as mock_sys:
+        mock_sys.platform = "darwin"
+        # should return without attempting to load libc
+        trim_memory(logger_)
+
+
+def test_trim_memory_does_not_raise_on_linux():
+    logger_ = Mock()
+    with patch("connectors.utils.sys") as mock_sys:
+        mock_sys.platform = "linux"
+        # best-effort; must never raise regardless of libc availability
+        trim_memory(logger_)
