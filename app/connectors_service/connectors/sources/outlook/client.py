@@ -23,6 +23,7 @@ from exchangelib import (
     Identity,
     OAuth2Credentials,
 )
+from exchangelib.errors import ErrorFolderNotFound
 from exchangelib.protocol import BaseProtocol, NoVerifyHTTPAdapter
 from ldap3 import SAFE_SYNC, Connection, Server
 
@@ -378,12 +379,11 @@ class OutlookClient:
                 f"Fetching {mail_type['folder']} mails for {account.primary_smtp_address}"
             )
             if mail_type["folder"] == "archive":
-                # If 'Archive' folder is not present, skipping the iteration
+                # msg_folder_root is locale-agnostic; the "Archive" leaf has no
+                # distinguished ID, so resolve it by name and skip if absent.
                 try:
-                    folder_object = (
-                        account.root / "Top of Information Store" / "Archive"
-                    )
-                except Exception:  # noqa S112
+                    folder_object = account.msg_folder_root / "Archive"
+                except ErrorFolderNotFound:
                     continue
             else:
                 folder_object = getattr(account, mail_type["folder"])
@@ -409,6 +409,14 @@ class OutlookClient:
             yield task
 
     async def get_contacts(self, account):
-        folder = account.root / "Top of Information Store" / "Contacts"
+        # account.contacts uses a distinguished folder ID, which is locale-agnostic
+        # unlike name-based paths that break on non-English Exchange servers.
+        try:
+            folder = account.contacts
+        except ErrorFolderNotFound:
+            self._logger.warning(
+                f"Could not resolve Contacts folder for {account.primary_smtp_address}, skipping."
+            )
+            return
         for contact in await asyncio.to_thread(folder.all().only, *CONTACT_FIELDS):
             yield contact
