@@ -741,6 +741,20 @@ async def test_get_contacts_skips_when_folder_not_found():
 
 
 @pytest.mark.asyncio
+async def test_get_mails_skips_archive_when_folder_not_found():
+    async with create_outlook_source() as source:
+        account = MockAccount()
+        account.msg_folder_root = MagicMock()
+        account.msg_folder_root.__truediv__.side_effect = ErrorFolderNotFound("no")
+
+        folders = [
+            mail_type["folder"]
+            async for _, mail_type in source.client.get_mails(account)
+        ]
+        assert folders == ["inbox", "sent", "junk"]
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "is_cloud, user_response",
     [(True, {"value": [{"mail": "dummy.user@gmail.com"}]})],
