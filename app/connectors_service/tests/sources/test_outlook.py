@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from aiohttp import StreamReader
 from connectors_sdk.source import ConfigurableFieldValueError
+from exchangelib.errors import ErrorFolderNotFound
 
 from connectors.sources.outlook import OutlookDataSource
 from connectors.sources.outlook.client import (
@@ -165,18 +166,14 @@ class MockException(Exception):
         self.status = status
 
 
-class CustomPath:
+class MockMsgFolderRoot:
+    """Mocks account.msg_folder_root, under which "Archive" is resolved by name."""
+
     def __truediv__(self, path):
-        # Simulate hierarchy navigation and return a list of dictionaries
-        if path == "Top of Information Store":
-            return self
-        elif path == "Archive":
+        if path == "Archive":
             return MockOutlookObject(object_type=MAIL)
-        elif path == "Contacts":
-            return MockOutlookObject(object_type=CONTACT)
-        else:
-            msg = "Unsupported path element"
-            raise ValueError(msg)
+        msg = "Unsupported path element"
+        raise ValueError(msg)
 
 
 class MockAttachmentId:
@@ -286,11 +283,12 @@ class MockAccount:
 
         self.inbox = MockOutlookObject(object_type=MAIL)
         self.sent = MockOutlookObject(object_type=MAIL)
-        self.root = MockOutlookObject(object_type=MAIL)
         self.junk = MockOutlookObject(object_type=MAIL)
         self.tasks = MockOutlookObject(object_type=TASK)
         self.calendar = MockOutlookObject(object_type=CALENDAR)
-        self.root = CustomPath()
+        # Accessed via distinguished folder IDs.
+        self.contacts = MockOutlookObject(object_type=CONTACT)
+        self.msg_folder_root = MockMsgFolderRoot()
         self.primary_smtp_address = "alex.wilber@gmail.com"
 
 
@@ -719,6 +717,27 @@ async def test_get_docs():
         )
         async for document, _ in source.get_docs():
             assert document in EXPECTED_RESPONSE
+
+
+@pytest.mark.asyncio
+async def test_get_contacts_resolves_via_distinguished_folder_id():
+    async with create_outlook_source() as source:
+        account = MockAccount()
+        contacts = [contact async for contact in source.client.get_contacts(account)]
+        assert [contact.id for contact in contacts] == ["contact_1"]
+
+
+@pytest.mark.asyncio
+async def test_get_contacts_skips_when_folder_not_found():
+    async with create_outlook_source() as source:
+        account = MagicMock()
+        account.primary_smtp_address = "alex.wilber@gmail.com"
+        type(account).contacts = mock.PropertyMock(
+            side_effect=ErrorFolderNotFound("no")
+        )
+
+        contacts = [contact async for contact in source.client.get_contacts(account)]
+        assert contacts == []
 
 
 @pytest.mark.asyncio
