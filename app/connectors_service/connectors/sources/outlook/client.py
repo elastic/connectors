@@ -23,6 +23,7 @@ from exchangelib import (
     Identity,
     OAuth2Credentials,
 )
+from exchangelib.errors import ErrorFolderNotFound
 from exchangelib.protocol import BaseProtocol, NoVerifyHTTPAdapter
 from ldap3 import SAFE_SYNC, Connection, Server
 
@@ -383,7 +384,7 @@ class OutlookClient:
                     folder_object = (
                         account.root / "Top of Information Store" / "Archive"
                     )
-                except Exception:  # noqa S112
+                except ErrorFolderNotFound:
                     continue
             else:
                 folder_object = getattr(account, mail_type["folder"])
@@ -409,6 +410,15 @@ class OutlookClient:
             yield task
 
     async def get_contacts(self, account):
-        folder = account.root / "Top of Information Store" / "Contacts"
+        try:
+            folder = account.root / "Top of Information Store" / "Contacts"
+        except ErrorFolderNotFound:
+            try:
+                folder = account.contacts
+            except ErrorFolderNotFound:
+                self._logger.warning(
+                    f"Could not resolve Contacts folder for {account.primary_smtp_address}, skipping."
+                )
+                return
         for contact in await asyncio.to_thread(folder.all().only, *CONTACT_FIELDS):
             yield contact
