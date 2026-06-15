@@ -45,6 +45,25 @@ def load_config(ctx, config):
         raise FileNotFoundError(msg)
 
 
+class LazyConfig:
+    def __init__(self, ctx, config):
+        self.ctx = ctx
+        self.config = config
+        self.value = None
+
+    def __getitem__(self, key):
+        if self.value is None:
+            try:
+                self.value = load_config(self.ctx, self.config)
+            except FileNotFoundError as e:
+                click.echo(
+                    f"{e} Run `connectors login` first, or make sure that the config is either present at the default location ({CONFIG_FILE_PATH}) or it's passed via the '-c' or '--config' option."
+                )
+                self.ctx.exit(1)
+
+        return self.value[key]
+
+
 # Main group
 @click.group(
     invoke_without_command=True,
@@ -60,13 +79,7 @@ def cli(ctx, config):
         return
 
     ctx.ensure_object(dict)
-    try:
-        ctx.obj["config"] = load_config(ctx, config)
-    except FileNotFoundError as e:
-        click.echo(
-            f"{e} Make sure that the config is either present at the default location ({CONFIG_FILE_PATH}) or it's passed via the '-c' or '--config' option."
-        )
-        ctx.exit(1)
+    ctx.obj["config"] = LazyConfig(ctx, config)
 
 
 @click.command(help="Authenticate Connectors CLI with an Elasticsearch instance")
