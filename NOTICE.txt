@@ -4090,7 +4090,7 @@ Apache Software License
 
 
 google-auth
-2.53.0
+2.54.0
 Apache Software License
                                  Apache License
                            Version 2.0, January 2004
@@ -4359,7 +4359,7 @@ THE SOFTWARE.
 
 
 grpcio
-1.81.0
+1.81.1
 Apache-2.0
 
                                  Apache License
