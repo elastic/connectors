@@ -52,6 +52,7 @@ PING = "ping"
 PROJECT = "project"
 PROJECT_BY_KEY = "project_by_key"
 ISSUES = "all_issues"
+ISSUES_FOR_SERVER = "issues_for_server"
 ISSUE_DATA = "issue_data"
 ATTACHMENT_CLOUD = "attachment_cloud"
 ATTACHMENT_SERVER = "attachment_server"
@@ -67,6 +68,7 @@ URLS = {
     PROJECT: "rest/api/2/project?expand=description,lead,url",
     PROJECT_BY_KEY: "rest/api/2/project/{key}",
     ISSUES: "rest/api/3/search/jql?jql={jql}&fields=*all&maxResults={max_results}",
+    ISSUES_FOR_SERVER: "rest/api/2/search?jql={jql}&fields=*all&maxResults={max_results}&startAt={start_at}",
     ISSUE_DATA: "rest/api/2/issue/{id}",
     ATTACHMENT_CLOUD: "rest/api/2/attachment/content/{attachment_id}",
     ATTACHMENT_SERVER: "secure/attachment/{attachment_id}/{attachment_name}",
@@ -85,6 +87,9 @@ JIRA_DATA_CENTER = "jira_data_center"
 
 ATLASSIAN = "atlassian"
 USER_QUERY = "expand=groups,applicationRoles"
+# Bounded JQL catch-all for "all issues". The newer Cloud issue-search API only accepts
+# bounded JQL (empty-string is rejected); every issue has a key, so this matches them all.
+ALL_ISSUES_JQL = "key%20IS%20NOT%20EMPTY"
 
 
 class ThrottledError(Exception):
@@ -261,10 +266,6 @@ class JiraClient:
                 await self._handle_client_errors(url=url, exception=exception)
 
     async def _paginated_api_call_cursor_based(self, url_name, jql=None, **kwargs):
-        if not jql and url_name == ISSUES:
-            # only bound jql allowed, so using "key IS NOT EMPTY" as a catch-all for "all issues"
-            jql = "key%20IS%20NOT%20EMPTY"
-
         url = parse.urljoin(
             self.host_url,
             URLS[url_name].format(
@@ -344,7 +345,9 @@ class JiraClient:
 
     async def paginated_api_call(self, url_name, jql=None, **kwargs):
         """Make a paginated API call for Jira objects using the passed url_name with retry for the failed API calls.
-        Most Jira API endpoints use offset-based pagination. However, some endpoints use cursor-based pagination.
+        Most Jira API endpoints use offset-based pagination. However, the Jira Cloud issue search endpoint
+        (rest/api/3/search/jql) uses cursor-based pagination. Jira Server/Data Center do not expose that
+        endpoint, so issue searches there fall back to the deprecated offset-based rest/api/2/search endpoint.
         This method handles both.
 
         Args:
@@ -354,13 +357,24 @@ class JiraClient:
         Yields:
             response: Return api response.
         """
-        is_cursor_based_pagination = url_name == ISSUES
-        if is_cursor_based_pagination:
+        if not jql and url_name == ISSUES:
+            # Resolved once here so both pagination styles share a single source of the
+            # bounded "all issues" catch-all and never format jql=None into the URL.
+            jql = ALL_ISSUES_JQL
+
+        use_cursor_pagination = (
+            url_name == ISSUES and self.data_source_type == JIRA_CLOUD
+        )
+        if use_cursor_pagination:
             async for response in self._paginated_api_call_cursor_based(
                 url_name=url_name, jql=jql, **kwargs
             ):
                 yield response
         else:
+            if url_name == ISSUES:
+                # Server/DC (especially pre-v10) lack rest/api/3/search/jql; fall back
+                # to the deprecated offset-based rest/api/2/search endpoint.
+                url_name = ISSUES_FOR_SERVER
             async for response in self._paginated_api_call_offset_based(
                 url_name=url_name, jql=jql, **kwargs
             ):
@@ -1018,12 +1032,11 @@ class JiraDataSource(BaseDataSource):
             Dictionary: Jira issue to get indexed
             issue (dict): Issue response to fetch the attachments
         """
-        wildcard_query = "key%20IS%20NOT%20EMPTY"
         comma_separated_projects = '"' + '","'.join(self.jira_client.projects) + '"'
         projects_query = f"project in ({comma_separated_projects})"
 
         jql = custom_query or (
-            wildcard_query
+            ALL_ISSUES_JQL
             if self.jira_client.projects == [WILDCARD]
             else projects_query
         )
