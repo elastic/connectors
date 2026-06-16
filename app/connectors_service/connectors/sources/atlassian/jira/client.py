@@ -337,7 +337,10 @@ class JiraClient:
         self._logger.info(info_msg)
         async for response in self.paginated_api_call(url_name=ISSUES, jql=jql):
             for issue in response.get("issues", []):
-                yield issue
+                # Yield only the key to avoid pinning the large search payload.
+                issue_key = issue.get("key")
+                if issue_key:
+                    yield issue_key
 
     async def get_issues_for_issue_key(self, key):
         try:
