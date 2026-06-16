@@ -501,73 +501,80 @@ class JiraDataSource(BaseDataSource):
             )
             async for project in self.jira_client.get_projects():
                 await self._put_projects(project=project, timestamp=timestamp)
-            await self.queue.put("FINISHED")  # pyright: ignore
         except Exception as exception:
             self._logger.warning(
                 f"Skipping data for type: {PROJECT}. Error: {exception}"
             )
+        finally:
+            # Always signal completion so the consumer drains.
+            await self.queue.put("FINISHED")  # pyright: ignore
 
-    async def _put_issue(self, issue):
+    async def _put_issue(self, issue_key):
         """Put a specific issue as per the given issue_key in a queue
 
         Args:
-            issue (dict): Issue representation containing the key to enqueue
+            issue_key (str): Issue key identifying the issue to fetch and enqueue
         """
-        async for issue_metadata in self.jira_client.get_issues_for_issue_key(
-            key=issue.get("key")
-        ):
-            response_custom_fields = {}
-            response_fields = copy(issue_metadata.get("fields"))
-            for k, v in response_fields.items():
-                if self.custom_fields.get(k):
-                    response_custom_fields[self.custom_fields[k]] = v
+        try:
+            async for issue_metadata in self.jira_client.get_issues_for_issue_key(
+                key=issue_key
+            ):
+                response_custom_fields = {}
+                response_fields = copy(issue_metadata.get("fields"))
+                for k, v in response_fields.items():
+                    if self.custom_fields.get(k):
+                        response_custom_fields[self.custom_fields[k]] = v
 
-            for k in self.custom_fields.keys():
-                if k in response_fields:
-                    del response_fields[k]
+                for k in self.custom_fields.keys():
+                    if k in response_fields:
+                        del response_fields[k]
 
-            document = {
-                "_id": f"{response_fields.get('project', {}).get('name')}-{issue_metadata.get('key')}",
-                "_timestamp": response_fields.get("updated"),
-                "Key": issue_metadata.get("key"),
-                "Type": response_fields.get("issuetype", {}).get("name"),
-                "Issue": response_fields,
-                "Custom_Fields": response_custom_fields,
-            }
+                document = {
+                    "_id": f"{response_fields.get('project', {}).get('name')}-{issue_metadata.get('key')}",
+                    "_timestamp": response_fields.get("updated"),
+                    "Key": issue_metadata.get("key"),
+                    "Type": response_fields.get("issuetype", {}).get("name"),
+                    "Issue": response_fields,
+                    "Custom_Fields": response_custom_fields,
+                }
 
-            if restrictions := [
-                restriction.get("restrictionValue")
-                for restriction in response_fields.get("issuerestriction", {})
-                .get("issuerestrictions", {})
-                .get("projectrole", [])
-            ]:
-                issue_access_control = []
-                for role_id in restrictions:
-                    access_control = await anext(
-                        self.jira_client.project_role_members(
-                            project=response_fields.get("project"),
-                            role_id=role_id,
-                            access_control=set(),
+                if restrictions := [
+                    restriction.get("restrictionValue")
+                    for restriction in response_fields.get("issuerestriction", {})
+                    .get("issuerestrictions", {})
+                    .get("projectrole", [])
+                ]:
+                    issue_access_control = []
+                    for role_id in restrictions:
+                        access_control = await anext(
+                            self.jira_client.project_role_members(
+                                project=response_fields.get("project"),
+                                role_id=role_id,
+                                access_control=set(),
+                            )
                         )
+                        issue_access_control.extend(list(access_control))
+                else:
+                    issue_access_control = await self._issue_access_control(
+                        issue_key=issue_metadata.get("key"),
+                        project=response_fields.get("project"),
                     )
-                    issue_access_control.extend(list(access_control))
-            else:
-                issue_access_control = await self._issue_access_control(
-                    issue_key=issue_metadata.get("key"),
-                    project=response_fields.get("project"),
+                document_with_access_control = self._decorate_with_access_control(
+                    document=document, access_control=issue_access_control
                 )
-            document_with_access_control = self._decorate_with_access_control(
-                document=document, access_control=issue_access_control
-            )
-            await self.queue.put((document_with_access_control, None))  # pyright: ignore
-            attachments = issue_metadata.get("fields", {}).get("attachment")
-            if len(attachments) > 0:
-                await self._put_attachment(
-                    attachments=attachments,
-                    issue_key=issue_metadata.get("key"),
-                    access_control=issue_access_control,
+                await self.queue.put(
+                    (document_with_access_control, None)  # pyright: ignore
                 )
-        await self.queue.put("FINISHED")  # pyright: ignore
+                attachments = issue_metadata.get("fields", {}).get("attachment")
+                if len(attachments) > 0:
+                    await self._put_attachment(
+                        attachments=attachments,
+                        issue_key=issue_metadata.get("key"),
+                        access_control=issue_access_control,
+                    )
+        finally:
+            # Always signal completion (even on error); the error still propagates.
+            await self.queue.put("FINISHED")  # pyright: ignore
 
     async def _get_issues(self, custom_query=""):
         """Get issues with the help of REST APIs
@@ -585,10 +592,13 @@ class JiraDataSource(BaseDataSource):
             else projects_query
         )
 
-        async for issue in self.jira_client.get_issues_for_jql(jql=jql):
-            await self.fetchers.put(partial(self._put_issue, issue))
-            self.tasks += 1
-        await self.queue.put("FINISHED")  # pyright: ignore
+        try:
+            async for issue_key in self.jira_client.get_issues_for_jql(jql=jql):
+                await self.fetchers.put(partial(self._put_issue, issue_key))
+                self.tasks += 1
+        finally:
+            # Always signal completion (even on error); the error still propagates.
+            await self.queue.put("FINISHED")  # pyright: ignore
 
     async def _put_attachment(self, attachments, issue_key, access_control):
         """Put attachments of a specific issue in a queue
