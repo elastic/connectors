@@ -7,6 +7,7 @@
 from collections import defaultdict
 from functools import partial
 
+import gidgethub
 from connectors_sdk.source import BaseDataSource, ConfigurableFieldValueError
 from connectors_sdk.utils import nested_get_from_dict
 
@@ -395,7 +396,11 @@ class GitHubDataSource(BaseDataSource):
                         org_name = self.configuration["org_name"]
                         self.org_repos.setdefault(org_name, {})[repo_name] = repo_data
             return invalid_repos
-        except Exception as exception:
+        except (
+            gidgethub.GitHubException,
+            UnauthorizedException,
+            ForbiddenException,
+        ) as exception:
             self._logger.exception(
                 f"Error while checking for inaccessible repositories. Exception: {exception}.",
                 exc_info=True,
@@ -498,7 +503,7 @@ class GitHubDataSource(BaseDataSource):
         try:
             await self.github_client.ping()
             self._logger.debug("Successfully connected to GitHub.")
-        except Exception:
+        except (gidgethub.GitHubException, UnauthorizedException, ForbiddenException):
             self._logger.exception("Error while connecting to GitHub.")
             raise
 
@@ -639,35 +644,25 @@ class GitHubDataSource(BaseDataSource):
         # or _get_personal_repos/_get_org_repos, see comments there
         # for potential performance/rate limit implications
         self._logger.info("Fetching repos")
-        try:
-            if (
-                WILDCARD in self.configured_repos
-                and self.configuration["repo_type"] == "other"
+        if (
+            WILDCARD in self.configured_repos
+            and self.configuration["repo_type"] == "other"
+        ):
+            async for user in self._get_owners():
+                async for repo_object in self._get_personal_repos(user):
+                    yield self._convert_repo_object_to_doc(repo_object)
+        elif (
+            WILDCARD in self.configured_repos
+            and self.configuration["repo_type"] == "organization"
+        ):
+            async for org in self._get_owners():
+                async for repo_object in self._get_org_repos(org):
+                    yield self._convert_repo_object_to_doc(repo_object)
+        else:
+            async for repo_object in self._get_configured_repos(
+                configured_repos=self.configured_repos
             ):
-                async for user in self._get_owners():
-                    async for repo_object in self._get_personal_repos(user):
-                        yield self._convert_repo_object_to_doc(repo_object)
-            elif (
-                WILDCARD in self.configured_repos
-                and self.configuration["repo_type"] == "organization"
-            ):
-                async for org in self._get_owners():
-                    async for repo_object in self._get_org_repos(org):
-                        yield self._convert_repo_object_to_doc(repo_object)
-            else:
-                async for repo_object in self._get_configured_repos(
-                    configured_repos=self.configured_repos
-                ):
-                    yield repo_object
-        except UnauthorizedException:
-            raise
-        except ForbiddenException:
-            raise
-        except Exception as exception:
-            self._logger.warning(
-                f"Something went wrong while fetching the repository. Exception: {exception}",
-                exc_info=True,
-            )
+                yield repo_object
 
     def _convert_repo_object_to_doc(self, repo_object):
         repo_object = repo_object.copy()
@@ -772,55 +767,59 @@ class GitHubDataSource(BaseDataSource):
         self._logger.info(
             f"Fetching pull requests from '{repo_name}' with response_key '{response_key}' and filter query: '{filter_query}'"
         )
-        try:
-            query = (
-                GithubQuery.SEARCH_QUERY.value
-                if filter_query
-                else GithubQuery.PULL_REQUEST_QUERY.value
-            )
-            owner, repo = self.github_client.get_repo_details(repo_name=repo_name)
-            pull_request_variables = {
-                "owner": owner,
-                "name": repo,
-                "cursor": None,
-                "filter_query": filter_query,
-            }
-            async for response in self.github_client.paginated_api_call(
-                query=query,
-                variables=pull_request_variables,
-                keys=response_key,
+        query = (
+            GithubQuery.SEARCH_QUERY.value
+            if filter_query
+            else GithubQuery.PULL_REQUEST_QUERY.value
+        )
+        owner, repo = self.github_client.get_repo_details(repo_name=repo_name)
+        pull_request_variables = {
+            "owner": owner,
+            "name": repo,
+            "cursor": None,
+            "filter_query": filter_query,
+        }
+        async for response in self.github_client.paginated_api_call(
+            query=query,
+            variables=pull_request_variables,
+            keys=response_key,
+        ):
+            for pull_request in nested_get_from_dict(  # pyright: ignore
+                response, response_key + ["nodes"], default=[]
             ):
-                for pull_request in nested_get_from_dict(  # pyright: ignore
-                    response, response_key + ["nodes"], default=[]
-                ):
+                try:
                     async for pull_request_doc in self._extract_pull_request(
                         pull_request=pull_request, owner=owner, repo=repo
                     ):
                         yield pull_request_doc
-        except UnauthorizedException:
-            raise
-        except ForbiddenException:
-            raise
-        except Exception as exception:
-            self._logger.warning(
-                f"Something went wrong while fetching the pull requests. Exception: {exception}",
-                exc_info=True,
-            )
+                except gidgethub.GitHubException as exception:
+                    self._logger.warning(
+                        f"Skipping a pull request from '{repo_name}' due to an error while fetching its details. Exception: {exception}",
+                        exc_info=True,
+                    )
+                    continue
 
     async def _extract_issues(self, response, owner, repo, response_key):
         for issue in nested_get_from_dict(  # pyright: ignore
             response, response_key + ["nodes"], default=[]
         ):
-            issue.update(self._prepare_issue_doc(issue=issue))
-            for field in ["comments", "labels", "assignees"]:
-                await self._fetch_remaining_fields(
-                    type_obj=issue,
-                    object_type=ObjectType.ISSUE.value.lower(),
-                    owner=owner,
-                    repo=repo,
-                    field_type=field,
+            try:
+                issue.update(self._prepare_issue_doc(issue=issue))
+                for field in ["comments", "labels", "assignees"]:
+                    await self._fetch_remaining_fields(
+                        type_obj=issue,
+                        object_type=ObjectType.ISSUE.value.lower(),
+                        owner=owner,
+                        repo=repo,
+                        field_type=field,
+                    )
+                    issue.pop(field)
+            except gidgethub.GitHubException as exception:
+                self._logger.warning(
+                    f"Skipping an issue from '{owner}/{repo}' due to an error while fetching its details. Exception: {exception}",
+                    exc_info=True,
                 )
-                issue.pop(field)
+                continue
             yield issue
 
     async def _fetch_issues(
@@ -832,37 +831,27 @@ class GitHubDataSource(BaseDataSource):
         self._logger.info(
             f"Fetching issues from repo: {repo_name} with response_key: '{response_key}' and filter_query: '{filter_query}'"
         )
-        try:
-            query = (
-                GithubQuery.SEARCH_QUERY.value
-                if filter_query
-                else GithubQuery.ISSUE_QUERY.value
-            )
-            owner, repo = self.github_client.get_repo_details(repo_name=repo_name)
-            issue_variables = {
-                "owner": owner,
-                "name": repo,
-                "cursor": None,
-                "filter_query": filter_query,
-            }
-            async for response in self.github_client.paginated_api_call(
-                query=query,
-                variables=issue_variables,
-                keys=response_key,
+        query = (
+            GithubQuery.SEARCH_QUERY.value
+            if filter_query
+            else GithubQuery.ISSUE_QUERY.value
+        )
+        owner, repo = self.github_client.get_repo_details(repo_name=repo_name)
+        issue_variables = {
+            "owner": owner,
+            "name": repo,
+            "cursor": None,
+            "filter_query": filter_query,
+        }
+        async for response in self.github_client.paginated_api_call(
+            query=query,
+            variables=issue_variables,
+            keys=response_key,
+        ):
+            async for issue in self._extract_issues(
+                response=response, owner=owner, repo=repo, response_key=response_key
             ):
-                async for issue in self._extract_issues(
-                    response=response, owner=owner, repo=repo, response_key=response_key
-                ):
-                    yield issue
-        except UnauthorizedException:
-            raise
-        except ForbiddenException:
-            raise
-        except Exception as exception:
-            self._logger.warning(
-                f"Something went wrong while fetching the issues. Exception: {exception}",
-                exc_info=True,
-            )
+                yield issue
 
     async def _fetch_last_commit_timestamp(self, repo_name, path):
         commit, *_ = await self.github_client.get_github_item(  # pyright: ignore
@@ -901,53 +890,49 @@ class GitHubDataSource(BaseDataSource):
         self._logger.info(
             f"Fetching files from repo: '{repo_name}' (branch: '{default_branch}')"
         )
-        try:
-            file_tree = await self.github_client.get_github_item(
-                resource=self.github_client.endpoints["TREE"].format(
-                    repo_name=repo_name, default_branch=default_branch
-                )
+        file_tree = await self.github_client.get_github_item(
+            resource=self.github_client.endpoints["TREE"].format(
+                repo_name=repo_name, default_branch=default_branch
             )
+        )
 
-            for repo_object in file_tree.get("tree", []):
-                if repo_object["type"] == BLOB:
-                    if document := await self._format_file_document(
+        for repo_object in file_tree.get("tree", []):
+            if repo_object["type"] == BLOB:
+                try:
+                    document = await self._format_file_document(
                         repo_object=repo_object, repo_name=repo_name, schema=FILE_SCHEMA
-                    ):
-                        yield document
-        except UnauthorizedException:
-            raise
-        except ForbiddenException:
-            raise
-        except Exception as exception:
-            self._logger.warning(
-                f"Something went wrong while fetching the files of {repo_name}. Exception: {exception}",
-                exc_info=True,
-            )
+                    )
+                except gidgethub.GitHubException as exception:
+                    self._logger.warning(
+                        f"Skipping a file from '{repo_name}' due to an error while fetching its details. Exception: {exception}",
+                        exc_info=True,
+                    )
+                    continue
+                if document:
+                    yield document
 
     async def _fetch_files_by_path(self, repo_name, path):
         self._logger.info(f"Fetching files from repo: '{repo_name}' (path: '{path}')")
-        try:
-            for repo_object in await self.github_client.get_github_item(
-                resource=self.github_client.endpoints["PATH"].format(
-                    repo_name=repo_name, path=path
-                )
-            ):  # pyright: ignore
-                if repo_object["type"] == FILE:
-                    if document := await self._format_file_document(
+        for repo_object in await self.github_client.get_github_item(
+            resource=self.github_client.endpoints["PATH"].format(
+                repo_name=repo_name, path=path
+            )
+        ):  # pyright: ignore
+            if repo_object["type"] == FILE:
+                try:
+                    document = await self._format_file_document(
                         repo_object=repo_object,
                         repo_name=repo_name,
                         schema=PATH_SCHEMA,
-                    ):
-                        yield document
-        except UnauthorizedException:
-            raise
-        except ForbiddenException:
-            raise
-        except Exception as exception:
-            self._logger.warning(
-                f"Something went wrong while fetching the files of {repo_name}. Exception: {exception}",
-                exc_info=True,
-            )
+                    )
+                except gidgethub.GitHubException as exception:
+                    self._logger.warning(
+                        f"Skipping a file from '{repo_name}' due to an error while fetching its details. Exception: {exception}",
+                        exc_info=True,
+                    )
+                    continue
+                if document:
+                    yield document
 
     async def get_content(self, attachment, timestamp=None, doit=False):
         """Extracts the content for Apache TIKA supported file types.

@@ -29,6 +29,7 @@ from connectors.sources.github.utils import (
     PERSONAL_ACCESS_TOKEN,
     REPOSITORY_OBJECT,
     ForbiddenException,
+    RateLimitingError,
     UnauthorizedException,
 )
 from tests.commons import AsyncIterator
@@ -1017,8 +1018,56 @@ async def test_get_response_with_rate_limit_exceeded():
 async def test_put_to_sleep():
     async with create_github_source() as source:
         source.github_client._get_retry_after = AsyncMock(return_value=0)
-        with pytest.raises(Exception, match="Rate limit exceeded."):
-            await source.github_client._put_to_sleep("core")
+        # _put_to_sleep only sleeps; callers are responsible for re-raising RateLimitingError
+        assert await source.github_client._put_to_sleep("core") is None
+
+
+@pytest.mark.asyncio
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_get_github_item_reraises_rate_limiting_error():
+    async with create_github_source() as source:
+        source.github_client._get_retry_after = AsyncMock(return_value=0)
+        source.github_client._get_client.getitem = AsyncMock(
+            side_effect=gidgethub.RateLimitExceeded(rate_limit=None)
+        )
+        with pytest.raises(RateLimitingError):
+            await source.github_client.get_github_item("/user")
+
+
+@pytest.mark.asyncio
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_graphql_reraises_rate_limiting_error_on_rate_limited_query_error():
+    async with create_github_source() as source:
+        source.github_client._get_retry_after = AsyncMock(return_value=0)
+        source.github_client._get_client.graphql = Mock(
+            side_effect=QueryError(
+                {
+                    "errors": [
+                        {
+                            "type": "RATE_LIMITED",
+                            "message": "API rate limit exceeded for user ID: 123456",
+                        }
+                    ]
+                }
+            )
+        )
+        with pytest.raises(RateLimitingError):
+            await source.github_client.graphql(
+                query="QUERY", variables={"owner": "demo_user"}
+            )
+
+
+@pytest.mark.asyncio
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+@patch("connectors.sources.github.client.get_jwt", Mock(return_value="jwt"))
+async def test_github_app_get_reraises_rate_limiting_error():
+    async with create_github_source(auth_method=GITHUB_APP) as source:
+        source.github_client._get_retry_after = AsyncMock(return_value=0)
+        source.github_client._get_client._make_request = AsyncMock(
+            side_effect=gidgethub.RateLimitExceeded(rate_limit=None)
+        )
+        with pytest.raises(RateLimitingError):
+            await source.github_client._github_app_get("/app")
 
 
 @pytest.mark.asyncio
@@ -1372,16 +1421,18 @@ async def test_fetch_repos_organization():
 @pytest.mark.asyncio
 async def test_fetch_repos_when_user_repos_is_available():
     async with create_github_source(repos="demo_user/demo_repo, , demo_repo") as source:
+        repository_response = {
+            "repository": {
+                "id": "123",
+                "updatedAt": "2023-04-17T12:55:01Z",
+                "nameWithOwner": "demo_user/demo_repo",
+            }
+        }
         source.github_client.graphql = AsyncMock(
             side_effect=[
                 {"viewer": {"login": "owner1"}},
-                {
-                    "repository": {
-                        "id": "123",
-                        "updatedAt": "2023-04-17T12:55:01Z",
-                        "nameWithOwner": "demo_user/demo_repo",
-                    }
-                },
+                deepcopy(repository_response),
+                deepcopy(repository_response),
             ]
         )
         async for repo in source._fetch_repos():
@@ -1402,6 +1453,21 @@ async def test_fetch_repos_with_client_exception(exception):
     async with create_github_source() as source:
         source.github_client.graphql = Mock(side_effect=exception())
         with pytest.raises(exception):
+            async for _ in source._fetch_repos():
+                pass
+
+
+@pytest.mark.asyncio
+async def test_fetch_repos_propagates_github_exception():
+    # Failing to list repositories must fail the sync instead of being swallowed
+    async with create_github_source() as source:
+        source._get_owners = Mock(return_value=AsyncIterator(["demo_user"]))
+        source.github_client.get_user_repos = Mock(
+            side_effect=gidgethub.HTTPException(
+                status_code=HTTPStatus.INTERNAL_SERVER_ERROR
+            )
+        )
+        with pytest.raises(gidgethub.HTTPException):
             async for _ in source._fetch_repos():
                 pass
 
@@ -1483,13 +1549,60 @@ async def test_fetch_issues_with_client_exception(exception):
 
 
 @pytest.mark.asyncio
+async def test_fetch_issues_propagates_github_exception():
+    # A page-level GitHub failure must fail the sync instead of being swallowed
+    async with create_github_source() as source:
+        source.github_client.paginated_api_call = Mock(
+            side_effect=gidgethub.HTTPException(
+                status_code=HTTPStatus.INTERNAL_SERVER_ERROR
+            )
+        )
+        with pytest.raises(gidgethub.HTTPException):
+            async for _ in source._fetch_issues(
+                repo_name="demo_user/demo_repo",
+                response_key=[REPOSITORY_OBJECT, "issues"],
+            ):
+                pass
+
+
+@pytest.mark.asyncio
+async def test_fetch_issues_skips_document_on_github_exception(patch_logger):
+    # A failure while enriching a single issue is logged and skipped, not raised
+    issue_response = {
+        "repository": {
+            "issues": {"nodes": [{"id": "1", "updatedAt": "2023-04-19T08:56:23Z"}]}
+        }
+    }
+    async with create_github_source() as source:
+        source._fetch_remaining_fields = AsyncMock(
+            side_effect=gidgethub.HTTPException(
+                status_code=HTTPStatus.INTERNAL_SERVER_ERROR
+            )
+        )
+        with patch.object(
+            source.github_client,
+            "paginated_api_call",
+            side_effect=[AsyncIterator([issue_response])],
+        ):
+            issues = [
+                issue
+                async for issue in source._fetch_issues(
+                    repo_name="demo_user/demo_repo",
+                    response_key=[REPOSITORY_OBJECT, "issues"],
+                )
+            ]
+        assert issues == []
+        patch_logger.assert_present("Skipping an issue")
+
+
+@pytest.mark.asyncio
 async def test_fetch_pull_requests():
     async with create_github_source() as source:
         with patch.object(
             source.github_client,
             "paginated_api_call",
             side_effect=[
-                AsyncIterator([MOCK_RESPONSE_PULL]),
+                AsyncIterator([deepcopy(MOCK_RESPONSE_PULL)]),
                 AsyncIterator([MOCK_COMMENTS_RESPONSE]),
                 AsyncIterator([MOCK_REVIEW_REQUESTED_RESPONSE]),
                 AsyncIterator([MOCK_LABELS_RESPONSE]),
@@ -1518,6 +1631,61 @@ async def test_fetch_pull_requests_with_client_exception(exception):
                 response_key=[REPOSITORY_OBJECT, "pullRequests"],
             ):
                 pass
+
+
+@pytest.mark.asyncio
+async def test_fetch_pull_requests_propagates_github_exception():
+    # A page-level GitHub failure must fail the sync instead of being swallowed
+    async with create_github_source() as source:
+        source.github_client.paginated_api_call = Mock(
+            side_effect=gidgethub.HTTPException(
+                status_code=HTTPStatus.INTERNAL_SERVER_ERROR
+            )
+        )
+        with pytest.raises(gidgethub.HTTPException):
+            async for _ in source._fetch_pull_requests(
+                repo_name="demo_user/demo_repo",
+                response_key=[REPOSITORY_OBJECT, "pullRequests"],
+            ):
+                pass
+
+
+@pytest.mark.asyncio
+async def test_fetch_pull_requests_skips_document_on_github_exception(patch_logger):
+    # A failure while enriching a single pull request is logged and skipped, not raised
+    pull_response = {
+        "repository": {
+            "pullRequests": {
+                "nodes": [
+                    {
+                        "id": "1",
+                        "updatedAt": "2023-07-03T12:24:16Z",
+                        "reviews": {"nodes": []},
+                    }
+                ]
+            }
+        }
+    }
+    async with create_github_source() as source:
+        source._fetch_remaining_fields = AsyncMock(
+            side_effect=gidgethub.HTTPException(
+                status_code=HTTPStatus.INTERNAL_SERVER_ERROR
+            )
+        )
+        with patch.object(
+            source.github_client,
+            "paginated_api_call",
+            side_effect=[AsyncIterator([pull_response])],
+        ):
+            pulls = [
+                pull
+                async for pull in source._fetch_pull_requests(
+                    repo_name="demo_user/demo_repo",
+                    response_key=[REPOSITORY_OBJECT, "pullRequests"],
+                )
+            ]
+        assert pulls == []
+        patch_logger.assert_present("Skipping a pull request")
 
 
 @pytest.mark.asyncio
@@ -1567,7 +1735,7 @@ async def test_fetch_pull_requests_with_deleted_users():
             source.github_client,
             "paginated_api_call",
             side_effect=[
-                AsyncIterator([MOCK_RESPONSE_PULL]),
+                AsyncIterator([deepcopy(MOCK_RESPONSE_PULL)]),
                 AsyncIterator([MOCK_COMMENTS_RESPONSE]),
                 AsyncIterator([MOCK_REVIEW_REQUESTED_RESPONSE]),
                 AsyncIterator([MOCK_LABELS_RESPONSE]),
@@ -1643,6 +1811,37 @@ async def test_fetch_files_when_error_occurs(exception):
         with pytest.raises(exception):
             async for _ in source._fetch_files("demo_repo", "main"):
                 pass
+
+
+@pytest.mark.asyncio
+async def test_fetch_files_propagates_github_exception():
+    # Failing to fetch the repository tree must fail the sync instead of being swallowed
+    async with create_github_source() as source:
+        source.github_client.get_github_item = Mock(
+            side_effect=gidgethub.HTTPException(
+                status_code=HTTPStatus.INTERNAL_SERVER_ERROR
+            )
+        )
+        with pytest.raises(gidgethub.HTTPException):
+            async for _ in source._fetch_files("demo_repo", "main"):
+                pass
+
+
+@pytest.mark.asyncio
+async def test_fetch_files_skips_document_on_github_exception(patch_logger):
+    # A failure while fetching a single file's details is logged and skipped, not raised
+    async with create_github_source() as source:
+        with patch.object(
+            source.github_client,
+            "get_github_item",
+            side_effect=[
+                deepcopy(MOCK_TREE),
+                gidgethub.HTTPException(status_code=HTTPStatus.INTERNAL_SERVER_ERROR),
+            ],
+        ):
+            files = [doc async for doc in source._fetch_files("demo_repo", "main")]
+        assert files == []
+        patch_logger.assert_present("Skipping a file")
 
 
 @pytest.mark.asyncio
