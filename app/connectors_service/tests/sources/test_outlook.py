@@ -694,7 +694,7 @@ async def test_get_content_with_extraction_service():
     "is_cloud, user_response",
     [
         (True, {"value": [{"mail": "dummy.user@gmail.com"}]}),
-        (False, {"type": "user", "attributes": {"mail": "account"}}),
+        (False, {"type": "user", "attributes": {"mail": ["account@example.com"]}}),
     ],
 )
 @patch("connectors.sources.outlook.client.Account", return_value="account")
@@ -707,6 +707,69 @@ async def test_get_user_accounts_for_cloud(account, is_cloud, user_response):
             source_account
         ) in source.client._get_user_instance.get_user_accounts():
             assert source_account == "account"
+
+
+@pytest.mark.asyncio
+@patch("connectors.sources.outlook.client.logger.warning")
+@patch("connectors.sources.outlook.client.Account", return_value="account")
+async def test_exchange_get_user_accounts_skips_empty_mail(
+    mock_account, mock_warning
+):
+    valid_user = {
+        "type": "user",
+        "attributes": {"mail": ["valid.user@example.com"]},
+    }
+    user_without_mail = {
+        "type": "user",
+        "dn": "CN=NoMail,CN=Users,DC=example,DC=local",
+        "attributes": {"mail": []},
+    }
+    async with create_outlook_source() as source:
+        source.client.is_cloud = False
+        source.client._get_user_instance.get_users = AsyncIterator(
+            [user_without_mail, valid_user]
+        )
+
+        accounts = [
+            account
+            async for account in source.client._get_user_instance.get_user_accounts()
+        ]
+
+        assert accounts == ["account"]
+        mock_account.assert_called_once()
+        assert mock_account.call_args.kwargs["primary_smtp_address"] == (
+            "valid.user@example.com"
+        )
+        mock_warning.assert_called_once()
+        warning_message = mock_warning.call_args.args[0]
+        assert "Skipping Active Directory user without a valid mail attribute" in (
+            warning_message
+        )
+        assert "CN=NoMail,CN=Users,DC=example,DC=local" in warning_message
+
+
+@pytest.mark.asyncio
+@patch("connectors.sources.outlook.client.Account", return_value="account")
+async def test_exchange_get_user_accounts_normalizes_ldap_mail_list(mock_account):
+    user = {
+        "type": "user",
+        "attributes": {"mail": ["user@example.com"]},
+    }
+    async with create_outlook_source() as source:
+        source.client.is_cloud = False
+        source.client._get_user_instance.get_users = AsyncIterator([user])
+
+        accounts = [
+            account
+            async for account in source.client._get_user_instance.get_user_accounts()
+        ]
+
+        assert accounts == ["account"]
+        mock_account.assert_called_once_with(
+            primary_smtp_address="user@example.com",
+            config=mock_account.call_args.kwargs["config"],
+            access_type=mock_account.call_args.kwargs["access_type"],
+        )
 
 
 @pytest.mark.asyncio
