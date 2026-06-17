@@ -82,6 +82,15 @@ class SSLFailed(Exception):
     pass
 
 
+def _extract_ldap_mail(attributes):
+    mail = attributes.get("mail")
+    if isinstance(mail, list):
+        mail = mail[0] if mail else None
+    if not mail:
+        return None
+    return mail
+
+
 class ManageCertificate:
     async def store_certificate(self, certificate):
         async with aiofiles.open(CERT_FILE, "w") as file:
@@ -210,8 +219,16 @@ class ExchangeUsers:
             if "searchResRef" in user["type"]:
                 continue
 
+            mail = _extract_ldap_mail(user.get("attributes", {}))
+            if mail is None:
+                logger.warning(
+                    "Skipping Active Directory user without a valid mail attribute: "
+                    f"{user.get('dn', 'unknown')}"
+                )
+                continue
+
             user_account = Account(
-                primary_smtp_address=user.get("attributes", {}).get("mail"),
+                primary_smtp_address=mail,
                 config=configuration,
                 access_type=IMPERSONATION,
             )
