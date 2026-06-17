@@ -8181,7 +8181,7 @@ limitations under the License.
 
 
 tzlocal
-5.4
+5.4.3
 MIT
 Copyright 2011-2017 Lennart Regebro
 

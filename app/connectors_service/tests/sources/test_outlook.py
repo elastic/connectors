@@ -712,9 +712,7 @@ async def test_get_user_accounts_for_cloud(account, is_cloud, user_response):
 @pytest.mark.asyncio
 @patch("connectors.sources.outlook.client.logger.warning")
 @patch("connectors.sources.outlook.client.Account", return_value="account")
-async def test_exchange_get_user_accounts_skips_empty_mail(
-    mock_account, mock_warning
-):
+async def test_exchange_get_user_accounts_skips_empty_mail(mock_account, mock_warning):
     valid_user = {
         "type": "user",
         "attributes": {"mail": ["valid.user@example.com"]},
