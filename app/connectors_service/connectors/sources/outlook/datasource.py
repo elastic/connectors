@@ -12,7 +12,6 @@ from connectors_sdk.utils import (
     hash_id,
     iso_utc,
 )
-
 from exchangelib.errors import ErrorNonExistentMailbox
 
 from connectors.access_control import ACCESS_CONTROL, es_access_control_query
