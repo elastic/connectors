@@ -15,7 +15,7 @@ from connectors_sdk.utils import (
 from exchangelib.errors import ErrorNonExistentMailbox
 
 from connectors.access_control import ACCESS_CONTROL, es_access_control_query
-from connectors.sources.outlook.client import OutlookClient, SSLFailed
+from connectors.sources.outlook.client import OutlookClient
 from connectors.sources.outlook.constants import (
     CALENDAR_ATTACHMENT,
     DEFAULT_TIMEZONE,
@@ -585,12 +585,12 @@ class OutlookDataSource(BaseDataSource):
                 ):
                     yield child_calendar
             except ErrorNonExistentMailbox:
+                # A missing mailbox is specific to this account, so skip it and
+                # keep syncing the rest. Connection-wide failures (e.g. TLS
+                # errors) are intentionally not caught here: they affect every
+                # account, and silently skipping them would yield an empty but
+                # "successful" sync that deletes previously indexed documents.
                 self._logger.warning(
                     f"Skipping account {account.primary_smtp_address}: "
                     "the SMTP address has no associated mailbox."
-                )
-            except SSLFailed as e:
-                self._logger.warning(
-                    f"Skipping account {account.primary_smtp_address} "
-                    f"due to SSL error: {e}"
                 )

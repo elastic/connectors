@@ -12,7 +12,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from aiohttp import StreamReader
 from connectors_sdk.source import ConfigurableFieldValueError
-from exchangelib.errors import ErrorFolderNotFound, ErrorNonExistentMailbox
+from exchangelib.errors import (
+    ErrorFolderNotFound,
+    ErrorNonExistentMailbox,
+    TransportError,
+)
 from exchangelib.protocol import BaseProtocol, NoVerifyHTTPAdapter
 
 from connectors.sources.outlook import OutlookDataSource
@@ -20,7 +24,6 @@ from connectors.sources.outlook.client import (
     Forbidden,
     NotFound,
     RootCAAdapter,
-    SSLFailed,
     UnauthorizedException,
     UsersFetchFailed,
 )
@@ -849,22 +852,10 @@ def _account_raising_on_inbox(exception, smtp):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "exception, expected_warning",
-    [
-        (
-            ErrorNonExistentMailbox("no mailbox"),
-            "no associated mailbox",
-        ),
-        (SSLFailed("bad certificate"), "SSL error"),
-    ],
-)
-async def test_get_docs_skips_failing_account_and_continues(
-    exception, expected_warning
-):
+async def test_get_docs_skips_account_without_mailbox_and_continues():
     async with create_outlook_source() as source:
         bad_account = _account_raising_on_inbox(
-            exception, smtp="no.mailbox@example.com"
+            ErrorNonExistentMailbox("no mailbox"), smtp="no.mailbox@example.com"
         )
         source.client._get_user_instance.get_user_accounts = AsyncIterator(
             [bad_account, MockAccount()]
@@ -880,20 +871,28 @@ async def test_get_docs_skips_failing_account_and_continues(
         source._logger.warning.assert_called_once()
         warning_message = source._logger.warning.call_args.args[0]
         assert "no.mailbox@example.com" in warning_message
-        assert expected_warning in warning_message
+        assert "no associated mailbox" in warning_message
 
 
 @pytest.mark.asyncio
-async def test_get_docs_reraises_unexpected_account_error():
+@pytest.mark.parametrize(
+    "exception",
+    [
+        # Connection-wide failures (e.g. exchangelib wraps TLS errors as
+        # TransportError) must abort the sync rather than be silently skipped,
+        # which would empty the index.
+        TransportError("TLS verification failed"),
+        RuntimeError("boom"),
+    ],
+)
+async def test_get_docs_reraises_connection_wide_error(exception):
     async with create_outlook_source() as source:
-        bad_account = _account_raising_on_inbox(
-            RuntimeError("boom"), smtp="broken@example.com"
-        )
+        bad_account = _account_raising_on_inbox(exception, smtp="broken@example.com")
         source.client._get_user_instance.get_user_accounts = AsyncIterator(
             [bad_account, MockAccount()]
         )
 
-        with pytest.raises(RuntimeError):
+        with pytest.raises(type(exception)):
             async for _document, _ in source.get_docs():
                 pass
 
