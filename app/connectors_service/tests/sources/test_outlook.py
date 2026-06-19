@@ -12,12 +12,15 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from aiohttp import StreamReader
 from connectors_sdk.source import ConfigurableFieldValueError
-from exchangelib.errors import ErrorFolderNotFound
+from exchangelib.errors import ErrorFolderNotFound, ErrorNonExistentMailbox
+from exchangelib.protocol import BaseProtocol, NoVerifyHTTPAdapter
 
 from connectors.sources.outlook import OutlookDataSource
 from connectors.sources.outlook.client import (
     Forbidden,
     NotFound,
+    RootCAAdapter,
+    SSLFailed,
     UnauthorizedException,
     UsersFetchFailed,
 )
@@ -771,6 +774,62 @@ async def test_exchange_get_user_accounts_normalizes_ldap_mail_list(mock_account
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "ssl_enabled, ssl_ca, expected_adapter, cert_stored, warning_logged",
+    [
+        # SSL on with a certificate -> verify with RootCAAdapter.
+        (True, "PEM-CERTIFICATE", RootCAAdapter, True, False),
+        # SSL on without a certificate -> fall back instead of crashing.
+        (True, "", NoVerifyHTTPAdapter, False, True),
+        # SSL off -> no verification, no warning.
+        (False, "", NoVerifyHTTPAdapter, False, False),
+    ],
+)
+@patch("connectors.sources.outlook.client.logger.warning")
+@patch("connectors.sources.outlook.client.ManageCertificate")
+@patch("connectors.sources.outlook.client.Account", return_value="account")
+async def test_exchange_get_user_accounts_selects_ssl_adapter(
+    mock_account,
+    mock_manage_certificate,
+    mock_warning,
+    ssl_enabled,
+    ssl_ca,
+    expected_adapter,
+    cert_stored,
+    warning_logged,
+):
+    store_certificate = AsyncMock()
+    mock_manage_certificate.return_value.store_certificate = store_certificate
+    mock_manage_certificate.return_value.remove_certificate_file = AsyncMock()
+    BaseProtocol.HTTP_ADAPTER_CLS = object  # sentinel to prove it gets reassigned
+
+    async with create_outlook_source(data_source=OUTLOOK_SERVER) as source:
+        source.client.is_cloud = False
+        instance = source.client._get_user_instance
+        instance.ssl_enabled = ssl_enabled
+        instance.ssl_ca = ssl_ca
+        instance.get_users = AsyncIterator(
+            [{"type": "user", "attributes": {"mail": ["user@example.com"]}}]
+        )
+
+        accounts = [account async for account in instance.get_user_accounts()]
+
+        assert accounts == ["account"]
+        assert BaseProtocol.HTTP_ADAPTER_CLS is expected_adapter
+
+        if cert_stored:
+            store_certificate.assert_awaited_once_with(certificate=ssl_ca)
+        else:
+            store_certificate.assert_not_awaited()
+
+        if warning_logged:
+            mock_warning.assert_called_once()
+            assert "no certificate" in mock_warning.call_args.args[0]
+        else:
+            mock_warning.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_get_docs():
     async with create_outlook_source() as source:
         source.client._get_user_instance.get_user_accounts = AsyncIterator(
@@ -778,6 +837,65 @@ async def test_get_docs():
         )
         async for document, _ in source.get_docs():
             assert document in EXPECTED_RESPONSE
+
+
+def _account_raising_on_inbox(exception, smtp):
+    """Build a mock account whose first folder access (inbox) raises."""
+    account = MagicMock()
+    account.default_timezone = "UTC"
+    account.primary_smtp_address = smtp
+    type(account).inbox = mock.PropertyMock(side_effect=exception)
+    return account
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "exception, expected_warning",
+    [
+        (
+            ErrorNonExistentMailbox("no mailbox"),
+            "no associated mailbox",
+        ),
+        (SSLFailed("bad certificate"), "SSL error"),
+    ],
+)
+async def test_get_docs_skips_failing_account_and_continues(
+    exception, expected_warning
+):
+    async with create_outlook_source() as source:
+        bad_account = _account_raising_on_inbox(
+            exception, smtp="no.mailbox@example.com"
+        )
+        source.client._get_user_instance.get_user_accounts = AsyncIterator(
+            [bad_account, MockAccount()]
+        )
+        source._logger = MagicMock()
+
+        documents = [document async for document, _ in source.get_docs()]
+
+        # The healthy account is still fully synced past the mail stage.
+        assert all(document in EXPECTED_RESPONSE for document in documents)
+        assert any(document["_id"] == "contact_1" for document in documents)
+
+        source._logger.warning.assert_called_once()
+        warning_message = source._logger.warning.call_args.args[0]
+        assert "no.mailbox@example.com" in warning_message
+        assert expected_warning in warning_message
+
+
+@pytest.mark.asyncio
+async def test_get_docs_reraises_unexpected_account_error():
+    async with create_outlook_source() as source:
+        bad_account = _account_raising_on_inbox(
+            RuntimeError("boom"), smtp="broken@example.com"
+        )
+        source.client._get_user_instance.get_user_accounts = AsyncIterator(
+            [bad_account, MockAccount()]
+        )
+
+        with pytest.raises(RuntimeError):
+            async for _document, _ in source.get_docs():
+                pass
 
 
 @pytest.mark.asyncio
