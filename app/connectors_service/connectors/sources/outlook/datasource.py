@@ -13,8 +13,10 @@ from connectors_sdk.utils import (
     iso_utc,
 )
 
+from exchangelib.errors import ErrorNonExistentMailbox
+
 from connectors.access_control import ACCESS_CONTROL, es_access_control_query
-from connectors.sources.outlook.client import OutlookClient
+from connectors.sources.outlook.client import OutlookClient, SSLFailed
 from connectors.sources.outlook.constants import (
     CALENDAR_ATTACHMENT,
     DEFAULT_TIMEZONE,
@@ -562,24 +564,34 @@ class OutlookDataSource(BaseDataSource):
         """
         async for account in self.client._get_user_instance.get_user_accounts():
             timezone = account.default_timezone or DEFAULT_TIMEZONE
+            try:
+                async for mail in self._fetch_mails(account=account, timezone=timezone):
+                    yield mail
 
-            async for mail in self._fetch_mails(account=account, timezone=timezone):
-                yield mail
+                async for contact in self._fetch_contacts(
+                    account=account, timezone=timezone
+                ):
+                    yield contact
 
-            async for contact in self._fetch_contacts(
-                account=account, timezone=timezone
-            ):
-                yield contact
+                async for task in self._fetch_tasks(account=account, timezone=timezone):
+                    yield task
 
-            async for task in self._fetch_tasks(account=account, timezone=timezone):
-                yield task
+                async for calendar in self._fetch_calendars(
+                    account=account, timezone=timezone
+                ):
+                    yield calendar
 
-            async for calendar in self._fetch_calendars(
-                account=account, timezone=timezone
-            ):
-                yield calendar
-
-            async for child_calendar in self._fetch_child_calendars(
-                account=account, timezone=timezone
-            ):
-                yield child_calendar
+                async for child_calendar in self._fetch_child_calendars(
+                    account=account, timezone=timezone
+                ):
+                    yield child_calendar
+            except ErrorNonExistentMailbox:
+                self._logger.warning(
+                    f"Skipping account {account.primary_smtp_address}: "
+                    "the SMTP address has no associated mailbox."
+                )
+            except SSLFailed as e:
+                self._logger.warning(
+                    f"Skipping account {account.primary_smtp_address} "
+                    f"due to SSL error: {e}"
+                )
