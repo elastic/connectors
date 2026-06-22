@@ -200,16 +200,10 @@ class ExchangeUsers:
             yield user
 
     async def get_user_accounts(self):
-        if self.ssl_enabled and self.ssl_ca:
-            await ManageCertificate().store_certificate(certificate=self.ssl_ca)
-            BaseProtocol.HTTP_ADAPTER_CLS = RootCAAdapter
-        else:
-            if self.ssl_enabled and not self.ssl_ca:
-                logger.warning(
-                    "SSL is enabled but no certificate was provided; "
-                    "falling back to unverified SSL connections."
-                )
-            BaseProtocol.HTTP_ADAPTER_CLS = NoVerifyHTTPAdapter
+        await ManageCertificate().store_certificate(certificate=self.ssl_ca)
+        BaseProtocol.HTTP_ADAPTER_CLS = (
+            RootCAAdapter if self.ssl_enabled else NoVerifyHTTPAdapter
+        )
 
         credentials = Credentials(
             username=self.user,

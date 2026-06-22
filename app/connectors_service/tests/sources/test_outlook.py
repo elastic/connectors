@@ -17,13 +17,11 @@ from exchangelib.errors import (
     ErrorNonExistentMailbox,
     TransportError,
 )
-from exchangelib.protocol import BaseProtocol, NoVerifyHTTPAdapter
 
 from connectors.sources.outlook import OutlookDataSource
 from connectors.sources.outlook.client import (
     Forbidden,
     NotFound,
-    RootCAAdapter,
     UnauthorizedException,
     UsersFetchFailed,
 )
@@ -777,59 +775,39 @@ async def test_exchange_get_user_accounts_normalizes_ldap_mail_list(mock_account
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "ssl_enabled, ssl_ca, expected_adapter, cert_stored, warning_logged",
-    [
-        # SSL on with a certificate -> verify with RootCAAdapter.
-        (True, "PEM-CERTIFICATE", RootCAAdapter, True, False),
-        # SSL on without a certificate -> fall back instead of crashing.
-        (True, "", NoVerifyHTTPAdapter, False, True),
-        # SSL off -> no verification, no warning.
-        (False, "", NoVerifyHTTPAdapter, False, False),
-    ],
-)
-@patch("connectors.sources.outlook.client.logger.warning")
-@patch("connectors.sources.outlook.client.ManageCertificate")
-@patch("connectors.sources.outlook.client.Account", return_value="account")
-async def test_exchange_get_user_accounts_selects_ssl_adapter(
-    mock_account,
-    mock_manage_certificate,
-    mock_warning,
-    ssl_enabled,
-    ssl_ca,
-    expected_adapter,
-    cert_stored,
-    warning_logged,
-):
-    store_certificate = AsyncMock()
-    mock_manage_certificate.return_value.store_certificate = store_certificate
-    mock_manage_certificate.return_value.remove_certificate_file = AsyncMock()
-    BaseProtocol.HTTP_ADAPTER_CLS = object  # sentinel to prove it gets reassigned
+async def test_validate_config_raises_when_ssl_enabled_without_certificate():
+    # Enabling SSL without supplying a certificate is a misconfiguration: the
+    # required dependent `ssl_ca` field must be rejected up front rather than
+    # silently downgrading to unverified TLS or failing later mid-sync.
+    async with create_outlook_source(
+        data_source=OUTLOOK_SERVER,
+        username="foo.bar@gmail.com",
+        password="abc@123",
+        exchange_server="127.0.0.1",
+        domain="gmail.com",
+        active_directory_server="127.0.0.1",
+        ssl_enabled=True,
+        ssl_ca="",
+    ) as source:
+        with pytest.raises(ConfigurableFieldValueError) as exc_info:
+            await source.validate_config()
 
-    async with create_outlook_source(data_source=OUTLOOK_SERVER) as source:
-        source.client.is_cloud = False
-        instance = source.client._get_user_instance
-        instance.ssl_enabled = ssl_enabled
-        instance.ssl_ca = ssl_ca
-        instance.get_users = AsyncIterator(
-            [{"type": "user", "attributes": {"mail": ["user@example.com"]}}]
-        )
+        assert "SSL certificate" in str(exc_info.value)
 
-        accounts = [account async for account in instance.get_user_accounts()]
 
-        assert accounts == ["account"]
-        assert BaseProtocol.HTTP_ADAPTER_CLS is expected_adapter
-
-        if cert_stored:
-            store_certificate.assert_awaited_once_with(certificate=ssl_ca)
-        else:
-            store_certificate.assert_not_awaited()
-
-        if warning_logged:
-            mock_warning.assert_called_once()
-            assert "no certificate" in mock_warning.call_args.args[0]
-        else:
-            mock_warning.assert_not_called()
+@pytest.mark.asyncio
+async def test_validate_config_passes_when_ssl_enabled_with_certificate():
+    async with create_outlook_source(
+        data_source=OUTLOOK_SERVER,
+        username="foo.bar@gmail.com",
+        password="abc@123",
+        exchange_server="127.0.0.1",
+        domain="gmail.com",
+        active_directory_server="127.0.0.1",
+        ssl_enabled=True,
+        ssl_ca="-----BEGIN CERTIFICATE-----\nPEM\n-----END CERTIFICATE-----",
+    ) as source:
+        await source.validate_config()
 
 
 @pytest.mark.asyncio
