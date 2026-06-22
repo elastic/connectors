@@ -884,6 +884,59 @@ Certificate2
     assert formatted_multi_certificate == expected_formatted_multiple_certificates
 
 
+def test_get_pem_format_already_multiline_certificate_is_preserved():
+    # A certificate copied verbatim from a .pem file already has newlines; the
+    # intact "-----END CERTIFICATE-----" marker must not be reflowed/broken.
+    certificate = """-----BEGIN CERTIFICATE-----
+Certificate1
+Certificate2
+-----END CERTIFICATE-----"""
+
+    assert get_pem_format(key=certificate) == certificate
+
+
+def test_get_pem_format_already_multiline_private_key_is_preserved():
+    private_key = """-----BEGIN PRIVATE KEY-----
+PrivateKey
+-----END PRIVATE KEY-----"""
+
+    assert (
+        get_pem_format(key=private_key, postfix="-----END PRIVATE KEY-----")
+        == private_key
+    )
+
+
+def test_get_pem_format_multiline_with_surrounding_whitespace_is_normalized():
+    certificate = (
+        "\n  -----BEGIN CERTIFICATE-----  \n"
+        "Certificate1\n"
+        "\n"
+        "Certificate2\n"
+        "  -----END CERTIFICATE-----  \n"
+    )
+    expected = """-----BEGIN CERTIFICATE-----
+Certificate1
+Certificate2
+-----END CERTIFICATE-----"""
+
+    assert get_pem_format(key=certificate) == expected
+
+
+def test_get_pem_format_single_line_with_trailing_newline_is_reflowed():
+    # A single-line value with only a trailing newline must still be reflowed,
+    # not mistaken for already-multiline content.
+    certificate = (
+        "-----BEGIN CERTIFICATE----- Certificate1 Certificate2 "
+        "-----END CERTIFICATE-----\n"
+    )
+    expected = """-----BEGIN CERTIFICATE-----
+Certificate1
+Certificate2
+-----END CERTIFICATE-----"""
+
+    assert get_pem_format(key=certificate) == expected
+
+
 def test_truncate_id():
     long_id = "something-12341361361-21905128510263"
     truncated_id = truncate_id(long_id)

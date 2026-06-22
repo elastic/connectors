@@ -558,11 +558,21 @@ def is_expired(expires_at):
 
 
 def get_pem_format(key, postfix="-----END CERTIFICATE-----"):
-    """Convert key into PEM format.
+    """Convert a key/certificate into PEM format.
+
+    Accepts either of the two formats users commonly provide:
+
+    * Single-line, where the PEM line breaks have been replaced by spaces (for
+      example when pasted into a one-line field). The spaces are reflowed back
+      into the newlines that PEM requires.
+    * Already multi-line PEM (for example copied verbatim from a ``.pem`` file).
+      In this case the content is only whitespace-normalized and returned as-is.
+      Reflowing it would corrupt the intact ``BEGIN``/``END`` markers, which
+      themselves contain a space (e.g. ``-----END CERTIFICATE-----``).
 
     Args:
-        key (str): Key in raw format.
-        postfix (str): Certificate footer.
+        key (str): Key/certificate in raw format.
+        postfix (str): PEM footer used to detect single-line blocks.
 
     Returns:
         string: PEM format
@@ -574,6 +584,14 @@ def get_pem_format(key, postfix="-----END CERTIFICATE-----"):
                     PrivateKey
                     -----END PRIVATE KEY-----"
     """
+    key = key.strip()
+
+    # Already multi-line: skip the single-line reflow below, which would replace
+    # the space inside markers like "-----END CERTIFICATE-----" with a newline
+    # and break them. Just trim each line and drop blank lines.
+    if "\n" in key:
+        return "\n".join(line.strip() for line in key.splitlines() if line.strip())
+
     pem_format = ""
     reverse_split = postfix.count(" ")
     if key.count(postfix) == 1:
