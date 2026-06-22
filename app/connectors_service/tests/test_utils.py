@@ -847,6 +847,12 @@ def test_evaluate_timedelta():
     assert expected_response == "2023-02-19T14:25:05.158843"
 
 
+MULTILINE_PEM_CERTIFICATE = """-----BEGIN CERTIFICATE-----
+Certificate1
+Certificate2
+-----END CERTIFICATE-----"""
+
+
 def test_get_pem_format_with_postfix():
     expected_formatted_pem_key = """-----BEGIN PRIVATE KEY-----
 PrivateKey
@@ -860,14 +866,9 @@ PrivateKey
 
 
 def test_get_pem_format_multiline():
-    expected_formatted_certificate = """-----BEGIN CERTIFICATE-----
-Certificate1
-Certificate2
------END CERTIFICATE-----"""
     certificate = "-----BEGIN CERTIFICATE----- Certificate1 Certificate2 -----END CERTIFICATE-----"
 
-    formatted_certificate = get_pem_format(key=certificate)
-    assert formatted_certificate == expected_formatted_certificate
+    assert get_pem_format(key=certificate) == MULTILINE_PEM_CERTIFICATE
 
 
 def test_get_pem_format_multiple_certificates():
@@ -885,14 +886,8 @@ Certificate2
 
 
 def test_get_pem_format_already_multiline_certificate_is_preserved():
-    # A certificate copied verbatim from a .pem file already has newlines; the
-    # intact "-----END CERTIFICATE-----" marker must not be reflowed/broken.
-    certificate = """-----BEGIN CERTIFICATE-----
-Certificate1
-Certificate2
------END CERTIFICATE-----"""
-
-    assert get_pem_format(key=certificate) == certificate
+    # Copied verbatim from a .pem file: the intact END marker must not be broken.
+    assert get_pem_format(key=MULTILINE_PEM_CERTIFICATE) == MULTILINE_PEM_CERTIFICATE
 
 
 def test_get_pem_format_already_multiline_private_key_is_preserved():
@@ -914,27 +909,18 @@ def test_get_pem_format_multiline_with_surrounding_whitespace_is_normalized():
         "Certificate2\n"
         "  -----END CERTIFICATE-----  \n"
     )
-    expected = """-----BEGIN CERTIFICATE-----
-Certificate1
-Certificate2
------END CERTIFICATE-----"""
 
-    assert get_pem_format(key=certificate) == expected
+    assert get_pem_format(key=certificate) == MULTILINE_PEM_CERTIFICATE
 
 
 def test_get_pem_format_single_line_with_trailing_newline_is_reflowed():
-    # A single-line value with only a trailing newline must still be reflowed,
-    # not mistaken for already-multiline content.
+    # A trailing newline alone must not be mistaken for multi-line content.
     certificate = (
         "-----BEGIN CERTIFICATE----- Certificate1 Certificate2 "
         "-----END CERTIFICATE-----\n"
     )
-    expected = """-----BEGIN CERTIFICATE-----
-Certificate1
-Certificate2
------END CERTIFICATE-----"""
 
-    assert get_pem_format(key=certificate) == expected
+    assert get_pem_format(key=certificate) == MULTILINE_PEM_CERTIFICATE
 
 
 def test_truncate_id():

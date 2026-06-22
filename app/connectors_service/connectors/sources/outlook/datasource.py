@@ -297,20 +297,15 @@ class OutlookDataSource(BaseDataSource):
         }
 
     async def validate_config(self):
-        """Validate the connector configuration.
+        """Validate the configuration and the SSL certificate content.
 
-        The standard field checks only ensure the SSL certificate field is
-        *present*. This additionally verifies that the certificate is actually
-        loadable by OpenSSL. The certificate is validated through the exact same
-        transformation (`get_pem_format`) and loader (`load_verify_locations`)
-        used at sync time, so a certificate that passes here is guaranteed not to
-        fail later with an opaque "NO_CERTIFICATE_OR_CRL_FOUND" SSL error
-        mid-sync.
+        The base field checks only confirm the certificate is present; this also
+        confirms it actually loads, so a bad certificate fails here instead of
+        mid-sync with an opaque SSL error.
 
         Raises:
-            ConfigurableFieldValueError: if SSL verification is enabled for an
-                Exchange server source but the provided certificate is not a
-                valid, loadable PEM certificate.
+            ConfigurableFieldValueError: if SSL is enabled for an Exchange server
+                source but the certificate is not a loadable PEM certificate.
         """
         await super().validate_config()
         self._validate_ssl_certificate()
@@ -322,11 +317,9 @@ class OutlookDataSource(BaseDataSource):
         ):
             return
 
-        # `self.client.ssl_ca` is the exact PEM string that will be written to
-        # disk and handed to OpenSSL at sync time, so loading it here mirrors the
-        # runtime verification precisely. `load_verify_locations` raises
-        # ssl.SSLError for malformed PEM content and ValueError for empty/blank
-        # certificate data.
+        # Load the exact PEM string used at sync time through the same OpenSSL
+        # loader: load_verify_locations raises ssl.SSLError for malformed content
+        # and ValueError for empty data.
         try:
             ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT).load_verify_locations(
                 cadata=self.client.ssl_ca

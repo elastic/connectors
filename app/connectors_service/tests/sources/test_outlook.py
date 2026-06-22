@@ -774,11 +774,8 @@ async def test_exchange_get_user_accounts_normalizes_ldap_mail_list(mock_account
         )
 
 
-# A real, self-signed certificate in the single-line form the connector
-# receives. `get_pem_format` reflows it into multi-line PEM at sync time, so it
-# is the same content OpenSSL will actually load. `load_verify_locations` does
-# not check validity dates, so this fixed certificate never expires for the
-# purposes of these tests.
+# Real self-signed certificate in the single-line form the connector receives.
+# load_verify_locations ignores validity dates, so it never expires for tests.
 VALID_SSL_CERTIFICATE = (
     "-----BEGIN CERTIFICATE----- "
     "MIICsjCCAZqgAwIBAgIUDznyN9v5Tk8muCxnL/Z2EFwtcBwwDQYJKoZIhvcNAQELBQAwEjEQMA4GA1UEAwwHdGVzdC1jYTAgFw0wMDAxMDEwMDAwMDBaGA8yMDk5MDEwMTAwMDAwMFowEjEQMA4GA1UEAwwHdGVzdC1jYTCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAKmQAqm3+hDpc9+OzTjhY4W/AASWa41qyeuKNL+K8kA6oh9TmT20YhPikxPzQCUxp/prm9pi9eym5VLh2GhNCCE8LR+TsrwZr2MpYGZph1Y/y4U5PVNZCOboCee44F/6f8huYtHRPSrOC1OHehvMwdfAC63MueN6oBtxIIOwktxlkuBbK5wY97QlY/utxMa72APdUh3TAyzA6GWum7rLvEafj1v7WRpJWkTpklFXhaGVm4u/SWeFiMfgIK+ciJgT04k0qbk8APwuPmLR5VmUNyMDOgLMtSLu9sbntVv+eLoAAiOFLk5ZpHs0Q8UPANdNMV03tgxaDnvtgzh7W0Qgvo8CAwEAATANBgkqhkiG9w0BAQsFAAOCAQEAGPI/7KUIjHsNuRHUALIRtNVlhD80gdzKN27IEFLTu/jbiNEIGY59oV0qvx+iCPrLTLDnJkxHlnwApwB2WulXNg7+nYGHPP03jSLXKA+61GAN/ghPULl1DcA5Q+gunhPA4ITyqOr70i/3fphSXWjWfcX8hcym3pDcKzPIY3wV+dVeVdRdi9C1cTRuZ7zh2Chm7e4vM1SagLybMA4F8yckPJsRdVV5hZ+W6cI1H9fhjq/G1N0TyH4wG3FffRVniYVgAxY9m9RgMiQ5qCuc2PdktO7ovmNybijVG1aLVcHcYAS285f4JnZPIAJJMvCvW0NXDDphBNQPG5Nt1PHVgzUiNA== "
@@ -788,9 +785,8 @@ VALID_SSL_CERTIFICATE = (
 
 @pytest.mark.asyncio
 async def test_validate_config_raises_when_ssl_enabled_without_certificate():
-    # Enabling SSL without supplying a certificate is a misconfiguration: the
-    # required dependent `ssl_ca` field must be rejected up front rather than
-    # silently downgrading to unverified TLS or failing later mid-sync.
+    # SSL enabled without a certificate must be rejected up front, not silently
+    # downgraded or failed mid-sync.
     async with create_outlook_source(
         data_source=OUTLOOK_SERVER,
         username="foo.bar@gmail.com",
@@ -809,9 +805,8 @@ async def test_validate_config_raises_when_ssl_enabled_without_certificate():
 
 @pytest.mark.asyncio
 async def test_validate_config_raises_when_certificate_is_invalid():
-    # The certificate field is present (passes the required-field check) but its
-    # content is not a loadable certificate, which would otherwise crash mid-sync
-    # with an opaque X509 SSL error.
+    # A present but unloadable certificate would otherwise crash mid-sync with an
+    # opaque X509 error.
     async with create_outlook_source(
         data_source=OUTLOOK_SERVER,
         username="foo.bar@gmail.com",
