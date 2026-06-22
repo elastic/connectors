@@ -1602,7 +1602,7 @@ Apache License
 
 
 anyio
-4.13.0
+4.14.0
 MIT
 The MIT License (MIT)
 
@@ -4090,7 +4090,7 @@ Apache Software License
 
 
 google-auth
-2.53.0
+2.55.0
 Apache Software License
                                  Apache License
                            Version 2.0, January 2004
@@ -8047,8 +8047,8 @@ limitations under the License.
 
 
 tzlocal
-5.3.1
-MIT License
+5.4.3
+MIT
 Copyright 2011-2017 Lennart Regebro
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
