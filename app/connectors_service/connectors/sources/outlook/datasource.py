@@ -317,13 +317,15 @@ class OutlookDataSource(BaseDataSource):
         ):
             return
 
-        # Load the exact PEM string used at sync time through the same OpenSSL
-        # loader: load_verify_locations raises ssl.SSLError for malformed content
-        # and ValueError for empty data.
+        # Build the context exactly as the sync path does (ssl.create_default_context
+        # with the same PEM string) so a certificate that validates here is
+        # guaranteed to load at sync time, including stricter X.509 parsing.
+        # create_default_context does not reject empty cadata (it would silently
+        # fall back to system CAs), so an empty certificate is rejected explicitly.
         try:
-            ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT).load_verify_locations(
-                cadata=self.client.ssl_ca
-            )
+            if not self.client.ssl_ca:
+                raise ValueError("No SSL certificate was provided.")
+            ssl.create_default_context(cadata=self.client.ssl_ca)
         except (ssl.SSLError, ValueError) as exception:
             msg = (
                 "The provided SSL certificate is not valid. Provide a valid "

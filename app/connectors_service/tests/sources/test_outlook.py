@@ -709,7 +709,9 @@ async def test_get_content_with_extraction_service():
     ],
 )
 @patch("connectors.sources.outlook.client.Account", return_value="account")
-async def test_get_user_accounts_for_cloud(account, is_cloud, user_response):
+async def test_get_user_accounts_for_cloud(
+    account, is_cloud, user_response, reset_http_adapter_cls
+):
     async with create_outlook_source() as source:
         source.client.is_cloud = is_cloud
         source.client._get_user_instance.get_users = AsyncIterator([user_response])
@@ -723,7 +725,9 @@ async def test_get_user_accounts_for_cloud(account, is_cloud, user_response):
 @pytest.mark.asyncio
 @patch("connectors.sources.outlook.client.logger.warning")
 @patch("connectors.sources.outlook.client.Account", return_value="account")
-async def test_exchange_get_user_accounts_skips_empty_mail(mock_account, mock_warning):
+async def test_exchange_get_user_accounts_skips_empty_mail(
+    mock_account, mock_warning, reset_http_adapter_cls
+):
     valid_user = {
         "type": "user",
         "attributes": {"mail": ["valid.user@example.com"]},
@@ -759,7 +763,9 @@ async def test_exchange_get_user_accounts_skips_empty_mail(mock_account, mock_wa
 
 @pytest.mark.asyncio
 @patch("connectors.sources.outlook.client.Account", return_value="account")
-async def test_exchange_get_user_accounts_normalizes_ldap_mail_list(mock_account):
+async def test_exchange_get_user_accounts_normalizes_ldap_mail_list(
+    mock_account, reset_http_adapter_cls
+):
     user = {
         "type": "user",
         "attributes": {"mail": ["user@example.com"]},
@@ -931,6 +937,45 @@ async def test_exchange_get_user_accounts_raises_when_ssl_enabled_with_bad_cert(
             pass
 
     assert BaseProtocol.HTTP_ADAPTER_CLS is original_adapter_cls
+
+
+@pytest.mark.asyncio
+@patch("connectors.sources.outlook.client.Account", return_value="account")
+async def test_exchange_get_user_accounts_raises_on_markerless_cert_via_client(
+    mock_account, reset_http_adapter_cls
+):
+    # Exercise the real production path through OutlookClient: get_pem_format
+    # strips marker-less garbage to an empty string, which must hit the
+    # "no CA certificate" guard rather than silently using system CAs.
+    async with create_outlook_source(
+        ssl_enabled=True,
+        ssl_ca="this is not a certificate",
+        **EXCHANGE_SERVER_CONFIG,
+    ) as source:
+        source.client._get_user_instance.get_users = AsyncIterator([EXCHANGE_LDAP_USER])
+
+        with pytest.raises(SSLCertificateError):
+            async for _ in source.client._get_user_instance.get_user_accounts():
+                pass
+
+
+@pytest.mark.asyncio
+@patch("connectors.sources.outlook.client.Account", return_value="account")
+async def test_exchange_get_user_accounts_raises_on_unloadable_pem_via_client(
+    mock_account, reset_http_adapter_cls
+):
+    # A string that survives get_pem_format as a non-empty (but bogus) PEM block
+    # must hit the "could not be loaded" guard at sync time.
+    async with create_outlook_source(
+        ssl_enabled=True,
+        ssl_ca="-----BEGIN CERTIFICATE----- notbase64 -----END CERTIFICATE-----",
+        **EXCHANGE_SERVER_CONFIG,
+    ) as source:
+        source.client._get_user_instance.get_users = AsyncIterator([EXCHANGE_LDAP_USER])
+
+        with pytest.raises(SSLCertificateError):
+            async for _ in source.client._get_user_instance.get_user_accounts():
+                pass
 
 
 @pytest.mark.asyncio
