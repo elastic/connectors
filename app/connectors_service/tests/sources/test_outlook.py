@@ -11,6 +11,7 @@ from unittest import mock
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+import requests.adapters
 from aiohttp import StreamReader
 from connectors_sdk.source import ConfigurableFieldValueError
 from exchangelib.errors import (
@@ -805,8 +806,10 @@ EXCHANGE_LDAP_USER = {
 @pytest.fixture
 def reset_http_adapter_cls():
     original_adapter_cls = BaseProtocol.HTTP_ADAPTER_CLS
+    original_ssl_context = InMemoryCAAdapter.ssl_context
     yield
     BaseProtocol.HTTP_ADAPTER_CLS = original_adapter_cls
+    InMemoryCAAdapter.ssl_context = original_ssl_context
 
 
 @pytest.mark.asyncio
@@ -828,6 +831,31 @@ async def test_exchange_get_user_accounts_uses_in_memory_ssl_adapter(
         assert isinstance(InMemoryCAAdapter.ssl_context, ssl.SSLContext)
         assert InMemoryCAAdapter.ssl_context.verify_mode == ssl.CERT_REQUIRED
         assert InMemoryCAAdapter.ssl_context.check_hostname is True
+
+
+@pytest.mark.parametrize("manager_method", ["init_poolmanager", "proxy_manager_for"])
+def test_in_memory_ca_adapter_injects_ssl_context(
+    manager_method, reset_http_adapter_cls
+):
+    sentinel_context = MagicMock(spec=ssl.SSLContext)
+    InMemoryCAAdapter.ssl_context = sentinel_context
+
+    with patch.object(requests.adapters.HTTPAdapter, manager_method) as mock_super:
+        adapter = InMemoryCAAdapter()
+        getattr(adapter, manager_method)()
+
+        # The configured in-memory context must be forwarded to urllib3.
+        assert mock_super.call_args.kwargs["ssl_context"] is sentinel_context
+
+
+def test_in_memory_ca_adapter_omits_ssl_context_when_unset(reset_http_adapter_cls):
+    InMemoryCAAdapter.ssl_context = None
+
+    with patch.object(requests.adapters.HTTPAdapter, "init_poolmanager") as mock_super:
+        adapter = InMemoryCAAdapter()
+        adapter.init_poolmanager()
+
+        assert "ssl_context" not in mock_super.call_args.kwargs
 
 
 @pytest.mark.asyncio
