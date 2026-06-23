@@ -4,14 +4,16 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 
+import ssl
 from copy import copy
 from functools import cached_property, partial
 
-from connectors_sdk.source import BaseDataSource
+from connectors_sdk.source import BaseDataSource, ConfigurableFieldValueError
 from connectors_sdk.utils import (
     hash_id,
     iso_utc,
 )
+from exchangelib.errors import ErrorNonExistentMailbox
 
 from connectors.access_control import ACCESS_CONTROL, es_access_control_query
 from connectors.sources.outlook.client import OutlookClient
@@ -294,6 +296,41 @@ class OutlookDataSource(BaseDataSource):
             },
         }
 
+    async def validate_config(self):
+        """Validate the configuration and the SSL certificate content.
+
+        The base field checks only confirm the certificate is present; this also
+        confirms it actually loads, so a bad certificate fails here instead of
+        mid-sync with an opaque SSL error.
+
+        Raises:
+            ConfigurableFieldValueError: if SSL is enabled for an Exchange server
+                source but the certificate is not a loadable PEM certificate.
+        """
+        await super().validate_config()
+        self._validate_ssl_certificate()
+
+    def _validate_ssl_certificate(self):
+        if (
+            self.configuration["data_source"] != OUTLOOK_SERVER
+            or not self.configuration["ssl_enabled"]
+        ):
+            return
+
+        # Load the exact PEM string used at sync time through the same OpenSSL
+        # loader: load_verify_locations raises ssl.SSLError for malformed content
+        # and ValueError for empty data.
+        try:
+            ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT).load_verify_locations(
+                cadata=self.client.ssl_ca
+            )
+        except (ssl.SSLError, ValueError) as exception:
+            msg = (
+                "The provided SSL certificate is not valid. Provide a valid "
+                "PEM-encoded certificate."
+            )
+            raise ConfigurableFieldValueError(msg) from exception
+
     def _dls_enabled(self):
         """Check if document level security is enabled. This method checks whether document level security (DLS) is enabled based on the provided configuration.
 
@@ -562,24 +599,34 @@ class OutlookDataSource(BaseDataSource):
         """
         async for account in self.client._get_user_instance.get_user_accounts():
             timezone = account.default_timezone or DEFAULT_TIMEZONE
+            try:
+                async for mail in self._fetch_mails(account=account, timezone=timezone):
+                    yield mail
 
-            async for mail in self._fetch_mails(account=account, timezone=timezone):
-                yield mail
+                async for contact in self._fetch_contacts(
+                    account=account, timezone=timezone
+                ):
+                    yield contact
 
-            async for contact in self._fetch_contacts(
-                account=account, timezone=timezone
-            ):
-                yield contact
+                async for task in self._fetch_tasks(account=account, timezone=timezone):
+                    yield task
 
-            async for task in self._fetch_tasks(account=account, timezone=timezone):
-                yield task
+                async for calendar in self._fetch_calendars(
+                    account=account, timezone=timezone
+                ):
+                    yield calendar
 
-            async for calendar in self._fetch_calendars(
-                account=account, timezone=timezone
-            ):
-                yield calendar
-
-            async for child_calendar in self._fetch_child_calendars(
-                account=account, timezone=timezone
-            ):
-                yield child_calendar
+                async for child_calendar in self._fetch_child_calendars(
+                    account=account, timezone=timezone
+                ):
+                    yield child_calendar
+            except ErrorNonExistentMailbox:
+                # A missing mailbox is specific to this account, so skip it and
+                # keep syncing the rest. Connection-wide failures (e.g. TLS
+                # errors) are intentionally not caught here: they affect every
+                # account, and silently skipping them would yield an empty but
+                # "successful" sync that deletes previously indexed documents.
+                self._logger.warning(
+                    f"Skipping account {account.primary_smtp_address}: "
+                    "the SMTP address has no associated mailbox."
+                )
