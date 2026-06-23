@@ -5,6 +5,7 @@
 #
 """Tests the Outlook source class methods"""
 
+import ssl
 from contextlib import asynccontextmanager
 from unittest import mock
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -17,10 +18,13 @@ from exchangelib.errors import (
     ErrorNonExistentMailbox,
     TransportError,
 )
+from exchangelib.protocol import BaseProtocol, NoVerifyHTTPAdapter
 
 from connectors.sources.outlook import OutlookDataSource
 from connectors.sources.outlook.client import (
+    ExchangeUsers,
     Forbidden,
+    InMemoryCAAdapter,
     NotFound,
     UnauthorizedException,
     UsersFetchFailed,
@@ -29,6 +33,7 @@ from connectors.sources.outlook.constants import (
     OUTLOOK_CLOUD,
     OUTLOOK_SERVER,
 )
+from connectors.utils import get_pem_format
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
 
@@ -781,6 +786,143 @@ VALID_SSL_CERTIFICATE = (
     "MIICsjCCAZqgAwIBAgIUDznyN9v5Tk8muCxnL/Z2EFwtcBwwDQYJKoZIhvcNAQELBQAwEjEQMA4GA1UEAwwHdGVzdC1jYTAgFw0wMDAxMDEwMDAwMDBaGA8yMDk5MDEwMTAwMDAwMFowEjEQMA4GA1UEAwwHdGVzdC1jYTCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAKmQAqm3+hDpc9+OzTjhY4W/AASWa41qyeuKNL+K8kA6oh9TmT20YhPikxPzQCUxp/prm9pi9eym5VLh2GhNCCE8LR+TsrwZr2MpYGZph1Y/y4U5PVNZCOboCee44F/6f8huYtHRPSrOC1OHehvMwdfAC63MueN6oBtxIIOwktxlkuBbK5wY97QlY/utxMa72APdUh3TAyzA6GWum7rLvEafj1v7WRpJWkTpklFXhaGVm4u/SWeFiMfgIK+ciJgT04k0qbk8APwuPmLR5VmUNyMDOgLMtSLu9sbntVv+eLoAAiOFLk5ZpHs0Q8UPANdNMV03tgxaDnvtgzh7W0Qgvo8CAwEAATANBgkqhkiG9w0BAQsFAAOCAQEAGPI/7KUIjHsNuRHUALIRtNVlhD80gdzKN27IEFLTu/jbiNEIGY59oV0qvx+iCPrLTLDnJkxHlnwApwB2WulXNg7+nYGHPP03jSLXKA+61GAN/ghPULl1DcA5Q+gunhPA4ITyqOr70i/3fphSXWjWfcX8hcym3pDcKzPIY3wV+dVeVdRdi9C1cTRuZ7zh2Chm7e4vM1SagLybMA4F8yckPJsRdVV5hZ+W6cI1H9fhjq/G1N0TyH4wG3FffRVniYVgAxY9m9RgMiQ5qCuc2PdktO7ovmNybijVG1aLVcHcYAS285f4JnZPIAJJMvCvW0NXDDphBNQPG5Nt1PHVgzUiNA== "
     "-----END CERTIFICATE-----"
 )
+
+EXCHANGE_SERVER_CONFIG = {
+    "data_source": OUTLOOK_SERVER,
+    "username": "foo.bar@gmail.com",
+    "password": "abc@123",
+    "exchange_server": "127.0.0.1",
+    "domain": "gmail.com",
+    "active_directory_server": "127.0.0.1",
+}
+
+EXCHANGE_LDAP_USER = {
+    "type": "user",
+    "attributes": {"mail": ["user@example.com"]},
+}
+
+
+@pytest.fixture
+def reset_http_adapter_cls():
+    original_adapter_cls = BaseProtocol.HTTP_ADAPTER_CLS
+    yield
+    BaseProtocol.HTTP_ADAPTER_CLS = original_adapter_cls
+
+
+@pytest.mark.asyncio
+@patch("connectors.sources.outlook.client.Account", return_value="account")
+async def test_exchange_get_user_accounts_uses_in_memory_ssl_adapter(
+    mock_account, reset_http_adapter_cls
+):
+    async with create_outlook_source(
+        ssl_enabled=True,
+        ssl_ca=VALID_SSL_CERTIFICATE,
+        **EXCHANGE_SERVER_CONFIG,
+    ) as source:
+        source.client._get_user_instance.get_users = AsyncIterator([EXCHANGE_LDAP_USER])
+
+        async for _ in source.client._get_user_instance.get_user_accounts():
+            pass
+
+        assert BaseProtocol.HTTP_ADAPTER_CLS is InMemoryCAAdapter
+        assert isinstance(InMemoryCAAdapter.ssl_context, ssl.SSLContext)
+        assert InMemoryCAAdapter.ssl_context.verify_mode == ssl.CERT_REQUIRED
+        assert InMemoryCAAdapter.ssl_context.check_hostname is True
+
+
+@pytest.mark.asyncio
+@patch("connectors.sources.outlook.client.ssl.create_default_context")
+@patch("connectors.sources.outlook.client.Account", return_value="account")
+async def test_exchange_get_user_accounts_builds_ssl_context_from_pem(
+    mock_account, mock_create_default_context, reset_http_adapter_cls
+):
+    mock_context = MagicMock(spec=ssl.SSLContext)
+    mock_create_default_context.return_value = mock_context
+    pem_certificate = get_pem_format(VALID_SSL_CERTIFICATE)
+
+    async with create_outlook_source(
+        ssl_enabled=True,
+        ssl_ca=VALID_SSL_CERTIFICATE,
+        **EXCHANGE_SERVER_CONFIG,
+    ) as source:
+        source.client._get_user_instance.get_users = AsyncIterator([EXCHANGE_LDAP_USER])
+
+        async for _ in source.client._get_user_instance.get_user_accounts():
+            pass
+
+        mock_create_default_context.assert_called_once_with(cadata=pem_certificate)
+        assert InMemoryCAAdapter.ssl_context is mock_context
+
+
+@pytest.mark.asyncio
+@patch("connectors.sources.outlook.client.logger.warning")
+@patch("connectors.sources.outlook.client.Account", return_value="account")
+async def test_exchange_get_user_accounts_falls_back_when_ssl_enabled_without_cert(
+    mock_account, mock_warning, reset_http_adapter_cls
+):
+    exchange_users = ExchangeUsers(
+        ad_server="127.0.0.1",
+        domain="example.com",
+        exchange_server="127.0.0.1",
+        user="user",
+        password="pass",
+        ssl_enabled=True,
+        ssl_ca="",
+    )
+    exchange_users.get_users = AsyncIterator([EXCHANGE_LDAP_USER])
+
+    async for _ in exchange_users.get_user_accounts():
+        pass
+
+    assert BaseProtocol.HTTP_ADAPTER_CLS is NoVerifyHTTPAdapter
+    mock_warning.assert_called_once()
+    warning_message = mock_warning.call_args.args[0]
+    assert "SSL is enabled but no certificate was provided" in warning_message
+
+
+@pytest.mark.asyncio
+@patch("connectors.sources.outlook.client.logger.warning")
+@patch("connectors.sources.outlook.client.Account", return_value="account")
+async def test_exchange_get_user_accounts_uses_no_verify_when_ssl_disabled(
+    mock_account, mock_warning, reset_http_adapter_cls
+):
+    exchange_users = ExchangeUsers(
+        ad_server="127.0.0.1",
+        domain="example.com",
+        exchange_server="127.0.0.1",
+        user="user",
+        password="pass",
+        ssl_enabled=False,
+        ssl_ca="",
+    )
+    exchange_users.get_users = AsyncIterator([EXCHANGE_LDAP_USER])
+
+    async for _ in exchange_users.get_user_accounts():
+        pass
+
+    assert BaseProtocol.HTTP_ADAPTER_CLS is NoVerifyHTTPAdapter
+    mock_warning.assert_not_called()
+
+
+@pytest.mark.asyncio
+@patch("connectors.sources.outlook.client.Account", return_value="account")
+async def test_exchange_get_user_accounts_does_not_write_cert_file(
+    mock_account, reset_http_adapter_cls
+):
+    with patch("aiofiles.open", create=True) as mock_open:
+        async with create_outlook_source(
+            ssl_enabled=True,
+            ssl_ca=VALID_SSL_CERTIFICATE,
+            **EXCHANGE_SERVER_CONFIG,
+        ) as source:
+            source.client._get_user_instance.get_users = AsyncIterator(
+                [EXCHANGE_LDAP_USER]
+            )
+
+            async for _ in source.client._get_user_instance.get_user_accounts():
+                pass
+
+        mock_open.assert_not_called()
 
 
 @pytest.mark.asyncio

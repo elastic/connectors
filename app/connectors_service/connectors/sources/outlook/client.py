@@ -5,13 +5,11 @@
 #
 
 import asyncio
-import os
+import ssl
 from functools import cached_property
 
-import aiofiles
 import aiohttp
 import requests.adapters
-from aiofiles.os import remove
 from connectors_sdk.logger import logger
 from exchangelib import (
     IMPERSONATION,
@@ -30,7 +28,6 @@ from ldap3 import SAFE_SYNC, Connection, Server
 from connectors.sources.outlook.constants import (
     API_SCOPE,
     CALENDAR_FIELDS,
-    CERT_FILE,
     CONTACT_FIELDS,
     EWS_ENDPOINT,
     MAIL_FIELDS,
@@ -78,10 +75,6 @@ class NotFound(Exception):
     pass
 
 
-class SSLFailed(Exception):
-    pass
-
-
 def _extract_ldap_mail(attributes):
     mail = attributes.get("mail")
     if isinstance(mail, list):
@@ -91,33 +84,22 @@ def _extract_ldap_mail(attributes):
     return mail
 
 
-class ManageCertificate:
-    async def store_certificate(self, certificate):
-        async with aiofiles.open(CERT_FILE, "w") as file:
-            await file.write(certificate)
+class InMemoryCAAdapter(requests.adapters.HTTPAdapter):
+    """HTTP adapter that verifies Exchange server TLS using an in-memory CA."""
 
-    def get_certificate_path(self):
-        return os.path.join(os.getcwd(), CERT_FILE)
+    ssl_context = None
 
-    async def remove_certificate_file(self):
-        if os.path.exists(CERT_FILE):
-            await remove(CERT_FILE)
+    def init_poolmanager(self, *args, **kwargs):
+        ssl_context = type(self).ssl_context
+        if ssl_context is not None:
+            kwargs["ssl_context"] = ssl_context
+        return super().init_poolmanager(*args, **kwargs)
 
-
-class RootCAAdapter(requests.adapters.HTTPAdapter):
-    """Class to verify SSL Certificate for Exchange Servers"""
-
-    def cert_verify(self, conn, url, verify, cert):
-        try:
-            super().cert_verify(
-                conn=conn,
-                url=url,
-                verify=ManageCertificate().get_certificate_path(),
-                cert=cert,
-            )
-        except Exception as exception:
-            msg = f"Something went wrong while verifying SSL certificate. Error: {exception}"
-            raise SSLFailed(msg) from exception
+    def proxy_manager_for(self, *args, **kwargs):
+        ssl_context = type(self).ssl_context
+        if ssl_context is not None:
+            kwargs["ssl_context"] = ssl_context
+        return super().proxy_manager_for(*args, **kwargs)
 
 
 class ExchangeUsers:
@@ -145,7 +127,7 @@ class ExchangeUsers:
         )
 
     async def close(self):
-        await ManageCertificate().remove_certificate_file()
+        pass
 
     def _fetch_normal_users(self, search_query):
         try:
@@ -200,10 +182,18 @@ class ExchangeUsers:
             yield user
 
     async def get_user_accounts(self):
-        await ManageCertificate().store_certificate(certificate=self.ssl_ca)
-        BaseProtocol.HTTP_ADAPTER_CLS = (
-            RootCAAdapter if self.ssl_enabled else NoVerifyHTTPAdapter
-        )
+        if self.ssl_enabled and self.ssl_ca:
+            InMemoryCAAdapter.ssl_context = ssl.create_default_context(
+                cadata=self.ssl_ca
+            )
+            BaseProtocol.HTTP_ADAPTER_CLS = InMemoryCAAdapter
+        else:
+            if self.ssl_enabled and not self.ssl_ca:
+                logger.warning(
+                    "SSL is enabled but no certificate was provided; "
+                    "connections will not verify the server certificate."
+                )
+            BaseProtocol.HTTP_ADAPTER_CLS = NoVerifyHTTPAdapter
 
         credentials = Credentials(
             username=self.user,
