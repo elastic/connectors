@@ -27,6 +27,7 @@ from connectors.sources.outlook.client import (
     Forbidden,
     InMemoryCAAdapter,
     NotFound,
+    SSLCertificateError,
     UnauthorizedException,
     UsersFetchFailed,
 )
@@ -883,11 +884,11 @@ async def test_exchange_get_user_accounts_builds_ssl_context_from_pem(
 
 
 @pytest.mark.asyncio
-@patch("connectors.sources.outlook.client.logger.warning")
 @patch("connectors.sources.outlook.client.Account", return_value="account")
-async def test_exchange_get_user_accounts_falls_back_when_ssl_enabled_without_cert(
-    mock_account, mock_warning, reset_http_adapter_cls
+async def test_exchange_get_user_accounts_raises_when_ssl_enabled_without_cert(
+    mock_account, reset_http_adapter_cls
 ):
+    original_adapter_cls = BaseProtocol.HTTP_ADAPTER_CLS
     exchange_users = ExchangeUsers(
         ad_server="127.0.0.1",
         domain="example.com",
@@ -899,20 +900,43 @@ async def test_exchange_get_user_accounts_falls_back_when_ssl_enabled_without_ce
     )
     exchange_users.get_users = AsyncIterator([EXCHANGE_LDAP_USER])
 
-    async for _ in exchange_users.get_user_accounts():
-        pass
+    # SSL enabled without a certificate must fail loudly, never silently fall
+    # back to an unverified connection.
+    with pytest.raises(SSLCertificateError):
+        async for _ in exchange_users.get_user_accounts():
+            pass
 
-    assert BaseProtocol.HTTP_ADAPTER_CLS is NoVerifyHTTPAdapter
-    mock_warning.assert_called_once()
-    warning_message = mock_warning.call_args.args[0]
-    assert "SSL is enabled but no certificate was provided" in warning_message
+    assert BaseProtocol.HTTP_ADAPTER_CLS is original_adapter_cls
 
 
 @pytest.mark.asyncio
-@patch("connectors.sources.outlook.client.logger.warning")
+@patch("connectors.sources.outlook.client.Account", return_value="account")
+async def test_exchange_get_user_accounts_raises_when_ssl_enabled_with_bad_cert(
+    mock_account, reset_http_adapter_cls
+):
+    original_adapter_cls = BaseProtocol.HTTP_ADAPTER_CLS
+    exchange_users = ExchangeUsers(
+        ad_server="127.0.0.1",
+        domain="example.com",
+        exchange_server="127.0.0.1",
+        user="user",
+        password="pass",
+        ssl_enabled=True,
+        ssl_ca="not-a-valid-certificate",
+    )
+    exchange_users.get_users = AsyncIterator([EXCHANGE_LDAP_USER])
+
+    with pytest.raises(SSLCertificateError):
+        async for _ in exchange_users.get_user_accounts():
+            pass
+
+    assert BaseProtocol.HTTP_ADAPTER_CLS is original_adapter_cls
+
+
+@pytest.mark.asyncio
 @patch("connectors.sources.outlook.client.Account", return_value="account")
 async def test_exchange_get_user_accounts_uses_no_verify_when_ssl_disabled(
-    mock_account, mock_warning, reset_http_adapter_cls
+    mock_account, reset_http_adapter_cls
 ):
     exchange_users = ExchangeUsers(
         ad_server="127.0.0.1",
@@ -929,7 +953,6 @@ async def test_exchange_get_user_accounts_uses_no_verify_when_ssl_disabled(
         pass
 
     assert BaseProtocol.HTTP_ADAPTER_CLS is NoVerifyHTTPAdapter
-    mock_warning.assert_not_called()
 
 
 @pytest.mark.asyncio

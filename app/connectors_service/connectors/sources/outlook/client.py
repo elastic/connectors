@@ -75,6 +75,12 @@ class NotFound(Exception):
     pass
 
 
+class SSLCertificateError(Exception):
+    """Raised when SSL is enabled but the configured CA certificate is missing or unusable."""
+
+    pass
+
+
 def _extract_ldap_mail(attributes):
     mail = attributes.get("mail")
     if isinstance(mail, list):
@@ -182,17 +188,31 @@ class ExchangeUsers:
             yield user
 
     async def get_user_accounts(self):
-        if self.ssl_enabled and self.ssl_ca:
-            InMemoryCAAdapter.ssl_context = ssl.create_default_context(
-                cadata=self.ssl_ca
-            )
+        if self.ssl_enabled:
+            # SSL is on, so a CA certificate is mandatory and must be verified
+            # against. validate_config already enforces this; the checks below
+            # are defense-in-depth so a misconfiguration fails loudly instead of
+            # silently downgrading to an unverified or system-CA connection.
+            if not self.ssl_ca:
+                msg = (
+                    "SSL is enabled for the Exchange server but no CA "
+                    "certificate was provided. Provide a valid PEM-encoded "
+                    "certificate."
+                )
+                raise SSLCertificateError(msg)
+            try:
+                InMemoryCAAdapter.ssl_context = ssl.create_default_context(
+                    cadata=self.ssl_ca
+                )
+            except (ssl.SSLError, ValueError) as exception:
+                msg = (
+                    "SSL is enabled for the Exchange server but the configured "
+                    "CA certificate could not be loaded. Provide a valid "
+                    "PEM-encoded certificate."
+                )
+                raise SSLCertificateError(msg) from exception
             BaseProtocol.HTTP_ADAPTER_CLS = InMemoryCAAdapter
         else:
-            if self.ssl_enabled and not self.ssl_ca:
-                logger.warning(
-                    "SSL is enabled but no certificate was provided; "
-                    "connections will not verify the server certificate."
-                )
             BaseProtocol.HTTP_ADAPTER_CLS = NoVerifyHTTPAdapter
 
         credentials = Credentials(
