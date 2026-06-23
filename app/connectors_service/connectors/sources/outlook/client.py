@@ -87,7 +87,7 @@ def _extract_ldap_mail(attributes):
 class InMemoryCAAdapter(requests.adapters.HTTPAdapter):
     """HTTP adapter that verifies Exchange server TLS using an in-memory CA."""
 
-    ssl_context = None
+    ssl_context: ssl.SSLContext | None = None
 
     def init_poolmanager(self, *args, **kwargs):
         ssl_context = type(self).ssl_context
