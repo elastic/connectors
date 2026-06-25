@@ -2580,6 +2580,57 @@ class TestSharepointOnlineDataSource:
         assert (operations["delete"]) == deleted
 
     @pytest.mark.asyncio
+    @freeze_time(iso_utc())
+    async def test_get_docs_incrementally_site_timestamp_older_than_cursor(
+        self, patch_sharepoint_client
+    ):
+        """Regression test: sites with lastModifiedDateTime older than cursor
+        must still be iterated so that drive delta links are consumed and
+        drive item deletions/modifications are not silently dropped."""
+
+        async with create_spo_source() as source:
+            source._site_access_control = AsyncMock(return_value=([], []))
+            # mock cache lookup
+            source.site_group_users = AsyncMock(return_value=self.site_group_users)
+
+        # cursor_timestamp is MORE RECENT than the site's lastModifiedDateTime (day_ago)
+        sync_cursor = {"site_drives": {}, "cursor_timestamp": self.today}
+        for site_drive in self.site_drives:
+            sync_cursor["site_drives"][site_drive["id"]] = (
+                "http://fakesharepoint.com/deltalink"
+            )
+
+        deleted = 0
+        for page in self.drive_items_delta:
+            deleted += len(list(filter(lambda item: "deleted" in item, page)))
+
+        docs = []
+        downloads = []
+        operations = {"index": 0, "delete": 0}
+
+        async for doc, download_func, operation in source.get_docs_incrementally(
+            sync_cursor=sync_cursor
+        ):
+            docs.append(doc)
+
+            if download_func:
+                downloads.append(download_func)
+
+            operations[operation] += 1
+
+        # Site must still be yielded even though its timestamp is older than cursor
+        assert len(self.sites) == len(
+            [doc for doc in docs if doc["object_type"] == "site"]
+        )
+        # Drive items (including deletions) must still be picked up via delta links
+        assert len([doc for doc in docs if doc["object_type"] == "drive_item"]) == sum(
+            len(i) for i in self.drive_items_delta
+        )
+        # Deletions must not be silently dropped
+        assert operations["delete"] == deleted
+        assert deleted > 0
+
+    @pytest.mark.asyncio
     async def test_site_lists(self, patch_sharepoint_client):
         async with create_spo_source(
             use_document_level_security=True, fetch_unique_list_permissions=False
