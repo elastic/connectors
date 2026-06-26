@@ -133,10 +133,7 @@ class ExchangeUsers:
         )
 
     async def close(self):
-        # The LDAP connection is opened lazily by the _create_connection
-        # cached_property, so only unbind it if it was actually created.
-        if "_create_connection" in self.__dict__:
-            self._create_connection.unbind()
+        pass
 
     def _fetch_normal_users(self, search_query):
         try:
