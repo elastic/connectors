@@ -317,16 +317,14 @@ class OutlookDataSource(BaseDataSource):
         ):
             return
 
-        # super().validate_config() already rejects a missing/empty certificate
-        # field, so here we only confirm the provided certificate actually loads
-        # (matching the sync path's ssl.create_default_context), failing now
-        # instead of mid-sync. A value that normalizes to an empty string is
-        # treated as invalid here, since empty cadata would make
-        # create_default_context silently fall back to the system CAs instead of
-        # loading the configured certificate.
+        # The base already rejects a missing field; here we confirm the cert
+        # actually loads (as the sync path does) so it fails now, not mid-sync.
+        # An empty cadata is treated as invalid, since it would silently fall
+        # back to the system CAs.
         try:
             if not self.client.ssl_ca:
-                raise ValueError("certificate is empty after normalization")
+                empty_cert_msg = "certificate is empty after normalization"
+                raise ValueError(empty_cert_msg)
             ssl.create_default_context(cadata=self.client.ssl_ca)
         except (ssl.SSLError, ValueError) as exception:
             msg = (

@@ -76,7 +76,7 @@ class NotFound(Exception):
 
 
 class SSLCertificateError(Exception):
-    """Raised when SSL is enabled but the configured CA certificate is missing or unusable."""
+    """Raised when SSL is enabled but the CA certificate is missing or unusable."""
 
     pass
 
@@ -188,15 +188,11 @@ class ExchangeUsers:
             yield user
 
     async def get_user_accounts(self):
-        # NOTE: exchangelib applies HTTP_ADAPTER_CLS (and our in-memory CA
-        # context) process-wide. This is safe here because each connector uses a
-        # single CA; concurrent Exchange Server connectors with different CAs are
-        # not a supported setup.
+        # exchangelib applies HTTP_ADAPTER_CLS (and our CA context) process-wide;
+        # safe because each connector uses a single CA.
         if self.ssl_enabled:
-            # SSL is on, so a CA certificate is mandatory and must be verified
-            # against. validate_config already enforces this; the checks below
-            # are defense-in-depth so a misconfiguration fails loudly instead of
-            # silently downgrading to an unverified or system-CA connection.
+            # Fail loudly on a missing/unusable CA instead of silently using an
+            # unverified or system-CA connection.
             if not self.ssl_ca:
                 msg = (
                     "SSL is enabled for the Exchange server but no CA "

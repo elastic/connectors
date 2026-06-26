@@ -906,8 +906,7 @@ async def test_exchange_get_user_accounts_raises_when_ssl_enabled_without_cert(
     )
     exchange_users.get_users = AsyncIterator([EXCHANGE_LDAP_USER])
 
-    # SSL enabled without a certificate must fail loudly, never silently fall
-    # back to an unverified connection.
+    # SSL on without a cert must fail loudly, not fall back to no verification.
     with pytest.raises(SSLCertificateError):
         async for _ in exchange_users.get_user_accounts():
             pass
@@ -944,8 +943,7 @@ async def test_exchange_get_user_accounts_raises_when_ssl_enabled_with_bad_cert(
 async def test_exchange_get_user_accounts_raises_on_markerless_cert_via_client(
     mock_account, reset_http_adapter_cls
 ):
-    # Exercise the real production path through OutlookClient: get_pem_format
-    # strips marker-less garbage to an empty string, which must hit the
+    # get_pem_format reduces marker-less junk to "", which must hit the
     # "no CA certificate" guard rather than silently using system CAs.
     async with create_outlook_source(
         ssl_enabled=True,
@@ -964,8 +962,7 @@ async def test_exchange_get_user_accounts_raises_on_markerless_cert_via_client(
 async def test_exchange_get_user_accounts_raises_on_unloadable_pem_via_client(
     mock_account, reset_http_adapter_cls
 ):
-    # A string that survives get_pem_format as a non-empty (but bogus) PEM block
-    # must hit the "could not be loaded" guard at sync time.
+    # A non-empty but bogus PEM must hit the "could not be loaded" guard.
     async with create_outlook_source(
         ssl_enabled=True,
         ssl_ca="-----BEGIN CERTIFICATE----- notbase64 -----END CERTIFICATE-----",
