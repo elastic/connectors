@@ -22,7 +22,11 @@ config = {
         "max_wait_duration": 0.1,
         "initial_backoff_duration": 0.1,
     },
-    "service": {"preflight_max_attempts": 4, "preflight_idle": 0.1},
+    "service": {
+        "mode": "selective",
+        "preflight_max_attempts": 4,
+        "preflight_idle": 0.1,
+    },
     "connectors": [
         {
             "connector_id": "connector_1",
@@ -288,25 +292,18 @@ async def test_index_exist_transient_error(mock_responses):
 
 @pytest.mark.asyncio
 @patch("connectors.preflight_check.logger")
-async def test_native_config_is_warned(patched_logger, mock_responses):
+async def test_native_config_is_not_warned(patched_logger, mock_responses):
     mock_es_info(mock_responses)
     mock_index_exists(mock_responses, CONCRETE_CONNECTORS_INDEX)
     mock_index_exists(mock_responses, CONCRETE_JOBS_INDEX)
     local_config = deepcopy(config)
-    local_config["native_service_types"] = ["foo", "bar"]
+    local_config["service"]["mode"] = "broad"
+    local_config["service"]["service_types"] = ["foo", "bar"]
     del local_config["connectors"]
     preflight = PreflightCheck(local_config, connectors_version)
     result = await preflight.run()
     assert result == (True, False)
-    patched_logger.warning.assert_any_call(
-        "The configuration 'native_service_types' has been deprecated. Please remove this configuration."
-    )
-    patched_logger.warning.assert_any_call(
-        "Native Connectors are only supported internal to Elastic Cloud deployments, which this process is not."
-    )
-    patched_logger.warning.assert_any_call(
-        "Please update your config.yml to configure at least one connector"
-    )
+    patched_logger.warning.assert_not_called()
 
 
 @pytest.mark.asyncio
