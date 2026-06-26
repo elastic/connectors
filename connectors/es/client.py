@@ -17,8 +17,14 @@ from elasticsearch import (
 
 from connectors import __version__
 from connectors.config import (
+    DEFAULT_ELASTICSEARCH_BACKOFF_MULTIPLIER,
+    DEFAULT_ELASTICSEARCH_HOST,
+    DEFAULT_ELASTICSEARCH_INITIAL_BACKOFF_DURATION,
     DEFAULT_ELASTICSEARCH_MAX_RETRIES,
+    DEFAULT_ELASTICSEARCH_MAX_WAIT_DURATION,
+    DEFAULT_ELASTICSEARCH_REQUEST_TIMEOUT,
     DEFAULT_ELASTICSEARCH_RETRY_INTERVAL,
+    DEFAULT_ELASTICSEARCH_RETRY_ON_TIMEOUT,
 )
 from connectors.logger import logger, set_extra_logger
 from connectors.utils import (
@@ -48,7 +54,7 @@ class ESClient:
     def __init__(self, config):
         self.serverless = config.get("serverless", False)
         self.config = config
-        self.configured_host = config.get("host", "http://localhost:9200")
+        self.configured_host = config.get("host", DEFAULT_ELASTICSEARCH_HOST)
         self.host = url_to_node_config(
             self.configured_host,
             use_default_ports_for_scheme=True,
@@ -62,8 +68,12 @@ class ESClient:
 
         options = {
             "hosts": [self.host],
-            "request_timeout": config.get("request_timeout", 120),
-            "retry_on_timeout": config.get("retry_on_timeout", True),
+            "request_timeout": config.get(
+                "request_timeout", DEFAULT_ELASTICSEARCH_REQUEST_TIMEOUT
+            ),
+            "retry_on_timeout": config.get(
+                "retry_on_timeout", DEFAULT_ELASTICSEARCH_RETRY_ON_TIMEOUT
+            ),
         }
         logger.debug(f"Initial Elasticsearch node configuration is {self.host}")
 
@@ -103,9 +113,15 @@ class ESClient:
             log_level=logging.getLevelName(level),
             filebeat=logger.filebeat,  # pyright: ignore
         )
-        self.max_wait_duration = config.get("max_wait_duration", 60)
-        self.initial_backoff_duration = config.get("initial_backoff_duration", 5)
-        self.backoff_multiplier = config.get("backoff_multiplier", 2)
+        self.max_wait_duration = config.get(
+            "max_wait_duration", DEFAULT_ELASTICSEARCH_MAX_WAIT_DURATION
+        )
+        self.initial_backoff_duration = config.get(
+            "initial_backoff_duration", DEFAULT_ELASTICSEARCH_INITIAL_BACKOFF_DURATION
+        )
+        self.backoff_multiplier = config.get(
+            "backoff_multiplier", DEFAULT_ELASTICSEARCH_BACKOFF_MULTIPLIER
+        )
 
         options["headers"] = config.get("headers", {})
         options["headers"]["user-agent"] = self.__class__.user_agent
