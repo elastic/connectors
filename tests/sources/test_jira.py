@@ -9,7 +9,7 @@ import ssl
 from contextlib import asynccontextmanager
 from copy import copy
 from unittest import mock
-from unittest.mock import AsyncMock, MagicMock, Mock, call, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import aiohttp
 import pytest
