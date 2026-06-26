@@ -56,7 +56,11 @@ USER = "user"
 USERS_FOR_DATA_CENTER = "users_for_data_center"
 SEARCH_FOR_DATA_CENTER = "search_for_data_center"
 USERS_FOR_SERVER = "users_for_server"
-SPACE_QUERY = "limit=100&expand=permissions,history"
+SPACE_QUERY_CLOUD = "limit=100&expand=permissions,history"
+# DC/Server omits expand=permissions,history: permissions come from the
+# SPACE_PERMISSION (Extender) endpoint and history is Cloud-only. Avoids HTTP 500
+# on Confluence DC/Server versions affected by CONFSERVER-99908 and similar bugs.
+SPACE_QUERY_DATA_CENTER = "limit=100"
 ATTACHMENT_QUERY = "limit=100&expand=version,history"
 CONTENT_QUERY = "limit=50&expand=ancestors,children.attachment,history.lastUpdated,body.storage,space,space.permissions,restrictions.read.restrictions.user,restrictions.read.restrictions.group"
 SEARCH_QUERY = "limit=100&expand=content.history,content.extensions,content.container,content.space,content.body.storage,space.description,space.history"
@@ -361,9 +365,14 @@ class ConfluenceClient:
                 yield entity
 
     async def fetch_spaces(self):
+        api_query = (
+            SPACE_QUERY_CLOUD
+            if self.data_source_type == CONFLUENCE_CLOUD
+            else SPACE_QUERY_DATA_CENTER
+        )
         async for response in self.paginated_api_call(
             url_name=SPACE,
-            api_query=SPACE_QUERY,
+            api_query=api_query,
         ):
             for space in response.get("results", []):
                 spaces = self.configuration.get("spaces", "")
@@ -874,8 +883,13 @@ class ConfluenceDataSource(BaseDataSource):
         if self.spaces == [WILDCARD]:
             return
         space_keys = []
+        api_query = (
+            SPACE_QUERY_CLOUD
+            if self.confluence_client.data_source_type == CONFLUENCE_CLOUD
+            else SPACE_QUERY_DATA_CENTER
+        )
         async for response in self.confluence_client.paginated_api_call(
-            url_name=SPACE, api_query=SPACE_QUERY
+            url_name=SPACE, api_query=api_query
         ):
             spaces = response.get("results", [])
             space_keys.extend([space.get("key", "") for space in spaces])
