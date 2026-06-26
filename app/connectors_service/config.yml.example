@@ -220,6 +220,25 @@
 ##  Connector service/framework related configurations
 #
 #
+##  Mode of running connectors service in relation to what connectors are served by the service
+##    Available modes:
+##    - selective - service only handles the connectors specified in "connectors" configuration
+##    - broad - service will attempt to handle all connectors that it can, automatically discovering them
+##    Important note: "broad" mode assumes that all operations are running using credentials from "elasticsearch" section.
+##    This means that the api_key in elasticsearch.api_key should have access to all indices that are used by connectors that
+##    are handled by this service.
+#service.mode: selective
+#
+#
+##  A collection of service types that a service running in "broad" mode will attempt to handle.
+##    This allows partitioning the load allowing to spread different connector types between different
+##    physical instance that can be bigger or smaller depending on the load and hardware requirements.
+##    If the mode is `selective` then this setting is ignored.
+##    If no values are provided, then all known service types from "sources" config are used
+##    Example: ['mongodb', 'mysql']
+#service.service_types: []
+#
+#
 ##  The interval (in seconds) to poll connectors from Elasticsearch.
 #service.idling: 30
 #

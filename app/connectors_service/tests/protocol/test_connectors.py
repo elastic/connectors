@@ -227,7 +227,7 @@ mongo = {
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "native_service_types, connector_ids, expected_connector_count",
+    "broad_service_types, connector_ids, expected_connector_count",
     [
         ([], [], 0),
         (["mongodb"], [], 1),
@@ -236,15 +236,15 @@ mongo = {
     ],
 )
 async def test_supported_connectors(
-    native_service_types, connector_ids, expected_connector_count, mock_responses
+    broad_service_types, connector_ids, expected_connector_count, mock_responses
 ):
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
-    native_connectors_query = {
+    broad_connectors_query = {
         "bool": {
             "must_not": [{"term": {"deleted": True}}],
             "filter": [
                 {"term": {"is_native": True}},
-                {"terms": {"service_type": native_service_types}},
+                {"terms": {"service_type": broad_service_types}},
             ],
         }
     }
@@ -259,10 +259,10 @@ async def test_supported_connectors(
         }
     }
 
-    if len(native_service_types) > 0 and len(connector_ids) > 0:
-        query = {"bool": {"should": [native_connectors_query, custom_connectors_query]}}
-    elif len(native_service_types) > 0:
-        query = native_connectors_query
+    if len(broad_service_types) > 0 and len(connector_ids) > 0:
+        query = {"bool": {"should": [broad_connectors_query, custom_connectors_query]}}
+    elif len(broad_service_types) > 0:
+        query = broad_connectors_query
     elif len(connector_ids) > 0:
         query = custom_connectors_query
     else:
@@ -285,7 +285,7 @@ async def test_supported_connectors(
     connectors = [
         connector
         async for connector in connector_index.supported_connectors(
-            native_service_types=native_service_types, connector_ids=connector_ids
+            broad_service_types=broad_service_types, connector_ids=connector_ids
         )
     ]
     await connector_index.close()
@@ -2429,7 +2429,7 @@ async def test_native_connector_missing_features():
             "is_native": True,
         },
     }
-    config = {"native_service_types": "banana"}
+    config = { "service": { "mode": "broad", "service_types": "banana"} }
     sources = {"banana": "tests.protocol.test_connectors:Banana"}
     index = Mock()
     index.fetch_response_by_id = AsyncMock(side_effect=[connector_doc, connector_doc])
