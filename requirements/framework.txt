@@ -22,7 +22,7 @@ azure-storage-blob==12.19.1
 SQLAlchemy==2.0.1
 oracledb==2.3.0
 asyncpg==0.29.0
-python-tds==1.12.0
+python-tds==1.15.0
 sqlalchemy-pytds==0.3.5
 pyOpenSSL==24.3.0
 dropbox==11.36.2
