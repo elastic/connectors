@@ -45,6 +45,21 @@ def load_config(ctx, config):
         raise FileNotFoundError(msg)
 
 
+def is_help_request(ctx):
+    return any(arg in ctx.help_option_names for arg in ctx.args)
+
+
+def ensure_config(ctx):
+    ctx.ensure_object(dict)
+    try:
+        ctx.obj["config"] = load_config(ctx, ctx.obj.get("config_file"))
+    except FileNotFoundError as e:
+        click.echo(
+            f"{e} Run `connectors login` first, or pass a config via the '-c' or '--config' option."
+        )
+        ctx.exit(1)
+
+
 # Main group
 @click.group(
     invoke_without_command=True,
@@ -55,18 +70,14 @@ def load_config(ctx, config):
 @click.pass_context
 def cli(ctx, config):
     # print help page if no subcommands provided
+    ctx.ensure_object(dict)
+    ctx.obj["config_file"] = config
+
     if ctx.invoked_subcommand is None:
         click.echo(ctx.get_help())
         return
-
-    ctx.ensure_object(dict)
-    try:
-        ctx.obj["config"] = load_config(ctx, config)
-    except FileNotFoundError as e:
-        click.echo(
-            f"{e} Make sure that the config is either present at the default location ({CONFIG_FILE_PATH}) or it's passed via the '-c' or '--config' option."
-        )
-        ctx.exit(1)
+    if ctx.invoked_subcommand == "login" or is_help_request(ctx):
+        return
 
 
 @click.command(help="Authenticate Connectors CLI with an Elasticsearch instance")
@@ -114,7 +125,7 @@ cli.add_command(login)
 @click.group(invoke_without_command=False, help="Connectors management")
 @click.pass_context
 def connector(ctx):
-    pass
+    ensure_config(ctx)
 
 
 @click.command(name="list", help="List all existing connectors")
@@ -385,9 +396,9 @@ cli.add_command(connector)
 
 # Index group
 @click.group(invoke_without_command=False, help="Search indices management")
-@click.pass_obj
-def index(obj):
-    pass
+@click.pass_context
+def index(ctx):
+    ensure_config(ctx)
 
 
 @click.command(name="list", help="Show all indices")
@@ -471,9 +482,9 @@ cli.add_command(index)
 
 # Job group
 @click.group(invoke_without_command=False, help="Sync jobs management")
-@click.pass_obj
-def job(obj):
-    pass
+@click.pass_context
+def job(ctx):
+    ensure_config(ctx)
 
 
 @click.command(help="Start a sync job.")
