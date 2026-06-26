@@ -133,7 +133,10 @@ class ExchangeUsers:
         )
 
     async def close(self):
-        pass
+        # The LDAP connection is opened lazily by the _create_connection
+        # cached_property, so only unbind it if it was actually created.
+        if "_create_connection" in self.__dict__:
+            self._create_connection.unbind()
 
     def _fetch_normal_users(self, search_query):
         try:
@@ -188,6 +191,10 @@ class ExchangeUsers:
             yield user
 
     async def get_user_accounts(self):
+        # NOTE: exchangelib applies HTTP_ADAPTER_CLS (and our in-memory CA
+        # context) process-wide. This is safe here because each connector uses a
+        # single CA; concurrent Exchange Server connectors with different CAs are
+        # not a supported setup.
         if self.ssl_enabled:
             # SSL is on, so a CA certificate is mandatory and must be verified
             # against. validate_config already enforces this; the checks below
