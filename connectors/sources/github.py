@@ -664,7 +664,7 @@ class GitHubClient:
         self._logger = logger
         self.auth_method = auth_method
         self.base_url = base_url
-        self.app_id = app_id if self.auth_method == GITHUB_APP else None
+        self.app_id = str(app_id) if self.auth_method == GITHUB_APP else None
         self.private_key = private_key if self.auth_method == GITHUB_APP else None
         self._personal_access_token = (
             token if self.auth_method == PERSONAL_ACCESS_TOKEN else None
