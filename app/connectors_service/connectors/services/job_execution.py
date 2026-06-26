@@ -102,7 +102,7 @@ class JobExecutionService(BaseService):
         self.connector_index = ConnectorIndex(self.es_config)
         self.sync_job_index = SyncJobIndex(self.es_config)
 
-        broad_service_types = self.config['service'].get("service_types", []) or []
+        broad_service_types = self.config["service"].get("service_types", []) or []
         if len(broad_service_types) > 0:
             self.logger.debug(
                 f"Native support for {self.display_name} for {', '.join(broad_service_types)}"

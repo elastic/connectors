@@ -2429,7 +2429,7 @@ async def test_native_connector_missing_features():
             "is_native": True,
         },
     }
-    config = { "service": { "mode": "broad", "service_types": "banana"} }
+    config = {"service": {"mode": "broad", "service_types": "banana"}}
     sources = {"banana": "tests.protocol.test_connectors:Banana"}
     index = Mock()
     index.fetch_response_by_id = AsyncMock(side_effect=[connector_doc, connector_doc])
