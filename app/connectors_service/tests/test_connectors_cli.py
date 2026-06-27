@@ -128,6 +128,20 @@ def test_connector_help_page():
     assert "Commands:" in result.output
 
 
+@pytest.mark.parametrize(
+    "commands", [["connector", "--help"], ["index", "--help"], ["job", "--help"]]
+)
+def test_group_help_page_does_not_require_config(commands, mock_cli_config):
+    mock_cli_config.side_effect = FileNotFoundError(CONFIG_FILE_PATH)
+
+    runner = CliRunner()
+    result = runner.invoke(cli, commands)
+
+    assert result.exit_code == 0
+    assert "Usage:" in result.output
+    mock_cli_config.assert_not_called()
+
+
 @patch("connectors.cli.connector.Connector.list_connectors", AsyncMock(return_value=[]))
 def test_connector_list_no_connectors():
     runner = CliRunner()
