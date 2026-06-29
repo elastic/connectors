@@ -2589,11 +2589,11 @@ Apache Software License
 
 
 bracex
-2.6
+2.7
 MIT
 MIT License
 
-Copyright (c) 2018 - 2025 Isaac Muse
+Copyright (c) 2018 - 2026 Isaac Muse
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -8181,7 +8181,7 @@ limitations under the License.
 
 
 tzlocal
-5.4.3
+5.4.4
 MIT
 Copyright 2011-2017 Lennart Regebro
 
