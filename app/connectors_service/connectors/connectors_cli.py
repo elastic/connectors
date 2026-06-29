@@ -45,6 +45,10 @@ def load_config(ctx, config):
         raise FileNotFoundError(msg)
 
 
+def is_help_request(ctx):
+    return any(arg in ctx.help_option_names for arg in ctx.args)
+
+
 # Main group
 @click.group(
     invoke_without_command=True,
@@ -58,13 +62,15 @@ def cli(ctx, config):
     if ctx.invoked_subcommand is None:
         click.echo(ctx.get_help())
         return
+    if is_help_request(ctx):
+        return
 
     ctx.ensure_object(dict)
     try:
         ctx.obj["config"] = load_config(ctx, config)
     except FileNotFoundError as e:
         click.echo(
-            f"{e} Make sure that the config is either present at the default location ({CONFIG_FILE_PATH}) or it's passed via the '-c' or '--config' option."
+            f"{e} Run `connectors login` first, or pass a config via the '-c' or '--config' option."
         )
         ctx.exit(1)
 
