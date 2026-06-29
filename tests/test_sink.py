@@ -1206,6 +1206,49 @@ async def test_batch_bulk_with_retry():
 
 
 @pytest.mark.asyncio
+async def test_batch_bulk_still_counts_successful_docs_when_process_bulk_response_raises():
+    """When bulk response processing raises mid-response, docs ES accepted in the same
+    batch must still be reflected in `INDEXED_DOCUMENT_COUNT`."""
+    config = {
+        "username": "elastic",
+        "password": "changeme",
+        "host": "http://nowhere.com:9200",
+    }
+    client = ESManagementClient(config)
+    client.client = AsyncMock()
+    sink = Sink(
+        client=client,
+        queue=None,
+        chunk_size=0,
+        pipeline={"name": "pipeline"},
+        chunk_mem_size=0,
+        max_concurrency=0,
+        max_retries=3,
+        retry_interval=10,
+    )
+
+    items = [{OP_INDEX: {"_id": f"ok_{i}", "result": "created"}} for i in range(5)]
+    client.bulk_insert = AsyncMock(return_value={"items": items, "errors": False})
+
+    stats = {
+        OP_INDEX: {f"ok_{i}": 50 for i in range(5)},
+        OP_UPDATE: {},
+        OP_DELETE: {},
+    }
+
+    with mock.patch.object(
+        sink,
+        "_process_bulk_response",
+        side_effect=RuntimeError("simulated mid-response failure"),
+    ):
+        with pytest.raises(RuntimeError):
+            await sink._batch_bulk([], stats)
+
+    assert sink.counters.get(INDEXED_DOCUMENT_COUNT) == 5
+    assert sink.counters.get(INDEXED_DOCUMENT_VOLUME) == 5 * 50
+
+
+@pytest.mark.asyncio
 async def test_batch_bulk_with_errors(patch_logger):
     config = {
         "username": "elastic",
