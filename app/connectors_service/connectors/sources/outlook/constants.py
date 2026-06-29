@@ -102,4 +102,3 @@ CALENDAR_FIELDS = [
 ]
 
 END_SIGNAL = "FINISHED"
-CERT_FILE = "outlook_cert.cer"
