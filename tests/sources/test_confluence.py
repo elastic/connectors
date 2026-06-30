@@ -24,6 +24,8 @@ from connectors.sources.confluence import (
     CONFLUENCE_CLOUD,
     CONFLUENCE_DATA_CENTER,
     CONFLUENCE_SERVER,
+    SPACE_QUERY_CLOUD,
+    SPACE_QUERY_DATA_CENTER,
     BadRequest,
     ConfluenceClient,
     ConfluenceDataSource,
@@ -955,6 +957,61 @@ async def test_fetch_spaces():
         )
         async for response in source.confluence_client.fetch_spaces():
             assert response["id"] == EXPECTED_SPACE["_id"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "data_source_type, expected_api_query",
+    [
+        (CONFLUENCE_CLOUD, SPACE_QUERY_CLOUD),
+        (CONFLUENCE_DATA_CENTER, SPACE_QUERY_DATA_CENTER),
+        (CONFLUENCE_SERVER, SPACE_QUERY_DATA_CENTER),
+    ],
+)
+async def test_fetch_spaces_uses_correct_query_for_data_source_type(
+    data_source_type, expected_api_query
+):
+    """fetch_spaces uses the DC/Server-safe query off Cloud (CONFSERVER-99908)."""
+    async with create_confluence_source(data_source=data_source_type) as source:
+        source.confluence_client.paginated_api_call = MagicMock(
+            return_value=AsyncIterator([RESPONSE_SPACE])
+        )
+
+        async for _ in source.confluence_client.fetch_spaces():
+            pass
+
+        source.confluence_client.paginated_api_call.assert_called_once_with(
+            url_name="space",
+            api_query=expected_api_query,
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "data_source_type, expected_api_query",
+    [
+        (CONFLUENCE_CLOUD, SPACE_QUERY_CLOUD),
+        (CONFLUENCE_DATA_CENTER, SPACE_QUERY_DATA_CENTER),
+        (CONFLUENCE_SERVER, SPACE_QUERY_DATA_CENTER),
+    ],
+)
+async def test_remote_validation_uses_correct_query_for_data_source_type(
+    data_source_type, expected_api_query
+):
+    """_remote_validation uses the DC/Server-safe query off Cloud (CONFSERVER-99908)."""
+    async with create_confluence_source(data_source=data_source_type) as source:
+        source.spaces = ["DM"]
+        source.confluence_client.ping = AsyncMock()
+        source.confluence_client.paginated_api_call = MagicMock(
+            return_value=AsyncIterator([RESPONSE_SPACE_KEYS])
+        )
+
+        await source._remote_validation()
+
+        source.confluence_client.paginated_api_call.assert_called_once_with(
+            url_name="space",
+            api_query=expected_api_query,
+        )
 
 
 @pytest.mark.asyncio
