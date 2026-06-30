@@ -22,10 +22,19 @@ from tests.commons import AsyncIterator
 
 
 @pytest.fixture(autouse=True)
-def mock_cli_config():
+def mock_cli_config(request):
+    if "use_real_cli_config" in request.fixturenames:
+        yield
+        return
+
     with patch("connectors.connectors_cli.load_config") as mock:
         mock.return_value = {"elasticsearch": {"host": "http://localhost:9211/"}}
         yield mock
+
+
+@pytest.fixture
+def use_real_cli_config():
+    pass
 
 
 @pytest.fixture(autouse=True)
@@ -653,6 +662,37 @@ def test_job_help_page_without_subcommands():
     assert "Usage:" in result.output
     assert "Options:" in result.output
     assert "Commands:" in result.output
+
+
+def test_job_help_page_without_config_file(tmp_path, use_real_cli_config):
+    runner = CliRunner()
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        result = runner.invoke(cli, ["job", "--help"])
+
+    assert result.exit_code == 0
+    assert "Usage:" in result.output
+    assert "Commands:" in result.output
+    assert f"{CONFIG_FILE_PATH} was not found" not in result.output
+
+
+def test_job_subcommand_help_page_without_config_file(tmp_path, use_real_cli_config):
+    runner = CliRunner()
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        result = runner.invoke(cli, ["job", "list", "--help"])
+
+    assert result.exit_code == 0
+    assert "Usage:" in result.output
+    assert f"{CONFIG_FILE_PATH} was not found" not in result.output
+
+
+def test_command_without_config_file_suggests_login(tmp_path, use_real_cli_config):
+    runner = CliRunner()
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        result = runner.invoke(cli, ["job", "list", "test-connector-id"])
+
+    assert result.exit_code == 1
+    assert f"{CONFIG_FILE_PATH} was not found" in result.output
+    assert "connectors login" in result.output
 
 
 @patch("click.confirm", MagicMock(return_value=True))
