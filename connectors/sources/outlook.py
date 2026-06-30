@@ -6,17 +6,14 @@
 """Microsoft Outlook source module is responsible to fetch documents from Outlook server or cloud platforms."""
 
 import asyncio
-import os
 import ssl
 from copy import copy
 from datetime import date
 from functools import cached_property, partial
 
-import aiofiles
 import aiohttp
 import exchangelib
 import requests.adapters
-from aiofiles.os import remove
 from exchangelib import (
     IMPERSONATION,
     OAUTH2,
@@ -146,7 +143,6 @@ CALENDAR_FIELDS = [
 ]
 
 END_SIGNAL = "FINISHED"
-CERT_FILE = "outlook_cert.cer"
 
 
 def ews_format_to_datetime(source_datetime, timezone):
@@ -211,7 +207,9 @@ class NotFound(Exception):
     pass
 
 
-class SSLFailed(Exception):
+class SSLCertificateError(Exception):
+    """Raised when SSL is enabled but the CA certificate is missing or unusable."""
+
     pass
 
 
@@ -224,33 +222,22 @@ def _extract_ldap_mail(attributes):
     return mail
 
 
-class ManageCertificate:
-    async def store_certificate(self, certificate):
-        async with aiofiles.open(CERT_FILE, "w") as file:
-            await file.write(certificate)
+class InMemoryCAAdapter(requests.adapters.HTTPAdapter):
+    """HTTP adapter that verifies Exchange server TLS using an in-memory CA."""
 
-    def get_certificate_path(self):
-        return os.path.join(os.getcwd(), CERT_FILE)
+    ssl_context: ssl.SSLContext | None = None
 
-    async def remove_certificate_file(self):
-        if os.path.exists(CERT_FILE):
-            await remove(CERT_FILE)
+    def init_poolmanager(self, *args, **kwargs):
+        ssl_context = type(self).ssl_context
+        if ssl_context is not None:
+            kwargs["ssl_context"] = ssl_context
+        return super().init_poolmanager(*args, **kwargs)
 
-
-class RootCAAdapter(requests.adapters.HTTPAdapter):
-    """Class to verify SSL Certificate for Exchange Servers"""
-
-    def cert_verify(self, conn, url, verify, cert):
-        try:
-            super().cert_verify(
-                conn=conn,
-                url=url,
-                verify=ManageCertificate().get_certificate_path(),
-                cert=cert,
-            )
-        except Exception as exception:
-            msg = f"Something went wrong while verifying SSL certificate. Error: {exception}"
-            raise SSLFailed(msg) from exception
+    def proxy_manager_for(self, *args, **kwargs):
+        ssl_context = type(self).ssl_context
+        if ssl_context is not None:
+            kwargs["ssl_context"] = ssl_context
+        return super().proxy_manager_for(*args, **kwargs)
 
 
 class ExchangeUsers:
@@ -278,7 +265,7 @@ class ExchangeUsers:
         )
 
     async def close(self):
-        await ManageCertificate().remove_certificate_file()
+        pass
 
     def _fetch_normal_users(self, search_query):
         try:
@@ -333,10 +320,32 @@ class ExchangeUsers:
             yield user
 
     async def get_user_accounts(self):
-        await ManageCertificate().store_certificate(certificate=self.ssl_ca)
-        BaseProtocol.HTTP_ADAPTER_CLS = (
-            RootCAAdapter if self.ssl_enabled else NoVerifyHTTPAdapter
-        )
+        # exchangelib applies HTTP_ADAPTER_CLS (and our CA context) process-wide;
+        # safe because each connector uses a single CA.
+        if self.ssl_enabled:
+            # Fail loudly on a missing/unusable CA instead of silently using an
+            # unverified or system-CA connection.
+            if not self.ssl_ca:
+                msg = (
+                    "SSL is enabled for the Exchange server but no CA "
+                    "certificate was provided. Provide a valid PEM-encoded "
+                    "certificate."
+                )
+                raise SSLCertificateError(msg)
+            try:
+                InMemoryCAAdapter.ssl_context = ssl.create_default_context(
+                    cadata=self.ssl_ca
+                )
+            except (ssl.SSLError, ValueError) as exception:
+                msg = (
+                    "SSL is enabled for the Exchange server but the configured "
+                    "CA certificate could not be loaded. Provide a valid "
+                    "PEM-encoded certificate."
+                )
+                raise SSLCertificateError(msg) from exception
+            BaseProtocol.HTTP_ADAPTER_CLS = InMemoryCAAdapter
+        else:
+            BaseProtocol.HTTP_ADAPTER_CLS = NoVerifyHTTPAdapter
 
         credentials = Credentials(
             username=self.user,
@@ -854,13 +863,15 @@ class OutlookDataSource(BaseDataSource):
         ):
             return
 
-        # Load the exact PEM string used at sync time through the same OpenSSL
-        # loader: load_verify_locations raises ssl.SSLError for malformed content
-        # and ValueError for empty data.
+        # The base already rejects a missing field; here we confirm the cert
+        # actually loads (as the sync path does) so it fails now, not mid-sync.
+        # An empty cadata is treated as invalid, since it would silently fall
+        # back to the system CAs.
         try:
-            ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT).load_verify_locations(
-                cadata=self.client.ssl_ca
-            )
+            if not self.client.ssl_ca:
+                empty_cert_msg = "certificate is empty after normalization"
+                raise ValueError(empty_cert_msg)
+            ssl.create_default_context(cadata=self.client.ssl_ca)
         except (ssl.SSLError, ValueError) as exception:
             msg = (
                 "The provided SSL certificate is not valid. Provide a valid "
