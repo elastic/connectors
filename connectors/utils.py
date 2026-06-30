@@ -31,14 +31,6 @@ from pympler import asizeof
 from connectors.logger import logger
 
 ACCESS_CONTROL_INDEX_PREFIX = ".search-acl-filter-"
-DEFAULT_CHUNK_SIZE = 500
-DEFAULT_QUEUE_SIZE = 1024
-DEFAULT_DISPLAY_EVERY = 100
-DEFAULT_QUEUE_MEM_SIZE = 5
-DEFAULT_CHUNK_MEM_SIZE = 25
-DEFAULT_MAX_CONCURRENCY = 5
-DEFAULT_CONCURRENT_DOWNLOADS = 10
-
 # Regular expression pattern to match a basic email format (no whitespace, valid domain)
 EMAIL_REGEX_PATTERN = r"^\S+@\S+\.\S+$"
 
