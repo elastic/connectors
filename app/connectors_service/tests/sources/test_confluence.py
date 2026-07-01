@@ -36,6 +36,8 @@ from connectors.sources.atlassian.confluence.constants import (
     CONFLUENCE_CLOUD,
     CONFLUENCE_DATA_CENTER,
     CONFLUENCE_SERVER,
+    CONTENT_QUERY_CLOUD,
+    CONTENT_QUERY_DATA_CENTER,
     SPACE_QUERY_CLOUD,
     SPACE_QUERY_DATA_CENTER,
 )
@@ -1264,6 +1266,43 @@ async def test_get_docs(spaces_patch, pages_patch, attachment_patch, content_pat
         async for item, _ in source.get_docs():
             documents.append(item)
         assert documents == expected_responses
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "data_source_type, expected_content_query",
+    [
+        (CONFLUENCE_CLOUD, CONTENT_QUERY_CLOUD),
+        (CONFLUENCE_DATA_CENTER, CONTENT_QUERY_DATA_CENTER),
+        (CONFLUENCE_SERVER, CONTENT_QUERY_DATA_CENTER),
+    ],
+)
+@freeze_time("2024-04-02T09:53:15.818621+00:00")
+async def test_get_docs_uses_correct_content_query_for_data_source_type(
+    data_source_type, expected_content_query
+):
+    """get_docs drops space.permissions from the content query off Cloud (CONFSERVER-99908)."""
+    async with create_confluence_source(data_source=data_source_type) as source:
+        source.confluence_client.fetch_spaces = MagicMock(
+            return_value=AsyncIterator([copy(SPACE)])
+        )
+        source.fetch_server_space_permission = AsyncMock(return_value={})
+        with mock.patch.object(
+            ConfluenceDataSource,
+            "fetch_documents",
+            side_effect=[AsyncIterator([]), AsyncIterator([])],
+        ) as fetch_documents_mock:
+            async for _ in source.get_docs():
+                pass
+
+        content_queries = [call.args[0] for call in fetch_documents_mock.call_args_list]
+        assert len(content_queries) == 2
+        for query in content_queries:
+            assert query.endswith(expected_content_query)
+        if data_source_type == CONFLUENCE_CLOUD:
+            assert all("space.permissions" in query for query in content_queries)
+        else:
+            assert all("space.permissions" not in query for query in content_queries)
 
 
 @pytest.mark.asyncio
