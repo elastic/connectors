@@ -1295,9 +1295,7 @@ async def test_get_docs_uses_correct_content_query_for_data_source_type(
             async for _ in source.get_docs():
                 pass
 
-        content_queries = [
-            call.args[0] for call in fetch_documents_mock.call_args_list
-        ]
+        content_queries = [call.args[0] for call in fetch_documents_mock.call_args_list]
         assert len(content_queries) == 2
         for query in content_queries:
             assert query.endswith(expected_content_query)
