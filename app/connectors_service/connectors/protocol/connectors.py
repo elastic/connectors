@@ -218,21 +218,21 @@ class ConnectorIndex(ESIndex):
             connector_id=connector_id, configuration=schema, values=values
         )
 
-    async def supported_connectors(self, native_service_types=None, connector_ids=None):
-        if native_service_types is None:
-            native_service_types = []
+    async def supported_connectors(self, broad_service_types=None, connector_ids=None):
+        if broad_service_types is None:
+            broad_service_types = []
         if connector_ids is None:
             connector_ids = []
 
-        if len(native_service_types) == 0 and len(connector_ids) == 0:
+        if len(broad_service_types) == 0 and len(connector_ids) == 0:
             return
 
         native_connectors_query = {
             "bool": {
                 "must_not": [{"term": {"deleted": True}}],
                 "filter": [
-                    {"term": {"is_native": True}},
-                    {"terms": {"service_type": native_service_types}},
+                    {"terms": {"service_type": broad_service_types}},
+                    {"term": {"is_native": False}},
                 ],
             }
         }
@@ -245,11 +245,11 @@ class ConnectorIndex(ESIndex):
                 ],
             }
         }
-        if len(native_service_types) > 0 and len(connector_ids) > 0:
+        if len(broad_service_types) > 0 and len(connector_ids) > 0:
             query = {
                 "bool": {"should": [native_connectors_query, custom_connectors_query]}
             }
-        elif len(native_service_types) > 0:
+        elif len(broad_service_types) > 0:
             query = native_connectors_query
         else:
             query = custom_connectors_query

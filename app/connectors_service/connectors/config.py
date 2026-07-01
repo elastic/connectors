@@ -39,6 +39,9 @@ DEFAULT_CONCURRENT_DOWNLOADS = 10
 # --- File handling defaults ----------------------------------------------------------
 DEFAULT_MAX_FILE_SIZE = 10485760  # 10MiB
 
+SERVICE_MODE_SELECTIVE = "selective"
+SERVICE_MODE_BROAD = "broad"
+
 
 def load_config(config_file):
     logger.info(f"Loading config from {config_file}")
@@ -82,6 +85,39 @@ log_level_mappings = {
 
 
 def _default_config():
+    sources = {
+        "azure_blob_storage": "connectors.sources.azure_blob_storage:AzureBlobStorageDataSource",
+        "box": "connectors.sources.box:BoxDataSource",
+        "confluence": "connectors.sources.atlassian.confluence:ConfluenceDataSource",
+        "dir": "connectors.sources.directory:DirectoryDataSource",
+        "dropbox": "connectors.sources.dropbox:DropboxDataSource",
+        "github": "connectors.sources.github:GitHubDataSource",
+        "gitlab": "connectors.sources.gitlab:GitLabDataSource",
+        "gmail": "connectors.sources.gmail:GMailDataSource",
+        "google_cloud_storage": "connectors.sources.google_cloud_storage:GoogleCloudStorageDataSource",
+        "google_drive": "connectors.sources.google_drive:GoogleDriveDataSource",
+        "graphql": "connectors.sources.graphql:GraphQLDataSource",
+        "jira": "connectors.sources.atlassian.jira:JiraDataSource",
+        "microsoft_teams": "connectors.sources.microsoft_teams:MicrosoftTeamsDataSource",
+        "mongodb": "connectors.sources.mongo:MongoDataSource",
+        "mssql": "connectors.sources.mssql:MSSQLDataSource",
+        "mysql": "connectors.sources.mysql:MySqlDataSource",
+        "network_drive": "connectors.sources.network_drive:NASDataSource",
+        "notion": "connectors.sources.notion:NotionDataSource",
+        "onedrive": "connectors.sources.onedrive:OneDriveDataSource",
+        "oracle": "connectors.sources.oracle:OracleDataSource",
+        "outlook": "connectors.sources.outlook:OutlookDataSource",
+        "postgresql": "connectors.sources.postgresql:PostgreSQLDataSource",
+        "redis": "connectors.sources.redis:RedisDataSource",
+        "s3": "connectors.sources.s3:S3DataSource",
+        "salesforce": "connectors.sources.salesforce:SalesforceDataSource",
+        "sandfly": "connectors.sources.sandfly:SandflyDataSource",
+        "servicenow": "connectors.sources.servicenow:ServiceNowDataSource",
+        "sharepoint_online": "connectors.sources.sharepoint.sharepoint_online:SharepointOnlineDataSource",
+        "sharepoint_server": "connectors.sources.sharepoint.sharepoint_server:SharepointServerDataSource",
+        "slack": "connectors.sources.slack:SlackDataSource",
+        "zoom": "connectors.sources.zoom:ZoomDataSource",
+    }
     return {
         "elasticsearch": {
             "host": DEFAULT_ELASTICSEARCH_HOST,
@@ -123,6 +159,8 @@ def _default_config():
             "feature_use_connectors_api": True,
         },
         "service": {
+            "mode": SERVICE_MODE_SELECTIVE,
+            "service_types": list(sources.keys()),
             "idling": 30,
             "heartbeat": 300,
             "preflight_max_attempts": 10,
@@ -137,39 +175,7 @@ def _default_config():
             "log_level": "INFO",
             "fips_mode": False,
         },
-        "sources": {
-            "azure_blob_storage": "connectors.sources.azure_blob_storage:AzureBlobStorageDataSource",
-            "box": "connectors.sources.box:BoxDataSource",
-            "confluence": "connectors.sources.atlassian.confluence:ConfluenceDataSource",
-            "dir": "connectors.sources.directory:DirectoryDataSource",
-            "dropbox": "connectors.sources.dropbox:DropboxDataSource",
-            "github": "connectors.sources.github:GitHubDataSource",
-            "gitlab": "connectors.sources.gitlab:GitLabDataSource",
-            "gmail": "connectors.sources.gmail:GMailDataSource",
-            "google_cloud_storage": "connectors.sources.google_cloud_storage:GoogleCloudStorageDataSource",
-            "google_drive": "connectors.sources.google_drive:GoogleDriveDataSource",
-            "graphql": "connectors.sources.graphql:GraphQLDataSource",
-            "jira": "connectors.sources.atlassian.jira:JiraDataSource",
-            "microsoft_teams": "connectors.sources.microsoft_teams:MicrosoftTeamsDataSource",
-            "mongodb": "connectors.sources.mongo:MongoDataSource",
-            "mssql": "connectors.sources.mssql:MSSQLDataSource",
-            "mysql": "connectors.sources.mysql:MySqlDataSource",
-            "network_drive": "connectors.sources.network_drive:NASDataSource",
-            "notion": "connectors.sources.notion:NotionDataSource",
-            "onedrive": "connectors.sources.onedrive:OneDriveDataSource",
-            "oracle": "connectors.sources.oracle:OracleDataSource",
-            "outlook": "connectors.sources.outlook:OutlookDataSource",
-            "postgresql": "connectors.sources.postgresql:PostgreSQLDataSource",
-            "redis": "connectors.sources.redis:RedisDataSource",
-            "s3": "connectors.sources.s3:S3DataSource",
-            "salesforce": "connectors.sources.salesforce:SalesforceDataSource",
-            "sandfly": "connectors.sources.sandfly:SandflyDataSource",
-            "servicenow": "connectors.sources.servicenow:ServiceNowDataSource",
-            "sharepoint_online": "connectors.sources.sharepoint.sharepoint_online:SharepointOnlineDataSource",
-            "sharepoint_server": "connectors.sources.sharepoint.sharepoint_server:SharepointServerDataSource",
-            "slack": "connectors.sources.slack:SlackDataSource",
-            "zoom": "connectors.sources.zoom:ZoomDataSource",
-        },
+        "sources": sources,
     }
 
 
