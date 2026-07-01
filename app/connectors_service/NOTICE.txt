@@ -2589,7 +2589,7 @@ Apache Software License
 
 
 bracex
-2.7
+3.0
 MIT
 MIT License
 
