@@ -24,7 +24,8 @@ from connectors.sources.atlassian.confluence.constants import (
     CONFLUENCE_DATA_CENTER,
     CONFLUENCE_SERVER,
     CONTENT,
-    CONTENT_QUERY,
+    CONTENT_QUERY_CLOUD,
+    CONTENT_QUERY_DATA_CENTER,
     END_SIGNAL,
     MAX_CONCURRENCY,
     MAX_CONCURRENT_DOWNLOADS,
@@ -929,6 +930,11 @@ class ConfluenceDataSource(BaseDataSource):
                         yield document, None
 
         else:
+            content_query = (
+                CONTENT_QUERY_CLOUD
+                if self.confluence_client.data_source_type == CONFLUENCE_CLOUD
+                else CONTENT_QUERY_DATA_CENTER
+            )
             async for space in self._space_coro():
                 yield space, None
                 self._logger.info(f"Fetching docs from space: {space['key']}")
@@ -936,14 +942,14 @@ class ConfluenceDataSource(BaseDataSource):
                 await self.fetchers.put(
                     partial(
                         self._page_blog_coro,
-                        f"{configured_spaces_query}{BLOGPOST}&{CONTENT_QUERY}",
+                        f"{configured_spaces_query}{BLOGPOST}&{content_query}",
                         BLOGPOST,
                     )
                 )
                 await self.fetchers.put(
                     partial(
                         self._page_blog_coro,
-                        f"{configured_spaces_query}{PAGE}&{CONTENT_QUERY}",
+                        f"{configured_spaces_query}{PAGE}&{content_query}",
                         PAGE,
                     )
                 )
