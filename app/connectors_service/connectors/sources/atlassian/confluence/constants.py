@@ -25,7 +25,12 @@ SPACE_QUERY_CLOUD = "limit=100&expand=permissions,history"
 # on Confluence DC/Server versions affected by CONFSERVER-99908 and similar bugs.
 SPACE_QUERY_DATA_CENTER = "limit=100"
 ATTACHMENT_QUERY = "limit=100&expand=version,history"
-CONTENT_QUERY = "limit=50&expand=ancestors,children.attachment,history.lastUpdated,body.storage,space,space.permissions,restrictions.read.restrictions.user,restrictions.read.restrictions.group"
+CONTENT_QUERY_CLOUD = "limit=50&expand=ancestors,children.attachment,history.lastUpdated,body.storage,space,space.permissions,restrictions.read.restrictions.user,restrictions.read.restrictions.group"
+# DC/Server omits space.permissions: space permissions come from the
+# SPACE_PERMISSION (Extender) endpoint and space.permissions is only read on the
+# Cloud code path. Avoids HTTP 500 on Confluence DC/Server versions affected by
+# CONFSERVER-99908 and similar expand=permissions bugs.
+CONTENT_QUERY_DATA_CENTER = "limit=50&expand=ancestors,children.attachment,history.lastUpdated,body.storage,space,restrictions.read.restrictions.user,restrictions.read.restrictions.group"
 SEARCH_QUERY = "limit=100&expand=content.history,content.extensions,content.container,content.space,content.body.storage,space.description,space.history"
 USER_QUERY = "expand=groups,applicationRoles"
 LABEL = "label"
