@@ -96,9 +96,7 @@ class JobExecutionService(BaseService):
             )
 
     async def _run(self):
-        self.logger.info(
-            f"{self.display_name.capitalize()} service starting"
-        )
+        self.logger.info(f"{self.display_name.capitalize()} service starting")
         self.connector_index = ConnectorIndex(self.es_config)
         self.sync_job_index = SyncJobIndex(self.es_config)
 

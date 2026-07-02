@@ -203,12 +203,14 @@ class PreflightCheck:
 
     def _validate_configuration(self):
         configured_native_types = "service_types" in self.config["service"]
-        run_all_service_types = self.config["service"].get("run_all_service_types", False)
+        run_all_service_types = self.config["service"].get(
+            "run_all_service_types", False
+        )
 
         if run_all_service_types:
             if not configured_native_types:
                 logger.error(
-                        f"Service is running with 'service.run_all_service_types: true' with no 'service.service_types' configured"
+                    "Service is running with 'service.run_all_service_types: true' with no 'service.service_types' configured"
                 )
                 return False
             return True

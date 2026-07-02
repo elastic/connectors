@@ -152,9 +152,7 @@ class JobSchedulingService(BaseService):
         """Main event loop."""
         self.connector_index = ConnectorIndex(self.es_config)
         self.sync_job_index = SyncJobIndex(self.es_config)
-        self.logger.info(
-            f"Job Scheduling service starting"
-        )
+        self.logger.info("Job Scheduling service starting")
 
         broad_service_types = self.config["service"].get("service_types", []) or []
         if len(broad_service_types) > 0:
@@ -162,9 +160,7 @@ class JobSchedulingService(BaseService):
                 f"Native support for job scheduling for {', '.join(broad_service_types)}"
             )
         else:
-            self.logger.debug(
-                "No service types configured"
-            )
+            self.logger.debug("No service types configured")
         connector_ids = list(self.connectors.keys())
 
         self.logger.info(
