@@ -518,11 +518,13 @@ class GitHubDataSource(BaseDataSource):
             "_id": pull_request.pop("id"),
             "_timestamp": pull_request.pop("updatedAt"),
             "type": ObjectType.PULL_REQUEST.value,
-            "issue_comments": pull_request.get("comments", {}).get("nodes"),
+            "issue_comments": (pull_request.get("comments") or {}).get("nodes"),
             "reviews_comments": reviews,
-            "labels_field": pull_request.get("labels", {}).get("nodes"),
-            "assignees_list": pull_request.get("assignees", {}).get("nodes"),
-            "requested_reviewers": pull_request.get("reviewRequests", {}).get("nodes"),
+            "labels_field": (pull_request.get("labels") or {}).get("nodes"),
+            "assignees_list": (pull_request.get("assignees") or {}).get("nodes"),
+            "requested_reviewers": (pull_request.get("reviewRequests") or {}).get(
+                "nodes"
+            ),
         }
 
     def _prepare_issue_doc(self, issue):
@@ -530,9 +532,9 @@ class GitHubDataSource(BaseDataSource):
             "_id": issue.pop("id"),
             "type": ObjectType.ISSUE.value,
             "_timestamp": issue.pop("updatedAt"),
-            "issue_comments": issue.get("comments", {}).get("nodes"),
-            "labels_field": issue.get("labels", {}).get("nodes"),
-            "assignees_list": issue.get("assignees", {}).get("nodes"),
+            "issue_comments": (issue.get("comments") or {}).get("nodes"),
+            "labels_field": (issue.get("labels") or {}).get("nodes"),
+            "assignees_list": (issue.get("assignees") or {}).get("nodes"),
         }
 
     def _prepare_review_doc(self, review):
@@ -543,7 +545,7 @@ class GitHubDataSource(BaseDataSource):
             "author": author.get("login"),
             "body": review.get("body"),
             "state": review.get("state"),
-            "comments": review.get("comments", {}).get("nodes"),
+            "comments": (review.get("comments") or {}).get("nodes"),
         }
 
     async def _fetch_installations(self):
@@ -716,7 +718,7 @@ class GitHubDataSource(BaseDataSource):
                 "es_field": "assignees_list",
             },
         }
-        page_info = type_obj.get(field_type, {}).get("pageInfo", {})
+        page_info = (type_obj.get(field_type) or {}).get("pageInfo", {})
         if page_info.get("hasNextPage"):
             variables = {
                 "owner": owner,
@@ -742,7 +744,7 @@ class GitHubDataSource(BaseDataSource):
     async def _extract_pull_request(self, pull_request, owner, repo):
         reviews = [
             self._prepare_review_doc(review=review)
-            for review in pull_request.get("reviews", {}).get("nodes")
+            for review in (pull_request.get("reviews") or {}).get("nodes") or []
         ]
         pull_request.update(
             self._prepare_pull_request_doc(pull_request=pull_request, reviews=reviews)
@@ -896,7 +898,7 @@ class GitHubDataSource(BaseDataSource):
             )
         )
 
-        for repo_object in file_tree.get("tree", []):
+        for repo_object in file_tree.get("tree") or []:
             if repo_object["type"] == BLOB:
                 try:
                     document = await self._format_file_document(
@@ -1036,9 +1038,9 @@ class GitHubDataSource(BaseDataSource):
             for user in nested_get_from_dict(  # pyright: ignore
                 response, ["repository", "collaborators", "edges"], default=[]
             ):
-                user_id = user.get("node", {}).get("id")
-                user_name = user.get("node", {}).get("login")
-                user_email = user.get("node", {}).get("email")
+                user_id = (user.get("node") or {}).get("id")
+                user_name = (user.get("node") or {}).get("login")
+                user_email = (user.get("node") or {}).get("email")
                 if user_id in self.members[owner]:
                     access_control.append(_prefix_user_id(user_id=user_id))
                     if user_name:

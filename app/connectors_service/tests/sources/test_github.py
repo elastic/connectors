@@ -1596,6 +1596,42 @@ async def test_fetch_issues_skips_document_on_github_exception(patch_logger):
 
 
 @pytest.mark.asyncio
+async def test_fetch_issues_handles_null_connection_fields():
+    # GitHub can return null for connection fields (comments/labels/assignees);
+    # this must not raise, and the issue should still be yielded.
+    issue_response = {
+        "repository": {
+            "issues": {
+                "nodes": [
+                    {
+                        "id": "1",
+                        "updatedAt": "2023-04-19T08:56:23Z",
+                        "comments": None,
+                        "labels": None,
+                        "assignees": None,
+                    }
+                ]
+            }
+        }
+    }
+    async with create_github_source() as source:
+        with patch.object(
+            source.github_client,
+            "paginated_api_call",
+            side_effect=[AsyncIterator([issue_response])],
+        ):
+            issues = [
+                issue
+                async for issue in source._fetch_issues(
+                    repo_name="demo_user/demo_repo",
+                    response_key=[REPOSITORY_OBJECT, "issues"],
+                )
+            ]
+    assert len(issues) == 1
+    assert issues[0]["_id"] == "1"
+
+
+@pytest.mark.asyncio
 async def test_fetch_pull_requests():
     async with create_github_source() as source:
         with patch.object(
@@ -1686,6 +1722,45 @@ async def test_fetch_pull_requests_skips_document_on_github_exception(patch_logg
             ]
         assert pulls == []
         patch_logger.assert_present("Skipping a pull request")
+
+
+@pytest.mark.asyncio
+async def test_fetch_pull_requests_handles_null_connection_fields():
+    # GitHub can return null for connection fields (reviews/comments/labels/...);
+    # this must not raise, and the pull request should still be yielded.
+    pull_response = {
+        "repository": {
+            "pullRequests": {
+                "nodes": [
+                    {
+                        "id": "1",
+                        "updatedAt": "2023-07-03T12:24:16Z",
+                        "reviews": None,
+                        "comments": None,
+                        "reviewRequests": None,
+                        "labels": None,
+                        "assignees": None,
+                    }
+                ]
+            }
+        }
+    }
+    async with create_github_source() as source:
+        with patch.object(
+            source.github_client,
+            "paginated_api_call",
+            side_effect=[AsyncIterator([pull_response])],
+        ):
+            pulls = [
+                pull
+                async for pull in source._fetch_pull_requests(
+                    repo_name="demo_user/demo_repo",
+                    response_key=[REPOSITORY_OBJECT, "pullRequests"],
+                )
+            ]
+    assert len(pulls) == 1
+    assert pulls[0]["_id"] == "1"
+    assert pulls[0]["reviews_comments"] == []
 
 
 @pytest.mark.asyncio
