@@ -57,12 +57,12 @@ USERS_FOR_DATA_CENTER = "users_for_data_center"
 SEARCH_FOR_DATA_CENTER = "search_for_data_center"
 USERS_FOR_SERVER = "users_for_server"
 SPACE_QUERY_CLOUD = "limit=100&expand=permissions,history"
-# DC/Server omits expand=permissions,history: permissions come from the
-# SPACE_PERMISSION (Extender) endpoint and history is Cloud-only. Avoids HTTP 500
-# on Confluence DC/Server versions affected by CONFSERVER-99908 and similar bugs.
+# DC/Server: drop expand=permissions,history (unused, and 500s per CONFSERVER-99908).
 SPACE_QUERY_DATA_CENTER = "limit=100"
 ATTACHMENT_QUERY = "limit=100&expand=version,history"
-CONTENT_QUERY = "limit=50&expand=ancestors,children.attachment,history.lastUpdated,body.storage,space,space.permissions,restrictions.read.restrictions.user,restrictions.read.restrictions.group"
+CONTENT_QUERY_CLOUD = "limit=50&expand=ancestors,children.attachment,history.lastUpdated,body.storage,space,space.permissions,restrictions.read.restrictions.user,restrictions.read.restrictions.group"
+# DC/Server: drop space.permissions (unused, and 500s per CONFSERVER-99908).
+CONTENT_QUERY_DATA_CENTER = "limit=50&expand=ancestors,children.attachment,history.lastUpdated,body.storage,space,restrictions.read.restrictions.user,restrictions.read.restrictions.group"
 SEARCH_QUERY = "limit=100&expand=content.history,content.extensions,content.container,content.space,content.body.storage,space.description,space.history"
 USER_QUERY = "expand=groups,applicationRoles"
 LABEL = "label"
@@ -1319,6 +1319,11 @@ class ConfluenceDataSource(BaseDataSource):
                         yield document, None
 
         else:
+            content_query = (
+                CONTENT_QUERY_CLOUD
+                if self.confluence_client.data_source_type == CONFLUENCE_CLOUD
+                else CONTENT_QUERY_DATA_CENTER
+            )
             async for space in self._space_coro():
                 yield space, None
                 self._logger.info(f"Fetching docs from space: {space['key']}")
@@ -1326,14 +1331,14 @@ class ConfluenceDataSource(BaseDataSource):
                 await self.fetchers.put(
                     partial(
                         self._page_blog_coro,
-                        f"{configured_spaces_query}{BLOGPOST}&{CONTENT_QUERY}",
+                        f"{configured_spaces_query}{BLOGPOST}&{content_query}",
                         BLOGPOST,
                     )
                 )
                 await self.fetchers.put(
                     partial(
                         self._page_blog_coro,
-                        f"{configured_spaces_query}{PAGE}&{CONTENT_QUERY}",
+                        f"{configured_spaces_query}{PAGE}&{content_query}",
                         PAGE,
                     )
                 )
