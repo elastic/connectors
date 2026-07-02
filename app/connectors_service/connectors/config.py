@@ -39,9 +39,6 @@ DEFAULT_CONCURRENT_DOWNLOADS = 10
 # --- File handling defaults ----------------------------------------------------------
 DEFAULT_MAX_FILE_SIZE = 10485760  # 10MiB
 
-SERVICE_MODE_SELECTIVE = "selective"
-SERVICE_MODE_BROAD = "broad"
-
 
 def load_config(config_file):
     logger.info(f"Loading config from {config_file}")
@@ -159,7 +156,7 @@ def _default_config():
             "feature_use_connectors_api": True,
         },
         "service": {
-            "mode": SERVICE_MODE_SELECTIVE,
+            "run_all_service_types": False,
             "service_types": list(sources.keys()),
             "idling": 30,
             "heartbeat": 300,

@@ -153,7 +153,7 @@ class JobSchedulingService(BaseService):
         self.connector_index = ConnectorIndex(self.es_config)
         self.sync_job_index = SyncJobIndex(self.es_config)
         self.logger.info(
-            f"Job Scheduling service starting in {self.service_config['mode']} mode"
+            f"Job Scheduling service starting"
         )
 
         broad_service_types = self.config["service"].get("service_types", []) or []
@@ -163,7 +163,7 @@ class JobSchedulingService(BaseService):
             )
         else:
             self.logger.debug(
-                "No service types configured for job scheduling via broad mode"
+                "No service types configured"
             )
         connector_ids = list(self.connectors.keys())
 

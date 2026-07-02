@@ -10,7 +10,6 @@ import re
 import aiohttp
 from connectors_sdk.logger import logger
 
-from connectors.config import SERVICE_MODE_BROAD, SERVICE_MODE_SELECTIVE
 from connectors.es.management_client import ESManagementClient
 from connectors.protocol import CONCRETE_CONNECTORS_INDEX, CONCRETE_JOBS_INDEX
 from connectors.utils import CancellableSleeps
@@ -203,30 +202,21 @@ class PreflightCheck:
         return False
 
     def _validate_configuration(self):
-        # SERVICE_MODE_BROAD mode
-
-        logger.info(self.config)
         configured_native_types = "service_types" in self.config["service"]
-        mode = self.config["service"].get("mode")
+        run_all_service_types = self.config["service"].get("run_all_service_types", False)
 
-        if mode not in [SERVICE_MODE_BROAD, SERVICE_MODE_SELECTIVE]:
-            logger.error(
-                "Unknown service.mode: '{mode}'. Allowed modes are: ['{SERVICE_MODE_SELECTIVE}', '{SERVICE_MODE_BROAD}']"
-            )
-            return False
-
-        if mode == SERVICE_MODE_BROAD:
+        if run_all_service_types:
             if not configured_native_types:
                 logger.error(
-                    f"Service is running with 'service.mode: {SERVICE_MODE_BROAD}' with no 'service.service_types' configured"
+                        f"Service is running with 'service.run_all_service_types: true' with no 'service.service_types' configured"
                 )
                 return False
             return True
 
-        # else mode == SERVICE_MODE_SELECTIVE and we need to verify connector configs
+        # else not running all service types
         if configured_native_types:
             logger.warning(
-                "The configuration 'service.service_types' requires running a service with 'service.mode: broad'"
+                "The configuration 'service.service_types' requires running a service with 'service.run_all_service_types: true'"
             )
 
         # Connector client mode
