@@ -977,7 +977,7 @@ Apache Software License
 UNKNOWN
 
 elasticsearch-connectors-sdk
-9.4.3
+9.4.4
 Elastic-2.0
 UNKNOWN
 
@@ -1515,7 +1515,7 @@ THE SOFTWARE.
 
 
 typing_extensions
-4.15.0
+4.16.0
 PSF-2.0
 A. HISTORY OF THE SOFTWARE
 ==========================
