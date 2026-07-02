@@ -230,7 +230,7 @@
 #service.run_all_service_types: false
 #
 #
-##  A collection of service types that a service running in "broad" mode will attempt to handle.
+##  A collection of service types that a service running with "service.run_all_service_types: true" config will attempt to handle.
 ##    This allows partitioning the load allowing to spread different connector types between different
 ##    physical instance that can be bigger or smaller depending on the load and hardware requirements.
 ##    If `service.run_all_service_types` is `false` then this setting is ignored.
