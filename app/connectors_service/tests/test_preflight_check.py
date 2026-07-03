@@ -23,7 +23,6 @@ config = {
         "initial_backoff_duration": 0.1,
     },
     "service": {
-        "mode": "selective",
         "preflight_max_attempts": 4,
         "preflight_idle": 0.1,
     },
