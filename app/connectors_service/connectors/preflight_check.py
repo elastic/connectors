@@ -203,9 +203,7 @@ class PreflightCheck:
 
     def _validate_configuration(self):
         configured_native_types = "service_types" in self.config["service"]
-        worker_mode = self.config["service"].get(
-            "worker_mode", False
-        )
+        worker_mode = self.config["service"].get("worker_mode", False)
 
         if worker_mode:
             if not configured_native_types:
