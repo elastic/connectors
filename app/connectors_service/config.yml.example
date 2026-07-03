@@ -223,17 +223,17 @@
 ##  Forces the service to handle all connectors defined in `service.service_types`
 ##    Value meaning:
 ##    - false (default) - service only handles the connectors specified in "connectors" configuration
-##    - true - service will attempt to handle all connectors of service_type from `service.service_types` setting of the service, automatically discovering them
+##    - true - service will attempt to handle all connectors of each service_type from `service.service_types` setting of the service, automatically discovering them
 ##    Important note: when the setting is `true` the service operates using only credentials from "elasticsearch" section.
 ##    This means that the api_key in elasticsearch.api_key should have access to all indices that are used by connectors that
 ##    are handled by this service. You won't be able to have an api_key per connector any more.
-#service.run_all_service_types: false
+#service.worker_mode: false
 #
 #
-##  A collection of service types that a service running with "service.run_all_service_types: true" config will attempt to handle.
+##  A collection of service types that a service running with "service.worker_mode: true" config will attempt to handle.
 ##    This allows partitioning the load allowing to spread different connector types between different
 ##    physical instance that can be bigger or smaller depending on the load and hardware requirements.
-##    If `service.run_all_service_types` is `false` then this setting is ignored.
+##    If `service.worker_mode` is `false` then this setting is ignored.
 ##    If no values are provided, then all known service types from "sources" config are used
 ##    Example: ['mongodb', 'mysql']
 #service.service_types: []

@@ -152,7 +152,6 @@ class JobSchedulingService(BaseService):
         """Main event loop."""
         self.connector_index = ConnectorIndex(self.es_config)
         self.sync_job_index = SyncJobIndex(self.es_config)
-        self.logger.info("Job Scheduling service starting")
 
         native_service_types = self.config["service"].get("service_types", []) or []
         if len(native_service_types) > 0:
