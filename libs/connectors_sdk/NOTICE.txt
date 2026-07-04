@@ -206,7 +206,7 @@ Apache License
 
 
 aiohappyeyeballs
-2.6.2
+2.7.1
 Python Software Foundation License
 A. HISTORY OF THE SOFTWARE
 ==========================
@@ -1515,7 +1515,7 @@ THE SOFTWARE.
 
 
 typing_extensions
-4.15.0
+4.16.0
 PSF-2.0
 A. HISTORY OF THE SOFTWARE
 ==========================
