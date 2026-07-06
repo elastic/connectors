@@ -74,7 +74,7 @@ spec:
           access_level: "READ_ONLY"
         search-extract-and-transform: {}
         search-productivity-team: {}
-        search-inference-team: {}
+        inference-team: {}
         enterprise-search: {}
         release-eng:
           access_level: BUILD_AND_READ
@@ -131,7 +131,7 @@ spec:
           access_level: "READ_ONLY"
         search-extract-and-transform: {}
         search-productivity-team: {}
-        search-inference-team: {}
+        inference-team: {}
         enterprise-search: {}
 
 ---
@@ -183,7 +183,7 @@ spec:
           access_level: "READ_ONLY"
         search-extract-and-transform: {}
         search-productivity-team: {}
-        search-inference-team: {}
+        inference-team: {}
         enterprise-search: {}
 
 ########
@@ -215,7 +215,7 @@ spec:
       teams:
         search-extract-and-transform: {}
         search-productivity-team: {}
-        search-inference-team: {}
+        inference-team: {}
         enterprise-search: {}
         everyone:
           access_level: "READ_ONLY"
@@ -286,7 +286,7 @@ spec:
           access_level: "READ_ONLY"
         search-extract-and-transform: {}
         search-productivity-team: {}
-        search-inference-team: {}
+        inference-team: {}
         enterprise-search: {}
         artifact-management:
           access_level: BUILD_AND_READ
