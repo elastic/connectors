@@ -296,7 +296,7 @@ async def test_native_config_is_not_warned(patched_logger, mock_responses):
     mock_index_exists(mock_responses, CONCRETE_CONNECTORS_INDEX)
     mock_index_exists(mock_responses, CONCRETE_JOBS_INDEX)
     local_config = deepcopy(config)
-    local_config["service"]["run_all_service_types"] = True
+    local_config["service"]["worker_mode"] = True
     local_config["service"]["service_types"] = ["foo", "bar"]
     del local_config["connectors"]
     preflight = PreflightCheck(local_config, connectors_version)
