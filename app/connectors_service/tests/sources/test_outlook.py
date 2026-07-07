@@ -32,9 +32,12 @@ from connectors.sources.outlook.client import (
     UsersFetchFailed,
 )
 from connectors.sources.outlook.constants import (
+    INBOX_MAIL_OBJECT,
+    MAIL_ATTACHMENT,
     OUTLOOK_CLOUD,
     OUTLOOK_SERVER,
 )
+from connectors.sources.outlook.datasource import OutlookDocFormatter
 from connectors.utils import get_pem_format
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
@@ -1159,6 +1162,134 @@ async def test_get_contacts_skips_when_folder_not_found():
         assert contacts == []
 
 
+def test_mails_doc_formatter_handles_missing_sender():
+    mail = MailDocument()
+    mail.sender = None
+
+    document = OutlookDocFormatter().mails_doc_formatter(
+        mail=mail,
+        mail_type={"constant": INBOX_MAIL_OBJECT},
+        timezone=TIMEZONE,
+    )
+
+    assert document["sender"] is None
+    assert document["to_recipients"] == ["dummy.user@gmail.com"]
+
+
+def test_calendar_doc_formatter_handles_missing_organizer():
+    calendar = CalendarDocument()
+    calendar.organizer = None
+
+    document = OutlookDocFormatter().calendar_doc_formatter(
+        calendar=calendar,
+        child_calendar="Calendar",
+        timezone=TIMEZONE,
+    )
+
+    assert document["organizer"] is None
+
+
+def test_calendar_doc_formatter_handles_occurrence_without_recurrence():
+    calendar = CalendarDocument()
+    calendar.type = "Occurrence"
+    calendar.recurrence = None
+
+    document = OutlookDocFormatter().calendar_doc_formatter(
+        calendar=calendar,
+        child_calendar="Calendar",
+        timezone=TIMEZONE,
+    )
+
+    assert document["meeting_type"] == "Occurrence"
+
+
+def test_calendar_doc_formatter_skips_attendees_without_mailbox():
+    calendar = CalendarDocument()
+    attendee_without_mailbox = MagicMock()
+    attendee_without_mailbox.mailbox = None
+    calendar.required_attendees = [attendee_without_mailbox]
+
+    document = OutlookDocFormatter().calendar_doc_formatter(
+        calendar=calendar,
+        child_calendar="Calendar",
+        timezone=TIMEZONE,
+    )
+
+    assert document["attendees"] == []
+
+
+def test_contact_doc_formatter_handles_missing_email_and_phone_entries():
+    contact = ContactDocument()
+    contact.email_addresses = [None, MagicMock(email=None)]
+    contact.phone_numbers = [None, MagicMock(phone_number=None)]
+
+    document = OutlookDocFormatter().contact_doc_formatter(
+        contact=contact,
+        timezone=TIMEZONE,
+    )
+
+    assert document["email_addresses"] == []
+    assert document["contact_numbers"] == []
+
+
+@pytest.mark.asyncio
+async def test_fetch_attachments_skips_attachment_without_id():
+    async with create_outlook_source() as source:
+        mail = MailDocument()
+        mail.attachments = [
+            MockAttachment(
+                attachment_id=None,
+                name="broken.txt",
+                size=100,
+                last_modified_time="2023-12-12T01:01:01Z",
+                content=RESPONSE_CONTENT,
+            )
+        ]
+        source._logger = MagicMock()
+        account = MockAccount()
+
+        attachments = [
+            document
+            async for document, _ in source._fetch_attachments(
+                attachment_type=MAIL_ATTACHMENT,
+                outlook_object=mail,
+                timezone=TIMEZONE,
+                account=account,
+            )
+        ]
+
+        assert attachments == []
+        source._logger.warning.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_get_mails_skips_junk_when_folder_not_found():
+    async with create_outlook_source() as source:
+        # Subclass so the folder override stays local and does not leak into
+        # the shared MockAccount used by other tests (pytest runs in random order).
+        # The no-op setter lets MockAccount.__init__ assign junk; reads raise.
+        class MockAccountWithoutJunk(MockAccount):
+            @property
+            def junk(self):
+                msg = "no"
+                raise ErrorFolderNotFound(msg)
+
+            @junk.setter
+            def junk(self, value):
+                pass
+
+        account = MockAccountWithoutJunk()
+        account.msg_folder_root = MagicMock()
+        account.msg_folder_root.__truediv__.side_effect = ErrorFolderNotFound("no")
+
+        folders = [
+            mail_type["folder"]
+            async for _, mail_type in source.client.get_mails(account)
+        ]
+
+        assert folders == ["inbox", "sent"]
+
+
 @pytest.mark.asyncio
 async def test_get_mails_skips_archive_when_folder_not_found():
     async with create_outlook_source() as source:
@@ -1187,6 +1318,40 @@ async def test_get_access_control(is_cloud, user_response):
         async for access_control in source.get_access_control():
             acl.append(access_control)
         assert len(acl) == 1
+
+
+@pytest.mark.asyncio
+async def test_get_access_control_for_server_normalizes_ldap_mail_list():
+    async with create_outlook_source() as source:
+        source.configuration.get_field("data_source").value = "outlook_server"
+        user_response = {
+            "attributes": {"mail": ["dummy@es.local"]},
+            "dn": "CN=Dummy,CN=Users,DC=es,DC=local",
+        }
+        source.client._get_user_instance.get_users = AsyncIterator([user_response])
+        source._dls_enabled = MagicMock(return_value=True)
+        acl = []
+        async for access_control in source.get_access_control():
+            acl.append(access_control)
+        assert len(acl) == 1
+        assert acl[0]["identity"]["email"] == "email:dummy@es.local"
+
+
+@pytest.mark.asyncio
+async def test_get_access_control_for_server_handles_malformed_dn():
+    async with create_outlook_source() as source:
+        source.configuration.get_field("data_source").value = "outlook_server"
+        user_response = {
+            "attributes": {"mail": "dummy@es.local"},
+            "dn": "",
+        }
+        source.client._get_user_instance.get_users = AsyncIterator([user_response])
+        source._dls_enabled = MagicMock(return_value=True)
+        acl = []
+        async for access_control in source.get_access_control():
+            acl.append(access_control)
+        assert len(acl) == 1
+        assert acl[0]["identity"]["display_name"] == "name:"
 
 
 @pytest.mark.asyncio

@@ -2713,7 +2713,7 @@ documentation is licensed as follows:
 
 
 charset-normalizer
-3.4.7
+3.4.8
 MIT
 MIT License
 
