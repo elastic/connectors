@@ -16,7 +16,7 @@ from connectors_sdk.utils import (
 from exchangelib.errors import ErrorNonExistentMailbox
 
 from connectors.access_control import ACCESS_CONTROL, es_access_control_query
-from connectors.sources.outlook.client import OutlookClient
+from connectors.sources.outlook.client import OutlookClient, _extract_ldap_mail
 from connectors.sources.outlook.constants import (
     CALENDAR_ATTACHMENT,
     DEFAULT_TIMEZONE,
@@ -38,6 +38,14 @@ from connectors.utils import html_to_text
 class OutlookDocFormatter:
     """Format Outlook object documents to Elasticsearch document"""
 
+    @staticmethod
+    def _calendar_meeting_type(calendar):
+        if calendar.type == "Single":
+            return "Single"
+        if calendar.recurrence and calendar.recurrence.pattern:
+            return f"Recurring {calendar.recurrence.pattern}"
+        return calendar.type
+
     def mails_doc_formatter(self, mail, mail_type, timezone):
         return {
             "_id": mail.id,
@@ -46,15 +54,21 @@ class OutlookDocFormatter:
             ),
             "title": mail.subject,
             "type": mail_type["constant"],
-            "sender": mail.sender.email_address,
+            "sender": mail.sender.email_address if mail.sender else None,
             "to_recipients": [
-                recipient.email_address for recipient in (mail.to_recipients or [])
+                recipient.email_address
+                for recipient in (mail.to_recipients or [])
+                if recipient and recipient.email_address
             ],
             "cc_recipients": [
-                recipient.email_address for recipient in (mail.cc_recipients or [])
+                recipient.email_address
+                for recipient in (mail.cc_recipients or [])
+                if recipient and recipient.email_address
             ],
             "bcc_recipients": [
-                recipient.email_address for recipient in (mail.bcc_recipients or [])
+                recipient.email_address
+                for recipient in (mail.bcc_recipients or [])
+                if recipient and recipient.email_address
             ],
             "importance": mail.importance,
             "categories": list((mail.categories or [])),
@@ -69,10 +83,10 @@ class OutlookDocFormatter:
             ),
             "type": "Calendar",
             "title": calendar.subject,
-            "meeting_type": "Single"
-            if calendar.type == "Single"
-            else f"Recurring {calendar.recurrence.pattern}",
-            "organizer": calendar.organizer.email_address,
+            "meeting_type": self._calendar_meeting_type(calendar),
+            "organizer": calendar.organizer.email_address
+            if calendar.organizer
+            else None,
         }
 
         if child_calendar in ["Folder (Birthdays)", "Birthdays (Birthdays)"]:
@@ -89,7 +103,9 @@ class OutlookDocFormatter:
                     "attendees": [
                         attendee.mailbox.email_address
                         for attendee in (calendar.required_attendees or [])
-                        if attendee.mailbox.email_address
+                        if attendee
+                        and attendee.mailbox
+                        and attendee.mailbox.email_address
                     ],
                     "start_date": ews_format_to_datetime(
                         source_datetime=calendar.start, timezone=timezone
@@ -137,12 +153,14 @@ class OutlookDocFormatter:
             ),
             "name": contact.display_name,
             "email_addresses": [
-                email.email for email in (contact.email_addresses or [])
+                email.email
+                for email in (contact.email_addresses or [])
+                if email and email.email
             ],
             "contact_numbers": [
                 number.phone_number
-                for number in contact.phone_numbers or []
-                if number.phone_number
+                for number in (contact.phone_numbers or [])
+                if number and number.phone_number
             ],
             "company_name": contact.company_name,
             "birthday": ews_format_to_datetime(
@@ -151,8 +169,11 @@ class OutlookDocFormatter:
         }
 
     def attachment_doc_formatter(self, attachment, attachment_type, timezone):
+        attachment_id = (
+            attachment.attachment_id.id if attachment.attachment_id else None
+        )
         return {
-            "_id": attachment.attachment_id.id,
+            "_id": attachment_id,
             "title": attachment.name,
             "type": attachment_type,
             "_timestamp": ews_format_to_datetime(
@@ -356,7 +377,7 @@ class OutlookDataSource(BaseDataSource):
             if self.configuration["data_source"] == OUTLOOK_CLOUD:
                 for user in users.get("value", []):
                     yield await self._user_access_control_doc(user=user)
-            elif users.get("attributes", {}).get("mail"):
+            elif _extract_ldap_mail(users.get("attributes", {})):
                 yield await self._user_access_control_doc_for_server(users=users)
 
     async def _user_access_control_doc(self, user):
@@ -383,9 +404,13 @@ class OutlookDataSource(BaseDataSource):
         )
 
     async def _user_access_control_doc_for_server(self, users):
-        name_metadata = users.get("dn", "").split("=", 1)[1]
-        display_name = name_metadata.split(",", 1)[0]
-        user_email = users.get("attributes", {}).get("mail")
+        dn = users.get("dn", "")
+        if "=" in dn:
+            name_metadata = dn.split("=", 1)[1]
+            display_name = name_metadata.split(",", 1)[0]
+        else:
+            display_name = dn or ""
+        user_email = _extract_ldap_mail(users.get("attributes", {}))
         user_id = hash_id(user_email)
 
         _prefixed_user_id = _prefix_user_id(user_id=user_id)
@@ -425,6 +450,9 @@ class OutlookDataSource(BaseDataSource):
         Returns:
             dictionary: Content document with _id, _timestamp and attachment content
         """
+        if not attachment.attachment_id:
+            return
+
         file_size = attachment.size
         if not (doit and file_size > 0):
             return
@@ -463,7 +491,12 @@ class OutlookDataSource(BaseDataSource):
     async def _fetch_attachments(
         self, attachment_type, outlook_object, timezone, account
     ):
-        for attachment in outlook_object.attachments:
+        for attachment in outlook_object.attachments or []:
+            if not attachment.attachment_id:
+                self._logger.warning(
+                    f"Skipping attachment without an ID on item {outlook_object.id}"
+                )
+                continue
             document = self.doc_formatter.attachment_doc_formatter(
                 attachment=attachment,
                 attachment_type=attachment_type,

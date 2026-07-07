@@ -405,15 +405,19 @@ class OutlookClient:
             self._logger.debug(
                 f"Fetching {mail_type['folder']} mails for {account.primary_smtp_address}"
             )
-            if mail_type["folder"] == "archive":
-                # msg_folder_root is locale-agnostic; the "Archive" leaf has no
-                # distinguished ID, so resolve it by name and skip if absent.
-                try:
+            try:
+                if mail_type["folder"] == "archive":
+                    # msg_folder_root is locale-agnostic; the "Archive" leaf has no
+                    # distinguished ID, so resolve it by name and skip if absent.
                     folder_object = account.msg_folder_root / "Archive"
-                except ErrorFolderNotFound:
-                    continue
-            else:
-                folder_object = getattr(account, mail_type["folder"])
+                else:
+                    folder_object = getattr(account, mail_type["folder"])
+            except ErrorFolderNotFound:
+                self._logger.warning(
+                    f"Could not resolve {mail_type['folder']} folder for "
+                    f"{account.primary_smtp_address}, skipping."
+                )
+                continue
 
             for mail in await asyncio.to_thread(folder_object.all().only, *MAIL_FIELDS):
                 yield mail, mail_type
