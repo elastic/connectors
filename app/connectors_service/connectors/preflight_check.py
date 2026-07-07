@@ -216,7 +216,7 @@ class PreflightCheck:
         # else not running all service types
         if len(configured_native_types) > 0:
             logger.warning(
-                "The configuration 'service.service_types' requires running a service with 'service.worker_mode: true'"
+                    "Configuration 'service.service_types' is ignored: requires running a service with 'service.worker_mode: true'"
             )
 
         # Connector client mode
@@ -239,7 +239,7 @@ class PreflightCheck:
             )
 
         if not configured_connectors:
-            logger.error("You must configure at least one connector. ")
+            logger.error("You must configure at least one connector.")
             logger.info(
                 "Using Kibana or the connectors CLI, create a connector. You will then be provided with the necessary fields (connector_id, service_type, api_key) to add to your config.yml"
             )
