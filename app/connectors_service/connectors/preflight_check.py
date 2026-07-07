@@ -216,7 +216,7 @@ class PreflightCheck:
         # else not running all service types
         if len(configured_native_types) > 0:
             logger.warning(
-                    "Configuration 'service.service_types' is ignored: requires running a service with 'service.worker_mode: true'"
+                "Configuration 'service.service_types' is ignored: requires running a service with 'service.worker_mode: true'"
             )
 
         # Connector client mode
