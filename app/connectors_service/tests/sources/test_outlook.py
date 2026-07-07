@@ -1271,7 +1271,8 @@ async def test_get_mails_skips_junk_when_folder_not_found():
         class MockAccountWithoutJunk(MockAccount):
             @property
             def junk(self):
-                raise ErrorFolderNotFound("no")
+                msg = "no"
+                raise ErrorFolderNotFound(msg)
 
             @junk.setter
             def junk(self, value):
