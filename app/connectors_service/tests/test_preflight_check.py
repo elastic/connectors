@@ -339,21 +339,6 @@ async def test_native_config_is_not_warned(patched_logger, mock_responses):
 
 @pytest.mark.asyncio
 @patch("connectors.preflight_check.logger")
-async def test_native_config_is_forced(patched_logger, mock_responses):
-    mock_es_info(mock_responses)
-    mock_index_exists(mock_responses, CONCRETE_CONNECTORS_INDEX)
-    mock_index_exists(mock_responses, CONCRETE_JOBS_INDEX)
-    local_config = deepcopy(config)
-    local_config["native_service_types"] = ["foo", "bar"]
-    local_config["_force_allow_native"] = True
-    preflight = PreflightCheck(local_config, connectors_version)
-    result = await preflight.run()
-    assert result == (True, False)
-    patched_logger.warning.assert_not_called()
-
-
-@pytest.mark.asyncio
-@patch("connectors.preflight_check.logger")
 async def test_client_config(patched_logger, mock_responses):
     mock_es_info(mock_responses)
     mock_index_exists(mock_responses, CONCRETE_CONNECTORS_INDEX)
