@@ -63,3 +63,7 @@ class NoInstallationAccessTokenException(Exception):
 
 class ForbiddenException(Exception):
     pass
+
+
+class RateLimitingError(Exception):
+    pass
