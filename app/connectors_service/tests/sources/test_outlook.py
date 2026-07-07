@@ -1265,8 +1265,19 @@ async def test_fetch_attachments_skips_attachment_without_id():
 @pytest.mark.asyncio
 async def test_get_mails_skips_junk_when_folder_not_found():
     async with create_outlook_source() as source:
-        account = MockAccount()
-        type(account).junk = mock.PropertyMock(side_effect=ErrorFolderNotFound("no"))
+        # Subclass so the folder override stays local and does not leak into
+        # the shared MockAccount used by other tests (pytest runs in random order).
+        # The no-op setter lets MockAccount.__init__ assign junk; reads raise.
+        class MockAccountWithoutJunk(MockAccount):
+            @property
+            def junk(self):
+                raise ErrorFolderNotFound("no")
+
+            @junk.setter
+            def junk(self, value):
+                pass
+
+        account = MockAccountWithoutJunk()
         account.msg_folder_root = MagicMock()
         account.msg_folder_root.__truediv__.side_effect = ErrorFolderNotFound("no")
 
