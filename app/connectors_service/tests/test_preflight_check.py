@@ -291,6 +291,32 @@ async def test_index_exist_transient_error(mock_responses):
 
 @pytest.mark.asyncio
 @patch("connectors.preflight_check.logger")
+async def test_non_native_config_is_not_warned_when_no_service_service_types_are_provided(patched_logger, mock_responses):
+    mock_es_info(mock_responses)
+    mock_index_exists(mock_responses, CONCRETE_CONNECTORS_INDEX)
+    mock_index_exists(mock_responses, CONCRETE_JOBS_INDEX)
+    preflight = PreflightCheck(config, connectors_version)
+    result = await preflight.run()
+    assert result == (True, False)
+    patched_logger.warning.assert_not_called()
+
+
+@pytest.mark.asyncio
+@patch("connectors.preflight_check.logger")
+async def test_non_native_config_is_warned_when_service_service_types_are_provided(patched_logger, mock_responses):
+    mock_es_info(mock_responses)
+    mock_index_exists(mock_responses, CONCRETE_CONNECTORS_INDEX)
+    mock_index_exists(mock_responses, CONCRETE_JOBS_INDEX)
+    local_config = deepcopy(config)
+    local_config["service"]["service_types"] = ["foo", "bar"]
+    preflight = PreflightCheck(local_config, connectors_version)
+    result = await preflight.run()
+    assert result == (True, False)
+    patched_logger.warning.assert_any_call("The configuration 'service.service_types' requires running a service with 'service.worker_mode: true'")
+
+
+@pytest.mark.asyncio
+@patch("connectors.preflight_check.logger")
 async def test_native_config_is_not_warned(patched_logger, mock_responses):
     mock_es_info(mock_responses)
     mock_index_exists(mock_responses, CONCRETE_CONNECTORS_INDEX)

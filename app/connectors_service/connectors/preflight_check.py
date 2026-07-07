@@ -202,11 +202,11 @@ class PreflightCheck:
         return False
 
     def _validate_configuration(self):
-        configured_native_types = "service_types" in self.config["service"]
+        configured_native_types = self.config["service"].get("service_types", [])
         worker_mode = self.config["service"].get("worker_mode", False)
 
         if worker_mode:
-            if not configured_native_types:
+            if len(configured_native_types) == 0:
                 logger.error(
                     "Service is running with 'service.worker_mode: true' with no 'service.service_types' configured"
                 )
@@ -214,7 +214,7 @@ class PreflightCheck:
             return True
 
         # else not running all service types
-        if configured_native_types:
+        if len(configured_native_types) > 0:
             logger.warning(
                 "The configuration 'service.service_types' requires running a service with 'service.worker_mode: true'"
             )
