@@ -317,7 +317,7 @@ async def test_non_native_config_is_warned_when_service_service_types_are_provid
     result = await preflight.run()
     assert result == (True, False)
     patched_logger.warning.assert_any_call(
-        "The configuration 'service.service_types' requires running a service with 'service.worker_mode: true'"
+        "Configuration 'service.service_types' is ignored: requires running a service with 'service.worker_mode: true'"
     )
 
 
