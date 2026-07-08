@@ -36,6 +36,10 @@ from connectors.sources.atlassian.confluence.constants import (
     CONFLUENCE_CLOUD,
     CONFLUENCE_DATA_CENTER,
     CONFLUENCE_SERVER,
+    CONTENT_QUERY_CLOUD,
+    CONTENT_QUERY_DATA_CENTER,
+    SPACE_QUERY_CLOUD,
+    SPACE_QUERY_DATA_CENTER,
 )
 from connectors.utils import ssl_context
 from tests.commons import AsyncIterator
@@ -962,6 +966,61 @@ async def test_fetch_spaces():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "data_source_type, expected_api_query",
+    [
+        (CONFLUENCE_CLOUD, SPACE_QUERY_CLOUD),
+        (CONFLUENCE_DATA_CENTER, SPACE_QUERY_DATA_CENTER),
+        (CONFLUENCE_SERVER, SPACE_QUERY_DATA_CENTER),
+    ],
+)
+async def test_fetch_spaces_uses_correct_query_for_data_source_type(
+    data_source_type, expected_api_query
+):
+    """fetch_spaces uses the DC/Server-safe query off Cloud (CONFSERVER-99908)."""
+    async with create_confluence_source(data_source=data_source_type) as source:
+        source.confluence_client.paginated_api_call = MagicMock(
+            return_value=AsyncIterator([RESPONSE_SPACE])
+        )
+
+        async for _ in source.confluence_client.fetch_spaces():
+            pass
+
+        source.confluence_client.paginated_api_call.assert_called_once_with(
+            url_name="space",
+            api_query=expected_api_query,
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "data_source_type, expected_api_query",
+    [
+        (CONFLUENCE_CLOUD, SPACE_QUERY_CLOUD),
+        (CONFLUENCE_DATA_CENTER, SPACE_QUERY_DATA_CENTER),
+        (CONFLUENCE_SERVER, SPACE_QUERY_DATA_CENTER),
+    ],
+)
+async def test_remote_validation_uses_correct_query_for_data_source_type(
+    data_source_type, expected_api_query
+):
+    """_remote_validation uses the DC/Server-safe query off Cloud (CONFSERVER-99908)."""
+    async with create_confluence_source(data_source=data_source_type) as source:
+        source.spaces = ["DM"]
+        source.confluence_client.ping = AsyncMock()
+        source.confluence_client.paginated_api_call = MagicMock(
+            return_value=AsyncIterator([RESPONSE_SPACE_KEYS])
+        )
+
+        await source._remote_validation()
+
+        source.confluence_client.paginated_api_call.assert_called_once_with(
+            url_name="space",
+            api_query=expected_api_query,
+        )
+
+
+@pytest.mark.asyncio
 async def test_fetch_documents():
     # Setup
     async with create_confluence_source() as source:
@@ -1207,6 +1266,43 @@ async def test_get_docs(spaces_patch, pages_patch, attachment_patch, content_pat
         async for item, _ in source.get_docs():
             documents.append(item)
         assert documents == expected_responses
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "data_source_type, expected_content_query",
+    [
+        (CONFLUENCE_CLOUD, CONTENT_QUERY_CLOUD),
+        (CONFLUENCE_DATA_CENTER, CONTENT_QUERY_DATA_CENTER),
+        (CONFLUENCE_SERVER, CONTENT_QUERY_DATA_CENTER),
+    ],
+)
+@freeze_time("2024-04-02T09:53:15.818621+00:00")
+async def test_get_docs_uses_correct_content_query_for_data_source_type(
+    data_source_type, expected_content_query
+):
+    """get_docs drops space.permissions from the content query off Cloud (CONFSERVER-99908)."""
+    async with create_confluence_source(data_source=data_source_type) as source:
+        source.confluence_client.fetch_spaces = MagicMock(
+            return_value=AsyncIterator([copy(SPACE)])
+        )
+        source.fetch_server_space_permission = AsyncMock(return_value={})
+        with mock.patch.object(
+            ConfluenceDataSource,
+            "fetch_documents",
+            side_effect=[AsyncIterator([]), AsyncIterator([])],
+        ) as fetch_documents_mock:
+            async for _ in source.get_docs():
+                pass
+
+        content_queries = [call.args[0] for call in fetch_documents_mock.call_args_list]
+        assert len(content_queries) == 2
+        for query in content_queries:
+            assert query.endswith(expected_content_query)
+        if data_source_type == CONFLUENCE_CLOUD:
+            assert all("space.permissions" in query for query in content_queries)
+        else:
+            assert all("space.permissions" not in query for query in content_queries)
 
 
 @pytest.mark.asyncio

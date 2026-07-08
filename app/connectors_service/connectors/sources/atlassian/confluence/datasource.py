@@ -24,7 +24,8 @@ from connectors.sources.atlassian.confluence.constants import (
     CONFLUENCE_DATA_CENTER,
     CONFLUENCE_SERVER,
     CONTENT,
-    CONTENT_QUERY,
+    CONTENT_QUERY_CLOUD,
+    CONTENT_QUERY_DATA_CENTER,
     END_SIGNAL,
     MAX_CONCURRENCY,
     MAX_CONCURRENT_DOWNLOADS,
@@ -33,7 +34,8 @@ from connectors.sources.atlassian.confluence.constants import (
     QUEUE_SIZE,
     SPACE,
     SPACE_PERMISSION,
-    SPACE_QUERY,
+    SPACE_QUERY_CLOUD,
+    SPACE_QUERY_DATA_CENTER,
     URLS,
     USER,
     USER_QUERY,
@@ -492,8 +494,13 @@ class ConfluenceDataSource(BaseDataSource):
         if self.spaces == [WILDCARD]:
             return
         space_keys = []
+        api_query = (
+            SPACE_QUERY_CLOUD
+            if self.confluence_client.data_source_type == CONFLUENCE_CLOUD
+            else SPACE_QUERY_DATA_CENTER
+        )
         async for response in self.confluence_client.paginated_api_call(
-            url_name=SPACE, api_query=SPACE_QUERY
+            url_name=SPACE, api_query=api_query
         ):
             spaces = response.get("results", [])
             space_keys.extend([space.get("key", "") for space in spaces])
@@ -923,6 +930,11 @@ class ConfluenceDataSource(BaseDataSource):
                         yield document, None
 
         else:
+            content_query = (
+                CONTENT_QUERY_CLOUD
+                if self.confluence_client.data_source_type == CONFLUENCE_CLOUD
+                else CONTENT_QUERY_DATA_CENTER
+            )
             async for space in self._space_coro():
                 yield space, None
                 self._logger.info(f"Fetching docs from space: {space['key']}")
@@ -930,14 +942,14 @@ class ConfluenceDataSource(BaseDataSource):
                 await self.fetchers.put(
                     partial(
                         self._page_blog_coro,
-                        f"{configured_spaces_query}{BLOGPOST}&{CONTENT_QUERY}",
+                        f"{configured_spaces_query}{BLOGPOST}&{content_query}",
                         BLOGPOST,
                     )
                 )
                 await self.fetchers.put(
                     partial(
                         self._page_blog_coro,
-                        f"{configured_spaces_query}{PAGE}&{CONTENT_QUERY}",
+                        f"{configured_spaces_query}{PAGE}&{content_query}",
                         PAGE,
                     )
                 )

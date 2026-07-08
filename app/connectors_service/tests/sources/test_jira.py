@@ -840,8 +840,80 @@ async def test_put_issue():
         source.get_content = Mock(return_value=EXPECTED_CONTENT)
 
         with patch("aiohttp.ClientSession.get", side_effect=side_effect_function):
-            await source._put_issue(issue=MOCK_ISSUE)
+            await source._put_issue(issue_key=MOCK_ISSUE["key"])
             assert source.queue.qsize() == 3
+
+
+@pytest.mark.asyncio
+async def test_put_issue_emits_finished_on_error():
+    """FINISHED is still emitted on error, and the error propagates."""
+
+    async with create_jira_source() as source:
+        source.jira_client.get_issues_for_issue_key = Mock(
+            side_effect=Exception("boom")
+        )
+
+        with pytest.raises(Exception, match="boom"):
+            await source._put_issue(issue_key="TP-1")
+
+        items = []
+        while not source.queue.empty():
+            _, item = await source.queue.get()
+            items.append(item)
+        assert items == ["FINISHED"]
+
+
+@freeze_time("2023-01-24T04:07:19")
+@pytest.mark.asyncio
+async def test_get_projects_emits_finished_on_error():
+    """FINISHED sentinel is enqueued even if fetching projects fails."""
+
+    async with create_jira_source() as source:
+        source.jira_client.get_timezone = AsyncMock(side_effect=Exception("boom"))
+
+        await source._get_projects()
+
+        items = []
+        while not source.queue.empty():
+            _, item = await source.queue.get()
+            items.append(item)
+        assert items == ["FINISHED"]
+
+
+@pytest.mark.asyncio
+async def test_get_issues_schedules_put_issue_with_key_only():
+    """_get_issues schedules _put_issue with the key, not the full payload."""
+
+    async with create_jira_source() as source:
+        source.jira_client.get_issues_for_jql = Mock(
+            return_value=AsyncIterator(["TP-1", "TP-2"])
+        )
+        source.fetchers.put = AsyncMock()
+
+        await source._get_issues()
+
+        scheduled_args = [
+            call.args[0].args for call in source.fetchers.put.await_args_list
+        ]
+        assert scheduled_args == [("TP-1",), ("TP-2",)]
+        assert source.tasks == 2
+
+        _, item = await source.queue.get()
+        assert item == "FINISHED"
+
+
+@pytest.mark.asyncio
+async def test_get_issues_emits_finished_on_error():
+    """FINISHED is still emitted on error, and the error propagates."""
+
+    async with create_jira_source() as source:
+        source.jira_client.get_issues_for_jql = Mock(side_effect=Exception("boom"))
+
+        with pytest.raises(Exception, match="boom"):
+            await source._get_issues()
+
+        _, item = await source.queue.get()
+        assert item == "FINISHED"
 
 
 @pytest.mark.asyncio
@@ -1021,6 +1093,100 @@ async def test_get_docs():
         ):
             async for item, _ in source.get_docs():
                 assert item in EXPECTED_RESPONSES
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("data_source", [JIRA_SERVER, JIRA_DATA_CENTER])
+async def test_get_issues_for_jql_uses_deprecated_v2_search_for_server(data_source):
+    """Server/Data Center lack rest/api/3/search/jql, so issue searches must fall back
+    to the deprecated offset-based rest/api/2/search endpoint paginated via startAt."""
+    requested_urls = []
+
+    def server_side_effect(url, ssl):
+        requested_urls.append(url)
+        if "startAt=0" in url:
+            return get_json_mock(mock_response={"issues": [MOCK_ISSUE], "total": 150})
+        return get_json_mock(
+            mock_response={"issues": [MOCK_ISSUE_TYPE_BUG], "total": 150}
+        )
+
+    async with create_jira_source(data_source=data_source) as source:
+        with mock.patch.object(
+            source.jira_client._get_session(), "get", side_effect=server_side_effect
+        ):
+            issues = [
+                issue
+                async for issue in source.jira_client.get_issues_for_jql(
+                    jql="key%20IS%20NOT%20EMPTY"
+                )
+            ]
+
+    assert (
+        f"{HOST_URL}/rest/api/2/search?jql=key%20IS%20NOT%20EMPTY&fields=*all&maxResults=100&startAt=0"
+        in requested_urls
+    )
+    assert (
+        f"{HOST_URL}/rest/api/2/search?jql=key%20IS%20NOT%20EMPTY&fields=*all&maxResults=100&startAt=100"
+        in requested_urls
+    )
+    assert all("rest/api/3/search/jql" not in url for url in requested_urls)
+    # get_issues_for_jql yields only keys.
+    assert issues == [MOCK_ISSUE["key"], MOCK_ISSUE_TYPE_BUG["key"]]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("data_source", [JIRA_SERVER, JIRA_DATA_CENTER])
+async def test_get_issues_for_jql_none_uses_catch_all_for_server(data_source):
+    """jql=None on Server/Data Center must fall back to the "key IS NOT EMPTY" catch-all,
+    consistent with Cloud, instead of formatting the literal string "None" into the URL."""
+    requested_urls = []
+
+    def server_side_effect(url, ssl):
+        requested_urls.append(url)
+        return get_json_mock(mock_response={"issues": [MOCK_ISSUE], "total": 1})
+
+    async with create_jira_source(data_source=data_source) as source:
+        with mock.patch.object(
+            source.jira_client._get_session(), "get", side_effect=server_side_effect
+        ):
+            _ = [
+                issue async for issue in source.jira_client.get_issues_for_jql(jql=None)
+            ]
+
+    assert (
+        f"{HOST_URL}/rest/api/2/search?jql=key%20IS%20NOT%20EMPTY&fields=*all&maxResults=100&startAt=0"
+        in requested_urls
+    )
+    assert all("jql=None" not in url for url in requested_urls)
+
+
+@pytest.mark.asyncio
+async def test_get_issues_for_jql_uses_cursor_based_v3_search_for_cloud():
+    """Jira Cloud must keep using the cursor-based rest/api/3/search/jql endpoint."""
+    requested_urls = []
+
+    def cloud_side_effect(url, ssl):
+        requested_urls.append(url)
+        return get_json_mock(mock_response={"issues": [MOCK_ISSUE]})
+
+    async with create_jira_source(data_source=JIRA_CLOUD) as source:
+        with mock.patch.object(
+            source.jira_client._get_session(), "get", side_effect=cloud_side_effect
+        ):
+            issues = [
+                issue
+                async for issue in source.jira_client.get_issues_for_jql(
+                    jql="key%20IS%20NOT%20EMPTY"
+                )
+            ]
+
+    assert (
+        f"{HOST_URL}/rest/api/3/search/jql?jql=key%20IS%20NOT%20EMPTY&fields=*all&maxResults=100"
+        in requested_urls
+    )
+    assert all("rest/api/2/search" not in url for url in requested_urls)
+    # get_issues_for_jql yields only keys.
+    assert issues == [MOCK_ISSUE["key"]]
 
 
 @pytest.mark.parametrize(
