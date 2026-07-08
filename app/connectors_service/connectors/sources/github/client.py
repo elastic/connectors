@@ -31,6 +31,7 @@ from connectors.sources.github.utils import (
     UNAUTHORIZED,
     ForbiddenException,
     NoInstallationAccessTokenException,
+    RateLimitingError,
     UnauthorizedException,
 )
 from connectors.utils import (
@@ -94,8 +95,6 @@ class GitHubClient:
             f"Rate limit exceeded. Retry after {retry_after} seconds. Resource type: {resource_type}"
         )
         await self._sleeps.sleep(retry_after)
-        msg = "Rate limit exceeded."
-        raise Exception(msg)
 
     def _access_token(self):
         if self.auth_method == PERSONAL_ACCESS_TOKEN:
@@ -126,9 +125,11 @@ class GitHubClient:
                 private_key=self.private_key,
             )
             self._installation_access_token = access_token_response["token"]
-        except gidgethub.RateLimitExceeded:
+        except gidgethub.RateLimitExceeded as exception:
             await self._put_to_sleep("core")
-        except Exception:
+            msg = "Rate limit exceeded."
+            raise RateLimitingError(msg) from exception
+        except gidgethub.GitHubException:
             self._logger.exception(
                 f"Failed to get access token for installation {self._installation_id}.",
                 exc_info=True,
@@ -214,6 +215,8 @@ class GitHubClient:
                     and "api rate limit exceeded" in error.get("message").lower()
                 ):
                     await self._put_to_sleep(resource_type="graphql")
+                    msg = "Rate limit exceeded."
+                    raise RateLimitingError(msg) from exception
 
             if all(error.get("type") in ignore_errors for error in errors):
                 # All errors are ignored, return just the data part without errors
@@ -226,7 +229,7 @@ class GitHubClient:
 
             msg = f"Error while executing query. Exception: {non_ignored_errors}"
             raise Exception(msg) from exception
-        except Exception as e:
+        except gidgethub.GitHubException as e:
             self._logger.debug(
                 f"An unexpected error occurred while executing GraphQL query: {query}. Error: {e}"
             )
@@ -253,8 +256,10 @@ class GitHubClient:
             return await self._get_client.getitem(
                 url=resource, oauth_token=self._access_token()
             )
-        except gidgethub.RateLimitExceeded:
+        except gidgethub.RateLimitExceeded as exception:
             await self._put_to_sleep("core")
+            msg = "Rate limit exceeded."
+            raise RateLimitingError(msg) from exception
         except gidgethub.HTTPException as exception:
             if exception.status_code == UNAUTHORIZED:
                 if self.auth_method == GITHUB_APP:
@@ -270,7 +275,7 @@ class GitHubClient:
                 raise ForbiddenException(msg) from exception
             else:
                 raise
-        except Exception as e:
+        except gidgethub.GitHubException as e:
             self._logger.debug(
                 f"An unexpected error occurred while getting GitHub item: {resource}. Error: {e}"
             )
@@ -350,10 +355,10 @@ class GitHubClient:
                 get_jwt(app_id=self.app_id, private_key=self.private_key),
             )
         # we don't expect any 401 error as the jwt is freshly generated
-        except gidgethub.RateLimitExceeded:
+        except gidgethub.RateLimitExceeded as exception:
             await self._put_to_sleep("core")
-        except Exception:
-            raise
+            msg = "Rate limit exceeded."
+            raise RateLimitingError(msg) from exception
 
     async def _github_app_paginated_get(self, url):
         data, more = await self._github_app_get(url)  # pyright: ignore

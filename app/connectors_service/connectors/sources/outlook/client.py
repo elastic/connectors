@@ -5,13 +5,11 @@
 #
 
 import asyncio
-import os
+import ssl
 from functools import cached_property
 
-import aiofiles
 import aiohttp
 import requests.adapters
-from aiofiles.os import remove
 from connectors_sdk.logger import logger
 from exchangelib import (
     IMPERSONATION,
@@ -30,7 +28,6 @@ from ldap3 import SAFE_SYNC, Connection, Server
 from connectors.sources.outlook.constants import (
     API_SCOPE,
     CALENDAR_FIELDS,
-    CERT_FILE,
     CONTACT_FIELDS,
     EWS_ENDPOINT,
     MAIL_FIELDS,
@@ -78,7 +75,9 @@ class NotFound(Exception):
     pass
 
 
-class SSLFailed(Exception):
+class SSLCertificateError(Exception):
+    """Raised when SSL is enabled but the CA certificate is missing or unusable."""
+
     pass
 
 
@@ -91,33 +90,22 @@ def _extract_ldap_mail(attributes):
     return mail
 
 
-class ManageCertificate:
-    async def store_certificate(self, certificate):
-        async with aiofiles.open(CERT_FILE, "w") as file:
-            await file.write(certificate)
+class InMemoryCAAdapter(requests.adapters.HTTPAdapter):
+    """HTTP adapter that verifies Exchange server TLS using an in-memory CA."""
 
-    def get_certificate_path(self):
-        return os.path.join(os.getcwd(), CERT_FILE)
+    ssl_context: ssl.SSLContext | None = None
 
-    async def remove_certificate_file(self):
-        if os.path.exists(CERT_FILE):
-            await remove(CERT_FILE)
+    def init_poolmanager(self, *args, **kwargs):
+        ssl_context = type(self).ssl_context
+        if ssl_context is not None:
+            kwargs["ssl_context"] = ssl_context
+        return super().init_poolmanager(*args, **kwargs)
 
-
-class RootCAAdapter(requests.adapters.HTTPAdapter):
-    """Class to verify SSL Certificate for Exchange Servers"""
-
-    def cert_verify(self, conn, url, verify, cert):
-        try:
-            super().cert_verify(
-                conn=conn,
-                url=url,
-                verify=ManageCertificate().get_certificate_path(),
-                cert=cert,
-            )
-        except Exception as exception:
-            msg = f"Something went wrong while verifying SSL certificate. Error: {exception}"
-            raise SSLFailed(msg) from exception
+    def proxy_manager_for(self, *args, **kwargs):
+        ssl_context = type(self).ssl_context
+        if ssl_context is not None:
+            kwargs["ssl_context"] = ssl_context
+        return super().proxy_manager_for(*args, **kwargs)
 
 
 class ExchangeUsers:
@@ -145,7 +133,7 @@ class ExchangeUsers:
         )
 
     async def close(self):
-        await ManageCertificate().remove_certificate_file()
+        pass
 
     def _fetch_normal_users(self, search_query):
         try:
@@ -200,10 +188,32 @@ class ExchangeUsers:
             yield user
 
     async def get_user_accounts(self):
-        await ManageCertificate().store_certificate(certificate=self.ssl_ca)
-        BaseProtocol.HTTP_ADAPTER_CLS = (
-            RootCAAdapter if self.ssl_enabled else NoVerifyHTTPAdapter
-        )
+        # exchangelib applies HTTP_ADAPTER_CLS (and our CA context) process-wide;
+        # safe because each connector uses a single CA.
+        if self.ssl_enabled:
+            # Fail loudly on a missing/unusable CA instead of silently using an
+            # unverified or system-CA connection.
+            if not self.ssl_ca:
+                msg = (
+                    "SSL is enabled for the Exchange server but no CA "
+                    "certificate was provided. Provide a valid PEM-encoded "
+                    "certificate."
+                )
+                raise SSLCertificateError(msg)
+            try:
+                InMemoryCAAdapter.ssl_context = ssl.create_default_context(
+                    cadata=self.ssl_ca
+                )
+            except (ssl.SSLError, ValueError) as exception:
+                msg = (
+                    "SSL is enabled for the Exchange server but the configured "
+                    "CA certificate could not be loaded. Provide a valid "
+                    "PEM-encoded certificate."
+                )
+                raise SSLCertificateError(msg) from exception
+            BaseProtocol.HTTP_ADAPTER_CLS = InMemoryCAAdapter
+        else:
+            BaseProtocol.HTTP_ADAPTER_CLS = NoVerifyHTTPAdapter
 
         credentials = Credentials(
             username=self.user,
@@ -395,15 +405,19 @@ class OutlookClient:
             self._logger.debug(
                 f"Fetching {mail_type['folder']} mails for {account.primary_smtp_address}"
             )
-            if mail_type["folder"] == "archive":
-                # msg_folder_root is locale-agnostic; the "Archive" leaf has no
-                # distinguished ID, so resolve it by name and skip if absent.
-                try:
+            try:
+                if mail_type["folder"] == "archive":
+                    # msg_folder_root is locale-agnostic; the "Archive" leaf has no
+                    # distinguished ID, so resolve it by name and skip if absent.
                     folder_object = account.msg_folder_root / "Archive"
-                except ErrorFolderNotFound:
-                    continue
-            else:
-                folder_object = getattr(account, mail_type["folder"])
+                else:
+                    folder_object = getattr(account, mail_type["folder"])
+            except ErrorFolderNotFound:
+                self._logger.warning(
+                    f"Could not resolve {mail_type['folder']} folder for "
+                    f"{account.primary_smtp_address}, skipping."
+                )
+                continue
 
             for mail in await asyncio.to_thread(folder_object.all().only, *MAIL_FIELDS):
                 yield mail, mail_type
