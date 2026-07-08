@@ -231,8 +231,8 @@ class ConnectorIndex(ESIndex):
             "bool": {
                 "must_not": [{"term": {"deleted": True}}],
                 "filter": [
-                    {"term": {"is_native": True}},
                     {"terms": {"service_type": native_service_types}},
+                    {"term": {"is_native": False}},
                 ],
             }
         }
