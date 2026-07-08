@@ -61,6 +61,10 @@ class LazyConfig:
                 )
                 self.ctx.exit(1)
 
+        if self.value is None:
+            msg = f"{CONFIG_FILE_PATH} is empty or invalid. Run `connectors login` to (re)create it."
+            raise click.ClickException(msg)
+
         return self.value[key]
 
 
