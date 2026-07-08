@@ -229,7 +229,7 @@ class PreflightCheck:
             and deprecated_service_type
         ):
             logger.warning(
-                "The configuration 'connector_id' and 'service_type' has been deprecated and will be removed in later release. Please configure the connector in 'connectors'."
+                "The configuration 'connector_id' and 'service_type' has been deprecated and will be removed in later release. Please configure the connector in 'connectors'"
             )
             configured_connectors.append(
                 {
@@ -239,7 +239,7 @@ class PreflightCheck:
             )
 
         if not configured_connectors:
-            logger.error("You must configure at least one connector.")
+            logger.error("You must configure at least one connector")
             logger.info(
                 "Using Kibana or the connectors CLI, create a connector. You will then be provided with the necessary fields (connector_id, service_type, api_key) to add to your config.yml"
             )

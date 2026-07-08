@@ -364,7 +364,7 @@ async def test_unmodified_default_config(patched_logger, mock_responses):
     preflight = PreflightCheck(local_config, connectors_version)
     result = await preflight.run()
     assert result == (False, False)
-    patched_logger.errorassert_any_call(
+    patched_logger.error.assert_any_call(
         "In your configuration, you must change 'connector_id' and 'service_type' to not be 'changeme'"
     )
 
@@ -380,7 +380,7 @@ async def test_missing_mode_config(patched_logger, mock_responses):
     preflight = PreflightCheck(local_config, connectors_version)
     result = await preflight.run()
     assert result == (False, False)
-    patched_logger.errorassert_any_call("You must configure at least one connector")
+    patched_logger.error.assert_any_call("You must configure at least one connector")
 
 
 @pytest.mark.asyncio
