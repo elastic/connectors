@@ -234,7 +234,7 @@
 ##    This allows partitioning the load allowing to spread different connector types between different
 ##    physical instance that can be bigger or smaller depending on the load and hardware requirements.
 ##    If `service.worker_mode` is `false` then this setting is ignored.
-##    If no values are provided, then all known service types from "sources" config are used
+##    If `service.worker_mode` is `false` then you should explicitly provide service types you want the service to handle
 ##    Example: ['mongodb', 'mysql']
 #service.service_types: []
 #
