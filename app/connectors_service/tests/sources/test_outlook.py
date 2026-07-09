@@ -246,6 +246,18 @@ class ContactDocument:
         self.birthday = "2023-12-12T01:01:01Z"
 
 
+class DistributionListDocument:
+    """Mimics a DistributionList (contact group) item that Exchange can return
+    from the Contacts folder. It carries only the shared item fields and lacks
+    the per-contact fields (email_addresses, phone_numbers, company_name,
+    birthday)."""
+
+    def __init__(self):
+        self.id = "distribution_list_1"
+        self.last_modified_time = "2023-12-12T01:01:01Z"
+        self.display_name = "Dummy Group"
+
+
 class CalendarDocument:
     def __init__(self):
         organizer = MagicMock()
@@ -1230,6 +1242,24 @@ def test_contact_doc_formatter_handles_missing_email_and_phone_entries():
 
     assert document["email_addresses"] == []
     assert document["contact_numbers"] == []
+
+
+def test_contact_doc_formatter_handles_distribution_list():
+    # A DistributionList (contact group) lacks the per-contact fields; the
+    # formatter must not crash with an AttributeError and abort the sync.
+    distribution_list = DistributionListDocument()
+
+    document = OutlookDocFormatter().contact_doc_formatter(
+        contact=distribution_list,
+        timezone=TIMEZONE,
+    )
+
+    assert document["_id"] == "distribution_list_1"
+    assert document["name"] == "Dummy Group"
+    assert document["email_addresses"] == []
+    assert document["contact_numbers"] == []
+    assert document["company_name"] is None
+    assert document["birthday"] is None
 
 
 @pytest.mark.asyncio

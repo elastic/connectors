@@ -145,6 +145,9 @@ class OutlookDocFormatter:
         }
 
     def contact_doc_formatter(self, contact, timezone):
+        # The Contacts folder can also return contact groups (DistributionList),
+        # which lack the per-contact fields below. Read them defensively so a
+        # single group no longer aborts the whole sync with an AttributeError.
         return {
             "_id": contact.id,
             "type": "Contact",
@@ -154,17 +157,17 @@ class OutlookDocFormatter:
             "name": contact.display_name,
             "email_addresses": [
                 email.email
-                for email in (contact.email_addresses or [])
+                for email in (getattr(contact, "email_addresses", None) or [])
                 if email and email.email
             ],
             "contact_numbers": [
                 number.phone_number
-                for number in (contact.phone_numbers or [])
+                for number in (getattr(contact, "phone_numbers", None) or [])
                 if number and number.phone_number
             ],
-            "company_name": contact.company_name,
+            "company_name": getattr(contact, "company_name", None),
             "birthday": ews_format_to_datetime(
-                source_datetime=contact.birthday, timezone=timezone
+                source_datetime=getattr(contact, "birthday", None), timezone=timezone
             ),
         }
 
