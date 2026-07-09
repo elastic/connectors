@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock, MagicMock, Mock
 from uuid import UUID
 
 import pytest
-from bson import Binary, DBRef, ObjectId
+from bson import Binary, DatetimeConversion, DatetimeMS, DBRef, ObjectId
 from bson.decimal128 import Decimal128
 from connectors_sdk.filtering.validation import Filter
 from connectors_sdk.source import ConfigurableFieldValueError
@@ -457,11 +457,50 @@ async def test_validate_config_when_configuration_valid_then_does_not_raise(
             },
             {"some_binary_uuid": None},
         ),
+        (
+            # in-range datetime still serializes to an ISO string
+            {"created": datetime(2020, 1, 1, 12, 30, 0)},
+            {"created": "2020-01-01T12:30:00"},
+        ),
+        (
+            # out-of-range date decoded as DatetimeMS -> raw milliseconds
+            {"too_big": DatetimeMS(2**62)},
+            {"too_big": 2**62},
+        ),
+        (
+            {"too_small": DatetimeMS(-(2**62))},
+            {"too_small": -(2**62)},
+        ),
+        (
+            {"epoch": DatetimeMS(0)},
+            {"epoch": 0},
+        ),
+        (
+            # DatetimeMS nested inside a list and a dict
+            {
+                "nested": {"created": DatetimeMS(2**62)},
+                "list": [DatetimeMS(0)],
+            },
+            {
+                "nested": {"created": 2**62},
+                "list": [0],
+            },
+        ),
     ],
 )
 async def test_serialize(raw, output):
     async with create_mongo_source() as source:
         assert source.serialize(raw) == output
+
+
+@pytest.mark.asyncio
+async def test_get_client_uses_datetime_auto_conversion():
+    async with create_mongo_source() as source:
+        with source.get_client() as client:
+            assert (
+                client.codec_options.datetime_conversion
+                == DatetimeConversion.DATETIME_AUTO
+            )
 
 
 @pytest.mark.asyncio
