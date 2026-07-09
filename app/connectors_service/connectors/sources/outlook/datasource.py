@@ -557,8 +557,8 @@ class OutlookDataSource(BaseDataSource):
     async def _fetch_contacts(self, account, timezone):
         self._logger.debug(f"Fetching contacts for {account.primary_smtp_address}")
         async for contact in self.client.get_contacts(account=account):
-            # Contacts folder holds contacts and groups; dispatch on type and
-            # skip anything unexpected instead of forcing it through a formatter.
+            # Contacts folder returns only Contact or DistributionList; any other
+            # type breaks that assumption, so fail loudly instead of guessing.
             if isinstance(contact, Contact):
                 document = self.doc_formatter.contact_doc_formatter(
                     contact=contact,
@@ -570,11 +570,12 @@ class OutlookDataSource(BaseDataSource):
                     timezone=timezone,
                 )
             else:
-                self._logger.warning(
-                    f"Skipping unexpected Contacts item type "
-                    f"{type(contact).__name__} for {account.primary_smtp_address}"
+                msg = (
+                    f"Unexpected Contacts item type {type(contact).__name__} for "
+                    f"{account.primary_smtp_address}; expected Contact or "
+                    "DistributionList"
                 )
-                continue
+                raise TypeError(msg)
             yield (
                 self._decorate_with_access_control(
                     document, [account.primary_smtp_address]

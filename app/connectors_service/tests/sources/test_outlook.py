@@ -1224,28 +1224,17 @@ async def test_get_tasks_skips_when_folder_not_found():
 
 
 @pytest.mark.asyncio
-async def test_fetch_contacts_skips_unexpected_item_type_with_warning():
-    # An item that is neither a Contact nor a DistributionList is skipped with a
-    # warning; a known Contact is still indexed.
+async def test_fetch_contacts_raises_on_unexpected_item_type():
+    # The Contacts folder should only yield Contact or DistributionList items;
+    # anything else breaks that assumption and must fail loudly.
     async with create_outlook_source() as source:
-        source._logger = MagicMock()
         unexpected = MagicMock()
-        source.client.get_contacts = AsyncIterator([unexpected, ContactDocument()])
+        source.client.get_contacts = AsyncIterator([unexpected])
         account = MockAccount()
 
-        documents = [
-            document
-            async for document, _ in source._fetch_contacts(
-                account=account, timezone=TIMEZONE
-            )
-        ]
-
-        assert [document["_id"] for document in documents] == ["contact_1"]
-        source._logger.warning.assert_called_once()
-        warning_message = source._logger.warning.call_args.args[0]
-        assert "unexpected" in warning_message.lower()
-        assert type(unexpected).__name__ in warning_message
-        assert account.primary_smtp_address in warning_message
+        with pytest.raises(TypeError, match="Unexpected Contacts item type"):
+            async for _ in source._fetch_contacts(account=account, timezone=TIMEZONE):
+                pass
 
 
 @pytest.mark.asyncio
