@@ -19,6 +19,7 @@ from exchangelib.errors import (
     ErrorNonExistentMailbox,
     TransportError,
 )
+from exchangelib.items import DistributionList
 from exchangelib.protocol import BaseProtocol, NoVerifyHTTPAdapter
 
 from connectors.sources.outlook import OutlookDataSource
@@ -248,14 +249,18 @@ class ContactDocument:
 
 class DistributionListDocument:
     """Mimics a DistributionList (contact group) item that Exchange can return
-    from the Contacts folder. It carries only the shared item fields and lacks
-    the per-contact fields (email_addresses, phone_numbers, company_name,
+    from the Contacts folder. It carries the shared item fields plus its members,
+    not the per-contact fields (email_addresses, phone_numbers, company_name,
     birthday)."""
 
     def __init__(self):
+        member = MagicMock()
+        member.mailbox.email_address = "group.member@gmail.com"
+
         self.id = "distribution_list_1"
         self.last_modified_time = "2023-12-12T01:01:01Z"
         self.display_name = "Dummy Group"
+        self.members = [member]
 
 
 class BrokenContact:
@@ -1249,6 +1254,39 @@ async def test_fetch_contacts_skips_malformed_item_and_continues():
 
 
 @pytest.mark.asyncio
+async def test_fetch_contacts_routes_distribution_list_to_group_formatter():
+    # A DistributionList must be dispatched to the group formatter, while a
+    # regular contact still goes through the contact formatter.
+    async with create_outlook_source() as source:
+        member = MagicMock()
+        member.mailbox.email_address = "group.member@gmail.com"
+        distribution_list = MagicMock(spec=DistributionList)
+        distribution_list.id = "distribution_list_1"
+        distribution_list.last_modified_time = "2023-12-12T01:01:01Z"
+        distribution_list.display_name = "Dummy Group"
+        distribution_list.members = [member]
+
+        source.client.get_contacts = AsyncIterator(
+            [distribution_list, ContactDocument()]
+        )
+        account = MockAccount()
+
+        documents = [
+            document
+            async for document, _ in source._fetch_contacts(
+                account=account, timezone=TIMEZONE
+            )
+        ]
+
+        by_id = {document["_id"]: document for document in documents}
+        assert by_id["distribution_list_1"]["type"] == "Distribution List"
+        assert by_id["distribution_list_1"]["email_addresses"] == [
+            "group.member@gmail.com"
+        ]
+        assert by_id["contact_1"]["type"] == "Contact"
+
+
+@pytest.mark.asyncio
 @patch("connectors.sources.outlook.client.Account", return_value="account")
 async def test_exchange_get_user_accounts_handles_missing_type_key(
     mock_account, reset_http_adapter_cls
@@ -1350,22 +1388,20 @@ def test_contact_doc_formatter_handles_missing_email_and_phone_entries():
     assert document["contact_numbers"] == []
 
 
-def test_contact_doc_formatter_handles_distribution_list():
-    # A DistributionList (contact group) lacks the per-contact fields; the
-    # formatter must not crash with an AttributeError and abort the sync.
+def test_distribution_list_doc_formatter():
+    # A DistributionList (contact group) is formatted by its own formatter and
+    # indexed by name plus its members' email addresses.
     distribution_list = DistributionListDocument()
 
-    document = OutlookDocFormatter().contact_doc_formatter(
-        contact=distribution_list,
+    document = OutlookDocFormatter().distribution_list_doc_formatter(
+        distribution_list=distribution_list,
         timezone=TIMEZONE,
     )
 
     assert document["_id"] == "distribution_list_1"
+    assert document["type"] == "Distribution List"
     assert document["name"] == "Dummy Group"
-    assert document["email_addresses"] == []
-    assert document["contact_numbers"] == []
-    assert document["company_name"] is None
-    assert document["birthday"] is None
+    assert document["email_addresses"] == ["group.member@gmail.com"]
 
 
 @pytest.mark.asyncio

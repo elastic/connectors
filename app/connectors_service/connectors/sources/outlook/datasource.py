@@ -14,6 +14,7 @@ from connectors_sdk.utils import (
     iso_utc,
 )
 from exchangelib.errors import ErrorNonExistentMailbox
+from exchangelib.items import DistributionList
 
 from connectors.access_control import ACCESS_CONTROL, es_access_control_query
 from connectors.sources.outlook.client import OutlookClient, _extract_ldap_mail
@@ -156,9 +157,6 @@ class OutlookDocFormatter:
         }
 
     def contact_doc_formatter(self, contact, timezone):
-        # The Contacts folder can also return contact groups (DistributionList),
-        # which lack the per-contact fields below. Read them defensively so a
-        # single group no longer aborts the whole sync with an AttributeError.
         return {
             "_id": contact.id,
             "type": "Contact",
@@ -168,18 +166,37 @@ class OutlookDocFormatter:
             "name": contact.display_name,
             "email_addresses": [
                 email.email
-                for email in (getattr(contact, "email_addresses", None) or [])
+                for email in (contact.email_addresses or [])
                 if email and email.email
             ],
             "contact_numbers": [
                 number.phone_number
-                for number in (getattr(contact, "phone_numbers", None) or [])
+                for number in (contact.phone_numbers or [])
                 if number and number.phone_number
             ],
-            "company_name": getattr(contact, "company_name", None),
+            "company_name": contact.company_name,
             "birthday": ews_format_to_datetime(
-                source_datetime=getattr(contact, "birthday", None), timezone=timezone
+                source_datetime=contact.birthday, timezone=timezone
             ),
+        }
+
+    def distribution_list_doc_formatter(self, distribution_list, timezone):
+        # A DistributionList is a contact group. It carries only the shared item
+        # fields plus its members, not the per-contact fields, so it has a
+        # dedicated formatter rather than being forced into the Contact schema.
+        return {
+            "_id": distribution_list.id,
+            "type": "Distribution List",
+            "_timestamp": ews_format_to_datetime(
+                source_datetime=distribution_list.last_modified_time,
+                timezone=timezone,
+            ),
+            "name": distribution_list.display_name,
+            "email_addresses": [
+                member.mailbox.email_address
+                for member in (distribution_list.members or [])
+                if member and member.mailbox and member.mailbox.email_address
+            ],
         }
 
     def attachment_doc_formatter(self, attachment, attachment_type, timezone):
@@ -590,15 +607,21 @@ class OutlookDataSource(BaseDataSource):
     async def _fetch_contacts(self, account, timezone):
         self._logger.debug(f"Fetching contacts for {account.primary_smtp_address}")
         async for contact in self.client.get_contacts(account=account):
-            document = self._format_item(
-                partial(
+            # The Contacts folder holds both individual contacts and contact
+            # groups (DistributionList); each has its own document shape.
+            if isinstance(contact, DistributionList):
+                formatter = partial(
+                    self.doc_formatter.distribution_list_doc_formatter,
+                    distribution_list=contact,
+                    timezone=timezone,
+                )
+            else:
+                formatter = partial(
                     self.doc_formatter.contact_doc_formatter,
                     contact=contact,
                     timezone=timezone,
-                ),
-                item=contact,
-                account=account,
-            )
+                )
+            document = self._format_item(formatter, item=contact, account=account)
             if document is None:
                 continue
             yield (

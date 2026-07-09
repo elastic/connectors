@@ -28,7 +28,7 @@ from ldap3 import SAFE_SYNC, Connection, Server
 from connectors.sources.outlook.constants import (
     API_SCOPE,
     CALENDAR_FIELDS,
-    CONTACT_FIELDS,
+    CONTACT_FOLDER_FIELDS,
     EWS_ENDPOINT,
     MAIL_FIELDS,
     MAIL_TYPES,
@@ -473,5 +473,7 @@ class OutlookClient:
                 f"Could not resolve Contacts folder for {account.primary_smtp_address}, skipping."
             )
             return
-        for contact in await asyncio.to_thread(folder.all().only, *CONTACT_FIELDS):
+        for contact in await asyncio.to_thread(
+            folder.all().only, *CONTACT_FOLDER_FIELDS
+        ):
             yield contact
