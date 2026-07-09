@@ -1255,8 +1255,7 @@ async def test_fetch_contacts_skips_malformed_item_and_continues():
 
 @pytest.mark.asyncio
 async def test_fetch_contacts_routes_distribution_list_to_group_formatter():
-    # A DistributionList must be dispatched to the group formatter, while a
-    # regular contact still goes through the contact formatter.
+    # DistributionList routes to the group formatter; a contact to the contact one.
     async with create_outlook_source() as source:
         member = MagicMock()
         member.mailbox.email_address = "group.member@gmail.com"
@@ -1389,8 +1388,7 @@ def test_contact_doc_formatter_handles_missing_email_and_phone_entries():
 
 
 def test_distribution_list_doc_formatter():
-    # A DistributionList (contact group) is formatted by its own formatter and
-    # indexed by name plus its members' email addresses.
+    # A contact group is indexed by name plus its members' emails.
     distribution_list = DistributionListDocument()
 
     document = OutlookDocFormatter().distribution_list_doc_formatter(

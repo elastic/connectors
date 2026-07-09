@@ -35,12 +35,9 @@ from connectors.sources.outlook.utils import (
 )
 from connectors.utils import html_to_text
 
-# Errors that mean a single Exchange item has an unexpected shape (a missing
-# attribute, an unexpected item type, a bad field value, etc.). These are
-# isolated per item so one malformed object cannot abort the whole sync.
-# Connection-wide failures (transport, SSL, rate limiting, missing mailbox) are
-# deliberately excluded so they still fail the sync loudly instead of silently
-# emptying the index.
+# Per-item errors: a single malformed item is skipped, not fatal. Connection-wide
+# failures (transport, SSL, rate limit, missing mailbox) are excluded on purpose
+# so they still abort the sync instead of silently emptying the index.
 ITEM_SHAPE_ERRORS = (AttributeError, KeyError, ValueError, TypeError)
 
 
@@ -99,8 +96,7 @@ class OutlookDocFormatter:
         }
 
         if child_calendar in ["Folder (Birthdays)", "Birthdays (Birthdays)"]:
-            # calendar.start can be absent on malformed items; guard the split so
-            # ews_format_to_datetime returning None does not raise.
+            # calendar.start may be missing; guard against splitting a None.
             birthday = ews_format_to_datetime(
                 source_datetime=calendar.start, timezone=timezone
             )
@@ -181,9 +177,7 @@ class OutlookDocFormatter:
         }
 
     def distribution_list_doc_formatter(self, distribution_list, timezone):
-        # A DistributionList is a contact group. It carries only the shared item
-        # fields plus its members, not the per-contact fields, so it has a
-        # dedicated formatter rather than being forced into the Contact schema.
+        # A contact group has members, not per-contact fields, so it needs its own shape.
         return {
             "_id": distribution_list.id,
             "type": "Distribution List",
@@ -607,8 +601,7 @@ class OutlookDataSource(BaseDataSource):
     async def _fetch_contacts(self, account, timezone):
         self._logger.debug(f"Fetching contacts for {account.primary_smtp_address}")
         async for contact in self.client.get_contacts(account=account):
-            # The Contacts folder holds both individual contacts and contact
-            # groups (DistributionList); each has its own document shape.
+            # Contacts folder holds both contacts and groups; each has its own shape.
             if isinstance(contact, DistributionList):
                 formatter = partial(
                     self.doc_formatter.distribution_list_doc_formatter,

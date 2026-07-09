@@ -76,8 +76,7 @@ DISTRIBUTION_LIST_FIELDS = [
     "display_name",
     "members",
 ]
-# The Contacts folder holds both Contact and DistributionList items, so the
-# query must request the union of the fields each formatter needs.
+# Contacts folder holds both item types, so query the union of their fields.
 CONTACT_FOLDER_FIELDS = list(dict.fromkeys(CONTACT_FIELDS + DISTRIBUTION_LIST_FIELDS))
 TASK_FIELDS = [
     "last_modified_time",

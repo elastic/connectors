@@ -423,8 +423,7 @@ class OutlookClient:
                 yield mail, mail_type
 
     async def get_calendars(self, account):
-        # account.calendar uses a distinguished folder ID (locale-agnostic), but
-        # a mailbox may still lack a Calendar folder; skip it instead of aborting.
+        # Skip instead of aborting if the mailbox has no Calendar folder.
         try:
             folder = account.calendar
         except ErrorFolderNotFound:
@@ -451,8 +450,7 @@ class OutlookClient:
                 yield calendar, child_calendar
 
     async def get_tasks(self, account):
-        # account.tasks uses a distinguished folder ID (locale-agnostic), but
-        # shared/resource mailboxes may lack a Tasks folder; skip if absent.
+        # Skip instead of aborting if the mailbox has no Tasks folder.
         try:
             folder = account.tasks
         except ErrorFolderNotFound:
