@@ -5,6 +5,7 @@
 #
 """Tests the Outlook source class methods"""
 
+import asyncio
 import ssl
 from contextlib import asynccontextmanager
 from unittest import mock
@@ -1221,6 +1222,84 @@ async def test_get_tasks_skips_when_folder_not_found():
 
         tasks = [task async for task in source.client.get_tasks(account)]
         assert tasks == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "method_name, folder_attr",
+    [
+        ("get_calendars", "calendar"),
+        ("get_tasks", "tasks"),
+        ("get_contacts", "contacts"),
+    ],
+)
+async def test_get_methods_resolve_folder_off_event_loop(method_name, folder_attr):
+    # exchangelib is synchronous, so resolving the distinguished folder must be
+    # offloaded via asyncio.to_thread instead of blocking the event loop.
+    async with create_outlook_source() as source:
+        account = MockAccount()
+        method = getattr(source.client, method_name)
+        with patch(
+            "connectors.sources.outlook.client.asyncio.to_thread",
+            wraps=asyncio.to_thread,
+        ) as to_thread:
+            _ = [item async for item in method(account)]
+
+        assert any(
+            call.args[:3] == (getattr, account, folder_attr)
+            for call in to_thread.call_args_list
+        )
+
+
+@pytest.mark.asyncio
+async def test_get_mails_resolve_folder_off_event_loop():
+    async with create_outlook_source() as source:
+        account = MockAccount()
+        with patch(
+            "connectors.sources.outlook.client.asyncio.to_thread",
+            wraps=asyncio.to_thread,
+        ) as to_thread:
+            _ = [item async for item in source.client.get_mails(account)]
+
+        # Named folders resolve via getattr, off the loop.
+        assert any(
+            call.args[:3] == (getattr, account, "inbox")
+            for call in to_thread.call_args_list
+        )
+        # The Archive leaf resolves via a lambda, also off the loop.
+        archive_calls = [c for c in to_thread.call_args_list if len(c.args) == 1]
+        assert archive_calls
+        assert archive_calls[0].args[0]().object_type == MAIL
+
+
+@pytest.mark.asyncio
+async def test_get_child_calendars_resolve_folder_off_event_loop():
+    async with create_outlook_source() as source:
+        account = MockAccount()
+        with patch(
+            "connectors.sources.outlook.client.asyncio.to_thread",
+            wraps=asyncio.to_thread,
+        ) as to_thread:
+            _ = [item async for item in source.client.get_child_calendars(account)]
+
+        # The first offloaded call resolves the child-calendar list.
+        resolved = to_thread.call_args_list[0].args[0]()
+        assert resolved == list(account.calendar.children)
+
+
+@pytest.mark.asyncio
+async def test_get_contacts_queries_distribution_list_fields():
+    # The Contacts folder query must include DistributionList fields (members),
+    # or contact groups come back with no email addresses.
+    async with create_outlook_source() as source:
+        account = MockAccount()
+        with patch(
+            "connectors.sources.outlook.client.asyncio.to_thread",
+            wraps=asyncio.to_thread,
+        ) as to_thread:
+            _ = [contact async for contact in source.client.get_contacts(account)]
+
+        assert any("members" in call.args[1:] for call in to_thread.call_args_list)
 
 
 @pytest.mark.asyncio
