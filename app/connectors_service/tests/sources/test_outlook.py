@@ -258,6 +258,17 @@ class DistributionListDocument:
         self.display_name = "Dummy Group"
 
 
+class BrokenContact:
+    """Mimics a malformed item whose formatting raises an item-shape error."""
+
+    id = "broken_contact"
+
+    @property
+    def last_modified_time(self):
+        msg = "malformed contact"
+        raise AttributeError(msg)
+
+
 class CalendarDocument:
     def __init__(self):
         organizer = MagicMock()
@@ -1174,6 +1185,88 @@ async def test_get_contacts_skips_when_folder_not_found():
         assert contacts == []
 
 
+@pytest.mark.asyncio
+async def test_get_calendars_skips_when_folder_not_found():
+    async with create_outlook_source() as source:
+        account = MagicMock()
+        account.primary_smtp_address = "alex.wilber@gmail.com"
+        type(account).calendar = mock.PropertyMock(
+            side_effect=ErrorFolderNotFound("no")
+        )
+
+        calendars = [
+            calendar async for calendar in source.client.get_calendars(account)
+        ]
+        assert calendars == []
+
+
+@pytest.mark.asyncio
+async def test_get_child_calendars_skips_when_folder_not_found():
+    async with create_outlook_source() as source:
+        account = MagicMock()
+        account.primary_smtp_address = "alex.wilber@gmail.com"
+        type(account).calendar = mock.PropertyMock(
+            side_effect=ErrorFolderNotFound("no")
+        )
+
+        calendars = [
+            calendar async for calendar in source.client.get_child_calendars(account)
+        ]
+        assert calendars == []
+
+
+@pytest.mark.asyncio
+async def test_get_tasks_skips_when_folder_not_found():
+    async with create_outlook_source() as source:
+        account = MagicMock()
+        account.primary_smtp_address = "alex.wilber@gmail.com"
+        type(account).tasks = mock.PropertyMock(side_effect=ErrorFolderNotFound("no"))
+
+        tasks = [task async for task in source.client.get_tasks(account)]
+        assert tasks == []
+
+
+@pytest.mark.asyncio
+async def test_fetch_contacts_skips_malformed_item_and_continues():
+    # A single malformed item must be skipped with a warning, not abort the sync.
+    async with create_outlook_source() as source:
+        source._logger = MagicMock()
+        source.client.get_contacts = AsyncIterator([BrokenContact(), ContactDocument()])
+        account = MockAccount()
+
+        documents = [
+            document
+            async for document, _ in source._fetch_contacts(
+                account=account, timezone=TIMEZONE
+            )
+        ]
+
+        assert [document["_id"] for document in documents] == ["contact_1"]
+        source._logger.warning.assert_called_once()
+        warning_message = source._logger.warning.call_args.args[0]
+        assert "broken_contact" in warning_message
+        assert "BrokenContact" in warning_message
+
+
+@pytest.mark.asyncio
+@patch("connectors.sources.outlook.client.Account", return_value="account")
+async def test_exchange_get_user_accounts_handles_missing_type_key(
+    mock_account, reset_http_adapter_cls
+):
+    # Some LDAP entries may not carry a "type" key; that must not raise KeyError.
+    user_without_type = {"attributes": {"mail": ["user@example.com"]}}
+    async with create_outlook_source() as source:
+        source.client.is_cloud = False
+        source.client._get_user_instance.get_users = AsyncIterator([user_without_type])
+
+        accounts = [
+            account
+            async for account in source.client._get_user_instance.get_user_accounts()
+        ]
+
+        assert accounts == ["account"]
+
+
 def test_mails_doc_formatter_handles_missing_sender():
     mail = MailDocument()
     mail.sender = None
@@ -1213,6 +1306,19 @@ def test_calendar_doc_formatter_handles_occurrence_without_recurrence():
     )
 
     assert document["meeting_type"] == "Occurrence"
+
+
+def test_calendar_doc_formatter_handles_birthday_without_start():
+    calendar = CalendarDocument()
+    calendar.start = None
+
+    document = OutlookDocFormatter().calendar_doc_formatter(
+        calendar=calendar,
+        child_calendar="Birthdays (Birthdays)",
+        timezone=TIMEZONE,
+    )
+
+    assert document["date"] is None
 
 
 def test_calendar_doc_formatter_skips_attendees_without_mailbox():

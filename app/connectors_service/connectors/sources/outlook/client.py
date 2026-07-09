@@ -226,7 +226,7 @@ class ExchangeUsers:
         )
 
         async for user in self.get_users():
-            if "searchResRef" in user["type"]:
+            if "searchResRef" in user.get("type", ""):
                 continue
 
             mail = _extract_ldap_mail(user.get("attributes", {}))
@@ -423,20 +423,44 @@ class OutlookClient:
                 yield mail, mail_type
 
     async def get_calendars(self, account):
-        for calendar in await asyncio.to_thread(
-            account.calendar.all().only, *CALENDAR_FIELDS
-        ):
+        # account.calendar uses a distinguished folder ID (locale-agnostic), but
+        # a mailbox may still lack a Calendar folder; skip it instead of aborting.
+        try:
+            folder = account.calendar
+        except ErrorFolderNotFound:
+            self._logger.warning(
+                f"Could not resolve Calendar folder for {account.primary_smtp_address}, skipping."
+            )
+            return
+        for calendar in await asyncio.to_thread(folder.all().only, *CALENDAR_FIELDS):
             yield calendar
 
     async def get_child_calendars(self, account):
-        for child_calendar in account.calendar.children:
+        try:
+            child_calendars = account.calendar.children
+        except ErrorFolderNotFound:
+            self._logger.warning(
+                f"Could not resolve Calendar folder for {account.primary_smtp_address}, "
+                "skipping child calendars."
+            )
+            return
+        for child_calendar in child_calendars:
             for calendar in await asyncio.to_thread(
                 child_calendar.all().only, *CALENDAR_FIELDS
             ):
                 yield calendar, child_calendar
 
     async def get_tasks(self, account):
-        for task in await asyncio.to_thread(account.tasks.all().only, *TASK_FIELDS):
+        # account.tasks uses a distinguished folder ID (locale-agnostic), but
+        # shared/resource mailboxes may lack a Tasks folder; skip if absent.
+        try:
+            folder = account.tasks
+        except ErrorFolderNotFound:
+            self._logger.warning(
+                f"Could not resolve Tasks folder for {account.primary_smtp_address}, skipping."
+            )
+            return
+        for task in await asyncio.to_thread(folder.all().only, *TASK_FIELDS):
             yield task
 
     async def get_contacts(self, account):

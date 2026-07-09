@@ -34,6 +34,14 @@ from connectors.sources.outlook.utils import (
 )
 from connectors.utils import html_to_text
 
+# Errors that mean a single Exchange item has an unexpected shape (a missing
+# attribute, an unexpected item type, a bad field value, etc.). These are
+# isolated per item so one malformed object cannot abort the whole sync.
+# Connection-wide failures (transport, SSL, rate limiting, missing mailbox) are
+# deliberately excluded so they still fail the sync loudly instead of silently
+# emptying the index.
+ITEM_SHAPE_ERRORS = (AttributeError, KeyError, ValueError, TypeError)
+
 
 class OutlookDocFormatter:
     """Format Outlook object documents to Elasticsearch document"""
@@ -90,11 +98,14 @@ class OutlookDocFormatter:
         }
 
         if child_calendar in ["Folder (Birthdays)", "Birthdays (Birthdays)"]:
+            # calendar.start can be absent on malformed items; guard the split so
+            # ews_format_to_datetime returning None does not raise.
+            birthday = ews_format_to_datetime(
+                source_datetime=calendar.start, timezone=timezone
+            )
             document.update(
                 {
-                    "date": ews_format_to_datetime(
-                        source_datetime=calendar.start, timezone=timezone
-                    ).split("T", 1)[0],
+                    "date": birthday.split("T", 1)[0] if birthday else None,
                 }
             )
         else:
@@ -491,6 +502,31 @@ class OutlookDataSource(BaseDataSource):
         """
         yield content
 
+    def _format_item(self, formatter, item, account):
+        """Run a document formatter for a single item, isolating item-shape
+        errors so one malformed Exchange object is skipped (with a warning)
+        instead of aborting the whole sync.
+
+        Args:
+            formatter (callable): Zero-argument callable that formats the item
+                (typically a functools.partial around a doc formatter).
+            item: The Exchange item being formatted, used for logging context.
+            account: The account the item belongs to, used for logging context.
+
+        Returns:
+            The formatted document, or None if the item was malformed and
+            skipped. Connection-wide errors are not caught here and propagate.
+        """
+        try:
+            return formatter()
+        except ITEM_SHAPE_ERRORS as error:
+            self._logger.warning(
+                f"Skipping malformed {type(item).__name__} item "
+                f"{getattr(item, 'id', 'unknown')} for "
+                f"{account.primary_smtp_address}: {error}"
+            )
+            return None
+
     async def _fetch_attachments(
         self, attachment_type, outlook_object, timezone, account
     ):
@@ -500,11 +536,18 @@ class OutlookDataSource(BaseDataSource):
                     f"Skipping attachment without an ID on item {outlook_object.id}"
                 )
                 continue
-            document = self.doc_formatter.attachment_doc_formatter(
-                attachment=attachment,
-                attachment_type=attachment_type,
-                timezone=timezone,
+            document = self._format_item(
+                partial(
+                    self.doc_formatter.attachment_doc_formatter,
+                    attachment=attachment,
+                    attachment_type=attachment_type,
+                    timezone=timezone,
+                ),
+                item=attachment,
+                account=account,
             )
+            if document is None:
+                continue
             yield (
                 self._decorate_with_access_control(
                     document, [account.primary_smtp_address]
@@ -516,11 +559,18 @@ class OutlookDataSource(BaseDataSource):
 
     async def _fetch_mails(self, account, timezone):
         async for mail, mail_type in self.client.get_mails(account=account):
-            document = self.doc_formatter.mails_doc_formatter(
-                mail=mail,
-                mail_type=mail_type,
-                timezone=timezone,
+            document = self._format_item(
+                partial(
+                    self.doc_formatter.mails_doc_formatter,
+                    mail=mail,
+                    mail_type=mail_type,
+                    timezone=timezone,
+                ),
+                item=mail,
+                account=account,
             )
+            if document is None:
+                continue
             yield (
                 self._decorate_with_access_control(
                     document, [account.primary_smtp_address]
@@ -540,10 +590,17 @@ class OutlookDataSource(BaseDataSource):
     async def _fetch_contacts(self, account, timezone):
         self._logger.debug(f"Fetching contacts for {account.primary_smtp_address}")
         async for contact in self.client.get_contacts(account=account):
-            document = self.doc_formatter.contact_doc_formatter(
-                contact=contact,
-                timezone=timezone,
+            document = self._format_item(
+                partial(
+                    self.doc_formatter.contact_doc_formatter,
+                    contact=contact,
+                    timezone=timezone,
+                ),
+                item=contact,
+                account=account,
             )
+            if document is None:
+                continue
             yield (
                 self._decorate_with_access_control(
                     document, [account.primary_smtp_address]
@@ -554,9 +611,17 @@ class OutlookDataSource(BaseDataSource):
     async def _fetch_tasks(self, account, timezone):
         self._logger.debug(f"Fetching tasks for {account.primary_smtp_address}")
         async for task in self.client.get_tasks(account=account):
-            document = self.doc_formatter.task_doc_formatter(
-                task=task, timezone=timezone
+            document = self._format_item(
+                partial(
+                    self.doc_formatter.task_doc_formatter,
+                    task=task,
+                    timezone=timezone,
+                ),
+                item=task,
+                account=account,
             )
+            if document is None:
+                continue
             yield (
                 self._decorate_with_access_control(
                     document, [account.primary_smtp_address]
@@ -600,11 +665,18 @@ class OutlookDataSource(BaseDataSource):
                 yield doc
 
     async def _enqueue_calendars(self, calendar, child_calendar, timezone, account):
-        document = self.doc_formatter.calendar_doc_formatter(
-            calendar=calendar,
-            child_calendar=str(child_calendar),
-            timezone=timezone,
+        document = self._format_item(
+            partial(
+                self.doc_formatter.calendar_doc_formatter,
+                calendar=calendar,
+                child_calendar=str(child_calendar),
+                timezone=timezone,
+            ),
+            item=calendar,
+            account=account,
         )
+        if document is None:
+            return
         yield (
             self._decorate_with_access_control(
                 document, [account.primary_smtp_address]
