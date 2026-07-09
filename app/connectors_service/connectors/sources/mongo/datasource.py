@@ -115,9 +115,7 @@ class MongoDataSource(BaseDataSource):
         try:
             client_params = {}
 
-            # Return out-of-range BSON datetimes (years outside 1-9999) as
-            # DatetimeMS instead of raising InvalidBSON, so a single document
-            # with an extreme date can't abort the whole sync.
+            # Return out-of-range dates as DatetimeMS instead of raising.
             client_params["datetime_conversion"] = DatetimeConversion.DATETIME_AUTO
 
             if self.configuration["direct_connection"]:
@@ -186,8 +184,7 @@ class MongoDataSource(BaseDataSource):
             elif isinstance(value, DBRef):
                 value = _serialize(value.as_doc().to_dict())
             elif isinstance(value, DatetimeMS):
-                # Out-of-range dates can't be represented as datetime, so keep
-                # the raw milliseconds since epoch as an integer.
+                # Keep out-of-range dates as raw milliseconds since epoch.
                 value = int(value)
             elif isinstance(value, Binary):
                 # UUID_SUBTYPE is guaranteed to properly be serialized cross-platform and cross-driver
