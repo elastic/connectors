@@ -123,6 +123,8 @@ def _default_config():
             "feature_use_connectors_api": True,
         },
         "service": {
+            "worker_mode": False,
+            "service_types": [],
             "idling": 30,
             "heartbeat": 300,
             "preflight_max_attempts": 10,
