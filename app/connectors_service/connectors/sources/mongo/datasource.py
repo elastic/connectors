@@ -14,7 +14,6 @@ from bson import (
     OLD_UUID_SUBTYPE,
     Binary,
     DatetimeConversion,
-    DatetimeMS,
     DBRef,
     Decimal128,
     ObjectId,
@@ -115,8 +114,10 @@ class MongoDataSource(BaseDataSource):
         try:
             client_params = {}
 
-            # Return out-of-range dates as DatetimeMS instead of raising.
-            client_params["datetime_conversion"] = DatetimeConversion.DATETIME_AUTO
+            # Clamp out-of-range dates to datetime.min/max instead of raising,
+            # so extreme values stay valid dates and don't break the sync or
+            # the Elasticsearch date mapping.
+            client_params["datetime_conversion"] = DatetimeConversion.DATETIME_CLAMP
 
             if self.configuration["direct_connection"]:
                 client_params["directConnection"] = True
@@ -183,9 +184,6 @@ class MongoDataSource(BaseDataSource):
                 value = value.to_decimal()
             elif isinstance(value, DBRef):
                 value = _serialize(value.as_doc().to_dict())
-            elif isinstance(value, DatetimeMS):
-                # Keep out-of-range dates as raw milliseconds since epoch.
-                value = int(value)
             elif isinstance(value, Binary):
                 # UUID_SUBTYPE is guaranteed to properly be serialized cross-platform and cross-driver
                 if value.subtype == UUID_SUBTYPE:

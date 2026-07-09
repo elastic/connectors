@@ -10,8 +10,10 @@ from unittest import mock
 from unittest.mock import AsyncMock, MagicMock, Mock
 from uuid import UUID
 
+import bson
 import pytest
 from bson import Binary, DatetimeConversion, DatetimeMS, DBRef, ObjectId
+from bson.codec_options import CodecOptions
 from bson.decimal128 import Decimal128
 from connectors_sdk.filtering.validation import Filter
 from connectors_sdk.source import ConfigurableFieldValueError
@@ -458,33 +460,18 @@ async def test_validate_config_when_configuration_valid_then_does_not_raise(
             {"some_binary_uuid": None},
         ),
         (
-            # in-range datetime still serializes to an ISO string
+            # in-range datetime serializes to an ISO string
             {"created": datetime(2020, 1, 1, 12, 30, 0)},
             {"created": "2020-01-01T12:30:00"},
         ),
         (
-            # out-of-range date decoded as DatetimeMS -> raw milliseconds
-            {"too_big": DatetimeMS(2**62)},
-            {"too_big": 2**62},
+            # dates clamped to the datetime bounds serialize to ISO strings too
+            {"clamped_max": datetime.max},
+            {"clamped_max": datetime.max.isoformat()},
         ),
         (
-            {"too_small": DatetimeMS(-(2**62))},
-            {"too_small": -(2**62)},
-        ),
-        (
-            {"epoch": DatetimeMS(0)},
-            {"epoch": 0},
-        ),
-        (
-            # DatetimeMS nested inside a list and a dict
-            {
-                "nested": {"created": DatetimeMS(2**62)},
-                "list": [DatetimeMS(0)],
-            },
-            {
-                "nested": {"created": 2**62},
-                "list": [0],
-            },
+            {"clamped_min": datetime.min},
+            {"clamped_min": datetime.min.isoformat()},
         ),
     ],
 )
@@ -494,13 +481,39 @@ async def test_serialize(raw, output):
 
 
 @pytest.mark.asyncio
-async def test_get_client_uses_datetime_auto_conversion():
+async def test_get_client_clamps_out_of_range_dates():
     async with create_mongo_source() as source:
         with source.get_client() as client:
             assert (
                 client.codec_options.datetime_conversion
-                == DatetimeConversion.DATETIME_AUTO
+                == DatetimeConversion.DATETIME_CLAMP
             )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("milliseconds", [2**62, -(2**62), 0])
+async def test_out_of_range_dates_are_clamped_and_serialized_as_iso(milliseconds):
+    # An out-of-range BSON date (outside datetime's 1-9999 year range) must not
+    # abort the sync: the client clamps it to a valid datetime, which then
+    # serializes to an ISO string rather than a raw number.
+    async with create_mongo_source() as source:
+        with source.get_client() as client:
+            codec = client.codec_options
+
+        raw = bson.encode(
+            {"date": DatetimeMS(milliseconds)},
+            codec_options=CodecOptions(
+                datetime_conversion=DatetimeConversion.DATETIME_MS
+            ),
+        )
+        decoded = bson.decode(raw, codec_options=codec)
+
+        # Clamping yields a regular datetime, never a DatetimeMS.
+        assert isinstance(decoded["date"], datetime)
+
+        serialized = source.serialize(dict(decoded))
+        assert serialized["date"] == decoded["date"].isoformat()
+        assert isinstance(serialized["date"], str)
 
 
 @pytest.mark.asyncio
