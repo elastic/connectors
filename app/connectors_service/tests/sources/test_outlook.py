@@ -19,7 +19,7 @@ from exchangelib.errors import (
     ErrorNonExistentMailbox,
     TransportError,
 )
-from exchangelib.items import DistributionList
+from exchangelib.items import Contact, DistributionList
 from exchangelib.protocol import BaseProtocol, NoVerifyHTTPAdapter
 
 from connectors.sources.outlook import OutlookDataSource
@@ -232,19 +232,22 @@ class TaskDocument:
         self.attachments = [MOCK_ATTACHMENT]
 
 
-class ContactDocument:
-    def __init__(self):
-        contact = MagicMock()
-        contact.email = "dummy.user@gmail.com"
-        contact.phone_number = 99887776655
+def ContactDocument():
+    # A real Contact instance so _fetch_contacts' isinstance dispatch routes it
+    # to the contact formatter (spec mock keeps isinstance(..., Contact) True).
+    contact = MagicMock()
+    contact.email = "dummy.user@gmail.com"
+    contact.phone_number = 99887776655
 
-        self.id = "contact_1"
-        self.last_modified_time = "2023-12-12T01:01:01Z"
-        self.display_name = "Dummy User"
-        self.email_addresses = [contact]
-        self.phone_numbers = [contact]
-        self.company_name = "ABC"
-        self.birthday = "2023-12-12T01:01:01Z"
+    document = MagicMock(spec=Contact)
+    document.id = "contact_1"
+    document.last_modified_time = "2023-12-12T01:01:01Z"
+    document.display_name = "Dummy User"
+    document.email_addresses = [contact]
+    document.phone_numbers = [contact]
+    document.company_name = "ABC"
+    document.birthday = "2023-12-12T01:01:01Z"
+    return document
 
 
 class DistributionListDocument:
@@ -261,17 +264,6 @@ class DistributionListDocument:
         self.last_modified_time = "2023-12-12T01:01:01Z"
         self.display_name = "Dummy Group"
         self.members = [member]
-
-
-class BrokenContact:
-    """Mimics a malformed item whose formatting raises an item-shape error."""
-
-    id = "broken_contact"
-
-    @property
-    def last_modified_time(self):
-        msg = "malformed contact"
-        raise AttributeError(msg)
 
 
 class CalendarDocument:
@@ -1232,11 +1224,13 @@ async def test_get_tasks_skips_when_folder_not_found():
 
 
 @pytest.mark.asyncio
-async def test_fetch_contacts_skips_malformed_item_and_continues():
-    # A single malformed item must be skipped with a warning, not abort the sync.
+async def test_fetch_contacts_skips_unexpected_item_type_with_warning():
+    # An item that is neither a Contact nor a DistributionList is skipped with a
+    # warning; a known Contact is still indexed.
     async with create_outlook_source() as source:
         source._logger = MagicMock()
-        source.client.get_contacts = AsyncIterator([BrokenContact(), ContactDocument()])
+        unexpected = MagicMock()
+        source.client.get_contacts = AsyncIterator([unexpected, ContactDocument()])
         account = MockAccount()
 
         documents = [
@@ -1249,8 +1243,9 @@ async def test_fetch_contacts_skips_malformed_item_and_continues():
         assert [document["_id"] for document in documents] == ["contact_1"]
         source._logger.warning.assert_called_once()
         warning_message = source._logger.warning.call_args.args[0]
-        assert "broken_contact" in warning_message
-        assert "BrokenContact" in warning_message
+        assert "unexpected" in warning_message.lower()
+        assert type(unexpected).__name__ in warning_message
+        assert account.primary_smtp_address in warning_message
 
 
 @pytest.mark.asyncio
