@@ -37,7 +37,7 @@ DEFAULT_MAX_CONCURRENCY = 5
 DEFAULT_CONCURRENT_DOWNLOADS = 10
 
 # --- File handling defaults ----------------------------------------------------------
-DEFAULT_MAX_FILE_SIZE = 10485760  # 10MiB
+DEFAULT_MAX_FILE_SIZE = 8388608  # 8MiB
 
 
 def load_config(config_file):
@@ -123,6 +123,8 @@ def _default_config():
             "feature_use_connectors_api": True,
         },
         "service": {
+            "worker_mode": False,
+            "service_types": [],
             "idling": 30,
             "heartbeat": 300,
             "preflight_max_attempts": 10,
