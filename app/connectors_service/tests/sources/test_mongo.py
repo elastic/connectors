@@ -15,6 +15,7 @@ import pytest
 from bson import Binary, DatetimeConversion, DatetimeMS, DBRef, ObjectId
 from bson.codec_options import CodecOptions
 from bson.decimal128 import Decimal128
+from bson.errors import InvalidBSON
 from connectors_sdk.filtering.validation import Filter
 from connectors_sdk.source import ConfigurableFieldValueError
 from pymongo.errors import OperationFailure
@@ -35,6 +36,7 @@ async def create_mongo_source(
     ssl_enabled=False,
     ssl_ca="",
     tls_insecure=False,
+    datetime_conversion="DATETIME",
 ):
     async with create_source(
         MongoDataSource,
@@ -47,6 +49,7 @@ async def create_mongo_source(
         ssl_enabled=ssl_enabled,
         ssl_ca=ssl_ca,
         tls_insecure=tls_insecure,
+        datetime_conversion=datetime_conversion,
     ) as source:
         yield source
 
@@ -460,18 +463,32 @@ async def test_validate_config_when_configuration_valid_then_does_not_raise(
             {"some_binary_uuid": None},
         ),
         (
-            # in-range datetime serializes to an ISO string
+            # in-range date -> ISO string
             {"created": datetime(2020, 1, 1, 12, 30, 0)},
             {"created": "2020-01-01T12:30:00"},
         ),
         (
-            # dates clamped to the datetime bounds serialize to ISO strings too
+            # clamped dates -> ISO string
             {"clamped_max": datetime.max},
             {"clamped_max": datetime.max.isoformat()},
         ),
         (
             {"clamped_min": datetime.min},
             {"clamped_min": datetime.min.isoformat()},
+        ),
+        (
+            # DatetimeMS -> raw ms
+            {"ms": DatetimeMS(2**62)},
+            {"ms": 2**62},
+        ),
+        (
+            {"ms_zero": DatetimeMS(0)},
+            {"ms_zero": 0},
+        ),
+        (
+            # nested DatetimeMS
+            {"nested": {"ms": DatetimeMS(5)}, "list": [DatetimeMS(-(2**62))]},
+            {"nested": {"ms": 5}, "list": [-(2**62)]},
         ),
     ],
 )
@@ -481,39 +498,75 @@ async def test_serialize(raw, output):
 
 
 @pytest.mark.asyncio
-async def test_get_client_clamps_out_of_range_dates():
+async def test_get_client_defaults_to_legacy_datetime_conversion():
+    # Unconfigured keeps legacy DATETIME (raise); opt-in only.
     async with create_mongo_source() as source:
         with source.get_client() as client:
             assert (
-                client.codec_options.datetime_conversion
-                == DatetimeConversion.DATETIME_CLAMP
+                client.codec_options.datetime_conversion == DatetimeConversion.DATETIME
             )
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("milliseconds", [2**62, -(2**62), 0])
-async def test_out_of_range_dates_are_clamped_and_serialized_as_iso(milliseconds):
-    # An out-of-range BSON date (outside datetime's 1-9999 year range) must not
-    # abort the sync: the client clamps it to a valid datetime, which then
-    # serializes to an ISO string rather than a raw number.
-    async with create_mongo_source() as source:
+@pytest.mark.parametrize(
+    "conversion",
+    ["DATETIME", "DATETIME_CLAMP", "DATETIME_AUTO", "DATETIME_MS"],
+)
+async def test_get_client_uses_configured_datetime_conversion(conversion):
+    async with create_mongo_source(datetime_conversion=conversion) as source:
+        with source.get_client() as client:
+            assert (
+                client.codec_options.datetime_conversion
+                == DatetimeConversion[conversion]
+            )
+
+
+def _encode_out_of_range_date():
+    return bson.encode(
+        {"date": DatetimeMS(2**62)},
+        codec_options=CodecOptions(datetime_conversion=DatetimeConversion.DATETIME_MS),
+    )
+
+
+@pytest.mark.asyncio
+async def test_legacy_conversion_raises_on_out_of_range_date():
+    # Legacy mode raises on out-of-range dates.
+    async with create_mongo_source(datetime_conversion="DATETIME") as source:
+        with source.get_client() as client:
+            codec = client.codec_options
+        with pytest.raises(InvalidBSON):
+            bson.decode(_encode_out_of_range_date(), codec_options=codec)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "conversion, expected",
+    [
+        # Clamp -> ISO string
+        ("DATETIME_CLAMP", "9999-12-31T23:59:59.999000"),
+        # Auto/MS -> raw ms
+        ("DATETIME_AUTO", 2**62),
+        ("DATETIME_MS", 2**62),
+    ],
+)
+async def test_out_of_range_date_conversion_and_serialization(conversion, expected):
+    # Non-legacy modes let the sync continue.
+    async with create_mongo_source(datetime_conversion=conversion) as source:
         with source.get_client() as client:
             codec = client.codec_options
 
-        raw = bson.encode(
-            {"date": DatetimeMS(milliseconds)},
-            codec_options=CodecOptions(
-                datetime_conversion=DatetimeConversion.DATETIME_MS
-            ),
-        )
-        decoded = bson.decode(raw, codec_options=codec)
-
-        # Clamping yields a regular datetime, never a DatetimeMS.
-        assert isinstance(decoded["date"], datetime)
-
+        decoded = bson.decode(_encode_out_of_range_date(), codec_options=codec)
         serialized = source.serialize(dict(decoded))
-        assert serialized["date"] == decoded["date"].isoformat()
-        assert isinstance(serialized["date"], str)
+
+        assert serialized["date"] == expected
+
+
+@pytest.mark.asyncio
+async def test_validate_config_rejects_unknown_datetime_conversion():
+    async with create_mongo_source(datetime_conversion="NOT_A_REAL_OPTION") as source:
+        with pytest.raises(ConfigurableFieldValueError) as e:
+            await source.validate_config()
+        assert e.match("NOT_A_REAL_OPTION")
 
 
 @pytest.mark.asyncio
