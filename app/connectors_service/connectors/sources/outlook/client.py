@@ -28,7 +28,7 @@ from ldap3 import SAFE_SYNC, Connection, Server
 from connectors.sources.outlook.constants import (
     API_SCOPE,
     CALENDAR_FIELDS,
-    CONTACT_FIELDS,
+    CONTACT_FOLDER_FIELDS,
     EWS_ENDPOINT,
     MAIL_FIELDS,
     MAIL_TYPES,
@@ -226,7 +226,7 @@ class ExchangeUsers:
         )
 
         async for user in self.get_users():
-            if "searchResRef" in user["type"]:
+            if "searchResRef" in user.get("type", ""):
                 continue
 
             mail = _extract_ldap_mail(user.get("attributes", {}))
@@ -406,12 +406,17 @@ class OutlookClient:
                 f"Fetching {mail_type['folder']} mails for {account.primary_smtp_address}"
             )
             try:
+                # Resolve folders off the event loop (blocking exchangelib call).
                 if mail_type["folder"] == "archive":
                     # msg_folder_root is locale-agnostic; the "Archive" leaf has no
                     # distinguished ID, so resolve it by name and skip if absent.
-                    folder_object = account.msg_folder_root / "Archive"
+                    folder_object = await asyncio.to_thread(
+                        lambda: account.msg_folder_root / "Archive"
+                    )
                 else:
-                    folder_object = getattr(account, mail_type["folder"])
+                    folder_object = await asyncio.to_thread(
+                        getattr, account, mail_type["folder"]
+                    )
             except ErrorFolderNotFound:
                 self._logger.warning(
                     f"Could not resolve {mail_type['folder']} folder for "
@@ -423,31 +428,58 @@ class OutlookClient:
                 yield mail, mail_type
 
     async def get_calendars(self, account):
-        for calendar in await asyncio.to_thread(
-            account.calendar.all().only, *CALENDAR_FIELDS
-        ):
+        # Resolve the folder off the event loop (blocking call); skip if absent.
+        try:
+            folder = await asyncio.to_thread(getattr, account, "calendar")
+        except ErrorFolderNotFound:
+            self._logger.warning(
+                f"Could not resolve Calendar folder for {account.primary_smtp_address}, skipping."
+            )
+            return
+        for calendar in await asyncio.to_thread(folder.all().only, *CALENDAR_FIELDS):
             yield calendar
 
     async def get_child_calendars(self, account):
-        for child_calendar in account.calendar.children:
+        # Resolve folder and children off the event loop; skip if absent.
+        try:
+            child_calendars = await asyncio.to_thread(
+                lambda: list(account.calendar.children)
+            )
+        except ErrorFolderNotFound:
+            self._logger.warning(
+                f"Could not resolve Calendar folder for {account.primary_smtp_address}, "
+                "skipping child calendars."
+            )
+            return
+        for child_calendar in child_calendars:
             for calendar in await asyncio.to_thread(
                 child_calendar.all().only, *CALENDAR_FIELDS
             ):
                 yield calendar, child_calendar
 
     async def get_tasks(self, account):
-        for task in await asyncio.to_thread(account.tasks.all().only, *TASK_FIELDS):
+        # Resolve the folder off the event loop (blocking call); skip if absent.
+        try:
+            folder = await asyncio.to_thread(getattr, account, "tasks")
+        except ErrorFolderNotFound:
+            self._logger.warning(
+                f"Could not resolve Tasks folder for {account.primary_smtp_address}, skipping."
+            )
+            return
+        for task in await asyncio.to_thread(folder.all().only, *TASK_FIELDS):
             yield task
 
     async def get_contacts(self, account):
-        # account.contacts uses a distinguished folder ID, which is locale-agnostic
-        # unlike name-based paths that break on non-English Exchange servers.
+        # account.contacts uses a locale-agnostic distinguished folder ID; resolve
+        # it off the event loop (blocking call); skip if absent.
         try:
-            folder = account.contacts
+            folder = await asyncio.to_thread(getattr, account, "contacts")
         except ErrorFolderNotFound:
             self._logger.warning(
                 f"Could not resolve Contacts folder for {account.primary_smtp_address}, skipping."
             )
             return
-        for contact in await asyncio.to_thread(folder.all().only, *CONTACT_FIELDS):
+        for contact in await asyncio.to_thread(
+            folder.all().only, *CONTACT_FOLDER_FIELDS
+        ):
             yield contact
