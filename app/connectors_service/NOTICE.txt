@@ -2615,7 +2615,7 @@ SOFTWARE.
 
 
 build
-1.5.0
+1.5.1
 MIT
 Copyright © 2019 Filipe Laíns <filipe.lains@gmail.com>
 
@@ -7576,8 +7576,8 @@ SOFTWARE.
 
 
 stone
-3.3.9
-MIT License
+3.5.0
+MIT
 Copyright (c) 2020 Dropbox Inc., http://www.dropbox.com/
 
     Permission is hereby granted, free of charge, to any person obtaining
@@ -8161,11 +8161,12 @@ Apache Software License
 UNKNOWN
 
 tzdata
-2026.2
+2026.3
 Apache-2.0
 Apache Software License 2.0
 
 Copyright (c) 2020, Paul Ganssle (Google)
+Copyright (c) 2026, Stan Ulbrych
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
