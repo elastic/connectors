@@ -14,6 +14,7 @@ from connectors_sdk.utils import (
     iso_utc,
 )
 from exchangelib.errors import ErrorNonExistentMailbox
+from exchangelib.items import Contact, DistributionList
 
 from connectors.access_control import ACCESS_CONTROL, es_access_control_query
 from connectors.sources.outlook.client import OutlookClient, _extract_ldap_mail
@@ -90,11 +91,13 @@ class OutlookDocFormatter:
         }
 
         if child_calendar in ["Folder (Birthdays)", "Birthdays (Birthdays)"]:
+            # calendar.start may be missing; guard against splitting a None.
+            birthday = ews_format_to_datetime(
+                source_datetime=calendar.start, timezone=timezone
+            )
             document.update(
                 {
-                    "date": ews_format_to_datetime(
-                        source_datetime=calendar.start, timezone=timezone
-                    ).split("T", 1)[0],
+                    "date": birthday.split("T", 1)[0] if birthday else None,
                 }
             )
         else:
@@ -166,6 +169,23 @@ class OutlookDocFormatter:
             "birthday": ews_format_to_datetime(
                 source_datetime=contact.birthday, timezone=timezone
             ),
+        }
+
+    def distribution_list_doc_formatter(self, distribution_list, timezone):
+        # A contact group has members, not per-contact fields, so it needs its own shape.
+        return {
+            "_id": distribution_list.id,
+            "type": "Distribution List",
+            "_timestamp": ews_format_to_datetime(
+                source_datetime=distribution_list.last_modified_time,
+                timezone=timezone,
+            ),
+            "name": distribution_list.display_name,
+            "email_addresses": [
+                member.mailbox.email_address
+                for member in (distribution_list.members or [])
+                if member and member.mailbox and member.mailbox.email_address
+            ],
         }
 
     def attachment_doc_formatter(self, attachment, attachment_type, timezone):
@@ -537,10 +557,25 @@ class OutlookDataSource(BaseDataSource):
     async def _fetch_contacts(self, account, timezone):
         self._logger.debug(f"Fetching contacts for {account.primary_smtp_address}")
         async for contact in self.client.get_contacts(account=account):
-            document = self.doc_formatter.contact_doc_formatter(
-                contact=contact,
-                timezone=timezone,
-            )
+            # Contacts folder returns only Contact or DistributionList; any other
+            # type breaks that assumption, so fail loudly instead of guessing.
+            if isinstance(contact, Contact):
+                document = self.doc_formatter.contact_doc_formatter(
+                    contact=contact,
+                    timezone=timezone,
+                )
+            elif isinstance(contact, DistributionList):
+                document = self.doc_formatter.distribution_list_doc_formatter(
+                    distribution_list=contact,
+                    timezone=timezone,
+                )
+            else:
+                msg = (
+                    f"Unexpected Contacts item type {type(contact).__name__} for "
+                    f"{account.primary_smtp_address}; expected Contact or "
+                    "DistributionList"
+                )
+                raise TypeError(msg)
             yield (
                 self._decorate_with_access_control(
                     document, [account.primary_smtp_address]
