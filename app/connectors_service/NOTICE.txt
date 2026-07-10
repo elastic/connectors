@@ -7576,8 +7576,8 @@ SOFTWARE.
 
 
 stone
-3.4.0
-MIT License
+3.5.0
+MIT
 Copyright (c) 2020 Dropbox Inc., http://www.dropbox.com/
 
     Permission is hereby granted, free of charge, to any person obtaining
