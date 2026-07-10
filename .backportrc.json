@@ -1,6 +1,7 @@
 {
   "targetBranchChoices": [
     { "name": "main", "checked": true },
+    "9.5",
     "9.4",
     "9.3",
     "9.2",
@@ -10,7 +11,7 @@
   "fork": false,
   "targetPRLabels": ["backport"],
   "branchLabelMapping": {
-    "^v9.5.0$": "main",
+    "^v9.6.0$": "main",
     "^v(\\d+).(\\d+)(.\\d+)*$": "$1.$2"
   },
   "upstream": "elastic/connectors"
