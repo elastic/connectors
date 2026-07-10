@@ -128,6 +128,68 @@ def test_connector_help_page():
     assert "Commands:" in result.output
 
 
+@pytest.mark.parametrize(
+    "commands", [["connector", "--help"], ["index", "--help"], ["job", "--help"]]
+)
+def test_group_help_page_does_not_require_config(commands, mock_cli_config):
+    mock_cli_config.side_effect = FileNotFoundError(CONFIG_FILE_PATH)
+
+    runner = CliRunner()
+    result = runner.invoke(cli, commands)
+
+    assert result.exit_code == 0
+    assert "Usage:" in result.output
+    mock_cli_config.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "commands",
+    [
+        ["connector", "list", "--help"],
+        ["connector", "create", "--help"],
+        ["index", "list", "--help"],
+        ["index", "clean", "--help"],
+        ["index", "delete", "--help"],
+        ["job", "start", "--help"],
+        ["job", "list", "--help"],
+        ["job", "cancel", "--help"],
+        ["job", "view", "--help"],
+    ],
+)
+def test_command_help_page_does_not_require_config(commands, mock_cli_config):
+    mock_cli_config.side_effect = FileNotFoundError(CONFIG_FILE_PATH)
+
+    runner = CliRunner()
+    result = runner.invoke(cli, commands)
+
+    assert result.exit_code == 0
+    assert "Usage:" in result.output
+    mock_cli_config.assert_not_called()
+
+
+def test_command_without_config_fails(mock_cli_config):
+    mock_cli_config.side_effect = FileNotFoundError(CONFIG_FILE_PATH)
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ["connector", "list"])
+
+    assert result.exit_code == 1
+    assert f"{CONFIG_FILE_PATH} was not found." in result.output
+    assert "Make sure that the config is either present" in result.output
+    mock_cli_config.assert_called_once()
+
+
+def test_connector_create_without_config_fails_before_prompt(mock_cli_config):
+    mock_cli_config.side_effect = FileNotFoundError(CONFIG_FILE_PATH)
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ["connector", "create"])
+
+    assert result.exit_code == 1
+    assert "Index name" not in result.output
+    mock_cli_config.assert_called_once()
+
+
 @patch("connectors.cli.connector.Connector.list_connectors", AsyncMock(return_value=[]))
 def test_connector_list_no_connectors():
     runner = CliRunner()

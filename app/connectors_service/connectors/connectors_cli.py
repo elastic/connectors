@@ -14,6 +14,7 @@ executes the `main` function of this module, which starts the service.
 import asyncio
 import json
 import os
+from functools import wraps
 
 import click
 import yaml
@@ -32,17 +33,45 @@ from connectors.es import DEFAULT_LANGUAGE
 __all__ = ["main"]
 
 
-def load_config(ctx, config):
+def load_config(config):
     if config:
         return yaml.safe_load(config)
     elif os.path.isfile(CONFIG_FILE_PATH):
         with open(CONFIG_FILE_PATH, "r") as f:
             return yaml.safe_load(f.read())
-    elif ctx.invoked_subcommand == "login":
-        pass
     else:
         msg = f"{CONFIG_FILE_PATH} was not found."
         raise FileNotFoundError(msg)
+
+
+def ensure_config(ctx):
+    ctx.ensure_object(dict)
+    if "config" in ctx.obj:
+        return
+
+    try:
+        ctx.obj["config"] = load_config(ctx.obj.get("config_file"))
+    except FileNotFoundError as e:
+        click.echo(
+            f"{e} Make sure that the config is either present at the default location ({CONFIG_FILE_PATH}) or it's passed via the '-c' or '--config' option."
+        )
+        ctx.exit(1)
+
+
+def eager_config_check(ctx, _param, value):
+    if not ctx.resilient_parsing:
+        ensure_config(ctx)
+    return value
+
+
+def requires_config(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        ctx = click.get_current_context()
+        ensure_config(ctx)
+        return func(ctx.obj, *args, **kwargs)
+
+    return wrapper
 
 
 # Main group
@@ -55,18 +84,12 @@ def load_config(ctx, config):
 @click.pass_context
 def cli(ctx, config):
     # print help page if no subcommands provided
+    ctx.ensure_object(dict)
+    ctx.obj["config_file"] = config
+
     if ctx.invoked_subcommand is None:
         click.echo(ctx.get_help())
         return
-
-    ctx.ensure_object(dict)
-    try:
-        ctx.obj["config"] = load_config(ctx, config)
-    except FileNotFoundError as e:
-        click.echo(
-            f"{e} Make sure that the config is either present at the default location ({CONFIG_FILE_PATH}) or it's passed via the '-c' or '--config' option."
-        )
-        ctx.exit(1)
 
 
 @click.command(help="Authenticate Connectors CLI with an Elasticsearch instance")
@@ -112,13 +135,12 @@ cli.add_command(login)
 
 # Connector group
 @click.group(invoke_without_command=False, help="Connectors management")
-@click.pass_context
-def connector(ctx):
+def connector():
     pass
 
 
 @click.command(name="list", help="List all existing connectors")
-@click.pass_obj
+@requires_config
 def list_connectors(obj):
     connector = Connector(config=obj["config"]["elasticsearch"])
     coro = connector.list_connectors()
@@ -185,6 +207,14 @@ def interactive_service_type_prompt():
 
 @click.command(help="Creates a new connector and a search index")
 @click.option(
+    "--config-precheck",
+    is_flag=True,
+    is_eager=True,
+    expose_value=False,
+    hidden=True,
+    callback=eager_config_check,
+)
+@click.option(
     "--index-name",
     prompt=f"{click.style('?', fg='green')} Index name",
     help="Name of the index. If the connector will be native, `search-` will be prepended to the index name.",
@@ -235,7 +265,7 @@ def interactive_service_type_prompt():
     prompt=f"{click.style('?', fg='green')} Connector name",
     help="Connector name",
 )
-@click.pass_obj
+@requires_config
 def create(
     obj,
     index_name,
@@ -385,13 +415,12 @@ cli.add_command(connector)
 
 # Index group
 @click.group(invoke_without_command=False, help="Search indices management")
-@click.pass_obj
-def index(obj):
+def index():
     pass
 
 
 @click.command(name="list", help="Show all indices")
-@click.pass_obj
+@requires_config
 def list_indices(obj):
     index = Index(config=obj["config"]["elasticsearch"])
     indices = index.list_indices()
@@ -418,7 +447,7 @@ index.add_command(list_indices)
 
 
 @click.command(help="Remove all documents from the index")
-@click.pass_obj
+@requires_config
 @click.argument("index", nargs=1)
 def clean(obj, index):
     index_cli = Index(config=obj["config"]["elasticsearch"])
@@ -443,7 +472,7 @@ index.add_command(clean)
 
 
 @click.command(help="Delete an index")
-@click.pass_obj
+@requires_config
 @click.argument("index", nargs=1)
 def delete(obj, index):
     index_cli = Index(config=obj["config"]["elasticsearch"])
@@ -471,13 +500,12 @@ cli.add_command(index)
 
 # Job group
 @click.group(invoke_without_command=False, help="Sync jobs management")
-@click.pass_obj
-def job(obj):
+def job():
     pass
 
 
 @click.command(help="Start a sync job.")
-@click.pass_obj
+@requires_config
 @click.option("-i", help="Connector ID", required=True)
 @click.option(
     "-t",
@@ -519,7 +547,7 @@ job.add_command(start)
 
 
 @click.command(name="list", help="List of jobs sorted by date.")
-@click.pass_obj
+@requires_config
 @click.argument("connector_id", nargs=1)
 def list_jobs(obj, connector_id):
     job_cli = Job(config=obj["config"]["elasticsearch"])
@@ -564,7 +592,7 @@ job.add_command(list_jobs)
 
 
 @click.command(help="Cancel a job")
-@click.pass_obj
+@requires_config
 @click.argument("job_id")
 def cancel(obj, job_id):
     job_cli = Job(config=obj["config"]["elasticsearch"])
@@ -589,7 +617,7 @@ job.add_command(cancel)
 
 
 @click.command(help="Show information about a job", name="view")
-@click.pass_obj
+@requires_config
 @click.argument("job_id")
 @click.option(
     "-o",
