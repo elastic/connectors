@@ -24,6 +24,7 @@ from exchangelib.errors import (
     ErrorNonExistentMailbox,
     TransportError,
 )
+from exchangelib.folders import Calendar, Messages
 from exchangelib.items import (
     CalendarItem,
     Contact,
@@ -200,7 +201,8 @@ class MockMsgFolderRoot:
 
     def __truediv__(self, path):
         if path == "Archive":
-            return MockOutlookObject(object_type=MAIL)
+            # A real mail Archive is a Messages folder (the client now verifies this).
+            return typed_folder(Messages, MAIL)
         msg = "Unsupported path element"
         raise ValueError(msg)
 
@@ -334,6 +336,16 @@ class MockOutlookObject:
         return AllObjects(object_type=self.object_type)
 
 
+def typed_folder(folder_cls, object_type):
+    """A folder mock that passes isinstance(folder_cls) (as the client now checks)
+    while keeping MockOutlookObject's .all().only() dispatch."""
+    folder = MagicMock()
+    folder.__class__ = folder_cls
+    folder.object_type = object_type
+    folder.all.return_value = AllObjects(object_type=object_type)
+    return folder
+
+
 class MockAccount:
     def __init__(self):
         self.default_timezone = "UTC"
@@ -343,6 +355,9 @@ class MockAccount:
         self.junk = MockOutlookObject(object_type=MAIL)
         self.tasks = MockOutlookObject(object_type=TASK)
         self.calendar = MockOutlookObject(object_type=CALENDAR)
+        # Child folders under Calendar are real Calendar folders (the client only
+        # descends into folders it identifies as calendars).
+        self.calendar.children = [typed_folder(Calendar, CALENDAR)]
         # Accessed via distinguished folder IDs.
         self.contacts = MockOutlookObject(object_type=CONTACT)
         self.msg_folder_root = MockMsgFolderRoot()
@@ -1243,11 +1258,6 @@ FOLDER_SKIP_EXCEPTIONS = [
     pytest.param(ErrorFolderNotFound("no"), id="ErrorFolderNotFound"),
     pytest.param(ErrorManagedFolderNotFound("no"), id="ErrorManagedFolderNotFound"),
 ]
-# Plus ValueError for an unprojectable child folder (CHILD_CALENDAR_SKIP_ERRORS).
-CHILD_CALENDAR_SKIP_EXCEPTIONS = [
-    *FOLDER_SKIP_EXCEPTIONS,
-    pytest.param(ValueError("unknown field for this folder"), id="ValueError"),
-]
 
 
 @pytest.mark.asyncio
@@ -1291,28 +1301,26 @@ async def test_get_child_calendars_skips_when_folder_not_found(exception):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("exception", CHILD_CALENDAR_SKIP_EXCEPTIONS)
-async def test_get_child_calendars_skips_unreadable_child(exception):
+async def test_get_child_calendars_skips_non_calendar_child():
     async with create_outlook_source() as source:
         source.client._logger = MagicMock()
         account = MagicMock()
         account.primary_smtp_address = "alex.wilber@gmail.com"
-        # Only the unreadable child is skipped; a healthy sibling still yields.
-        bad_child = MagicMock()
-        bad_child.name = "Weird Folder"
-        bad_child.all.return_value.only.side_effect = exception
-        good_child = MagicMock()
-        good_child.name = "Team Calendar"
-        good_child.all.return_value.only.return_value = [build_calendar_document()]
-        account.calendar.children = [bad_child, good_child]
+        # A child folder under Calendar that isn't itself a calendar (e.g. a mail
+        # folder) is ignored by design; a real Calendar child still yields.
+        non_calendar = MagicMock(spec=Messages)
+        non_calendar.name = "Notes"
+        calendar_child = typed_folder(Calendar, CALENDAR)
+        calendar_child.name = "Team Calendar"
+        account.calendar.children = [non_calendar, calendar_child]
 
         calendars = [
             (calendar, child)
             async for calendar, child in source.client.get_child_calendars(account)
         ]
 
-        assert [child for _, child in calendars] == [good_child]
-        source.client._logger.warning.assert_called_once()
+        assert [child for _, child in calendars] == [calendar_child]
+        source.client._logger.debug.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -1813,6 +1821,24 @@ async def test_get_mails_skips_archive_when_folder_not_found(exception):
             mail_type["folder"]
             async for _, mail_type in source.client.get_mails(account)
         ]
+        assert folders == ["inbox", "sent", "junk"]
+
+
+@pytest.mark.asyncio
+async def test_get_mails_skips_non_mail_archive_folder():
+    async with create_outlook_source() as source:
+        source.client._logger = MagicMock()
+        account = MockAccount()
+        # A folder literally named "Archive" that isn't a mail folder must be
+        # ignored, not projected with MAIL_FIELDS.
+        account.msg_folder_root = MagicMock()
+        account.msg_folder_root.__truediv__.return_value = MagicMock(spec=Calendar)
+
+        folders = [
+            mail_type["folder"]
+            async for _, mail_type in source.client.get_mails(account)
+        ]
+
         assert folders == ["inbox", "sent", "junk"]
 
 

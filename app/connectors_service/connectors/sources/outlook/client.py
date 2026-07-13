@@ -22,6 +22,7 @@ from exchangelib import (
     OAuth2Credentials,
 )
 from exchangelib.errors import ErrorFolderNotFound, ErrorManagedFolderNotFound
+from exchangelib.folders import Calendar, Messages
 from exchangelib.protocol import BaseProtocol, NoVerifyHTTPAdapter
 from ldap3 import SAFE_SYNC, Connection, Server
 
@@ -51,8 +52,6 @@ from connectors.utils import (
 # Per-folder faults meaning a folder is absent: skip the folder, keep syncing.
 # Account-wide and connection-wide errors are handled elsewhere.
 FOLDER_SKIP_ERRORS = (ErrorFolderNotFound, ErrorManagedFolderNotFound)
-# A non-calendar child folder also raises ValueError when projected.
-CHILD_CALENDAR_SKIP_ERRORS = (*FOLDER_SKIP_ERRORS, ValueError)
 
 
 class TokenFetchFailed(Exception):
@@ -419,6 +418,15 @@ class OutlookClient:
                     folder_object = await asyncio.to_thread(
                         lambda: account.msg_folder_root / "Archive"
                     )
+                    # A folder literally named "Archive" that isn't a mail folder
+                    # can't be projected with MAIL_FIELDS; only iterate real mail
+                    # folders so the item stream stays a closed list.
+                    if not isinstance(folder_object, Messages):
+                        self._logger.debug(
+                            f"Skipping 'Archive' folder for {account.primary_smtp_address}: "
+                            f"not a mail folder ({type(folder_object).__name__})"
+                        )
+                        continue
                 else:
                     folder_object = await asyncio.to_thread(
                         getattr, account, mail_type["folder"]
@@ -458,17 +466,20 @@ class OutlookClient:
             )
             return
         for child_calendar in child_calendars:
-            try:
-                # Skip a child folder that isn't a projectable calendar.
-                calendars = await asyncio.to_thread(
-                    child_calendar.all().only, *CALENDAR_FIELDS
-                )
-            except CHILD_CALENDAR_SKIP_ERRORS:
-                self._logger.warning(
-                    f"Could not read child calendar {getattr(child_calendar, 'name', 'unknown')} "
-                    f"for {account.primary_smtp_address}, skipping."
+            # Only descend into folders that are actually calendars. A non-calendar
+            # child can't be projected with CALENDAR_FIELDS and its items aren't
+            # CalendarItems, so identifying the folder type up front keeps the item
+            # stream a closed list instead of relying on catching a ValueError.
+            if not isinstance(child_calendar, Calendar):
+                self._logger.debug(
+                    f"Skipping non-calendar child folder "
+                    f"{getattr(child_calendar, 'name', 'unknown')} "
+                    f"({type(child_calendar).__name__}) for {account.primary_smtp_address}"
                 )
                 continue
+            calendars = await asyncio.to_thread(
+                child_calendar.all().only, *CALENDAR_FIELDS
+            )
             for calendar in calendars:
                 yield calendar, child_calendar
 
