@@ -947,7 +947,7 @@ Apache Software License
 
 
 build
-1.5.0
+1.5.1
 MIT
 Copyright © 2019 Filipe Laíns <filipe.lains@gmail.com>
 
@@ -977,7 +977,7 @@ Apache Software License
 UNKNOWN
 
 elasticsearch-connectors-sdk
-9.5.0
+9.6.0
 Elastic-2.0
 UNKNOWN
 

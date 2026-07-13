@@ -153,13 +153,13 @@ class JobSchedulingService(BaseService):
         self.connector_index = ConnectorIndex(self.es_config)
         self.sync_job_index = SyncJobIndex(self.es_config)
 
-        native_service_types = self.config.get("native_service_types", []) or []
+        native_service_types = self.service_config.get("service_types", []) or []
         if len(native_service_types) > 0:
             self.logger.debug(
                 f"Native support for job scheduling for {', '.join(native_service_types)}"
             )
         else:
-            self.logger.debug("No native service types configured for job scheduling")
+            self.logger.debug("No service types configured")
         connector_ids = list(self.connectors.keys())
 
         self.logger.info(
