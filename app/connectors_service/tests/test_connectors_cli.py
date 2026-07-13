@@ -384,6 +384,7 @@ def test_connector_create_from_file():
                             "collection": "test",
                             "direct_connection": False,
                             "ssl_enabled": False,
+                            "datetime_conversion": "DATETIME",
                         }
                     )
                 )
