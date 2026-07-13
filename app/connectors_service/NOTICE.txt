@@ -1628,7 +1628,7 @@ SOFTWARE.
 
 
 anyio
-4.14.1
+4.14.2
 MIT
 The MIT License (MIT)
 
@@ -4146,7 +4146,7 @@ Apache Software License
 
 
 google-auth
-2.55.2
+2.56.0
 Apache Software License
                                  Apache License
                            Version 2.0, January 2004
@@ -7576,8 +7576,8 @@ SOFTWARE.
 
 
 stone
-3.4.0
-MIT License
+3.5.1
+MIT
 Copyright (c) 2020 Dropbox Inc., http://www.dropbox.com/
 
     Permission is hereby granted, free of charge, to any person obtaining
