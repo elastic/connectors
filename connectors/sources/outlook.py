@@ -25,6 +25,7 @@ from exchangelib import (
     OAuth2Credentials,
 )
 from exchangelib.errors import ErrorFolderNotFound, ErrorNonExistentMailbox
+from exchangelib.items import Contact, DistributionList
 from exchangelib.protocol import BaseProtocol, NoVerifyHTTPAdapter
 from ldap3 import SAFE_SYNC, Connection, Server
 
@@ -112,6 +113,13 @@ CONTACT_FIELDS = [
     "company_name",
     "birthday",
 ]
+DISTRIBUTION_LIST_FIELDS = [
+    "last_modified_time",
+    "display_name",
+    "members",
+]
+# Contacts folder holds both item types, so query the union of their fields.
+CONTACT_FOLDER_FIELDS = list(dict.fromkeys(CONTACT_FIELDS + DISTRIBUTION_LIST_FIELDS))
 TASK_FIELDS = [
     "last_modified_time",
     "due_date",
@@ -358,7 +366,7 @@ class ExchangeUsers:
         )
 
         async for user in self.get_users():
-            if "searchResRef" in user["type"]:
+            if "searchResRef" in user.get("type", ""):
                 continue
 
             mail = _extract_ldap_mail(user.get("attributes", {}))
@@ -541,11 +549,13 @@ class OutlookDocFormatter:
         }
 
         if child_calendar in ["Folder (Birthdays)", "Birthdays (Birthdays)"]:
+            # calendar.start may be missing; guard against splitting a None.
+            birthday = ews_format_to_datetime(
+                source_datetime=calendar.start, timezone=timezone
+            )
             document.update(
                 {
-                    "date": ews_format_to_datetime(
-                        source_datetime=calendar.start, timezone=timezone
-                    ).split("T", 1)[0],
+                    "date": birthday.split("T", 1)[0] if birthday else None,
                 }
             )
         else:
@@ -619,6 +629,23 @@ class OutlookDocFormatter:
             ),
         }
 
+    def distribution_list_doc_formatter(self, distribution_list, timezone):
+        # A contact group has members, not per-contact fields, so it needs its own shape.
+        return {
+            "_id": distribution_list.id,
+            "type": "Distribution List",
+            "_timestamp": ews_format_to_datetime(
+                source_datetime=distribution_list.last_modified_time,
+                timezone=timezone,
+            ),
+            "name": distribution_list.display_name,
+            "email_addresses": [
+                member.mailbox.email_address
+                for member in (distribution_list.members or [])
+                if member and member.mailbox and member.mailbox.email_address
+            ],
+        }
+
     def attachment_doc_formatter(self, attachment, attachment_type, timezone):
         attachment_id = (
             attachment.attachment_id.id if attachment.attachment_id else None
@@ -686,12 +713,17 @@ class OutlookClient:
                 f"Fetching {mail_type['folder']} mails for {account.primary_smtp_address}"
             )
             try:
+                # Resolve folders off the event loop (blocking exchangelib call).
                 if mail_type["folder"] == "archive":
                     # msg_folder_root is locale-agnostic; the "Archive" leaf has no
                     # distinguished ID, so resolve it by name and skip if absent.
-                    folder_object = account.msg_folder_root / "Archive"
+                    folder_object = await asyncio.to_thread(
+                        lambda: account.msg_folder_root / "Archive"
+                    )
                 else:
-                    folder_object = getattr(account, mail_type["folder"])
+                    folder_object = await asyncio.to_thread(
+                        getattr, account, mail_type["folder"]
+                    )
             except ErrorFolderNotFound:
                 self._logger.warning(
                     f"Could not resolve {mail_type['folder']} folder for "
@@ -703,33 +735,60 @@ class OutlookClient:
                 yield mail, mail_type
 
     async def get_calendars(self, account):
-        for calendar in await asyncio.to_thread(
-            account.calendar.all().only, *CALENDAR_FIELDS
-        ):
+        # Resolve the folder off the event loop (blocking call); skip if absent.
+        try:
+            folder = await asyncio.to_thread(getattr, account, "calendar")
+        except ErrorFolderNotFound:
+            self._logger.warning(
+                f"Could not resolve Calendar folder for {account.primary_smtp_address}, skipping."
+            )
+            return
+        for calendar in await asyncio.to_thread(folder.all().only, *CALENDAR_FIELDS):
             yield calendar
 
     async def get_child_calendars(self, account):
-        for child_calendar in account.calendar.children:
+        # Resolve folder and children off the event loop; skip if absent.
+        try:
+            child_calendars = await asyncio.to_thread(
+                lambda: list(account.calendar.children)
+            )
+        except ErrorFolderNotFound:
+            self._logger.warning(
+                f"Could not resolve Calendar folder for {account.primary_smtp_address}, "
+                "skipping child calendars."
+            )
+            return
+        for child_calendar in child_calendars:
             for calendar in await asyncio.to_thread(
                 child_calendar.all().only, *CALENDAR_FIELDS
             ):
                 yield calendar, child_calendar
 
     async def get_tasks(self, account):
-        for task in await asyncio.to_thread(account.tasks.all().only, *TASK_FIELDS):
+        # Resolve the folder off the event loop (blocking call); skip if absent.
+        try:
+            folder = await asyncio.to_thread(getattr, account, "tasks")
+        except ErrorFolderNotFound:
+            self._logger.warning(
+                f"Could not resolve Tasks folder for {account.primary_smtp_address}, skipping."
+            )
+            return
+        for task in await asyncio.to_thread(folder.all().only, *TASK_FIELDS):
             yield task
 
     async def get_contacts(self, account):
-        # account.contacts uses a distinguished folder ID, which is locale-agnostic
-        # unlike name-based paths that break on non-English Exchange servers.
+        # account.contacts uses a locale-agnostic distinguished folder ID; resolve
+        # it off the event loop (blocking call); skip if absent.
         try:
-            folder = account.contacts
+            folder = await asyncio.to_thread(getattr, account, "contacts")
         except ErrorFolderNotFound:
             self._logger.warning(
                 f"Could not resolve Contacts folder for {account.primary_smtp_address}, skipping."
             )
             return
-        for contact in await asyncio.to_thread(folder.all().only, *CONTACT_FIELDS):
+        for contact in await asyncio.to_thread(
+            folder.all().only, *CONTACT_FOLDER_FIELDS
+        ):
             yield contact
 
 
@@ -1087,10 +1146,25 @@ class OutlookDataSource(BaseDataSource):
     async def _fetch_contacts(self, account, timezone):
         self._logger.debug(f"Fetching contacts for {account.primary_smtp_address}")
         async for contact in self.client.get_contacts(account=account):
-            document = self.doc_formatter.contact_doc_formatter(
-                contact=contact,
-                timezone=timezone,
-            )
+            # Contacts folder returns only Contact or DistributionList; any other
+            # type breaks that assumption, so fail loudly instead of guessing.
+            if isinstance(contact, Contact):
+                document = self.doc_formatter.contact_doc_formatter(
+                    contact=contact,
+                    timezone=timezone,
+                )
+            elif isinstance(contact, DistributionList):
+                document = self.doc_formatter.distribution_list_doc_formatter(
+                    distribution_list=contact,
+                    timezone=timezone,
+                )
+            else:
+                msg = (
+                    f"Unexpected Contacts item type {type(contact).__name__} for "
+                    f"{account.primary_smtp_address}; expected Contact or "
+                    "DistributionList"
+                )
+                raise TypeError(msg)
             yield (
                 self._decorate_with_access_control(
                     document, [account.primary_smtp_address]
