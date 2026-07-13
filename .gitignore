@@ -24,3 +24,12 @@ htmlcov
 app/connectors_service/scripts/stack/connectors-config
 
 .python-version
+
+# Local secrets and credentials -- never commit these
+.env
+.env.*
+*.pem
+*.key
+*credentials*
+*secret*
+kubeconfig
