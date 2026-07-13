@@ -11,7 +11,15 @@ from datetime import datetime
 from tempfile import NamedTemporaryFile
 
 import fastjsonschema
-from bson import OLD_UUID_SUBTYPE, Binary, DBRef, Decimal128, ObjectId
+from bson import (
+    OLD_UUID_SUBTYPE,
+    Binary,
+    DatetimeConversion,
+    DatetimeMS,
+    DBRef,
+    Decimal128,
+    ObjectId,
+)
 from bson.binary import UUID_SUBTYPE
 from fastjsonschema import JsonSchemaValueException
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -90,6 +98,11 @@ class MongoAdvancedRulesValidator(AdvancedRulesValidator):
             )
 
 
+# Config value name -> pymongo enum. "DATETIME" is the legacy default (raises).
+DATETIME_CONVERSION_OPTIONS = dict(DatetimeConversion.__members__)
+DEFAULT_DATETIME_CONVERSION = DatetimeConversion.DATETIME.name
+
+
 class MongoDataSource(BaseDataSource):
     """MongoDB"""
 
@@ -106,6 +119,7 @@ class MongoDataSource(BaseDataSource):
         self.ssl_ca = self.configuration["ssl_ca"]
         self.user = self.configuration["user"]
         self.password = self.configuration["password"]
+        self.datetime_conversion = self.configuration["datetime_conversion"]
         self.tls_insecure = self.configuration["tls_insecure"]
         self.collection = None
 
@@ -169,6 +183,33 @@ class MongoDataSource(BaseDataSource):
                 "ui_restrictions": ["advanced"],
                 "value": False,
             },
+            "datetime_conversion": {
+                "display": "dropdown",
+                "label": "Out-of-range date handling",
+                "options": [
+                    {"label": "Raise an error (legacy)", "value": "DATETIME"},
+                    {"label": "Clamp to the min/max date", "value": "DATETIME_CLAMP"},
+                    {
+                        "label": "Out-of-range dates as epoch milliseconds",
+                        "value": "DATETIME_AUTO",
+                    },
+                    {
+                        "label": "All dates as epoch milliseconds",
+                        "value": "DATETIME_MS",
+                    },
+                ],
+                "order": 10,
+                "required": False,
+                "tooltip": (
+                    "How to handle MongoDB dates outside the supported range "
+                    "(years 1-9999). 'Raise an error' is the legacy behavior; "
+                    "the other options let the sync continue by clamping or "
+                    "storing raw epoch milliseconds."
+                ),
+                "type": "str",
+                "ui_restrictions": ["advanced"],
+                "value": DEFAULT_DATETIME_CONVERSION,
+            },
         }
 
     @contextmanager
@@ -176,6 +217,11 @@ class MongoDataSource(BaseDataSource):
         certfile = ""
         try:
             client_params = {}
+
+            # How to decode out-of-range dates; defaults to legacy (raise).
+            client_params["datetime_conversion"] = DATETIME_CONVERSION_OPTIONS.get(
+                self.datetime_conversion, DatetimeConversion.DATETIME
+            )
 
             if self.configuration["direct_connection"]:
                 client_params["directConnection"] = True
@@ -242,6 +288,9 @@ class MongoDataSource(BaseDataSource):
                 value = value.to_decimal()
             elif isinstance(value, DBRef):
                 value = _serialize(value.as_doc().to_dict())
+            elif isinstance(value, DatetimeMS):
+                # Out-of-range date (DATETIME_AUTO/MS mode); keep raw epoch ms.
+                value = int(value)
             elif isinstance(value, Binary):
                 # UUID_SUBTYPE is guaranteed to properly be serialized cross-platform and cross-driver
                 if value.subtype == UUID_SUBTYPE:
@@ -299,6 +348,14 @@ class MongoDataSource(BaseDataSource):
 
     async def validate_config(self):
         await super().validate_config()
+
+        if self.datetime_conversion not in DATETIME_CONVERSION_OPTIONS:
+            msg = (
+                f"Invalid 'Out-of-range date handling' value '{self.datetime_conversion}'. "
+                f"Must be one of: {', '.join(DATETIME_CONVERSION_OPTIONS)}."
+            )
+            raise ConfigurableFieldValueError(msg)
+
         parsed_url = urllib.parse.urlparse(self.host)
         query_params = urllib.parse.parse_qs(parsed_url.query)
 
