@@ -21,7 +21,7 @@ from exchangelib import (
     Identity,
     OAuth2Credentials,
 )
-from exchangelib.errors import ErrorFolderNotFound
+from exchangelib.errors import ErrorFolderNotFound, ErrorManagedFolderNotFound
 from exchangelib.protocol import BaseProtocol, NoVerifyHTTPAdapter
 from ldap3 import SAFE_SYNC, Connection, Server
 
@@ -47,6 +47,12 @@ from connectors.utils import (
     retryable,
     url_encode,
 )
+
+# Per-folder faults meaning a folder is absent: skip the folder, keep syncing.
+# Account-wide and connection-wide errors are handled elsewhere.
+FOLDER_SKIP_ERRORS = (ErrorFolderNotFound, ErrorManagedFolderNotFound)
+# A non-calendar child folder also raises ValueError when projected.
+CHILD_CALENDAR_SKIP_ERRORS = (*FOLDER_SKIP_ERRORS, ValueError)
 
 
 class TokenFetchFailed(Exception):
@@ -417,7 +423,7 @@ class OutlookClient:
                     folder_object = await asyncio.to_thread(
                         getattr, account, mail_type["folder"]
                     )
-            except ErrorFolderNotFound:
+            except FOLDER_SKIP_ERRORS:
                 self._logger.warning(
                     f"Could not resolve {mail_type['folder']} folder for "
                     f"{account.primary_smtp_address}, skipping."
@@ -431,7 +437,7 @@ class OutlookClient:
         # Resolve the folder off the event loop (blocking call); skip if absent.
         try:
             folder = await asyncio.to_thread(getattr, account, "calendar")
-        except ErrorFolderNotFound:
+        except FOLDER_SKIP_ERRORS:
             self._logger.warning(
                 f"Could not resolve Calendar folder for {account.primary_smtp_address}, skipping."
             )
@@ -445,23 +451,32 @@ class OutlookClient:
             child_calendars = await asyncio.to_thread(
                 lambda: list(account.calendar.children)
             )
-        except ErrorFolderNotFound:
+        except FOLDER_SKIP_ERRORS:
             self._logger.warning(
                 f"Could not resolve Calendar folder for {account.primary_smtp_address}, "
                 "skipping child calendars."
             )
             return
         for child_calendar in child_calendars:
-            for calendar in await asyncio.to_thread(
-                child_calendar.all().only, *CALENDAR_FIELDS
-            ):
+            try:
+                # Skip a child folder that isn't a projectable calendar.
+                calendars = await asyncio.to_thread(
+                    child_calendar.all().only, *CALENDAR_FIELDS
+                )
+            except CHILD_CALENDAR_SKIP_ERRORS:
+                self._logger.warning(
+                    f"Could not read child calendar {getattr(child_calendar, 'name', 'unknown')} "
+                    f"for {account.primary_smtp_address}, skipping."
+                )
+                continue
+            for calendar in calendars:
                 yield calendar, child_calendar
 
     async def get_tasks(self, account):
         # Resolve the folder off the event loop (blocking call); skip if absent.
         try:
             folder = await asyncio.to_thread(getattr, account, "tasks")
-        except ErrorFolderNotFound:
+        except FOLDER_SKIP_ERRORS:
             self._logger.warning(
                 f"Could not resolve Tasks folder for {account.primary_smtp_address}, skipping."
             )
@@ -474,7 +489,7 @@ class OutlookClient:
         # it off the event loop (blocking call); skip if absent.
         try:
             folder = await asyncio.to_thread(getattr, account, "contacts")
-        except ErrorFolderNotFound:
+        except FOLDER_SKIP_ERRORS:
             self._logger.warning(
                 f"Could not resolve Contacts folder for {account.primary_smtp_address}, skipping."
             )
