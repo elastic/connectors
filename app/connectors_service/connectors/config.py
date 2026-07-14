@@ -4,7 +4,6 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 
-import os
 
 from connectors_sdk.logger import logger
 from envyaml import EnvYAML
@@ -47,7 +46,6 @@ def load_config(config_file):
     for key, value in yaml_config.items():
         _nest_configs(nested_yaml_config, key, value)
     configuration = dict(_merge_dicts(_default_config(), nested_yaml_config))
-    _ent_search_config(configuration)
 
     return configuration
 
@@ -57,28 +55,6 @@ def add_defaults(config, default_config=None):
         default_config = _default_config()
     configuration = dict(_merge_dicts(default_config, config))
     return configuration
-
-
-# Left - in Enterprise Search; Right - in Connectors
-config_mappings = {
-    "elasticsearch.host": "elasticsearch.host",
-    "elasticsearch.username": "elasticsearch.username",
-    "elasticsearch.password": "elasticsearch.password",
-    "elasticsearch.headers": "elasticsearch.headers",
-    "log_level": "service.log_level",
-}
-
-# Enterprise Search uses Ruby and is in lower case always, so hacking it here for now
-# Ruby-supported log levels: 'debug', 'info', 'warn', 'error', 'fatal', 'unknown'
-# Python-supported log levels: 'DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL', 'NOTSET'
-log_level_mappings = {
-    "debug": "DEBUG",
-    "info": "INFO",
-    "warn": "WARNING",
-    "error": "ERROR",
-    "fatal": "CRITICAL",
-    "unknown": "NOTSET",
-}
 
 
 def _default_config():
@@ -171,29 +147,6 @@ def _default_config():
             "zoom": "connectors.sources.zoom:ZoomDataSource",
         },
     }
-
-
-def _ent_search_config(configuration):
-    if "ENT_SEARCH_CONFIG_PATH" not in os.environ:
-        return
-    logger.info("Found ENT_SEARCH_CONFIG_PATH, loading ent-search config")
-    ent_search_config = EnvYAML(os.environ["ENT_SEARCH_CONFIG_PATH"])
-    for es_field in config_mappings.keys():
-        if es_field not in ent_search_config:
-            continue
-
-        connector_field = config_mappings[es_field]
-        es_field_value = ent_search_config[es_field]
-
-        if es_field == "log_level":
-            if es_field_value not in log_level_mappings:
-                msg = f"Unexpected log level: {es_field_value}. Allowed values: {', '.join(log_level_mappings.keys())}"
-                raise ValueError(msg)
-            es_field_value = log_level_mappings[es_field_value]
-
-        _nest_configs(configuration, connector_field, es_field_value)
-
-        logger.debug(f"Overridden {connector_field}")
 
 
 def _nest_configs(configuration, field, value):
