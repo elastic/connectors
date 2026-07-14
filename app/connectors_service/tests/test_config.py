@@ -5,7 +5,6 @@
 #
 
 import os
-from unittest import mock
 
 import pytest
 
@@ -32,16 +31,6 @@ def test_config(set_env):
 def test_default_max_text_document_size(set_env):
     config = load_config(CONFIG_FILE)
     assert config["elasticsearch"]["bulk"]["max_text_document_size"] == 3
-
-
-def test_config_with_invalid_log_level(set_env):
-    with mock.patch.dict(
-        os.environ, {"ENT_SEARCH_CONFIG_PATH": ES_CONFIG_INVALID_LOG_LEVEL_FILE}
-    ):
-        with pytest.raises(ValueError) as e:
-            _ = load_config(CONFIG_FILE)
-
-        assert e.match("Unexpected log level.*")
 
 
 def test_nest_config_when_nested_field_does_not_exist():

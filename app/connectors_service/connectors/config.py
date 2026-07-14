@@ -57,28 +57,6 @@ def add_defaults(config, default_config=None):
     return configuration
 
 
-# Left - in Enterprise Search; Right - in Connectors
-config_mappings = {
-    "elasticsearch.host": "elasticsearch.host",
-    "elasticsearch.username": "elasticsearch.username",
-    "elasticsearch.password": "elasticsearch.password",
-    "elasticsearch.headers": "elasticsearch.headers",
-    "log_level": "service.log_level",
-}
-
-# Enterprise Search uses Ruby and is in lower case always, so hacking it here for now
-# Ruby-supported log levels: 'debug', 'info', 'warn', 'error', 'fatal', 'unknown'
-# Python-supported log levels: 'DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL', 'NOTSET'
-log_level_mappings = {
-    "debug": "DEBUG",
-    "info": "INFO",
-    "warn": "WARNING",
-    "error": "ERROR",
-    "fatal": "CRITICAL",
-    "unknown": "NOTSET",
-}
-
-
 def _default_config():
     return {
         "elasticsearch": {
