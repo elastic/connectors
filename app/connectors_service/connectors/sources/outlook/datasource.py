@@ -45,8 +45,11 @@ from connectors.sources.outlook.utils import (
 )
 from connectors.utils import html_to_text
 
-# Item types a mail folder may hold (exchangelib's Messages supported_item_models).
+# Item types each formatter can render. A test keeps these in sync with
+# exchangelib's per-folder `supported_item_models`.
 MAIL_ITEM_TYPES = (Message, MeetingRequest, MeetingResponse, MeetingCancellation)
+CALENDAR_ITEM_TYPES = (CalendarItem,)
+TASK_ITEM_TYPES = (Task,)
 
 
 class OutlookDocFormatter:
@@ -623,7 +626,7 @@ class OutlookDataSource(BaseDataSource):
         self._logger.debug(f"Fetching tasks for {account.primary_smtp_address}")
         async for task in self.client.get_tasks(account=account):
             # Skip stray non-Task items that lack task fields (e.g. `status`).
-            if not isinstance(task, Task):
+            if not isinstance(task, TASK_ITEM_TYPES):
                 self._logger.warning(
                     f"Skipping non-task item {type(task).__name__} "
                     f"({getattr(task, 'id', 'unknown')}) in tasks folder "
@@ -677,7 +680,7 @@ class OutlookDataSource(BaseDataSource):
 
     async def _enqueue_calendars(self, calendar, child_calendar, timezone, account):
         # Skip stray non-calendar items that lack calendar fields (e.g. `type`).
-        if not isinstance(calendar, CalendarItem):
+        if not isinstance(calendar, CALENDAR_ITEM_TYPES):
             self._logger.warning(
                 f"Skipping non-calendar item {type(calendar).__name__} "
                 f"({getattr(calendar, 'id', 'unknown')}) in calendar folder "

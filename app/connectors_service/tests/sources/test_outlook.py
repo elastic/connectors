@@ -24,7 +24,7 @@ from exchangelib.errors import (
     ErrorNonExistentMailbox,
     TransportError,
 )
-from exchangelib.folders import Calendar, Messages
+from exchangelib.folders import Calendar, Messages, Tasks
 from exchangelib.items import (
     CalendarItem,
     Contact,
@@ -53,7 +53,12 @@ from connectors.sources.outlook.constants import (
     OUTLOOK_CLOUD,
     OUTLOOK_SERVER,
 )
-from connectors.sources.outlook.datasource import OutlookDocFormatter
+from connectors.sources.outlook.datasource import (
+    CALENDAR_ITEM_TYPES,
+    MAIL_ITEM_TYPES,
+    TASK_ITEM_TYPES,
+    OutlookDocFormatter,
+)
 from connectors.utils import get_pem_format
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
@@ -1759,6 +1764,21 @@ async def test_fetch_mails_accepts_all_mail_item_types(item_type):
 
         assert [document["_id"] for document in documents] == ["mail_1"]
         source._logger.warning.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "allowlist, folder_cls",
+    [
+        (MAIL_ITEM_TYPES, Messages),
+        (CALENDAR_ITEM_TYPES, Calendar),
+        (TASK_ITEM_TYPES, Tasks),
+    ],
+    ids=lambda arg: getattr(arg, "__name__", ""),
+)
+def test_item_type_allowlists_match_exchangelib(allowlist, folder_cls):
+    # Fails if a library upgrade changes a folder's item types, so a human can
+    # update the matching formatter instead of hitting a runtime crash.
+    assert set(allowlist) == set(folder_cls.supported_item_models)
 
 
 @pytest.mark.asyncio
