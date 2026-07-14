@@ -1776,8 +1776,7 @@ async def test_fetch_mails_accepts_all_mail_item_types(item_type):
     ids=lambda arg: getattr(arg, "__name__", ""),
 )
 def test_item_type_allowlists_match_exchangelib(allowlist, folder_cls):
-    # Fails if a library upgrade changes a folder's item types, so a human can
-    # update the matching formatter instead of hitting a runtime crash.
+    # Fails if a library upgrade changes a folder's item types (update the formatter).
     assert set(allowlist) == set(folder_cls.supported_item_models)
 
 

@@ -49,8 +49,7 @@ from connectors.utils import (
     url_encode,
 )
 
-# Per-folder faults meaning a folder is absent: skip the folder, keep syncing.
-# Account-wide and connection-wide errors are handled elsewhere.
+# Folder-absent faults: skip the folder, keep syncing.
 FOLDER_SKIP_ERRORS = (ErrorFolderNotFound, ErrorManagedFolderNotFound)
 
 
@@ -413,14 +412,11 @@ class OutlookClient:
             try:
                 # Resolve folders off the event loop (blocking exchangelib call).
                 if mail_type["folder"] == "archive":
-                    # msg_folder_root is locale-agnostic; the "Archive" leaf has no
-                    # distinguished ID, so resolve it by name and skip if absent.
+                    # "Archive" has no distinguished ID; resolve by name, skip if absent.
                     folder_object = await asyncio.to_thread(
                         lambda: account.msg_folder_root / "Archive"
                     )
-                    # A folder literally named "Archive" that isn't a mail folder
-                    # can't be projected with MAIL_FIELDS; only iterate real mail
-                    # folders so the item stream stays a closed list.
+                    # A non-mail "Archive" folder can't take MAIL_FIELDS.
                     if not isinstance(folder_object, Messages):
                         self._logger.debug(
                             f"Skipping 'Archive' folder for {account.primary_smtp_address}: "
@@ -466,10 +462,7 @@ class OutlookClient:
             )
             return
         for child_calendar in child_calendars:
-            # Only descend into folders that are actually calendars. A non-calendar
-            # child can't be projected with CALENDAR_FIELDS and its items aren't
-            # CalendarItems, so identifying the folder type up front keeps the item
-            # stream a closed list instead of relying on catching a ValueError.
+            # A non-calendar child can't take CALENDAR_FIELDS; skip it up front.
             if not isinstance(child_calendar, Calendar):
                 self._logger.debug(
                     f"Skipping non-calendar child folder "

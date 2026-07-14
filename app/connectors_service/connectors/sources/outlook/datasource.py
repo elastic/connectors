@@ -45,8 +45,7 @@ from connectors.sources.outlook.utils import (
 )
 from connectors.utils import html_to_text
 
-# Item types each formatter can render. A test keeps these in sync with
-# exchangelib's per-folder `supported_item_models`.
+# Item types each formatter can render; a test keeps them in sync with exchangelib.
 MAIL_ITEM_TYPES = (Message, MeetingRequest, MeetingResponse, MeetingCancellation)
 CALENDAR_ITEM_TYPES = (CalendarItem,)
 TASK_ITEM_TYPES = (Task,)
@@ -563,7 +562,7 @@ class OutlookDataSource(BaseDataSource):
 
     async def _fetch_mails(self, account, timezone):
         async for mail, mail_type in self.client.get_mails(account=account):
-            # Skip stray non-mail items that lack mail fields (e.g. `sender`).
+            # Skip strays lacking mail fields (e.g. `sender`).
             if not isinstance(mail, MAIL_ITEM_TYPES):
                 self._logger.warning(
                     f"Skipping non-mail item {type(mail).__name__} "
@@ -595,7 +594,7 @@ class OutlookDataSource(BaseDataSource):
     async def _fetch_contacts(self, account, timezone):
         self._logger.debug(f"Fetching contacts for {account.primary_smtp_address}")
         async for contact in self.client.get_contacts(account=account):
-            # Route by type; skip anything that is neither Contact nor DistributionList.
+            # Route Contact vs DistributionList; skip anything else.
             if isinstance(contact, Contact):
                 document = self.doc_formatter.contact_doc_formatter(
                     contact=contact,
@@ -625,7 +624,7 @@ class OutlookDataSource(BaseDataSource):
     async def _fetch_tasks(self, account, timezone):
         self._logger.debug(f"Fetching tasks for {account.primary_smtp_address}")
         async for task in self.client.get_tasks(account=account):
-            # Skip stray non-Task items that lack task fields (e.g. `status`).
+            # Skip strays lacking task fields (e.g. `status`).
             if not isinstance(task, TASK_ITEM_TYPES):
                 self._logger.warning(
                     f"Skipping non-task item {type(task).__name__} "
@@ -679,7 +678,7 @@ class OutlookDataSource(BaseDataSource):
                 yield doc
 
     async def _enqueue_calendars(self, calendar, child_calendar, timezone, account):
-        # Skip stray non-calendar items that lack calendar fields (e.g. `type`).
+        # Skip strays lacking calendar fields (e.g. `type`).
         if not isinstance(calendar, CALENDAR_ITEM_TYPES):
             self._logger.warning(
                 f"Skipping non-calendar item {type(calendar).__name__} "
@@ -747,9 +746,8 @@ class OutlookDataSource(BaseDataSource):
                 ):
                     yield child_calendar
             except (ErrorNonExistentMailbox, ErrorAccessDenied) as error:
-                # Account-specific failure: skip this account, keep the rest.
-                # Connection-wide errors propagate so a doc-less "successful"
-                # sync never empties the index.
+                # Account-specific failure: skip this account. Connection-wide errors
+                # propagate so an empty "successful" sync can't wipe the index.
                 self._logger.warning(
                     f"Skipping account {account.primary_smtp_address}: "
                     f"{error.__class__.__name__}."
