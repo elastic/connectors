@@ -1382,10 +1382,15 @@ async def test_get_mails_resolve_folder_off_event_loop():
             call.args[:3] == (getattr, account, "inbox")
             for call in to_thread.call_args_list
         )
-        # The Archive leaf resolves via a lambda, also off the loop.
-        archive_calls = [c for c in to_thread.call_args_list if len(c.args) == 1]
-        assert archive_calls
-        assert archive_calls[0].args[0]().object_type == MAIL
+        # The Archive leaf resolves via a lambda, also off the loop. Queryset
+        # materialization also runs via single-arg lambdas, so pick the lambda
+        # that resolves to the mail (Messages) folder.
+        lambda_calls = [c for c in to_thread.call_args_list if len(c.args) == 1]
+        assert lambda_calls
+        assert any(
+            getattr(call.args[0](), "object_type", None) == MAIL
+            for call in lambda_calls
+        )
 
 
 @pytest.mark.asyncio
@@ -1406,16 +1411,19 @@ async def test_get_child_calendars_resolve_folder_off_event_loop():
 @pytest.mark.asyncio
 async def test_get_contacts_queries_distribution_list_fields():
     # The Contacts folder query must include DistributionList fields (members),
-    # or contact groups come back with no email addresses.
+    # or contact groups come back with no email addresses. The fields are now
+    # applied inside the thread lambda, so spy on the folder's .only() call.
     async with create_outlook_source() as source:
         account = MockAccount()
-        with patch(
-            "connectors.sources.outlook.client.asyncio.to_thread",
-            wraps=asyncio.to_thread,
-        ) as to_thread:
-            _ = [contact async for contact in source.client.get_contacts(account)]
+        only_spy = MagicMock(return_value=[])
+        folder = MagicMock()
+        folder.all.return_value.only = only_spy
+        account.contacts = folder
 
-        assert any("members" in call.args[1:] for call in to_thread.call_args_list)
+        _ = [contact async for contact in source.client.get_contacts(account)]
+
+        only_spy.assert_called_once()
+        assert "members" in only_spy.call_args.args
 
 
 @pytest.mark.asyncio

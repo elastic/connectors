@@ -434,7 +434,12 @@ class OutlookClient:
                 )
                 continue
 
-            for mail in await asyncio.to_thread(folder_object.all().only, *MAIL_FIELDS):
+            # Materialize the queryset in the thread; iterating it lazily would
+            # run the blocking EWS fetch back on the event loop.
+            mails = await asyncio.to_thread(
+                lambda folder=folder_object: list(folder.all().only(*MAIL_FIELDS))
+            )
+            for mail in mails:
                 yield mail, mail_type
 
     async def get_calendars(self, account):
@@ -446,7 +451,12 @@ class OutlookClient:
                 f"Could not resolve Calendar folder for {account.primary_smtp_address}, skipping."
             )
             return
-        for calendar in await asyncio.to_thread(folder.all().only, *CALENDAR_FIELDS):
+        # Materialize the queryset in the thread; lazy iteration would run the
+        # blocking EWS fetch back on the event loop.
+        calendars = await asyncio.to_thread(
+            lambda: list(folder.all().only(*CALENDAR_FIELDS))
+        )
+        for calendar in calendars:
             yield calendar
 
     async def get_child_calendars(self, account):
@@ -470,8 +480,10 @@ class OutlookClient:
                     f"({type(child_calendar).__name__}) for {account.primary_smtp_address}"
                 )
                 continue
+            # Materialize the queryset in the thread; lazy iteration would run the
+            # blocking EWS fetch back on the event loop.
             calendars = await asyncio.to_thread(
-                child_calendar.all().only, *CALENDAR_FIELDS
+                lambda child=child_calendar: list(child.all().only(*CALENDAR_FIELDS))
             )
             for calendar in calendars:
                 yield calendar, child_calendar
@@ -485,7 +497,10 @@ class OutlookClient:
                 f"Could not resolve Tasks folder for {account.primary_smtp_address}, skipping."
             )
             return
-        for task in await asyncio.to_thread(folder.all().only, *TASK_FIELDS):
+        # Materialize the queryset in the thread; lazy iteration would run the
+        # blocking EWS fetch back on the event loop.
+        tasks = await asyncio.to_thread(lambda: list(folder.all().only(*TASK_FIELDS)))
+        for task in tasks:
             yield task
 
     async def get_contacts(self, account):
@@ -498,7 +513,10 @@ class OutlookClient:
                 f"Could not resolve Contacts folder for {account.primary_smtp_address}, skipping."
             )
             return
-        for contact in await asyncio.to_thread(
-            folder.all().only, *CONTACT_FOLDER_FIELDS
-        ):
+        # Materialize the queryset in the thread; lazy iteration would run the
+        # blocking EWS fetch back on the event loop.
+        contacts = await asyncio.to_thread(
+            lambda: list(folder.all().only(*CONTACT_FOLDER_FIELDS))
+        )
+        for contact in contacts:
             yield contact
