@@ -60,6 +60,63 @@ async def test_ping_negative():
 
 
 @pytest.mark.asyncio
+async def test_get_cursor_resets_connection_on_error():
+    """A failed query must drop the shared connection so a retry does not reuse
+    a poisoned pytds connection and raise "Invalid TDS marker"."""
+    async with create_source(MSSQLDataSource) as source:
+        broken_connection = Mock()
+        broken_connection.execute = Mock(
+            side_effect=Exception("Invalid TDS marker: 0(0)")
+        )
+        source.mssql_client.connection = broken_connection
+
+        with pytest.raises(Exception, match="Invalid TDS marker"):
+            await source.mssql_client.get_cursor("SELECT * FROM dbo.transactions")
+
+        broken_connection.invalidate.assert_called_once()
+        assert source.mssql_client.connection is None
+
+
+@pytest.mark.asyncio
+async def test_get_cursor_reconnects_after_reset():
+    """After a poisoned connection is dropped, the next query establishes a
+    fresh connection instead of failing again."""
+    async with create_source(MSSQLDataSource) as source:
+        source.mssql_client.engine = MockEngine()
+
+        broken_connection = Mock()
+        broken_connection.execute = Mock(
+            side_effect=Exception("Invalid TDS marker: 0(0)")
+        )
+        source.mssql_client.connection = broken_connection
+
+        with pytest.raises(Exception, match="Invalid TDS marker"):
+            await source.mssql_client.get_cursor("SELECT * FROM dbo.transactions")
+        assert source.mssql_client.connection is None
+
+        cursor = await source.mssql_client.get_cursor("SELECT * FROM dbo.transactions")
+        assert cursor is not None
+        assert source.mssql_client.connection is not None
+
+
+@pytest.mark.asyncio
+async def test_close_is_resilient_when_connection_close_fails():
+    """Closing a connection that still has an interrupted result set must not
+    crash cleanup; it should fall back to invalidating the connection."""
+    async with create_source(MSSQLDataSource) as source:
+        broken_connection = Mock()
+        broken_connection.close = Mock(
+            side_effect=Exception("Invalid TDS marker: 0(0)")
+        )
+        source.mssql_client.connection = broken_connection
+
+        source.mssql_client.close()
+
+        broken_connection.invalidate.assert_called_once()
+        assert source.mssql_client.connection is None
+
+
+@pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_fetch_documents_from_table_negative():
     async with create_source(MSSQLDataSource) as source:
