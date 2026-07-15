@@ -492,6 +492,45 @@ PAGE_RESTRICTION_RESPONSE = {
     "group": {"results": [], "size": 0},
 }
 
+CLOUD_INHERITED_RESTRICTION_RESPONSE = {
+    "operation": "read",
+    "restrictions": {
+        "user": {
+            "results": [
+                {
+                    "type": "known",
+                    "accountType": "atlassian",
+                    "accountId": "user_id_9",
+                }
+            ],
+            "size": 1,
+        },
+        "group": {
+            "results": [
+                {"type": "group", "name": "group-admin", "id": "group_id_admin"},
+                {"type": "group", "name": "group-power", "id": "group_id_power"},
+            ],
+            "size": 2,
+        },
+    },
+}
+DATA_CENTER_INHERITED_RESTRICTION_RESPONSE = {
+    "operation": "read",
+    "restrictions": {
+        "user": {
+            "results": [{"type": "known", "username": "restricted_user"}],
+            "size": 1,
+        },
+        "group": {
+            "results": [
+                {"type": "group", "name": "group-admin"},
+                {"type": "group", "name": "group-power-user"},
+            ],
+            "size": 2,
+        },
+    },
+}
+
 EXPECTED_QUERY_RESPONSE = {
     "content": {
         "id": "983041",
@@ -1030,7 +1069,7 @@ async def test_fetch_documents():
         source.confluence_client.index_labels = True
         source.confluence_client.data_source_type = "confluence_cloud"
         # Execute
-        async for response, _, _, _, _ in source.fetch_documents(api_query=""):
+        async for response, _, _, _, _, _ in source.fetch_documents(api_query=""):
             assert response == EXPECTED_PAGE
 
 
@@ -1229,8 +1268,8 @@ async def test_download_attachment_with_text_extraction_enabled_adds_body():
     ConfluenceDataSource,
     "fetch_documents",
     side_effect=[
-        (AsyncIterator([[copy(EXPECTED_PAGE), 1, "space_key", [], {}]])),
-        (AsyncIterator([[copy(EXPECTED_BLOG), 1, "space_key", [], {}]])),
+        (AsyncIterator([[copy(EXPECTED_PAGE), 1, "space_key", [], {}, []]])),
+        (AsyncIterator([[copy(EXPECTED_BLOG), 1, "space_key", [], {}, []]])),
     ],
 )
 @mock.patch.object(
@@ -1583,6 +1622,7 @@ async def test_fetch_confluence_server_users():
                         "space_key",
                         BLOG_POST_PERMISSION_RESPONSE,
                         {},
+                        [],
                     ]
                 ]
             )
@@ -1596,6 +1636,7 @@ async def test_fetch_confluence_server_users():
                         "space_key",
                         PAGE_PERMISSION_RESPONSE,
                         PAGE_RESTRICTION_RESPONSE,
+                        [],
                     ]
                 ]
             )
@@ -1764,6 +1805,182 @@ async def test_fetch_server_space_permission():
 
 
 @pytest.mark.asyncio
+async def test_fetch_content_restrictions_returns_payload():
+    async with create_confluence_source() as source:
+        async_response = AsyncMock()
+        async_response.json.return_value = CLOUD_INHERITED_RESTRICTION_RESPONSE
+        with mock.patch(
+            "connectors.sources.atlassian.confluence.ConfluenceClient.api_call",
+            return_value=async_response,
+        ):
+            response = await source.confluence_client.fetch_content_restrictions(
+                content_id="123"
+            )
+            assert response == CLOUD_INHERITED_RESTRICTION_RESPONSE
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("exception", [NotFound(), Forbidden(), Exception("boom")])
+async def test_fetch_content_restrictions_returns_empty_on_error(exception):
+    """Unreadable ancestors (draft/trashed/forbidden) must not break the sync."""
+    async with create_confluence_source() as source:
+        with mock.patch(
+            "connectors.sources.atlassian.confluence.ConfluenceClient.api_call",
+            side_effect=exception,
+        ):
+            response = await source.confluence_client.fetch_content_restrictions(
+                content_id="123"
+            )
+            assert response == {}
+
+
+@pytest.mark.asyncio
+async def test_resolve_inherited_restrictions_uses_nearest_restricted_ancestor():
+    async with create_confluence_source() as source:
+        source._dls_enabled = MagicMock(return_value=True)
+        # Ancestors are ordered from root to the immediate parent.
+        ancestors = [{"id": "root"}, {"id": "parent"}]
+        source.confluence_client.fetch_content_restrictions = AsyncMock(
+            return_value=CLOUD_INHERITED_RESTRICTION_RESPONSE
+        )
+
+        identities = await source._resolve_inherited_restrictions(
+            ancestors=ancestors, extract_identities=source._extract_identities
+        )
+
+        assert identities == {
+            "account_id:user_id_9",
+            "group_id:group_id_admin",
+            "group_id:group_id_power",
+        }
+        # The nearest ancestor (immediate parent) is queried first and wins.
+        source.confluence_client.fetch_content_restrictions.assert_called_once_with(
+            content_id="parent"
+        )
+
+
+@pytest.mark.asyncio
+async def test_resolve_inherited_restrictions_walks_up_until_a_restricted_ancestor():
+    async with create_confluence_source() as source:
+        source._dls_enabled = MagicMock(return_value=True)
+        ancestors = [{"id": "root"}, {"id": "parent"}]
+        # The immediate parent has no restrictions; the root does.
+        source.confluence_client.fetch_content_restrictions = AsyncMock(
+            side_effect=[{}, DATA_CENTER_INHERITED_RESTRICTION_RESPONSE]
+        )
+
+        identities = await source._resolve_inherited_restrictions(
+            ancestors=ancestors,
+            extract_identities=source._extract_identities_for_datacenter,
+        )
+
+        assert identities == {
+            "user:restricted_user",
+            "group:group-admin",
+            "group:group-power-user",
+        }
+        assert source.confluence_client.fetch_content_restrictions.call_args_list == [
+            mock.call(content_id="parent"),
+            mock.call(content_id="root"),
+        ]
+
+
+@pytest.mark.asyncio
+async def test_resolve_inherited_restrictions_returns_empty_without_restricted_ancestor():
+    async with create_confluence_source() as source:
+        source._dls_enabled = MagicMock(return_value=True)
+        source.confluence_client.fetch_content_restrictions = AsyncMock(return_value={})
+
+        identities = await source._resolve_inherited_restrictions(
+            ancestors=[{"id": "root"}, {"id": "parent"}],
+            extract_identities=source._extract_identities,
+        )
+
+        assert identities == set()
+
+
+@pytest.mark.asyncio
+async def test_resolve_inherited_restrictions_skips_calls_when_dls_disabled():
+    async with create_confluence_source() as source:
+        source._dls_enabled = MagicMock(return_value=False)
+        source.confluence_client.fetch_content_restrictions = AsyncMock()
+
+        identities = await source._resolve_inherited_restrictions(
+            ancestors=[{"id": "parent"}],
+            extract_identities=source._extract_identities,
+        )
+
+        assert identities == set()
+        source.confluence_client.fetch_content_restrictions.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "data_source_type, extractor_response, expected_access_control",
+    [
+        (
+            CONFLUENCE_CLOUD,
+            CLOUD_INHERITED_RESTRICTION_RESPONSE,
+            [
+                "account_id:user_id_9",
+                "group_id:group_id_admin",
+                "group_id:group_id_power",
+            ],
+        ),
+        (
+            CONFLUENCE_DATA_CENTER,
+            DATA_CENTER_INHERITED_RESTRICTION_RESPONSE,
+            ["group:group-admin", "group:group-power-user", "user:restricted_user"],
+        ),
+    ],
+)
+async def test_page_blog_coro_applies_inherited_restrictions_over_space_permissions(
+    data_source_type, extractor_response, expected_access_control
+):
+    """A page with no own restrictions inherits its ancestor's restrictions
+    instead of falling back to the broader space-level permissions (issue #4095)."""
+    async with create_confluence_source(data_source=data_source_type) as source:
+        source._dls_enabled = MagicMock(return_value=True)
+        source.confluence_client.data_source_type = data_source_type
+
+        page_document = {"_id": "child_page", "type": "page", "title": "Child"}
+        with mock.patch.object(
+            ConfluenceDataSource,
+            "fetch_documents",
+            return_value=AsyncIterator(
+                [
+                    [
+                        page_document,
+                        0,
+                        "space_key",
+                        SPACE_PERMISSION_RESPONSE,
+                        {},
+                        [{"id": "parent_id"}],
+                    ]
+                ]
+            ),
+        ):
+            source.confluence_client.fetch_content_restrictions = AsyncMock(
+                return_value=extractor_response
+            )
+            # The space-level fallback must not be used when a restricted ancestor exists.
+            source.fetch_server_space_permission = AsyncMock(
+                return_value={
+                    "permissions": {"VIEWSPACE": {"groups": ["all-licensed-users"]}}
+                }
+            )
+
+            await source._page_blog_coro("api_query", "page")
+
+        _, item = source.queue.get_nowait()
+        queued_document, _download = item
+        assert (
+            sorted(queued_document["_allow_access_control"]) == expected_access_control
+        )
+        source.fetch_server_space_permission.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_api_call_for_exception(patch_sleep):
     """This function test _api_call when credentials are incorrect"""
     async with create_confluence_source() as source:
@@ -1787,8 +2004,8 @@ async def test_get_permission():
     ConfluenceDataSource,
     "fetch_documents",
     side_effect=[
-        (AsyncIterator([[copy(EXPECTED_PAGE), 1, "space_key", [], {}]])),
-        (AsyncIterator([[copy(EXPECTED_BLOG), 1, "space_key", [], {}]])),
+        (AsyncIterator([[copy(EXPECTED_PAGE), 1, "space_key", [], {}, []]])),
+        (AsyncIterator([[copy(EXPECTED_BLOG), 1, "space_key", [], {}, []]])),
     ],
 )
 @pytest.mark.asyncio
@@ -1851,5 +2068,5 @@ async def test_fetch_documents_with_html():
             return_value=JSONAsyncMock(RESPONSE_PAGE_WITH_HTML)
         )
         source.confluence_client.index_labels = True
-        async for response, _, _, _, _ in source.fetch_documents(api_query=""):
+        async for response, _, _, _, _, _ in source.fetch_documents(api_query=""):
             assert response == EXPECTED_PAGE

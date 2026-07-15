@@ -464,6 +464,44 @@ class ConfluenceDataSource(BaseDataSource):
 
         return identities
 
+    async def _resolve_inherited_restrictions(self, ancestors, extract_identities):
+        """Resolve the effective view restrictions inherited from ancestor pages.
+
+        A Confluence page with no restrictions of its own ("No restrictions")
+        still inherits the view restrictions of its ancestors. The REST API does
+        not expose these inherited restrictions directly, so we walk the ancestor
+        chain from the closest parent up to the root and return the identities of
+        the nearest ancestor that has explicit read restrictions.
+
+        Args:
+            ancestors (list): Ancestors of the document, ordered from the root to
+                the immediate parent (as returned by the Confluence API).
+            extract_identities (callable): Function that extracts the set of
+                access-control identities from a restrictions payload.
+
+        Returns:
+            set: Identities inherited from the nearest restricted ancestor, or an
+                empty set when no ancestor has explicit read restrictions.
+        """
+        if not self._dls_enabled():
+            return set()
+
+        for ancestor in reversed(ancestors or []):
+            ancestor_id = ancestor.get("id")
+            if not ancestor_id:
+                continue
+
+            restrictions = await self.confluence_client.fetch_content_restrictions(
+                content_id=ancestor_id
+            )
+            identities = extract_identities(
+                response=restrictions.get("restrictions", {})
+            )
+            if identities:
+                return identities
+
+        return set()
+
     async def close(self):
         """Closes unclosed client session"""
         await self.confluence_client.close_session()
@@ -547,6 +585,7 @@ class ConfluenceDataSource(BaseDataSource):
             Integer: Number of attachments in a page/blogpost
             List: List of permissions attached to document
             Dictionary: Dictionary of restrictions attached to document
+            List: List of ancestors (with their ids) of the document
         """
         async for (
             document,
@@ -592,6 +631,7 @@ class ConfluenceDataSource(BaseDataSource):
                 document.get("restrictions", {})
                 .get("read", {})
                 .get("restrictions", {}),
+                document.get("ancestors", []),
             )
 
     async def fetch_attachments(
@@ -842,14 +882,28 @@ class ConfluenceDataSource(BaseDataSource):
                 space_key,
                 permissions,
                 restrictions,
+                ancestors,
             ) in self.fetch_documents(api_query):
                 # Pages and blog posts are open to viewing or editing by default,
                 # but you can restrict either viewing or editing to certain users or groups.
                 if self.confluence_client.data_source_type == CONFLUENCE_CLOUD:
+                    extract_identities = self._extract_identities
+                else:
+                    extract_identities = self._extract_identities_for_datacenter
+
+                access_control = list(extract_identities(response=restrictions))
+                if len(access_control) == 0:
+                    # A page with "No restrictions" of its own still inherits the
+                    # view restrictions of its ancestors, so resolve those before
+                    # falling back to the broader space-level permissions.
                     access_control = list(
-                        self._extract_identities(response=restrictions)
+                        await self._resolve_inherited_restrictions(
+                            ancestors=ancestors,
+                            extract_identities=extract_identities,
+                        )
                     )
-                    if len(access_control) == 0:
+                if len(access_control) == 0:
+                    if self.confluence_client.data_source_type == CONFLUENCE_CLOUD:
                         # Every space has its own independent set of permissions, managed by the space admin(s),
                         # which determine the access settings for different users and groups.
                         access_control = list(
@@ -857,11 +911,7 @@ class ConfluenceDataSource(BaseDataSource):
                                 permissions=permissions, target_type=target_type
                             )
                         )
-                else:
-                    access_control = list(
-                        self._extract_identities_for_datacenter(response=restrictions)
-                    )
-                    if len(access_control) == 0:
+                    else:
                         permission = await self.fetch_server_space_permission(
                             space_key=space_key
                         )
