@@ -193,6 +193,35 @@ class TestESManagementClient:
             assert ids == ["1", "2"]
 
     @pytest.mark.asyncio
+    async def test_yield_existing_documents_metadata_uses_underscore_id(
+        self, es_management_client, mock_responses
+    ):
+        # A user-controlled `id` field (e.g. set by an ingest pipeline) must not
+        # be trusted over the Elasticsearch `_id`. See issue #2776.
+        es_management_client.index_exists = AsyncMock(return_value=True)
+
+        records = [
+            {"_id": "Foo", "_source": {"id": "bar", "_timestamp": str(datetime.now())}},
+            {"_id": "Baz", "_source": {"id": "qux", "_timestamp": str(datetime.now())}},
+        ]
+
+        with mock.patch(
+            "connectors.es.management_client.async_scan",
+            return_value=AsyncIterator(records),
+        ) as async_scan_mock:
+            ids = []
+            async for (
+                doc_id,
+                _,
+            ) in es_management_client.yield_existing_documents_metadata("something"):
+                ids.append(doc_id)
+
+            assert ids == ["Foo", "Baz"]
+            # The `id` field is no longer requested from `_source`.
+            _, kwargs = async_scan_mock.call_args
+            assert "id" not in kwargs["_source"]
+
+    @pytest.mark.asyncio
     async def test_get_connector_secret(self, es_management_client, mock_responses):
         secret_id = "secret-id"
 
