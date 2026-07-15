@@ -40,6 +40,39 @@ def parse_datetime_string(datetime):
     return parser.parse(datetime)
 
 
+def _expand_cron_step_field(field, min_value, max_value):
+    """Expand a cron step expression (e.g. ``0/3``) into an explicit value list.
+
+    Quartz uses ``start/step`` syntax (e.g. ``0/3`` in the hours field means "every
+    3 hours starting at 0"), but ``tzcron`` only understands the standard-cron
+    ``*/step`` form and silently treats ``0/3`` as the literal value ``0``. That
+    turns interval schedules such as "every 3 hours" into "once a day at midnight".
+
+    Expanding any ``start/step`` (and ``low-high/step``) expression into an explicit
+    comma-separated list makes the behaviour deterministic and matches how Kibana
+    already emits minute intervals (e.g. ``0,5,10,...``).
+    """
+    if "/" not in field:
+        return field
+
+    base, _, step_str = field.partition("/")
+
+    step = int(step_str)
+    if step <= 0:
+        msg = f"Invalid step value in cron field: {field}"
+        raise ValueError(msg)
+
+    if base in ("*", "?", ""):
+        low, high = min_value, max_value
+    elif "-" in base:
+        low_str, _, high_str = base.partition("-")
+        low, high = int(low_str), int(high_str)
+    else:
+        low, high = int(base), max_value
+
+    return ",".join(str(value) for value in range(low, high + 1, step))
+
+
 def next_run(quartz_definition, now):
     """Returns the datetime in UTC timezone of the next run."""
     # Year is optional and is never present.
@@ -55,6 +88,13 @@ def next_run(quartz_definition, now):
 
     if not year:
         year = "*"
+
+    # Quartz "start/step" step syntax (e.g. "0/3") is not understood by tzcron, so
+    # expand it into an explicit value list before repackaging.
+    minutes = _expand_cron_step_field(minutes, 0, 59)
+    hours = _expand_cron_step_field(hours, 0, 23)
+    day_of_month = _expand_cron_step_field(day_of_month, 1, 31)
+    month = _expand_cron_step_field(month, 1, 12)
 
     # tzcron always expects year
     repackaged_definition = (
