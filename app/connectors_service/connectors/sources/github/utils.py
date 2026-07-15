@@ -20,8 +20,14 @@ RETRIES = 3
 RETRY_INTERVAL = 2
 FORBIDDEN = 403
 UNAUTHORIZED = 401
+# Page size for top-level and dedicated (single-field) paginated queries.
 NODE_SIZE = 100
-REVIEWS_COUNT = 45
+# GitHub GraphQL bills queries by the number of potential nodes they can return,
+# which grows multiplicatively for nested connections. To keep the cost of the
+# composite pull request/issue/search queries low, nested connections are fetched
+# in small eager pages; anything beyond the first page is backfilled on demand via
+# the dedicated pagination queries (COMMENT_QUERY, REVIEW_QUERY, etc.).
+NESTED_NODE_SIZE = 10
 
 SUPPORTED_EXTENSION = [".markdown", ".md", ".rst"]
 

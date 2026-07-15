@@ -6,7 +6,7 @@
 
 from enum import Enum
 
-from connectors.sources.github.utils import NODE_SIZE, REVIEWS_COUNT
+from connectors.sources.github.utils import NESTED_NODE_SIZE, NODE_SIZE
 
 
 class GithubQuery(Enum):
@@ -141,7 +141,7 @@ class GithubQuery(Enum):
             author {{
             login
             }}
-            assignees(first: {NODE_SIZE}) {{
+            assignees(first: {NESTED_NODE_SIZE}) {{
             pageInfo {{
                 hasNextPage
                 endCursor
@@ -150,7 +150,7 @@ class GithubQuery(Enum):
                 login
             }}
             }}
-            labels(first: {NODE_SIZE}) {{
+            labels(first: {NESTED_NODE_SIZE}) {{
             pageInfo {{
                 hasNextPage
                 endCursor
@@ -160,7 +160,7 @@ class GithubQuery(Enum):
                 description
             }}
             }}
-            reviewRequests(first: {NODE_SIZE}) {{
+            reviewRequests(first: {NESTED_NODE_SIZE}) {{
             pageInfo {{
                 hasNextPage
                 endCursor
@@ -173,7 +173,7 @@ class GithubQuery(Enum):
                 }}
             }}
             }}
-            comments(first: {NODE_SIZE}) {{
+            comments(first: {NESTED_NODE_SIZE}) {{
             pageInfo {{
                 hasNextPage
                 endCursor
@@ -185,7 +185,7 @@ class GithubQuery(Enum):
                 body
             }}
             }}
-            reviews(first: {REVIEWS_COUNT}) {{
+            reviews(first: {NESTED_NODE_SIZE}) {{
             pageInfo {{
                 hasNextPage
                 endCursor
@@ -234,7 +234,7 @@ class GithubQuery(Enum):
             author {{
             login
             }}
-            assignees(first: {NODE_SIZE}) {{
+            assignees(first: {NESTED_NODE_SIZE}) {{
             pageInfo {{
                 hasNextPage
                 endCursor
@@ -243,7 +243,7 @@ class GithubQuery(Enum):
                 login
             }}
             }}
-            labels(first: {NODE_SIZE}) {{
+            labels(first: {NESTED_NODE_SIZE}) {{
             pageInfo {{
                 hasNextPage
                 endCursor
@@ -253,7 +253,7 @@ class GithubQuery(Enum):
                 description
             }}
             }}
-            comments(first: {NODE_SIZE}) {{
+            comments(first: {NESTED_NODE_SIZE}) {{
             pageInfo {{
                 hasNextPage
                 endCursor
@@ -394,7 +394,7 @@ class GithubQuery(Enum):
             title
             body
             state
-            assignees(first: {NODE_SIZE}) {{
+            assignees(first: {NESTED_NODE_SIZE}) {{
             pageInfo {{
                 hasNextPage
                 endCursor
@@ -403,7 +403,7 @@ class GithubQuery(Enum):
                 login
             }}
             }}
-            labels(first: {NODE_SIZE}) {{
+            labels(first: {NESTED_NODE_SIZE}) {{
             pageInfo {{
                 hasNextPage
                 endCursor
@@ -413,7 +413,7 @@ class GithubQuery(Enum):
                 description
             }}
             }}
-            comments(first: {NODE_SIZE}) {{
+            comments(first: {NESTED_NODE_SIZE}) {{
             pageInfo {{
                 hasNextPage
                 endCursor
@@ -437,7 +437,7 @@ class GithubQuery(Enum):
             body
             state
             mergedAt
-            assignees(first: {NODE_SIZE}) {{
+            assignees(first: {NESTED_NODE_SIZE}) {{
             pageInfo {{
                 hasNextPage
                 endCursor
@@ -446,7 +446,7 @@ class GithubQuery(Enum):
                 login
             }}
             }}
-            labels(first: {NODE_SIZE}) {{
+            labels(first: {NESTED_NODE_SIZE}) {{
             pageInfo {{
                 hasNextPage
                 endCursor
@@ -456,7 +456,7 @@ class GithubQuery(Enum):
                 description
             }}
             }}
-            reviewRequests(first: {NODE_SIZE}) {{
+            reviewRequests(first: {NESTED_NODE_SIZE}) {{
             pageInfo {{
                 hasNextPage
                 endCursor
@@ -469,7 +469,7 @@ class GithubQuery(Enum):
                 }}
             }}
             }}
-            comments(first: {NODE_SIZE}) {{
+            comments(first: {NESTED_NODE_SIZE}) {{
             pageInfo {{
                 hasNextPage
                 endCursor
@@ -481,7 +481,7 @@ class GithubQuery(Enum):
                 body
             }}
             }}
-            reviews(first: {REVIEWS_COUNT}) {{
+            reviews(first: {NESTED_NODE_SIZE}) {{
             pageInfo {{
                 hasNextPage
                 endCursor

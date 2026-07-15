@@ -24,8 +24,11 @@ from connectors.sources.github import (
     GitHubClient,
     GitHubDataSource,
 )
+from connectors.sources.github.query import GithubQuery
 from connectors.sources.github.utils import (
     GITHUB_APP,
+    NESTED_NODE_SIZE,
+    NODE_SIZE,
     PERSONAL_ACCESS_TOKEN,
     REPOSITORY_OBJECT,
     ForbiddenException,
@@ -2701,3 +2704,90 @@ async def test_fetch_repos_batch_empty_list():
     async with create_github_source() as source:
         results = await source.github_client._fetch_repos_batch([])
         assert results == {}
+
+
+def _graphql_node_cost(query):
+    """Estimate the GitHub GraphQL node cost of a query.
+
+    GitHub bills a query by the number of nodes it can potentially return, which is
+    the sum, over every connection, of the product of the ``first``/``last`` values
+    along the path from the query root to that connection. This mirrors that formula
+    closely enough to guard the connector against re-introducing expensive queries.
+    """
+    import math
+    import re
+
+    total = 0
+    multipliers = [1]
+    pending_first = None
+    i = 0
+    while i < len(query):
+        char = query[i]
+        match = re.match(r"first:\s*(\d+)", query[i:])
+        if match:
+            pending_first = int(match.group(1))
+            i += match.end()
+            continue
+        if char == "{":
+            if pending_first is not None:
+                new_multiplier = multipliers[-1] * pending_first
+                total += new_multiplier
+                multipliers.append(new_multiplier)
+                pending_first = None
+            else:
+                multipliers.append(multipliers[-1])
+        elif char == "}":
+            if len(multipliers) > 1:
+                multipliers.pop()
+        i += 1
+    return total, max(1, math.ceil(total / 100))
+
+
+NESTED_CONNECTION_QUERIES = [
+    GithubQuery.PULL_REQUEST_QUERY.value,
+    GithubQuery.ISSUE_QUERY.value,
+    GithubQuery.SEARCH_QUERY.value,
+]
+
+
+@pytest.mark.parametrize("query", NESTED_CONNECTION_QUERIES)
+def test_composite_queries_fetch_nested_connections_in_small_eager_pages(query):
+    # Backfillable nested connections must use the reduced page size to keep the
+    # GraphQL cost low; they are paginated separately when they have more pages.
+    for connection in ["assignees", "labels"]:
+        assert f"{connection}(first: {NESTED_NODE_SIZE})" in query
+        assert f"{connection}(first: {NODE_SIZE})" not in query
+
+    # Top-level issue/PR comments are also fetched in small eager pages.
+    assert f"comments(first: {NESTED_NODE_SIZE})" in query
+
+    # Review comments are nested two levels deep and are not paginated further, so
+    # they intentionally keep the full page size to preserve completeness. They are
+    # the only NODE_SIZE-sized nested connection remaining in the PR-bearing queries.
+    if "reviews(first:" in query:
+        assert f"reviews(first: {NESTED_NODE_SIZE})" in query
+        assert query.count(f"comments(first: {NODE_SIZE})") == 1
+    else:
+        assert f"comments(first: {NODE_SIZE})" not in query
+
+
+def test_composite_queries_paginate_top_level_entities_with_full_page_size():
+    assert f"pullRequests(first: {NODE_SIZE}, after: $cursor)" in (
+        GithubQuery.PULL_REQUEST_QUERY.value
+    )
+    assert f"issues(first: {NODE_SIZE}, after: $cursor)" in (
+        GithubQuery.ISSUE_QUERY.value
+    )
+    assert f"type: ISSUE, first: {NODE_SIZE}, after: $cursor" in (
+        GithubQuery.SEARCH_QUERY.value
+    )
+
+
+@pytest.mark.parametrize("query", NESTED_CONNECTION_QUERIES)
+def test_composite_queries_stay_well_within_graphql_budget(query):
+    # A naive design that eagerly fetched every nested connection with the full
+    # NODE_SIZE page cost thousands of points (close to the 5000/hour budget) for a
+    # single page. The reduced eager pages must keep every composite query well below
+    # that so a sync consumes quota far more slowly.
+    _, points = _graphql_node_cost(query)
+    assert points <= 1100
