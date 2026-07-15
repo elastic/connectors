@@ -75,11 +75,17 @@ class TestConnectorCheckingHandler:
         assert not service_manager_mock.restart.called
 
     @pytest.mark.asyncio
-    async def test_apply_from_client_when_units_with_no_output(
+    async def test_apply_from_client_when_units_with_no_output_still_updates_from_input(
         self, connector_record_manager_mock, input_mock
     ):
+        # A connector input without an accompanying Elasticsearch output happens
+        # on delta check-in events (e.g. only the connector id changed). The
+        # update must still be applied, relying on the previously stored ES
+        # configuration, instead of being silently dropped (see #2992).
         client_mock = Mock()
         config_wrapper_mock = Mock()
+        config_wrapper_mock.try_update.return_value = True
+
         service_manager_mock = Mock()
         unit_mock = Mock()
         unit_mock.unit_type = "Something else"
@@ -95,7 +101,38 @@ class TestConnectorCheckingHandler:
 
         await checkin_handler.apply_from_client()
 
-        assert not config_wrapper_mock.try_update.called
+        assert config_wrapper_mock.try_update.called
+        _, called_kwargs = config_wrapper_mock.try_update.call_args
+        assert called_kwargs.get("output_unit") is None
+        assert connector_record_manager_mock.ensure_connector_records_exist.called
+        assert service_manager_mock.restart.called
+
+    @pytest.mark.asyncio
+    async def test_apply_from_client_when_units_with_no_output_and_non_updating_config(
+        self, connector_record_manager_mock, input_mock
+    ):
+        # When a delta event carries no output and the derived config is
+        # unchanged, no restart should be triggered.
+        client_mock = Mock()
+        config_wrapper_mock = Mock()
+        config_wrapper_mock.try_update.return_value = False
+
+        service_manager_mock = Mock()
+
+        client_mock.units = [input_mock]
+
+        checkin_handler = ConnectorCheckinHandler(
+            client_mock,
+            config_wrapper_mock,
+            service_manager_mock,
+        )
+        checkin_handler.connector_record_manager = connector_record_manager_mock
+
+        await checkin_handler.apply_from_client()
+
+        assert config_wrapper_mock.try_update.called
+        _, called_kwargs = config_wrapper_mock.try_update.call_args
+        assert called_kwargs.get("output_unit") is None
         assert not service_manager_mock.restart.called
 
     @pytest.mark.asyncio

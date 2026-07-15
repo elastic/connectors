@@ -149,6 +149,83 @@ def test_try_update_multiple_times_does_not_reset_config_values():
     assert config_wrapper.get()["service"]["log_level"] == log_level
 
 
+def test_try_update_with_new_connector_id_without_output():
+    # Simulates a delta check-in event where only the connector input changed
+    # (new connector id) and no Elasticsearch output is provided (see #2992).
+    hosts = ["https://localhost:9200"]
+    api_key = "lemme_in"
+
+    config_wrapper = prepare_config_wrapper()
+
+    # First a full update establishes the Elasticsearch configuration.
+    assert (
+        config_wrapper.try_update(
+            connector_id=CONNECTOR_ID,
+            service_type=SERVICE_TYPE,
+            output_unit=prepare_unit_mock({"hosts": hosts, "api_key": api_key}, None),
+        )
+        is True
+    )
+
+    # Then a delta event with only a new connector id and no output.
+    assert (
+        config_wrapper.try_update(
+            connector_id="new-connector-id",
+            service_type=SERVICE_TYPE,
+        )
+        is True
+    )
+
+    config = config_wrapper.get()
+    assert config["connectors"] == [
+        {"connector_id": "new-connector-id", "service_type": SERVICE_TYPE}
+    ]
+    # Previously stored Elasticsearch credentials must be preserved.
+    assert config["elasticsearch"]["host"] == hosts[0]
+    assert config["elasticsearch"]["api_key"] == api_key
+
+
+def test_try_update_without_output_and_same_connector_returns_false():
+    # A delta event with no output and no actual change must not report a change,
+    # to avoid unnecessary service restarts.
+    hosts = ["https://localhost:9200"]
+    api_key = "lemme_in"
+
+    config_wrapper = prepare_config_wrapper()
+    config_wrapper.try_update(
+        connector_id=CONNECTOR_ID,
+        service_type=SERVICE_TYPE,
+        output_unit=prepare_unit_mock({"hosts": hosts, "api_key": api_key}, None),
+    )
+
+    assert (
+        config_wrapper.try_update(
+            connector_id=CONNECTOR_ID,
+            service_type=SERVICE_TYPE,
+        )
+        is False
+    )
+
+
+def test_config_changed_ignores_missing_elasticsearch_key():
+    hosts = ["https://localhost:9200"]
+    api_key = "lemme_in"
+
+    config_wrapper = prepare_config_wrapper()
+    config_wrapper.try_update(
+        connector_id=CONNECTOR_ID,
+        service_type=SERVICE_TYPE,
+        output_unit=prepare_unit_mock({"hosts": hosts, "api_key": api_key}, None),
+    )
+
+    # new_config without an "elasticsearch" key must not be considered an ES change.
+    new_config = {
+        "connectors": [{"connector_id": CONNECTOR_ID, "service_type": SERVICE_TYPE}],
+    }
+
+    assert config_wrapper.config_changed(new_config) is False
+
+
 def test_config_changed_when_new_variables_are_passed():
     hosts = ["https://localhost:9200"]
     api_key = "lemme_in_lalala"

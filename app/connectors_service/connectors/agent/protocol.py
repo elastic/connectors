@@ -140,6 +140,13 @@ class ConnectorCheckinHandler(BaseCheckinHandler):
                     f"Connector input found. Service type: {service_type}, Connector ID: {connector_id}, Connector Name: {connector_name}"
                 )
 
+                # Agent sends partial (delta) check-in events. When only the
+                # connector input changes (e.g. the connector id in the fleet
+                # policy is updated) the event contains no Elasticsearch output.
+                # We still need to apply the update, relying on the previously
+                # stored Elasticsearch configuration, otherwise the change is
+                # silently dropped until the agent is restarted (see #2992).
+                elasticsearch_output = None
                 if elasticsearch_outputs:
                     if len(elasticsearch_outputs) > 1:
                         logger.warning(
@@ -149,29 +156,29 @@ class ConnectorCheckinHandler(BaseCheckinHandler):
                     logger.debug("Elasticsearch outputs found.")
 
                     elasticsearch_output = elasticsearch_outputs[0]
-
-                    configuration_changed = (
-                        self.agent_connectors_config_wrapper.try_update(
-                            connector_id=connector_id,
-                            service_type=service_type,
-                            output_unit=elasticsearch_output,
-                        )
-                    )
-
-                    # After updating the configuration, ensure all connector records exist in the connector index
-                    await self.connector_record_manager.ensure_connector_records_exist(
-                        agent_config=self.agent_connectors_config_wrapper.get_specific_config(),
-                        connector_name=connector_name,
-                    )
-
-                    if configuration_changed:
-                        logger.info(
-                            "Connector service manager config updated. Restarting service manager."
-                        )
-                        self.service_manager.restart()
-                    else:
-                        logger.debug("No changes to connectors config")
                 else:
-                    logger.warning("No Elasticsearch output found")
+                    logger.debug(
+                        "No Elasticsearch output in check-in event. Using previously stored Elasticsearch configuration if available."
+                    )
+
+                configuration_changed = self.agent_connectors_config_wrapper.try_update(
+                    connector_id=connector_id,
+                    service_type=service_type,
+                    output_unit=elasticsearch_output,
+                )
+
+                # After updating the configuration, ensure all connector records exist in the connector index
+                await self.connector_record_manager.ensure_connector_records_exist(
+                    agent_config=self.agent_connectors_config_wrapper.get_specific_config(),
+                    connector_name=connector_name,
+                )
+
+                if configuration_changed:
+                    logger.info(
+                        "Connector service manager config updated. Restarting service manager."
+                    )
+                    self.service_manager.restart()
+                else:
+                    logger.debug("No changes to connectors config")
             else:
                 logger.warning("No connector integration input found")
