@@ -955,6 +955,34 @@ def test_basic_rule_against_schema_validation(basic_rule, should_be_valid):
 
 
 @pytest.mark.parametrize(
+    "basic_rule, expected_rule_reference",
+    [
+        # order uses 0 based indexing, so it's referenced as order + 1 in the message
+        (basic_rule_json(merge_with={"order": 0, "value": ""}), "Basic rule 1"),
+        (basic_rule_json(merge_with={"order": 11, "value": ""}), "Basic rule 12"),
+        # order missing or not a number -> generic reference
+        (
+            basic_rule_json(delete_keys=["order"], merge_with={"value": ""}),
+            "Basic rule",
+        ),
+    ],
+)
+def test_basic_rule_against_schema_validation_message_references_rule(
+    basic_rule, expected_rule_reference
+):
+    result = BasicRuleAgainstSchemaValidator.validate(basic_rule)
+
+    assert not result.is_valid
+    # the message references the rule (by number when available) so users can
+    # identify the failing rule in the UI, which does not expose internal ids
+    assert result.validation_message.startswith(
+        f"{expected_rule_reference} is invalid:"
+    )
+    # the underlying schema error is still surfaced for debuggability
+    assert result.validation_message != f"{expected_rule_reference} is invalid: "
+
+
+@pytest.mark.parametrize(
     "basic_rules, should_be_valid",
     [
         (

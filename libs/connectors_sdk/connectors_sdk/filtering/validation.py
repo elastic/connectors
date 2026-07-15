@@ -381,8 +381,25 @@ class BasicRuleAgainstSchemaValidator(BasicRuleValidator):
             rule_id = rule["id"] if "id" in rule else None
 
             return SyncRuleValidationResult(
-                rule_id=rule_id, is_valid=False, validation_message=e.message
+                rule_id=rule_id,
+                is_valid=False,
+                validation_message=f"{cls._rule_reference(rule)} is invalid: {e.message}",
             )
+
+    @staticmethod
+    def _rule_reference(rule):
+        """Build a user-friendly reference to a basic rule for error messages.
+
+        The UI does not expose internal rule ids, so error messages reference
+        the rule by its 1-based position (derived from `order`) instead. When
+        `order` is missing or not a number, fall back to a generic reference.
+        """
+        order = rule.get("order")
+        if isinstance(order, bool) or not isinstance(order, (int, float)):
+            return "Basic rule"
+
+        # order uses 0 based indexing
+        return f"Basic rule {int(order) + 1}"
 
 
 class AdvancedRulesValidator:
