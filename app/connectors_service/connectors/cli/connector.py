@@ -251,7 +251,13 @@ class Connector:
                     {
                         "names": [
                             name,
+                            # When the sync target is an alias, writes and
+                            # index maintenance (e.g. refresh after a rollover)
+                            # hit the concrete backing indices, so the key must
+                            # be granted privileges on them too.
+                            f"{name}*",
                             acl_index_name,
+                            f"{acl_index_name}*",
                             f"{CONCRETE_CONNECTORS_INDEX}*",
                         ],
                         "privileges": ["all"],

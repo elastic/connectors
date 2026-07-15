@@ -14,9 +14,14 @@ from elasticsearch import ApiError
 
 from connectors import __version__  # NOQA
 from connectors.cli.auth import CONFIG_FILE_PATH
+from connectors.cli.connector import Connector
 from connectors.connectors_cli import cli, login
+from connectors.protocol.connectors import (
+    CONCRETE_CONNECTORS_INDEX,
+    CONNECTORS_ACCESS_CONTROL_INDEX_PREFIX,
+    JobStatus,
+)
 from connectors.protocol.connectors import Connector as ConnectorObject
-from connectors.protocol.connectors import JobStatus
 from connectors.protocol.connectors import SyncJob as SyncJobObject
 from tests.commons import AsyncIterator
 
@@ -829,3 +834,35 @@ def test_job_view():
         assert str(indexed_document_count) in result.output
         assert str(indexed_document_volume) in result.output
         assert result.exit_code == 0
+
+
+@pytest.mark.asyncio
+@patch("connectors.cli.connector.ConnectorIndex", MagicMock())
+async def test_create_api_key_grants_access_to_alias_backing_indices():
+    index_name = "search-my-index"
+    connector = Connector(config={"host": "http://localhost:9211/"})
+
+    security_client = connector.cli_client.client.security
+    security_client.create_api_key = AsyncMock(
+        return_value={"id": "api-key-id", "encoded": "encoded-api-key"}
+    )
+
+    await connector._Connector__create_api_key(index_name)
+
+    security_client.create_api_key.assert_awaited_once()
+    role_descriptors = security_client.create_api_key.await_args.kwargs[
+        "role_descriptors"
+    ]
+    names = role_descriptors[f"{index_name}-connector-role"]["index"][0]["names"]
+
+    acl_index_name = f"{CONNECTORS_ACCESS_CONTROL_INDEX_PREFIX}{index_name}"
+    # The wildcard entries ensure the key keeps write/maintenance access when the
+    # sync target is an alias whose backing index rolls over (e.g.
+    # "search-my-index-000001"), which previously caused 403 sync failures.
+    assert names == [
+        index_name,
+        f"{index_name}*",
+        acl_index_name,
+        f"{acl_index_name}*",
+        f"{CONCRETE_CONNECTORS_INDEX}*",
+    ]
