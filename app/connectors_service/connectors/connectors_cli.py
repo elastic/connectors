@@ -31,6 +31,34 @@ from connectors.es import DEFAULT_LANGUAGE
 
 __all__ = ["main"]
 
+HELP_OPTION_NAMES = ("-h", "--help")
+HELP_REQUESTED_META_KEY = "help_requested"
+
+
+def is_help_requested(args):
+    """Return True when the raw CLI arguments only ask for help.
+
+    Help pages must be available without a config file or prior `login`. By the
+    time the top-level group callback runs, click has already consumed the
+    subcommand arguments, so we inspect the raw arguments during parsing instead
+    (see ``ConnectorsGroup.parse_args``). This catches help requests aimed at a
+    subcommand too, e.g. `connectors job --help`.
+    """
+    return any(arg in HELP_OPTION_NAMES for arg in args)
+
+
+class ConnectorsGroup(click.Group):
+    """Top-level group that records whether help was requested.
+
+    ``parse_args`` still has access to the full, unconsumed argument list, so we
+    use it to flag help requests on the context before click dispatches to a
+    subcommand.
+    """
+
+    def parse_args(self, ctx, args):
+        ctx.meta[HELP_REQUESTED_META_KEY] = is_help_requested(args)
+        return super().parse_args(ctx, args)
+
 
 def load_config(ctx, config):
     if config:
@@ -47,6 +75,7 @@ def load_config(ctx, config):
 
 # Main group
 @click.group(
+    cls=ConnectorsGroup,
     invoke_without_command=True,
     context_settings={"help_option_names": ["-h", "--help"]},
 )
@@ -59,12 +88,18 @@ def cli(ctx, config):
         click.echo(ctx.get_help())
         return
 
+    # Help pages must be available without a config file. Skip loading config
+    # so that commands like `connectors job --help` work before `login`.
+    if ctx.meta.get(HELP_REQUESTED_META_KEY):
+        return
+
     ctx.ensure_object(dict)
     try:
         ctx.obj["config"] = load_config(ctx, config)
     except FileNotFoundError as e:
         click.echo(
-            f"{e} Make sure that the config is either present at the default location ({CONFIG_FILE_PATH}) or it's passed via the '-c' or '--config' option."
+            f"{e} Make sure that the config is either present at the default location ({CONFIG_FILE_PATH}) or it's passed via the '-c' or '--config' option. "
+            "If you haven't authenticated yet, run 'connectors login' first."
         )
         ctx.exit(1)
 

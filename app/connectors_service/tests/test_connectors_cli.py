@@ -14,7 +14,7 @@ from elasticsearch import ApiError
 
 from connectors import __version__  # NOQA
 from connectors.cli.auth import CONFIG_FILE_PATH
-from connectors.connectors_cli import cli, login
+from connectors.connectors_cli import cli, is_help_requested, login
 from connectors.protocol.connectors import Connector as ConnectorObject
 from connectors.protocol.connectors import JobStatus
 from connectors.protocol.connectors import SyncJob as SyncJobObject
@@ -57,6 +57,58 @@ def test_help_page(commands):
     assert "Usage:" in result.output
     assert "Options:" in result.output
     assert "Commands:" in result.output
+
+
+@pytest.mark.parametrize(
+    "args, expected",
+    [
+        (["job", "--help"], True),
+        (["job", "-h"], True),
+        (["connector", "create", "--help"], True),
+        (["connector", "create", "-h"], True),
+        (["-c", "config.yml", "job", "--help"], True),
+        (["job", "list", "connector-id"], False),
+        ([], False),
+    ],
+)
+def test_is_help_requested(args, expected):
+    assert is_help_requested(args) is expected
+
+
+@pytest.mark.parametrize(
+    "commands",
+    [
+        ["job", "--help"],
+        ["job", "-h"],
+        ["connector", "--help"],
+        ["index", "--help"],
+        ["connector", "create", "--help"],
+    ],
+)
+def test_subcommand_help_works_without_config(mock_cli_config, commands):
+    # Simulate a missing config / not-yet-authenticated environment: any
+    # attempt to load the config would fail.
+    mock_cli_config.side_effect = FileNotFoundError(
+        f"{CONFIG_FILE_PATH} was not found."
+    )
+    runner = CliRunner()
+    result = runner.invoke(cli, commands)
+
+    assert result.exit_code == 0
+    assert "Usage:" in result.output
+    # config must not be loaded when the user only asks for help
+    mock_cli_config.assert_not_called()
+
+
+def test_missing_config_prompts_login(mock_cli_config):
+    mock_cli_config.side_effect = FileNotFoundError(
+        f"{CONFIG_FILE_PATH} was not found."
+    )
+    runner = CliRunner()
+    result = runner.invoke(cli, ["job", "list", "some-connector-id"])
+
+    assert result.exit_code == 1
+    assert "connectors login" in result.output
 
 
 @patch("connectors.cli.auth.Auth._Auth__ping_es_client", AsyncMock(return_value=False))
