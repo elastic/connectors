@@ -3058,6 +3058,42 @@ class TestSharepointOnlineDataSource:
 
             assert download_result is not None
 
+    @pytest.mark.asyncio
+    async def test_download_function_removes_download_url_for_downloadable_file(self):
+        async with create_spo_source() as source:
+            max_drive_item_age = 15
+            drive_item = {
+                "name": "test.txt",
+                "@microsoft.graph.downloadUrl": "http://localhost/filename?token=secret",
+                "size": 5000,
+                "lastModifiedDateTime": (
+                    datetime.now(timezone.utc) - timedelta(days=max_drive_item_age - 5)
+                ).strftime(ISO_ZULU_TIMESTAMP_FORMAT),
+            }
+
+            download_result = source.download_function(drive_item, max_drive_item_age)
+
+            assert download_result is not None
+            # The pre-authenticated, time-limited URL must not be persisted
+            assert "@microsoft.graph.downloadUrl" not in drive_item
+
+    @pytest.mark.asyncio
+    async def test_download_function_removes_download_url_for_unsupported_file(self):
+        async with create_spo_source() as source:
+            drive_item = {
+                "id": "testid",
+                "name": "filename.randomextention",
+                "@microsoft.graph.downloadUrl": "http://localhost/filename?token=secret",
+                "lastModifiedDateTime": "2023-07-10T22:12:56Z",
+                "size": 10,
+            }
+
+            download_result = source.download_function(drive_item, None)
+
+            assert download_result is None
+            # Even when the file is skipped, the sensitive URL must be stripped
+            assert "@microsoft.graph.downloadUrl" not in drive_item
+
     def test_get_default_configuration(self):
         config = SharepointOnlineDataSource.get_default_configuration()
 

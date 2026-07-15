@@ -1264,6 +1264,12 @@ class SharepointOnlineDataSource(BaseDataSource):
             return OP_INDEX
 
     def download_function(self, drive_item, max_drive_item_age):
+        # The download URL is a pre-authenticated, time-limited link. It must not
+        # be persisted in the emitted document, so we pop it here and only use it
+        # locally to decide whether the item is downloadable. The actual download
+        # is performed against the Graph API `/content` endpoint, not this URL.
+        download_url = drive_item.pop("@microsoft.graph.downloadUrl", None)
+
         if "deleted" in drive_item:
             # deleted drive items do not contain `name` property in the payload
             # so drive_item['id'] is used
@@ -1277,7 +1283,7 @@ class SharepointOnlineDataSource(BaseDataSource):
             self._logger.debug(f"Not downloading folder {drive_item['name']}")
             return None
 
-        if "@microsoft.graph.downloadUrl" not in drive_item:
+        if not download_url:
             self._logger.debug(
                 f"Not downloading file {drive_item['name']}: field \"@microsoft.graph.downloadUrl\" is missing"
             )
