@@ -24,6 +24,7 @@ from connectors.es.sink import (
     BULK_RESPONSES,
     CREATES_QUEUED,
     DELETES_QUEUED,
+    DOCS_DROPPED_FIELD_LIMIT,
     DOCS_DROPPED_TOO_LARGE,
     DOCS_EXTRACTED,
     END_DOCS,
@@ -35,9 +36,11 @@ from connectors.es.sink import (
     AsyncBulkRunningError,
     ElasticsearchOverloadedError,
     Extractor,
+    FieldLimitExceededError,
     ForceCanceledError,
     Sink,
     SyncOrchestrator,
+    _is_field_limit_error,
 )
 from connectors.protocol import JobType, Pipeline
 from connectors.protocol.connectors import (
@@ -1337,6 +1340,114 @@ def test_sync_orchestrator_passes_error_monitor_config_as_kwargs():
     assert orchestrator.error_monitor.max_error_rate == 0.5
     assert orchestrator.error_monitor.error_window_size == 50
     assert orchestrator.error_monitor.error_queue_size == 7
+
+
+FIELD_LIMIT_ERROR = {
+    "type": "document_parsing_exception",
+    "reason": "[1:119] failed to parse: Limit of total fields [1000] has been exceeded while adding new fields [2]",
+    "caused_by": {
+        "type": "illegal_argument_exception",
+        "reason": "Limit of total fields [1000] has been exceeded while adding new fields [2]",
+    },
+}
+
+
+@pytest.mark.parametrize(
+    "error, expected",
+    [
+        (FIELD_LIMIT_ERROR, True),
+        # Field-limit reason reported at the top level (no nested cause).
+        (
+            {
+                "type": "illegal_argument_exception",
+                "reason": "Limit of total fields [1000] has been exceeded while adding new fields [1]",
+            },
+            True,
+        ),
+        # Unrelated errors must not be treated as field explosion.
+        (
+            {
+                "type": "version_conflict_engine_exception",
+                "reason": "version conflict, current version [2] is different",
+            },
+            False,
+        ),
+        (
+            {"type": "mapper_parsing_exception", "reason": "failed to parse field"},
+            False,
+        ),
+        ("something went wrong", False),
+        (None, False),
+        ({}, False),
+    ],
+)
+def test_is_field_limit_error(error, expected):
+    assert _is_field_limit_error(error) is expected
+
+
+def _build_sink(error_monitor):
+    config = {
+        "username": "elastic",
+        "password": "changeme",
+        "host": "http://nowhere.com:9200",
+    }
+    client = ESManagementClient(config)
+    client.client = AsyncMock()
+    return Sink(
+        client=client,
+        queue=None,
+        error_monitor=error_monitor,
+        chunk_size=0,
+        pipeline={"name": "pipeline"},
+        chunk_mem_size=0,
+        max_concurrency=0,
+        max_retries=3,
+        retry_interval=10,
+    )
+
+
+def _field_explosion_bulk_response(num_successful, num_field_limit_failures):
+    """Mostly-successful batch with a few field-explosion drops - staying well
+    below the `ErrorMonitor` thresholds so only the field-limit handling can
+    fail the sync."""
+    items = []
+    for id_ in range(num_successful):
+        items.append({OP_INDEX: {"_id": f"ok_{id_}", "result": "created"}})
+    for id_ in range(num_field_limit_failures):
+        items.append(
+            {OP_INDEX: {"_id": f"dropped_{id_}", "error": deepcopy(FIELD_LIMIT_ERROR)}}
+        )
+    return {"items": items, "errors": True}
+
+
+@pytest.mark.asyncio
+async def test_batch_bulk_fails_sync_on_field_explosion():
+    """A handful of field-limit drops among many successes must fail the sync
+    even though the `ErrorMonitor` thresholds are never tripped."""
+    sink = _build_sink(ErrorMonitor())
+    sink.client.bulk_insert = AsyncMock(
+        return_value=_field_explosion_bulk_response(50, 2)
+    )
+
+    with pytest.raises(FieldLimitExceededError):
+        await sink._batch_bulk([], {OP_INDEX: {}, OP_UPDATE: {}, OP_DELETE: {}})
+
+    assert sink.counters.get(f"{BULK_RESPONSES}.{DOCS_DROPPED_FIELD_LIMIT}") == 2
+
+
+@pytest.mark.asyncio
+async def test_batch_bulk_does_not_fail_on_field_explosion_when_monitor_disabled():
+    """Disabling the error monitor opts out of failing the sync, but the
+    dropped documents are still counted for diagnostics."""
+    sink = _build_sink(ErrorMonitor(enabled=False))
+    sink.client.bulk_insert = AsyncMock(
+        return_value=_field_explosion_bulk_response(50, 2)
+    )
+
+    # Should not raise.
+    await sink._batch_bulk([], {OP_INDEX: {}, OP_UPDATE: {}, OP_DELETE: {}})
+
+    assert sink.counters.get(f"{BULK_RESPONSES}.{DOCS_DROPPED_FIELD_LIMIT}") == 2
 
 
 @pytest.mark.asyncio

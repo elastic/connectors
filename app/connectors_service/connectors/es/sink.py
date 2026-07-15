@@ -87,6 +87,7 @@ DOCS_EXTRACTED = "docs_extracted"
 DOCS_FILTERED = "docs_filtered"
 DOCS_DROPPED = "docs_dropped"
 DOCS_DROPPED_TOO_LARGE = "docs_dropped_too_large"
+DOCS_DROPPED_FIELD_LIMIT = "docs_dropped_field_limit"
 ID_MISSING = "_ids_missing"
 RESULT_ERROR = "result_errors"
 RESULT_SUCCESS = "result_successes"
@@ -129,6 +130,48 @@ class ElasticsearchOverloadedError(Exception):
 
 class DocumentIngestionError(Exception):
     pass
+
+
+class FieldLimitExceededError(Exception):
+    """Raised when documents are dropped because the target index reached its
+    `index.mapping.total_fields.limit` ("field explosion").
+
+    Unlike transient per-document errors, this condition is systemic and
+    non-recoverable within a sync: once the mapping is full, every subsequent
+    document that would introduce a new field is silently dropped. The
+    thresholds tracked by `ErrorMonitor` may never trip when only a fraction of
+    documents add new fields, so the sync would otherwise "succeed" while
+    quietly losing data. We fail the sync instead, so the drop is surfaced.
+    """
+
+    pass
+
+
+def _is_field_limit_error(error):
+    """Detects an Elasticsearch bulk item error caused by the index exceeding
+    its `index.mapping.total_fields.limit` (a.k.a. field/mapping explosion).
+
+    Elasticsearch reports this as a `document_parsing_exception` whose reason
+    (or nested `caused_by` reason) reads like
+    `Limit of total fields [1000] has been exceeded while adding new fields [2]`.
+    We match on that message so the check keeps working regardless of the exact
+    exception type wrapping it. `error` is the bulk item `error` value, which is
+    normally a dict but may be any type, so non-dict inputs return ``False``.
+    """
+
+    def _reason_indicates_field_limit(node):
+        if not isinstance(node, dict):
+            return False
+        reason = node.get("reason", "")
+        if (
+            isinstance(reason, str)
+            and "Limit of total fields" in reason
+            and "has been exceeded" in reason
+        ):
+            return True
+        return _reason_indicates_field_limit(node.get("caused_by"))
+
+    return _reason_indicates_field_limit(error)
 
 
 class Sink:
@@ -265,6 +308,7 @@ class Sink:
         return result
 
     async def _process_bulk_response(self, res, ids_to_ops, do_log=False):
+        field_limit_error = None
         for item in res.get("items", []):
             if OP_INDEX in item:
                 action_item = OP_INDEX
@@ -316,7 +360,15 @@ class Sink:
             successful_result = result in SUCCESSFUL_RESULTS
             if not successful_result:
                 if "error" in item[action_item]:
-                    message = f"Failed to execute '{action_item}' on document with id '{doc_id}'. Error: {item[action_item].get('error')}"
+                    error = item[action_item].get("error")
+                    message = f"Failed to execute '{action_item}' on document with id '{doc_id}'. Error: {error}"
+                    if _is_field_limit_error(error):
+                        # Track every dropped doc for accurate stats, but keep
+                        # the last error to raise a single clear failure below.
+                        self.counters.increment(
+                            DOCS_DROPPED_FIELD_LIMIT, namespace=BULK_RESPONSES
+                        )
+                        field_limit_error = error
                     self.error_monitor.track_error(DocumentIngestionError(message))
                     if do_log:
                         self._logger.debug(message)
@@ -334,6 +386,26 @@ class Sink:
                         f"Successfully executed '{action_item}' on document with id '{doc_id}'. Result: {result}"
                     )
                 self.counters.increment(RESULT_SUCCESS)
+
+        # A field-limit ("field explosion") error is unrecoverable within a
+        # sync and drops data, so fail the sync to surface it - even if the
+        # `ErrorMonitor` thresholds were not tripped. Gated on the monitor being
+        # enabled so users who opt out of error-based failures keep that
+        # behaviour. Raising here (after the loop) still lets `_batch_bulk`'s
+        # `finally` log every failure and count already-accepted docs.
+        if field_limit_error is not None and getattr(
+            self.error_monitor, "enabled", True
+        ):
+            dropped = self.counters.get(f"{BULK_RESPONSES}.{DOCS_DROPPED_FIELD_LIMIT}")
+            msg = (
+                f"Dropped {dropped} document(s) because the index mapping reached "
+                "its total fields limit (field explosion). This drops data "
+                "silently, so the sync is being failed. Reduce the number of "
+                "indexed fields (e.g. via sync rules or an ingest pipeline) or "
+                "raise `index.mapping.total_fields.limit` on the index, then "
+                f"re-run the sync. Last error: {field_limit_error}"
+            )
+            raise FieldLimitExceededError(msg)
 
     def _populate_stats(self, stats, res):
         for item in res["items"]:

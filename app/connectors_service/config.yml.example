@@ -182,6 +182,9 @@
 ##  If this error happens rarely, we're safe to ignore such documents.
 ##  Error monitor in this section is taking care of this by ignoring transient errors while ingesting documents into Elasticsearch.
 ##  If any of the thresholds defined in this section are exceeded, then the whole sync is failed.
+##  Independently of the thresholds below, a "field explosion" error (a document dropped because the
+##  index reached its `index.mapping.total_fields.limit`) always fails the sync while the monitor is
+##  enabled, because it drops data silently and is not recoverable within a sync.
 #
 ##  Switch for enabling/disabling error monitor
 ##  When disabled, errors are only counted - they never cause failures (legacy behavior)
