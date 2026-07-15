@@ -67,6 +67,11 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         self._client = None
         self.site_group_cache = {}
+        # Caches to avoid re-fetching folder permission data while resolving
+        # inherited permissions for list items and site pages that live in
+        # folders with unique (non-inherited) permissions.
+        self._folder_access_control_cache = {}
+        self._list_root_folder_cache = {}
 
     def _set_internal_logger(self):
         self.client.set_logger(self._logger)
@@ -1006,10 +1011,37 @@ class SharepointOnlineDataSource(BaseDataSource):
                             list_item, list_item_access_control
                         )
 
+                # The list item inherits permissions. It may inherit them from a parent
+                # folder that has unique permissions rather than from the parent site.
                 if not has_unique_role_assignments:
-                    list_item = self._decorate_with_access_control(
-                        list_item, site_access_control
-                    )
+                    folder_access_control = None
+
+                    if (
+                        self._dls_enabled()
+                        and self.configuration["fetch_unique_list_item_permissions"]
+                    ):
+                        item_folder_path = (
+                            await self.client.site_list_item_parent_folder(
+                                site_web_url, site_list_name, list_item_natural_id
+                            )
+                        )
+                        list_root_path = await self._list_root_folder(
+                            site_web_url, site_list_name
+                        )
+                        folder_access_control = (
+                            await self._inherited_folder_access_control(
+                                site_web_url, item_folder_path, list_root_path
+                            )
+                        )
+
+                    if folder_access_control is not None:
+                        list_item = self._decorate_with_access_control(
+                            list_item, folder_access_control
+                        )
+                    else:
+                        list_item = self._decorate_with_access_control(
+                            list_item, site_access_control
+                        )
 
                 if "Attachments" in list_item["fields"]:
                     async for (
@@ -1169,6 +1201,78 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         return access_control
 
+    async def _list_root_folder(self, site_web_url, site_list_name):
+        """Returns the (cached) server-relative path of a list's root folder."""
+        cache_key = (site_web_url, site_list_name)
+        if cache_key not in self._list_root_folder_cache:
+            self._list_root_folder_cache[
+                cache_key
+            ] = await self.client.list_root_folder(site_web_url, site_list_name)
+
+        return self._list_root_folder_cache[cache_key]
+
+    async def _inherited_folder_access_control(
+        self, site_web_url, item_folder_path, list_root_path
+    ):
+        """Resolves access control inherited from a parent folder with unique permissions.
+
+        When an object (list item or site page) does not have its own unique role
+        assignments, it inherits permissions from its nearest ancestor. SharePoint only
+        breaks inheritance at the object that has unique permissions, so an object can
+        inherit permissions from a parent folder rather than from the parent site.
+
+        This walks up the folder hierarchy from the object's containing folder towards
+        (but not including) the list's root folder, and returns the access control of the
+        nearest ancestor folder that has unique role assignments.
+
+        Returns:
+            list | None: access control list of the nearest ancestor folder with unique
+                role assignments, or ``None`` when no such folder exists (in which case
+                the caller should fall back to the parent site access control).
+        """
+        if not item_folder_path or not list_root_path:
+            return None
+
+        item_folder_path = item_folder_path.rstrip("/")
+        cache_key = (site_web_url, item_folder_path)
+        if cache_key in self._folder_access_control_cache:
+            return self._folder_access_control_cache[cache_key]
+
+        current = item_folder_path
+        root = list_root_path.rstrip("/")
+        resolved_access_control = None
+
+        # Only consider folders strictly below the list's root folder. Permissions of the
+        # list itself (and of the site) are resolved elsewhere.
+        while current and current != root and current.startswith(f"{root}/"):
+            has_unique_role_assignments = (
+                await self.client.folder_has_unique_role_assignments(
+                    site_web_url, current
+                )
+            )
+
+            if has_unique_role_assignments:
+                self._logger.debug(
+                    f"Fetching unique folder permissions for folder '{current}'. Ignoring parent site permissions."
+                )
+
+                resolved_access_control = []
+                async for role_assignment in self.client.folder_role_assignments(
+                    site_web_url, current
+                ):
+                    resolved_access_control.extend(
+                        await self._get_access_control_from_role_assignment(
+                            role_assignment
+                        )
+                    )
+                break
+
+            # This folder inherits its permissions; keep walking up the hierarchy.
+            current = current.rsplit("/", 1)[0]
+
+        self._folder_access_control_cache[cache_key] = resolved_access_control
+        return resolved_access_control
+
     async def site_pages(self, site, site_access_control, check_timestamp=False):
         site_id = site["id"]
         url = site["webUrl"]
@@ -1221,11 +1325,30 @@ class SharepointOnlineDataSource(BaseDataSource):
                             site_page, page_access_control
                         )
 
-                # set parent site access control
+                # The page inherits permissions. It may inherit them from a parent
+                # folder that has unique permissions rather than from the parent site.
                 if not has_unique_role_assignments:
-                    site_page = self._decorate_with_access_control(
-                        site_page, site_access_control
-                    )
+                    folder_access_control = None
+
+                    if (
+                        self._dls_enabled()
+                        and self.configuration["fetch_unique_page_permissions"]
+                    ):
+                        list_root_path = await self._list_root_folder(url, "Site Pages")
+                        folder_access_control = (
+                            await self._inherited_folder_access_control(
+                                url, site_page.get("FileDirRef"), list_root_path
+                            )
+                        )
+
+                    if folder_access_control is not None:
+                        site_page = self._decorate_with_access_control(
+                            site_page, folder_access_control
+                        )
+                    else:
+                        site_page = self._decorate_with_access_control(
+                            site_page, site_access_control
+                        )
 
                 for html_field in [
                     "LayoutWebpartsContent",

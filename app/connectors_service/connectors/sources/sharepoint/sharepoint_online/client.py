@@ -1023,6 +1023,11 @@ class SharepointOnlineClient:
                         "OData__UIVersionString": site_page.get(
                             "OData__UIVersionString"
                         ),
+                        # Server-relative path of the containing folder. Used to
+                        # propagate unique permissions from a parent folder to a
+                        # page that inherits its permissions.
+                        "FileDirRef": site_page.get("FileDirRef"),
+                        "FileRef": site_page.get("FileRef"),
                     }
         except NotFound:
             # I'm not sure if site can have no pages, but given how weird API is I put this here
@@ -1052,6 +1057,69 @@ class SharepointOnlineClient:
                 for role_assignment in page:
                     yield role_assignment
         except NotFound:
+            return
+
+    async def site_list_item_parent_folder(
+        self, site_web_url, site_list_name, list_item_id
+    ):
+        """Returns the server-relative path of the folder that contains a given list item.
+
+        SharePoint list items expose the ``FileDirRef`` field, which points to the
+        server-relative URL of their containing folder. This is used to resolve unique
+        permissions that a parent folder might have broken from its parent.
+        """
+        self._validate_sharepoint_rest_url(site_web_url)
+
+        url = f"{site_web_url}/_api/lists/GetByTitle('{site_list_name}')/items({list_item_id})?$select=FileDirRef,FileRef"
+
+        try:
+            response = await self._rest_api_client.fetch(url)
+            return response.get("FileDirRef")
+        except (NotFound, BadRequestError):
+            return None
+
+    async def list_root_folder(self, site_web_url, site_list_name):
+        """Returns the server-relative path of the root folder of a list.
+
+        This marks the boundary at which folder-based permission inheritance should
+        stop: permissions of the list itself (and the site) are resolved separately.
+        """
+        self._validate_sharepoint_rest_url(site_web_url)
+
+        url = f"{site_web_url}/_api/lists/GetByTitle('{site_list_name}')/RootFolder?$select=ServerRelativeUrl"
+
+        try:
+            response = await self._rest_api_client.fetch(url)
+            return response.get("ServerRelativeUrl")
+        except (NotFound, BadRequestError):
+            return None
+
+    async def folder_has_unique_role_assignments(
+        self, site_web_url, folder_server_relative_url
+    ):
+        self._validate_sharepoint_rest_url(site_web_url)
+
+        folder = url_encode(folder_server_relative_url)
+        url = f"{site_web_url}/_api/web/GetFolderByServerRelativeUrl('{folder}')/ListItemAllFields/HasUniqueRoleAssignments"
+
+        try:
+            response = await self._rest_api_client.fetch(url)
+            return response.get("value", False)
+        except (NotFound, BadRequestError):
+            return False
+
+    async def folder_role_assignments(self, site_web_url, folder_server_relative_url):
+        self._validate_sharepoint_rest_url(site_web_url)
+
+        expand = "Member/users,RoleDefinitionBindings"
+        folder = url_encode(folder_server_relative_url)
+        url = f"{site_web_url}/_api/web/GetFolderByServerRelativeUrl('{folder}')/ListItemAllFields/roleassignments?$expand={expand}"
+
+        try:
+            async for page in self._rest_api_client.scroll(url):
+                for role_assignment in page:
+                    yield role_assignment
+        except (NotFound, BadRequestError):
             return
 
     async def users_and_groups_for_role_assignment(self, site_web_url, role_assignment):

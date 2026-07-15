@@ -1840,6 +1840,103 @@ class TestSharepointOnlineClient:
         assert len(returned_items) == 0
 
     @pytest.mark.asyncio
+    async def test_site_list_item_parent_folder(self, client, patch_fetch):
+        site_web_url = f"https://{self.tenant_name}.sharepoint.com/sites/site_1"
+        list_title = "Documents"
+        list_item_id = 5
+
+        patch_fetch.return_value = {
+            "FileDirRef": "/sites/site_1/Shared Documents/es",
+            "FileRef": "/sites/site_1/Shared Documents/es/file.docx",
+        }
+
+        assert (
+            await client.site_list_item_parent_folder(
+                site_web_url, list_title, list_item_id
+            )
+            == "/sites/site_1/Shared Documents/es"
+        )
+
+    @pytest.mark.asyncio
+    async def test_site_list_item_parent_folder_not_found(self, client, patch_fetch):
+        site_web_url = f"https://{self.tenant_name}.sharepoint.com/sites/site_1"
+
+        patch_fetch.side_effect = NotFound()
+
+        assert (
+            await client.site_list_item_parent_folder(site_web_url, "Documents", 5)
+            is None
+        )
+
+    @pytest.mark.asyncio
+    async def test_list_root_folder(self, client, patch_fetch):
+        site_web_url = f"https://{self.tenant_name}.sharepoint.com/sites/site_1"
+
+        patch_fetch.return_value = {
+            "ServerRelativeUrl": "/sites/site_1/Shared Documents"
+        }
+
+        assert (
+            await client.list_root_folder(site_web_url, "Documents")
+            == "/sites/site_1/Shared Documents"
+        )
+
+    @pytest.mark.asyncio
+    async def test_list_root_folder_bad_request(self, client, patch_fetch):
+        site_web_url = f"https://{self.tenant_name}.sharepoint.com/sites/site_1"
+
+        patch_fetch.side_effect = BadRequestError()
+
+        assert await client.list_root_folder(site_web_url, "Documents") is None
+
+    @pytest.mark.asyncio
+    async def test_folder_has_unique_role_assignments(self, client, patch_fetch):
+        site_web_url = f"https://{self.tenant_name}.sharepoint.com/sites/site_1"
+        folder = "/sites/site_1/SitePages/es"
+
+        patch_fetch.return_value = {"value": True}
+
+        assert await client.folder_has_unique_role_assignments(site_web_url, folder)
+
+    @pytest.mark.asyncio
+    async def test_folder_has_unique_role_assignments_not_found(
+        self, client, patch_fetch
+    ):
+        site_web_url = f"https://{self.tenant_name}.sharepoint.com/sites/site_1"
+        folder = "/sites/site_1/SitePages/es"
+
+        patch_fetch.side_effect = NotFound()
+
+        assert not await client.folder_has_unique_role_assignments(site_web_url, folder)
+
+    @pytest.mark.asyncio
+    async def test_folder_role_assignments(self, client, patch_scroll):
+        site_web_url = f"https://{self.tenant_name}.sharepoint.com/sites/site_1"
+        folder = "/sites/site_1/SitePages/es"
+        role_assignments = [{"value": ["role"]}]
+
+        actual_role_assignments = await self._execute_scrolling_method(
+            partial(client.folder_role_assignments, site_web_url, folder),
+            patch_scroll,
+            role_assignments,
+        )
+
+        assert actual_role_assignments == role_assignments
+
+    @pytest.mark.asyncio
+    async def test_folder_role_assignments_not_found(self, client, patch_scroll):
+        site_web_url = f"https://{self.tenant_name}.sharepoint.com/sites/site_1"
+        folder = "/sites/site_1/SitePages/es"
+
+        patch_scroll.side_effect = NotFound()
+
+        returned_items = []
+        async for item in client.folder_role_assignments(site_web_url, folder):
+            returned_items.append(item)
+
+        assert len(returned_items) == 0
+
+    @pytest.mark.asyncio
     async def test_users_and_groups_for_role_assignment(self, client, patch_fetch):
         users_by_id_url = (
             f"https://{self.tenant_name}.sharepoint.com/random/totally/made/up/users"
@@ -2326,6 +2423,10 @@ class TestSharepointOnlineDataSource:
             client.site_page_role_assignments = AsyncIterator(
                 [self.site_page_role_assignments]
             )
+            client.site_list_item_parent_folder = AsyncMock(return_value=None)
+            client.list_root_folder = AsyncMock(return_value=None)
+            client.folder_has_unique_role_assignments = AsyncMock(return_value=False)
+            client.folder_role_assignments = AsyncIterator([])
             client.users_and_groups_for_role_assignment = AsyncMock(
                 return_value=self.users_and_groups_for_role_assignments
             )
@@ -2968,6 +3069,261 @@ class TestSharepointOnlineDataSource:
                     admin_site_access_controls,
                 )
                 for site_page in site_pages
+            )
+
+    @pytest.mark.asyncio
+    @patch(
+        "connectors.sources.sharepoint.sharepoint_online.datasource.ACCESS_CONTROL",
+        ALLOW_ACCESS_CONTROL_PATCHED,
+    )
+    async def test_site_pages_inherit_permissions_from_parent_folder(
+        self, patch_sharepoint_client
+    ):
+        site = {
+            "id": "1",
+            "webUrl": "https://test.sharepoint.com/sites/site_1",
+        }
+        site_access_control = [_prefix_user("should-not-be-inherited")]
+        folder_access_control = _prefix_user(USER_TWO_NAME)
+
+        patch_sharepoint_client.site_pages = AsyncIterator(
+            [
+                {
+                    "Id": "4",
+                    "odata.id": "11",
+                    "Modified": self.day_ago,
+                    "FileDirRef": "/sites/site_1/SitePages/es",
+                }
+            ]
+        )
+        # The page itself does not break inheritance ...
+        patch_sharepoint_client.site_page_has_unique_role_assignments = AsyncMock(
+            return_value=False
+        )
+        # ... but its containing folder does.
+        patch_sharepoint_client.list_root_folder = AsyncMock(
+            return_value="/sites/site_1/SitePages"
+        )
+        patch_sharepoint_client.folder_has_unique_role_assignments = AsyncMock(
+            return_value=True
+        )
+        patch_sharepoint_client.folder_role_assignments = AsyncIterator(
+            [
+                {
+                    "Member": {
+                        "odata.type": "SP.User",
+                        "UserPrincipalName": USER_TWO_NAME,
+                    },
+                    "RoleDefinitionBindings": READ_BINDING,
+                }
+            ]
+        )
+
+        async with create_spo_source(use_document_level_security=True) as source:
+            site_pages = []
+            async for site_page in source.site_pages(site, site_access_control):
+                site_pages.append(site_page)
+
+            assert len(site_pages) == 1
+            assert folder_access_control in site_pages[0][ALLOW_ACCESS_CONTROL_PATCHED]
+            assert (
+                site_access_control[0]
+                not in site_pages[0][ALLOW_ACCESS_CONTROL_PATCHED]
+            )
+
+    @pytest.mark.asyncio
+    @patch(
+        "connectors.sources.sharepoint.sharepoint_online.datasource.ACCESS_CONTROL",
+        ALLOW_ACCESS_CONTROL_PATCHED,
+    )
+    async def test_site_pages_inherit_site_permissions_without_unique_folder(
+        self, patch_sharepoint_client
+    ):
+        site = {
+            "id": "1",
+            "webUrl": "https://test.sharepoint.com/sites/site_1",
+        }
+        site_access_control = [_prefix_user("should-be-inherited")]
+
+        patch_sharepoint_client.site_pages = AsyncIterator(
+            [
+                {
+                    "Id": "4",
+                    "odata.id": "11",
+                    "Modified": self.day_ago,
+                    "FileDirRef": "/sites/site_1/SitePages/es",
+                }
+            ]
+        )
+        patch_sharepoint_client.site_page_has_unique_role_assignments = AsyncMock(
+            return_value=False
+        )
+        patch_sharepoint_client.list_root_folder = AsyncMock(
+            return_value="/sites/site_1/SitePages"
+        )
+        # No folder in the hierarchy has unique permissions.
+        patch_sharepoint_client.folder_has_unique_role_assignments = AsyncMock(
+            return_value=False
+        )
+
+        async with create_spo_source(use_document_level_security=True) as source:
+            site_pages = []
+            async for site_page in source.site_pages(site, site_access_control):
+                site_pages.append(site_page)
+
+            assert len(site_pages) == 1
+            assert site_access_control[0] in site_pages[0][ALLOW_ACCESS_CONTROL_PATCHED]
+
+    @pytest.mark.asyncio
+    @patch(
+        "connectors.sources.sharepoint.sharepoint_online.datasource.ACCESS_CONTROL",
+        ALLOW_ACCESS_CONTROL_PATCHED,
+    )
+    async def test_site_list_items_inherit_permissions_from_parent_folder(
+        self, patch_sharepoint_client
+    ):
+        site = {
+            "id": "1",
+            "webUrl": "https://test.sharepoint.com/sites/site_1",
+            "siteCollection": {"hostname": "test.sharepoint.com"},
+        }
+        site_access_control = [_prefix_user("should-not-be-inherited")]
+        folder_access_control = _prefix_user(USER_TWO_NAME)
+
+        patch_sharepoint_client.site_list_items = AsyncIterator(
+            [
+                {
+                    "id": "6",
+                    "contentType": {"name": "Item"},
+                    "fields": {},
+                    "lastModifiedDateTime": self.day_ago,
+                }
+            ]
+        )
+        patch_sharepoint_client.site_list_item_has_unique_role_assignments = AsyncMock(
+            return_value=False
+        )
+        patch_sharepoint_client.site_list_item_parent_folder = AsyncMock(
+            return_value="/sites/site_1/Lists/MyList/es"
+        )
+        patch_sharepoint_client.list_root_folder = AsyncMock(
+            return_value="/sites/site_1/Lists/MyList"
+        )
+        patch_sharepoint_client.folder_has_unique_role_assignments = AsyncMock(
+            return_value=True
+        )
+        patch_sharepoint_client.folder_role_assignments = AsyncIterator(
+            [
+                {
+                    "Member": {
+                        "odata.type": "SP.User",
+                        "UserPrincipalName": USER_TWO_NAME,
+                    },
+                    "RoleDefinitionBindings": READ_BINDING,
+                }
+            ]
+        )
+
+        async with create_spo_source(use_document_level_security=True) as source:
+            list_items = []
+            async for list_item, _ in source.site_list_items(
+                site=site,
+                site_list_id="list-id",
+                site_list_name="MyList",
+                site_access_control=site_access_control,
+            ):
+                list_items.append(list_item)
+
+            assert len(list_items) == 1
+            assert folder_access_control in list_items[0][ALLOW_ACCESS_CONTROL_PATCHED]
+            assert (
+                site_access_control[0]
+                not in list_items[0][ALLOW_ACCESS_CONTROL_PATCHED]
+            )
+
+    @pytest.mark.asyncio
+    async def test_inherited_folder_access_control_walks_up_to_grandparent(
+        self, patch_sharepoint_client
+    ):
+        site_web_url = "https://test.sharepoint.com/sites/site_1"
+
+        # The immediate parent folder inherits, but its parent has unique permissions.
+        patch_sharepoint_client.folder_has_unique_role_assignments = AsyncMock(
+            side_effect=[False, True]
+        )
+        patch_sharepoint_client.folder_role_assignments = AsyncIterator(
+            [
+                {
+                    "Member": {
+                        "odata.type": "SP.User",
+                        "UserPrincipalName": USER_TWO_NAME,
+                    },
+                    "RoleDefinitionBindings": READ_BINDING,
+                }
+            ]
+        )
+
+        async with create_spo_source(use_document_level_security=True) as source:
+            access_control = await source._inherited_folder_access_control(
+                site_web_url,
+                "/sites/site_1/SitePages/es/sub",
+                "/sites/site_1/SitePages",
+            )
+
+            assert access_control == [_prefix_user(USER_TWO_NAME)]
+            # Two folders were checked before finding the unique one.
+            assert (
+                patch_sharepoint_client.folder_has_unique_role_assignments.await_count
+                == 2
+            )
+
+    @pytest.mark.asyncio
+    async def test_inherited_folder_access_control_returns_none_at_list_root(
+        self, patch_sharepoint_client
+    ):
+        site_web_url = "https://test.sharepoint.com/sites/site_1"
+
+        patch_sharepoint_client.folder_has_unique_role_assignments = AsyncMock(
+            return_value=True
+        )
+
+        async with create_spo_source(use_document_level_security=True) as source:
+            # The item lives directly in the list root, so there is no parent folder
+            # to inherit unique permissions from.
+            access_control = await source._inherited_folder_access_control(
+                site_web_url,
+                "/sites/site_1/SitePages",
+                "/sites/site_1/SitePages",
+            )
+
+            assert access_control is None
+            patch_sharepoint_client.folder_has_unique_role_assignments.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_inherited_folder_access_control_caches_result(
+        self, patch_sharepoint_client
+    ):
+        site_web_url = "https://test.sharepoint.com/sites/site_1"
+
+        patch_sharepoint_client.folder_has_unique_role_assignments = AsyncMock(
+            return_value=False
+        )
+
+        async with create_spo_source(use_document_level_security=True) as source:
+            for _ in range(3):
+                assert (
+                    await source._inherited_folder_access_control(
+                        site_web_url,
+                        "/sites/site_1/SitePages/es",
+                        "/sites/site_1/SitePages",
+                    )
+                    is None
+                )
+
+            # The folder hierarchy is only inspected once thanks to caching.
+            assert (
+                patch_sharepoint_client.folder_has_unique_role_assignments.await_count
+                == 1
             )
 
     @pytest.mark.asyncio
