@@ -1893,10 +1893,17 @@ class SharepointOnlineDataSource(BaseDataSource):
         async for site_collection in self.site_collections():
             yield site_collection, None, OP_INDEX
 
+            # Changes to a site's child resources (e.g. drive item
+            # deletions/modifications) don't reliably update the parent site's
+            # lastModifiedDateTime. If we skipped unchanged sites here, their
+            # drive delta links would never be consumed and those changes would
+            # be silently lost. Therefore, we set check_timestamp to False when
+            # iterating over sites and rely on the per-resource timestamp checks
+            # (and drive delta links) below to filter what actually changed.
             async for site in self.sites(
                 site_collection["siteCollection"]["hostname"],
                 self.configuration["site_collections"],
-                check_timestamp=True,
+                check_timestamp=False,
             ):
                 (
                     site_access_control,

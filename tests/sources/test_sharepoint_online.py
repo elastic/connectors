@@ -2575,6 +2575,60 @@ class TestSharepointOnlineDataSource:
         assert (operations["delete"]) == deleted
 
     @pytest.mark.asyncio
+    @freeze_time(iso_utc())
+    async def test_get_docs_incrementally_processes_sites_with_unchanged_timestamp(
+        self, patch_sharepoint_client
+    ):
+        # Regression test for https://github.com/elastic/connectors/issues/3994
+        # A site whose lastModifiedDateTime predates the last sync must still be
+        # processed so that its drive delta link is consumed. Otherwise drive
+        # item deletions/modifications (which don't bump the parent site's
+        # timestamp) are silently dropped from the index.
+        stale_site = {
+            "id": "1",
+            "webUrl": "https://test.sharepoint.com/sites/site_1",
+            "name": "site-1",
+            "siteCollection": self.site_collections[0]["siteCollection"],
+            "lastModifiedDateTime": self.two_months_ago,
+        }
+        patch_sharepoint_client.sites = AsyncIterator([stale_site])
+
+        async with create_spo_source() as source:
+            source._site_access_control = AsyncMock(return_value=([], []))
+            source.site_group_users = AsyncMock(return_value=self.site_group_users)
+
+        sync_cursor = {"site_drives": {}, "cursor_timestamp": self.month_ago}
+        for site_drive in self.site_drives:
+            sync_cursor["site_drives"][site_drive["id"]] = (
+                "http://fakesharepoint.com/deltalink"
+            )
+
+        deleted = 0
+        for page in self.drive_items_delta:
+            deleted += len(list(filter(lambda item: "deleted" in item, page)))
+
+        docs = []
+        operations = {"index": 0, "delete": 0}
+
+        async for doc, _download_func, operation in source.get_docs_incrementally(
+            sync_cursor=sync_cursor
+        ):
+            docs.append(doc)
+            operations[operation] += 1
+
+        # The stale site is still yielded and, crucially, its drive items and
+        # deletions are surfaced instead of being skipped.
+        assert len([doc for doc in docs if doc["object_type"] == "site"]) == 1
+        assert len([doc for doc in docs if doc["object_type"] == "site_drive"]) == len(
+            self.site_drives
+        )
+        assert len([doc for doc in docs if doc["object_type"] == "drive_item"]) == sum(
+            len(i) for i in self.drive_items_delta
+        )
+        assert operations["delete"] == deleted
+        assert deleted > 0
+
+    @pytest.mark.asyncio
     async def test_site_lists(self, patch_sharepoint_client):
         async with create_spo_source(
             use_document_level_security=True, fetch_unique_list_permissions=False
