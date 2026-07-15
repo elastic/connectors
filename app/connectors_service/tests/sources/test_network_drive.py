@@ -34,6 +34,9 @@ from connectors.sources.network_drive import (
     SMBSession,
     UserAccountDisabledException,
 )
+from connectors.sources.network_drive.datasource import (
+    ACCESS_MASK_ALLOWED_WRITE_PERMISSION,
+)
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
 
@@ -133,7 +136,7 @@ def side_effect_function(MAX_CHUNK_SIZE):
     return b"Mock...."
 
 
-def mock_permission(sid, ace):
+def mock_permission(sid, ace, mask=234):
     mock_response = {}
 
     class MockSID:
@@ -144,7 +147,7 @@ def mock_permission(sid, ace):
     mock_response["ace_type"].value = ace
 
     mock_response["mask"] = mock.Mock()
-    mock_response["mask"].value = 234
+    mock_response["mask"].value = mask
 
     mock_response["sid"] = MockSID()
 
@@ -1129,6 +1132,68 @@ async def test_group_allow_ace_member1_allow_member2_deny_ace_then_member1_has_a
             groups_info=mock_groups_info,
         )
         assert document_permissions[ACCESS_CONTROL] == expected_result
+
+
+@pytest.mark.asyncio
+@mock.patch.object(
+    NASDataSource,
+    "list_file_permission",
+    return_value=[
+        # User with only write permission (no read access) allowed.
+        mock_permission(
+            sid="S-2-21-211-411", ace=0, mask=ACCESS_MASK_ALLOWED_WRITE_PERMISSION
+        ),
+    ],
+)
+async def test_write_only_allow_ace_does_not_grant_read_access(
+    mock_list_file_permission,
+):
+    """A user whose only allow ACE grants write (not read) must not see the
+    document, matching Windows where write access does not imply read access."""
+    async with create_source(NASDataSource) as source:
+        source._dls_enabled = MagicMock(return_value=True)
+        document_permissions = await source._decorate_with_access_control(
+            document={"id": "123", "title": "sample.py"},
+            file_path="dummy_url/file1",
+            file_type="file",
+            groups_info={},
+        )
+        assert document_permissions[ACCESS_CONTROL] == []
+
+
+@pytest.mark.asyncio
+@mock.patch.object(
+    NASDataSource,
+    "list_file_permission",
+    return_value=[
+        # Group granted read access.
+        mock_permission(sid="S-1-11-11", ace=0),
+        # Member of that group additionally granted write-only access.
+        mock_permission(
+            sid="S-2-21-211-411", ace=0, mask=ACCESS_MASK_ALLOWED_WRITE_PERMISSION
+        ),
+    ],
+)
+async def test_group_read_access_is_kept_when_member_has_extra_write_only_ace(
+    mock_list_file_permission,
+):
+    """A write-only allow ACE must not revoke read access the user already has
+    through a group's read grant."""
+    mock_groups_info = {
+        "S-1-11-11": {"user-1": "S-2-21-211-411", "user-2": "S-3-23-222-221"}
+    }
+    async with create_source(NASDataSource) as source:
+        source._dls_enabled = MagicMock(return_value=True)
+        document_permissions = await source._decorate_with_access_control(
+            document={"id": "123", "title": "sample.py"},
+            file_path="dummy_url/file1",
+            file_type="file",
+            groups_info=mock_groups_info,
+        )
+        assert sorted(document_permissions[ACCESS_CONTROL]) == [
+            "sid:S-2-21-211-411",
+            "sid:S-3-23-222-221",
+        ]
 
 
 async def test_validate_drive_path():
