@@ -69,12 +69,16 @@ def mock_connector(
     last_sync_scheduled_at_by_job_type=None,
     document_level_security_enabled=True,
     incremental_sync_enabled=False,
+    access_control_sync_scheduling_enabled=True,
 ):
     connector = Mock()
     connector.native = True
     connector.service_type = service_type
     connector.status = status
     connector.configuration = DataSourceConfiguration({})
+    connector.access_control_sync_scheduling = {
+        "enabled": access_control_sync_scheduling_enabled
+    }
     connector.last_sync_scheduled_at_by_job_type.return_value = (
         last_sync_scheduled_at_by_job_type
     )
@@ -217,6 +221,43 @@ async def test_connector_scheduled_access_control_sync_with_insufficient_license
 
     connector.prepare.assert_awaited()
     connector.heartbeat.assert_awaited()
+
+    # only awaited once for a scheduled full sync
+    connector.update_last_sync_scheduled_at_by_job_type.assert_awaited()
+    sync_job_index_mock.create.assert_any_await(
+        connector=connector,
+        trigger_method=JobTriggerMethod.SCHEDULED,
+        job_type=JobType.FULL,
+    )
+    assert sync_job_index_mock.create.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_connector_dls_enabled_but_access_control_sync_scheduling_disabled(
+    connector_index_mock,
+    sync_job_index_mock,
+    set_env,
+):
+    # The DLS feature is enabled, but access control sync scheduling is turned off.
+    # The license should not be checked and no license error should be logged.
+    connector = mock_connector(
+        next_sync=datetime.now(timezone.utc),
+        document_level_security_enabled=True,
+        access_control_sync_scheduling_enabled=False,
+    )
+    connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
+    connector_index_mock.has_active_license_enabled = AsyncMock(
+        return_value=(False, License.BASIC)
+    )
+
+    await create_and_run_service(JobSchedulingService)
+
+    connector.prepare.assert_awaited()
+    connector.heartbeat.assert_awaited()
+
+    # license must not be checked when access control sync scheduling is disabled
+    connector_index_mock.has_active_license_enabled.assert_not_awaited()
+    connector.log_error.assert_not_called()
 
     # only awaited once for a scheduled full sync
     connector.update_last_sync_scheduled_at_by_job_type.assert_awaited()
