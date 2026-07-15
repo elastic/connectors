@@ -49,6 +49,7 @@ DELTA_LINK_KEY = "@odata.deltaLink"
 # See also: https://learn.microsoft.com/en-us/previous-versions/office/sharepoint-csom/ee536458(v=office.15)
 VIEW_ITEM_MASK = 0x1  # View items in lists, documents in document libraries, and Web discussion comments.
 VIEW_PAGE_MASK = 0x20000  # View pages in a Site.
+EDIT_ITEM_MASK = 0x4  # Edit items in lists, edit documents in document libraries, and customize Web Part Pages in document libraries.
 
 # See https://github.com/pnp/pnpcore/blob/dev/src/sdk/PnP.Core/Model/SharePoint/Core/Public/Enums/RoleType.cs
 # See also: https://learn.microsoft.com/en-us/dotnet/api/microsoft.sharepoint.client.roletype?view=sharepoint-csom
@@ -67,6 +68,15 @@ VIEW_ROLE_TYPES = [
     ADMINISTRATOR,
     EDITOR,
     REVIEWER,
+    SYSTEM,
+]
+# Role types that grant edit (or higher) access. READER and REVIEWER are
+# view-only and therefore excluded.
+EDIT_ROLE_TYPES = [
+    CONTRIBUTOR,
+    WEB_DESIGNER,
+    ADMINISTRATOR,
+    EDITOR,
     SYSTEM,
 ]
 

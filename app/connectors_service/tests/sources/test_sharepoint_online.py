@@ -47,6 +47,9 @@ from connectors.sources.sharepoint.sharepoint_online.constants import (
     DEFAULT_RETRY_SECONDS,
     WILDCARD,
 )
+from connectors.sources.sharepoint.sharepoint_online.datasource import (
+    _is_page_published,
+)
 from connectors.sources.sharepoint.sharepoint_online.utils import (
     SyncCursorEmpty,
     _get_login_name,
@@ -144,6 +147,18 @@ WEB_ONLY_BINDING = [
         "Name": "Web-Only Limited Access",
         "Order": 176,
         "RoleTypeKind": 9,
+    }
+]
+
+EDIT_BINDING = [
+    {
+        "BasePermissions": {"High": "432", "Low": "1011030767"},
+        "Description": "Can add, edit and delete lists; can view, add, update and delete list items and documents.",
+        "Hidden": False,
+        "Id": 1073741827,
+        "Name": "Edit",
+        "Order": 48,
+        "RoleTypeKind": 6,
     }
 ]
 
@@ -2414,7 +2429,7 @@ class TestSharepointOnlineDataSource:
 
         async with create_spo_source(use_document_level_security=True) as source:
             source._site_access_control = AsyncMock(
-                return_value=(expected_access_control, [])
+                return_value=(expected_access_control, [], expected_access_control)
             )
 
             results = []
@@ -2524,7 +2539,7 @@ class TestSharepointOnlineDataSource:
     @freeze_time(iso_utc())
     async def test_get_docs_incrementally(self, patch_sharepoint_client):
         async with create_spo_source() as source:
-            source._site_access_control = AsyncMock(return_value=([], []))
+            source._site_access_control = AsyncMock(return_value=([], [], []))
             # mock cache lookup
             source.site_group_users = AsyncMock(return_value=self.site_group_users)
 
@@ -2904,7 +2919,7 @@ class TestSharepointOnlineDataSource:
 
         async with create_spo_source(use_document_level_security=True) as source:
             source._site_access_control = AsyncMock(
-                return_value=(site_access_controls, [])
+                return_value=(site_access_controls, [], site_access_controls)
             )
 
             results = []
@@ -2953,7 +2968,11 @@ class TestSharepointOnlineDataSource:
 
         async with create_spo_source(use_document_level_security=True) as source:
             source._site_access_control = AsyncMock(
-                return_value=([], admin_site_access_controls)
+                return_value=(
+                    [],
+                    admin_site_access_controls,
+                    admin_site_access_controls,
+                )
             )
 
             results = []
@@ -3417,7 +3436,7 @@ class TestSharepointOnlineDataSource:
 
             site = {"id": 1, "webUrl": "some url"}
 
-            access_control, _ = await source._site_access_control(site)
+            access_control, _, _ = await source._site_access_control(site)
 
             two_users = 2
             two_groups = 2
@@ -3935,6 +3954,241 @@ class TestSharepointOnlineDataSource:
             assert all(
                 identity in access_control for identity in expected_access_control
             )
+
+    @pytest.mark.parametrize(
+        "role_assignment, expected_access_control",
+        [
+            (
+                # Reader (view-only) is excluded when edit access is required
+                {
+                    "Member": {
+                        "odata.type": "SP.User",
+                        "UserPrincipalName": USER_ONE_EMAIL,
+                    },
+                    "RoleDefinitionBindings": READ_BINDING,
+                },
+                [],
+            ),
+            (
+                # "Reader" role type (view-only) is excluded
+                {
+                    "Member": {
+                        "odata.type": "SP.User",
+                        "UserPrincipalName": USER_ONE_EMAIL,
+                    },
+                    "RoleDefinitionBindings": [{"RoleTypeKind": 2}],
+                },
+                [],
+            ),
+            (
+                # View item mask only is excluded when edit access is required
+                {
+                    "Member": {
+                        "odata.type": "SP.User",
+                        "UserPrincipalName": USER_ONE_EMAIL,
+                    },
+                    "RoleDefinitionBindings": [{"BasePermissions": {"Low": "1"}}],
+                },
+                [],
+            ),
+            (
+                # Editor binding grants edit access
+                {
+                    "Member": {
+                        "odata.type": "SP.User",
+                        "UserPrincipalName": USER_ONE_EMAIL,
+                    },
+                    "RoleDefinitionBindings": EDIT_BINDING,
+                },
+                [_prefix_user(USER_ONE_EMAIL)],
+            ),
+            (
+                # "Contributor" role type grants edit access
+                {
+                    "Member": {
+                        "odata.type": "SP.User",
+                        "UserPrincipalName": USER_ONE_EMAIL,
+                    },
+                    "RoleDefinitionBindings": [{"RoleTypeKind": 3}],
+                },
+                [_prefix_user(USER_ONE_EMAIL)],
+            ),
+            (
+                # Edit item mask only grants edit access
+                {
+                    "Member": {
+                        "odata.type": "SP.User",
+                        "UserPrincipalName": USER_ONE_EMAIL,
+                    },
+                    "RoleDefinitionBindings": [{"BasePermissions": {"Low": "4"}}],
+                },
+                [_prefix_user(USER_ONE_EMAIL)],
+            ),
+        ],
+    )
+    @pytest.mark.asyncio
+    async def test_get_access_control_from_role_assignment_require_edit_access(
+        self, role_assignment, expected_access_control
+    ):
+        async with create_spo_source() as source:
+            access_control = await source._get_access_control_from_role_assignment(
+                role_assignment, require_edit_access=True
+            )
+
+            assert len(access_control) == len(expected_access_control)
+            assert all(
+                identity in access_control for identity in expected_access_control
+            )
+
+    @pytest.mark.parametrize(
+        "version_string, expected_published",
+        [
+            ("1.0", True),
+            ("3.0", True),
+            ("12.0", True),
+            ("0.1", False),
+            ("3.1", False),
+            ("2.5", False),
+            # Missing/undeterminable version defaults to published
+            (None, True),
+            ("", True),
+            ("5", True),
+            ("not-a-version", True),
+        ],
+    )
+    def test_is_page_published(self, version_string, expected_published):
+        assert _is_page_published(version_string) == expected_published
+
+    @pytest.mark.asyncio
+    @patch(
+        "connectors.sources.sharepoint.sharepoint_online.datasource.ACCESS_CONTROL",
+        ALLOW_ACCESS_CONTROL_PATCHED,
+    )
+    async def test_site_pages_unpublished_page_with_unique_permissions_excludes_viewers(
+        self, patch_sharepoint_client
+    ):
+        viewer = {
+            "Member": {"odata.type": "SP.User", "UserPrincipalName": USER_ONE_EMAIL},
+            "RoleDefinitionBindings": READ_BINDING,
+        }
+        editor = {
+            "Member": {"odata.type": "SP.User", "UserPrincipalName": USER_TWO_EMAIL},
+            "RoleDefinitionBindings": EDIT_BINDING,
+        }
+
+        async with create_spo_source(use_document_level_security=True) as source:
+            source.client.site_pages = AsyncIterator(
+                [
+                    {
+                        "Id": "4",
+                        "Modified": self.day_ago,
+                        "OData__UIVersionString": "2.1",
+                    }
+                ]
+            )
+            source.client.site_page_has_unique_role_assignments = AsyncMock(
+                return_value=True
+            )
+            source.client.site_page_role_assignments = AsyncIterator([viewer, editor])
+
+            pages = [
+                page
+                async for page in source.site_pages(
+                    {"id": "1", "webUrl": "http://fakesharepoint.com/site"},
+                    site_access_control=[],
+                    site_editors_access_control=[],
+                )
+            ]
+
+            assert len(pages) == 1
+            page = pages[0]
+            assert page["published"] is False
+            access_control = page[ALLOW_ACCESS_CONTROL_PATCHED]
+            assert _prefix_user(USER_TWO_EMAIL) in access_control
+            assert _prefix_user(USER_ONE_EMAIL) not in access_control
+
+    @pytest.mark.asyncio
+    @patch(
+        "connectors.sources.sharepoint.sharepoint_online.datasource.ACCESS_CONTROL",
+        ALLOW_ACCESS_CONTROL_PATCHED,
+    )
+    async def test_site_pages_published_page_with_unique_permissions_includes_viewers(
+        self, patch_sharepoint_client
+    ):
+        viewer = {
+            "Member": {"odata.type": "SP.User", "UserPrincipalName": USER_ONE_EMAIL},
+            "RoleDefinitionBindings": READ_BINDING,
+        }
+
+        async with create_spo_source(use_document_level_security=True) as source:
+            source.client.site_pages = AsyncIterator(
+                [
+                    {
+                        "Id": "4",
+                        "Modified": self.day_ago,
+                        "OData__UIVersionString": "2.0",
+                    }
+                ]
+            )
+            source.client.site_page_has_unique_role_assignments = AsyncMock(
+                return_value=True
+            )
+            source.client.site_page_role_assignments = AsyncIterator([viewer])
+
+            pages = [
+                page
+                async for page in source.site_pages(
+                    {"id": "1", "webUrl": "http://fakesharepoint.com/site"},
+                    site_access_control=[],
+                    site_editors_access_control=[],
+                )
+            ]
+
+            assert len(pages) == 1
+            page = pages[0]
+            assert page["published"] is True
+            assert _prefix_user(USER_ONE_EMAIL) in page[ALLOW_ACCESS_CONTROL_PATCHED]
+
+    @pytest.mark.asyncio
+    @patch(
+        "connectors.sources.sharepoint.sharepoint_online.datasource.ACCESS_CONTROL",
+        ALLOW_ACCESS_CONTROL_PATCHED,
+    )
+    async def test_site_pages_unpublished_inherited_page_uses_editors_access_control(
+        self, patch_sharepoint_client
+    ):
+        site_access_control = [_prefix_user("viewer")]
+        site_editors_access_control = [_prefix_user("editor")]
+
+        async with create_spo_source(use_document_level_security=True) as source:
+            source.client.site_pages = AsyncIterator(
+                [
+                    {
+                        "Id": "4",
+                        "Modified": self.day_ago,
+                        "OData__UIVersionString": "2.1",
+                    }
+                ]
+            )
+            source.client.site_page_has_unique_role_assignments = AsyncMock(
+                return_value=False
+            )
+
+            pages = [
+                page
+                async for page in source.site_pages(
+                    {"id": "1", "webUrl": "http://fakesharepoint.com/site"},
+                    site_access_control=site_access_control,
+                    site_editors_access_control=site_editors_access_control,
+                )
+            ]
+
+            assert len(pages) == 1
+            page = pages[0]
+            assert page["published"] is False
+            access_control = page[ALLOW_ACCESS_CONTROL_PATCHED]
+            assert _prefix_user("editor") in access_control
+            assert _prefix_user("viewer") not in access_control
 
     @pytest.mark.parametrize(
         "raw_login_name, expected_login_name",
