@@ -18,10 +18,12 @@ from connectors.sources.microsoft_teams import (
     MicrosoftTeamsDataSource,
 )
 from connectors.sources.microsoft_teams.client import (
+    SCOPE,
     GraphAPIToken,
     InternalServerError,
     NotFound,
     PermissionsMissing,
+    TokenFetchFailed,
 )
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
@@ -1190,6 +1192,72 @@ async def test_get_for_username_password():
     actual_token = await source.get_with_username_password()
 
     assert actual_token == bearer
+
+
+@pytest.mark.asyncio
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+@patch("connectors.sources.microsoft_teams.client.ConfidentialClientApplication")
+async def test_fetch_token_raises_helpful_error_on_missing_consent(mock_app):
+    error_description = (
+        "AADSTS65001: The user or administrator has not consented to use the "
+        "application with ID 'some-app-id'."
+    )
+    mock_app.return_value.acquire_token_by_username_password.return_value = {
+        "error_description": error_description
+    }
+    source = GraphAPIToken(
+        "tenant_id", "client_id", "client_secret", "username", "password"
+    )
+
+    with pytest.raises(TokenFetchFailed) as e:
+        await source._fetch_token()
+
+    # The message should guide the user towards granting admin consent...
+    assert "admin consent" in str(e.value)
+    # ...surface the required delegated permissions...
+    for scope in SCOPE:
+        assert scope in str(e.value)
+    # ...and still include the original Azure AD error.
+    assert error_description in str(e.value)
+    # A consent error is not transient, so the token fetch must not be retried.
+    assert mock_app.return_value.acquire_token_by_username_password.call_count == 1
+
+
+@pytest.mark.asyncio
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+@patch("connectors.sources.microsoft_teams.client.ConfidentialClientApplication")
+async def test_fetch_token_raises_generic_error_on_other_failures(mock_app):
+    error_description = "AADSTS50126: Invalid username or password."
+    mock_app.return_value.acquire_token_by_username_password.return_value = {
+        "error_description": error_description
+    }
+    source = GraphAPIToken(
+        "tenant_id", "client_id", "client_secret", "username", "password"
+    )
+
+    with pytest.raises(TokenFetchFailed) as e:
+        await source._fetch_token()
+
+    assert "admin consent" not in str(e.value)
+    assert error_description in str(e.value)
+    assert mock_app.return_value.acquire_token_by_username_password.call_count == 1
+
+
+@pytest.mark.asyncio
+@patch("connectors.sources.microsoft_teams.client.ConfidentialClientApplication")
+async def test_fetch_token_returns_access_token_on_success(mock_app):
+    mock_app.return_value.acquire_token_for_client.return_value = {
+        "access_token": "token-value",
+        "expires_in": 3600,
+    }
+    source = GraphAPIToken(
+        "tenant_id", "client_id", "client_secret", "username", "password"
+    )
+
+    access_token, expires_in = await source._fetch_token(is_acquire_for_client=True)
+
+    assert access_token == "token-value"
+    assert expires_in == 3600
 
 
 @pytest.mark.asyncio

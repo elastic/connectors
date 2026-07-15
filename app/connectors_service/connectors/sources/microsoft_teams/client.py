@@ -33,6 +33,10 @@ TOKEN_EXPIRES = 3599
 RETRY_COUNT = 3
 RETRY_SECONDS = 30
 RETRY_INTERVAL = 2
+# Azure AD error code returned when admin consent has not been granted for the
+# delegated permissions requested by the app. Retrying does not help - the app
+# owner has to grant admin consent in the Azure portal.
+CONSENT_REQUIRED_ERROR_CODE = "AADSTS65001"
 RUNNING_FTEST = (
     "RUNNING_FTEST" in os.environ
 )  # Flag to check if a connector is run for ftest or not.
@@ -305,6 +309,7 @@ class GraphAPIToken:
         retries=RETRY_COUNT,
         interval=RETRY_INTERVAL,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+        skipped_exceptions=[TokenFetchFailed],
     )
     async def _fetch_token(self, is_acquire_for_client=False):
         """Generate API token for usage with Graph API
@@ -330,7 +335,18 @@ class GraphAPIToken:
                 username=self.username, password=self.password, scopes=SCOPE
             )
         if not token_metadata.get("access_token"):
-            msg = f"Failed to authorize to Graph API. Please verify, that provided details are valid. Error: {token_metadata.get('error_description')}"
+            error_description = token_metadata.get("error_description") or ""
+            if CONSENT_REQUIRED_ERROR_CODE in error_description:
+                msg = (
+                    "Failed to authorize to Graph API: admin consent has not been granted for the "
+                    "permissions required by this connector. In the Azure portal, open your app "
+                    "registration, go to 'API permissions', make sure the delegated Microsoft Graph "
+                    f"permissions ({', '.join(SCOPE)}) are added, then click "
+                    "'Grant admin consent for <your tenant>'. Consent changes can take a few minutes "
+                    f"to propagate before a sync succeeds. Error: {error_description}"
+                )
+            else:
+                msg = f"Failed to authorize to Graph API. Please verify, that provided details are valid. Error: {error_description}"
             raise TokenFetchFailed(msg)
 
         access_token = token_metadata.get("access_token")
