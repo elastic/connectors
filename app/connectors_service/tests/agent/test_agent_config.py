@@ -114,6 +114,76 @@ def test_try_update_with_basic_auth_auth_data():
     assert config_wrapper.get()["elasticsearch"]["password"] == password
 
 
+def test_try_update_with_ssl_verification_mode_none_disables_verify_certs():
+    hosts = ["https://localhost:9200"]
+    api_key = "lemme_in"
+
+    config_wrapper = prepare_config_wrapper()
+    unit_mock = prepare_unit_mock(
+        {
+            "hosts": hosts,
+            "api_key": api_key,
+            "ssl": {"verification_mode": "none"},
+        },
+        None,
+    )
+
+    assert (
+        config_wrapper.try_update(
+            connector_id=CONNECTOR_ID,
+            service_type=SERVICE_TYPE,
+            output_unit=unit_mock,
+        )
+        is True
+    )
+    assert config_wrapper.get()["elasticsearch"]["verify_certs"] is False
+
+
+def test_try_update_with_ssl_verification_mode_full_enables_verify_certs():
+    hosts = ["https://localhost:9200"]
+    api_key = "lemme_in"
+
+    config_wrapper = prepare_config_wrapper()
+    unit_mock = prepare_unit_mock(
+        {
+            "hosts": hosts,
+            "api_key": api_key,
+            "ssl": {"verification_mode": "full"},
+        },
+        None,
+    )
+
+    assert (
+        config_wrapper.try_update(
+            connector_id=CONNECTOR_ID,
+            service_type=SERVICE_TYPE,
+            output_unit=unit_mock,
+        )
+        is True
+    )
+    assert config_wrapper.get()["elasticsearch"]["verify_certs"] is True
+
+
+def test_try_update_without_ssl_config_keeps_default_verify_certs():
+    hosts = ["https://localhost:9200"]
+    api_key = "lemme_in"
+
+    config_wrapper = prepare_config_wrapper()
+    unit_mock = prepare_unit_mock({"hosts": hosts, "api_key": api_key}, None)
+
+    assert (
+        config_wrapper.try_update(
+            connector_id=CONNECTOR_ID,
+            service_type=SERVICE_TYPE,
+            output_unit=unit_mock,
+        )
+        is True
+    )
+    # verify_certs is not overridden, so the Connectors Service default applies
+    assert "verify_certs" not in config_wrapper.get_specific_config()["elasticsearch"]
+    assert config_wrapper.get()["elasticsearch"]["verify_certs"] is True
+
+
 def test_try_update_multiple_times_does_not_reset_config_values():
     hosts = ["https://localhost:9200"]
     api_key = "lemme_in"
