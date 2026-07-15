@@ -4,6 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 
+import json
 import os
 import re
 from collections.abc import Iterable, Sized
@@ -70,6 +71,23 @@ class InternalServerError(Exception):
     pass
 
 
+class DownloadError(Exception):
+    """Exception class to indicate that Sharepoint returned an error payload instead
+    of the actual file content for a download request.
+
+    Sharepoint responds with an HTTP 200 and a JSON error body (rather than the file
+    bytes) when a download cannot be served, for example when the site storage limit
+    or the list view threshold is exceeded. Without detecting this, that error text
+    would be streamed into the file and indexed as document content.
+
+    See:
+    - https://learn.microsoft.com/en-us/sharepoint/manage-site-collection-storage-limits
+    - https://learn.microsoft.com/en-us/sharepoint/troubleshoot/lists-and-libraries/items-exceeds-list-view-threshold
+    """
+
+    pass
+
+
 class ThrottledError(Exception):
     """Internal exception class to indicate that request was throttled by the API"""
 
@@ -98,6 +116,38 @@ class PermissionsMissing(Exception):
     """
 
     pass
+
+
+def _download_error_message(raw_body):
+    """Return a Sharepoint error message if the raw download body is actually an API
+    error payload rather than real file content, otherwise return ``None``.
+
+    Both the Graph API (``{"error": {"code": ..., "message": "..."}}``) and the
+    Sharepoint REST API (``{"error": {"message": {"value": "..."}}}``) error shapes
+    are handled.
+    """
+    try:
+        payload = json.loads(raw_body)
+    except (ValueError, TypeError):
+        # Not JSON at all - definitely not an API error payload.
+        return None
+
+    if not isinstance(payload, dict):
+        return None
+
+    error = payload.get("error")
+    if not isinstance(error, dict):
+        return None
+
+    message = error.get("message")
+    if isinstance(message, dict):
+        # Sharepoint REST API nests the message: {"message": {"value": "..."}}
+        message = message.get("value")
+
+    if isinstance(message, str) and message:
+        return message
+
+    return "Unknown error"
 
 
 class MicrosoftSecurityToken:
@@ -337,9 +387,28 @@ class MicrosoftAPISession:
             return await resp.json()
 
     async def pipe(self, url, stream):
+        # Sharepoint returns an HTTP 200 with a JSON error body (instead of the file
+        # bytes) when a download cannot be served, e.g. the site storage limit or the
+        # list view threshold has been exceeded. If we streamed that body straight to
+        # disk it would be indexed as file content, so we inspect JSON-looking
+        # responses and surface a helpful error instead.
+        download_error_message = None
+
         async with self._get(url) as resp:
-            async for data in resp.content.iter_chunked(FILE_WRITE_CHUNK_SIZE):
-                await stream.write(data)
+            if "json" in (resp.content_type or ""):
+                raw_body = await resp.read()
+                download_error_message = _download_error_message(raw_body)
+                if download_error_message is None:
+                    # A genuine JSON file (e.g. `.json`) was downloaded - write it out.
+                    await stream.write(raw_body)
+            else:
+                async for data in resp.content.iter_chunked(FILE_WRITE_CHUNK_SIZE):
+                    await stream.write(data)
+
+        # Raised outside the request context so it is not swallowed and retried by
+        # the retry wrapper around `_get` - retrying a download-limit error is futile.
+        if download_error_message is not None:
+            raise DownloadError(download_error_message)
 
     async def scroll(self, url):
         scroll_url = url

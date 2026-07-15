@@ -5,6 +5,7 @@
 #
 import asyncio
 import base64
+import json
 import re
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
@@ -29,6 +30,7 @@ from connectors.sources.sharepoint.sharepoint_online import (
 )
 from connectors.sources.sharepoint.sharepoint_online.client import (
     BadRequestError,
+    DownloadError,
     DriveItemsPage,
     EntraAPIToken,
     GraphAPIToken,
@@ -761,6 +763,67 @@ class TestMicrosoftAPISession:
         await microsoft_api_session.pipe(url, stream)
 
         assert stream.read() == file_content
+
+    class AsyncStream:
+        def __init__(self):
+            self.stream = BytesIO()
+
+        async def write(self, data):
+            self.stream.write(data)
+
+        def read(self):
+            return self.stream.getvalue().decode()
+
+    @pytest.mark.asyncio
+    async def test_pipe_raises_download_error_on_graph_error_payload(
+        self, microsoft_api_session, mock_responses
+    ):
+        url = "http://localhost:1234/download-some-sample-file"
+        error_message = (
+            "The file size exceeds the allowed limit. CorrelationId: abc, "
+            "UTC DateTime: 4/21/2022 11:24:22 PM"
+        )
+        stream = self.AsyncStream()
+        mock_responses.get(
+            url, payload={"error": {"code": "x", "message": error_message}}
+        )
+
+        with pytest.raises(DownloadError) as e:
+            await microsoft_api_session.pipe(url, stream)
+
+        assert error_message in str(e.value)
+        assert stream.read() == ""
+
+    @pytest.mark.asyncio
+    async def test_pipe_raises_download_error_on_rest_error_payload(
+        self, microsoft_api_session, mock_responses
+    ):
+        url = "http://localhost:1234/download-some-sample-file"
+        error_message = "The attempted operation is prohibited because it exceeds the list view threshold."
+        stream = self.AsyncStream()
+        mock_responses.get(
+            url, payload={"error": {"message": {"value": error_message}}}
+        )
+
+        with pytest.raises(DownloadError) as e:
+            await microsoft_api_session.pipe(url, stream)
+
+        assert error_message in str(e.value)
+
+    @pytest.mark.asyncio
+    async def test_pipe_writes_json_file_content_when_not_an_error(
+        self, microsoft_api_session, mock_responses
+    ):
+        url = "http://localhost:1234/download-some-sample-file"
+        # A genuine `.json` file download responds with `application/json` but is not
+        # an API error payload, so its content must be written unchanged.
+        payload = {"hello": "world", "nested": {"a": 1}}
+        stream = self.AsyncStream()
+        mock_responses.get(url, payload=payload)
+
+        await microsoft_api_session.pipe(url, stream)
+
+        assert json.loads(stream.read()) == payload
 
     @pytest.mark.asyncio
     async def test_call_api_with_429(
@@ -3325,6 +3388,59 @@ class TestSharepointOnlineDataSource:
                 assert "body" not in download_result
             else:
                 assert download_result is None
+
+    @pytest.mark.asyncio
+    async def test_get_drive_item_content_skips_indexing_on_download_error(
+        self, patch_sharepoint_client
+    ):
+        drive_item = {
+            "id": "1",
+            "size": 15,
+            "lastModifiedDateTime": datetime.now(timezone.utc),
+            "parentReference": {"driveId": "drive-1"},
+            "_original_filename": "file.txt",
+        }
+        error_message = "The file size exceeds the allowed limit."
+
+        async def download_func(drive_id, drive_item_id, async_buffer):
+            raise DownloadError(error_message)
+
+        patch_sharepoint_client.download_drive_item = download_func
+        async with create_spo_source() as source:
+            with patch.object(source._logger, "warning") as mock_warning:
+                download_result = await source.get_drive_item_content(
+                    drive_item, doit=True
+                )
+
+            # The item metadata is still returned, but the erroneous content is skipped.
+            assert "_attachment" not in download_result
+            assert "body" not in download_result
+            assert error_message in mock_warning.call_args[0][0]
+
+    @pytest.mark.asyncio
+    async def test_get_attachment_content_skips_indexing_on_download_error(
+        self, patch_sharepoint_client
+    ):
+        attachment = {"odata.id": "1", "_original_filename": "file.ppt"}
+        error_message = (
+            "The attempted operation is prohibited because it exceeds the "
+            "list view threshold."
+        )
+
+        async def download_func(attachment_id, async_buffer):
+            raise DownloadError(error_message)
+
+        patch_sharepoint_client.download_attachment = download_func
+        async with create_spo_source() as source:
+            with patch.object(source._logger, "warning") as mock_warning:
+                download_result = await source.get_attachment_content(
+                    attachment, doit=True
+                )
+
+            # The attachment metadata is still returned, but the erroneous content is skipped.
+            assert "_attachment" not in download_result
+            assert "body" not in download_result
+            assert error_message in mock_warning.call_args[0][0]
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("filesize", [(15), (10485761)])

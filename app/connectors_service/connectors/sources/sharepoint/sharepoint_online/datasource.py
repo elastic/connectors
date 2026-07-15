@@ -25,6 +25,7 @@ from connectors.access_control import (
 )
 from connectors.es.sink import OP_DELETE, OP_INDEX
 from connectors.sources.sharepoint.sharepoint_online.client import (
+    DownloadError,
     SharepointOnlineClient,
 )
 from connectors.sources.sharepoint.sharepoint_online.constants import (
@@ -1429,6 +1430,19 @@ class SharepointOnlineDataSource(BaseDataSource):
                     file=source_file_name, mode="r"
                 ) as target_file:
                     attachment = (await target_file.read()).strip()
+        except DownloadError as e:
+            # Sharepoint returned an error payload instead of the file content, most
+            # commonly because a download limit was exceeded. Skip indexing the bogus
+            # content and guide the user towards the likely cause.
+            self._logger.warning(
+                f"Could not download '{original_filename}' from Sharepoint: {e}. "
+                "This is commonly caused by Sharepoint download limits being exceeded, "
+                "such as the site storage limit or the list view threshold (5000 items). "
+                "See https://learn.microsoft.com/en-us/sharepoint/manage-site-collection-storage-limits "
+                "and https://learn.microsoft.com/en-us/sharepoint/troubleshoot/lists-and-libraries/items-exceeds-list-view-threshold "
+                "for guidance. Skipping content extraction for this item."
+            )
+            return None, None
         finally:
             if source_file_name:
                 await remove(str(source_file_name))
