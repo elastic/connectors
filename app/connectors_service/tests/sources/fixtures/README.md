@@ -41,7 +41,6 @@ A Docker compose file that needs to run the whole stack:
 
 - Elasticsearch
 - Kibana
-- Enterprise Search
 - Any backend server like MySQL
 
 connector.json
