@@ -10,6 +10,7 @@ Logger -- sets the logging and provides a `logger` global object.
 import contextlib
 import inspect
 import logging
+import sys
 import time
 from datetime import datetime, timezone
 from functools import wraps
@@ -21,6 +22,22 @@ from dateutil.tz import tzlocal
 from connectors_sdk import __version__
 
 logger = None
+
+
+class MaxLevelFilter(logging.Filter):
+    """Only lets through records strictly below ``level``.
+
+    Used to route non-error logs to stdout while errors (and above) are
+    emitted on stderr, so that redirecting stdout (e.g. ``>> logs.txt``)
+    captures the regular service output.
+    """
+
+    def __init__(self, level):
+        super().__init__()
+        self.level = level
+
+    def filter(self, record):
+        return record.levelno < self.level
 
 
 class ColorFormatter(logging.Formatter):
@@ -158,24 +175,45 @@ class ExtraLogger(logging.Logger):
         super(ExtraLogger, self)._log(level, msg, args, exc_info, extra)
 
 
+def _build_formatter(prefix, filebeat):
+    if filebeat:
+        return ecs_logging.StdlibFormatter()
+    return ColorFormatter(prefix)
+
+
+def _stdout_handler():
+    """Handler for non-error logs, so they can be piped via stdout redirection."""
+    handler = logging.StreamHandler(sys.stdout)
+    handler.addFilter(MaxLevelFilter(logging.ERROR))
+    return handler
+
+
+def _stderr_handler():
+    """Handler for error logs (ERROR and above), kept on stderr."""
+    handler = logging.StreamHandler(sys.stderr)
+    handler.setLevel(logging.ERROR)
+    return handler
+
+
 def set_logger(log_level=logging.INFO, filebeat=False):
     global logger
-    if filebeat:
-        formatter = ecs_logging.StdlibFormatter()
-    else:
-        formatter = ColorFormatter("FMWK")
+    formatter = _build_formatter("FMWK", filebeat)
 
     if logger is None:
         logging.setLoggerClass(ExtraLogger)
         logger = logging.getLogger("connectors")
         logger.handlers.clear()
-        handler = logging.StreamHandler()
-        logger.addHandler(handler)
+        logger.addHandler(_stdout_handler())
+        logger.addHandler(_stderr_handler())
 
     logger.propagate = False
     logger.setLevel(log_level)
-    logger.handlers[0].setLevel(log_level)
-    logger.handlers[0].setFormatter(formatter)
+    # Regular logs (below ERROR) follow the configured level and go to stdout;
+    # the stderr handler stays pinned at ERROR so errors are always visible there.
+    stdout_handler, stderr_handler = logger.handlers[0], logger.handlers[1]
+    stdout_handler.setLevel(log_level)
+    stdout_handler.setFormatter(formatter)
+    stderr_handler.setFormatter(formatter)
     logger.filebeat = filebeat  # pyright: ignore
     return logger
 
@@ -183,14 +221,17 @@ def set_logger(log_level=logging.INFO, filebeat=False):
 def set_extra_logger(logger, log_level=logging.INFO, prefix="BYOC", filebeat=False):
     if isinstance(logger, str):
         logger = logging.getLogger(logger)
-    handler = logging.StreamHandler()
-    if filebeat:
-        handler.setFormatter(ecs_logging.StdlibFormatter())
-    else:
-        formatter = ColorFormatter(prefix)
-        handler.setFormatter(formatter)
-    handler.setLevel(log_level)
-    logger.addHandler(handler)
+    formatter = _build_formatter(prefix, filebeat)
+
+    stdout_handler = _stdout_handler()
+    stdout_handler.setFormatter(formatter)
+    stdout_handler.setLevel(log_level)
+
+    stderr_handler = _stderr_handler()
+    stderr_handler.setFormatter(formatter)
+
+    logger.addHandler(stdout_handler)
+    logger.addHandler(stderr_handler)
     logger.setLevel(log_level)
 
 

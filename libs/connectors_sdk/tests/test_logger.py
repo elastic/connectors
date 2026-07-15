@@ -167,12 +167,63 @@ def test_colored_logging(log_level, color):
         def _w(msg):
             logs.append(msg)
 
-        logger.handlers[0].stream.write = _w
+        # capture both the stdout and stderr handler streams
+        for handler in logger.handlers:
+            handler.stream.write = _w
 
         getattr(logger, log_level)("foobar")
 
         assert len(logs) == 1
         assert logs[0].startswith(color)
+
+
+@pytest.mark.parametrize(
+    "log_level, expected_stream",
+    [
+        ("debug", "stdout"),
+        ("info", "stdout"),
+        ("warning", "stdout"),
+        ("error", "stderr"),
+        ("critical", "stderr"),
+    ],
+)
+def test_logs_routed_between_stdout_and_stderr(log_level, expected_stream):
+    with unset_logger():
+        logger = set_logger(logging.DEBUG, filebeat=False)
+
+        stdout_logs = []
+        stderr_logs = []
+
+        stdout_handler, stderr_handler = logger.handlers[0], logger.handlers[1]
+        stdout_handler.stream.write = stdout_logs.append
+        stderr_handler.stream.write = stderr_logs.append
+
+        getattr(logger, log_level)("foobar")
+
+        if expected_stream == "stdout":
+            assert len(stdout_logs) == 1
+            assert len(stderr_logs) == 0
+        else:
+            assert len(stdout_logs) == 0
+            assert len(stderr_logs) == 1
+
+
+def test_set_extra_logger_routes_between_stdout_and_stderr():
+    with unset_logger():
+        extra = logging.getLogger("test_extra_logger")
+        extra.handlers.clear()
+        connectors_sdk.logger.set_extra_logger(extra, log_level=logging.DEBUG)
+
+        stdout_logs = []
+        stderr_logs = []
+        extra.handlers[0].stream.write = stdout_logs.append
+        extra.handlers[1].stream.write = stderr_logs.append
+
+        extra.info("info message")
+        extra.error("error message")
+
+        assert len(stdout_logs) == 1
+        assert len(stderr_logs) == 1
 
 
 # first param is UTC time, second param is offset we run with
@@ -201,7 +252,9 @@ def test_colored_logging_with_filebeat():
         def _w(msg):
             logs.append(msg)
 
-        logger.handlers[0].stream.write = _w
+        # capture both the stdout and stderr handler streams
+        for handler in logger.handlers:
+            handler.stream.write = _w
 
         logger.debug("foobar")
         logger.info("foobar")
