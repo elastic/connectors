@@ -610,7 +610,13 @@ class NASDataSource(BaseDataSource):
                 # Else the SID corresponds to a user, hence we use it directly.
                 permissions = [_prefix_sid(sid)]
             if (
-                ace_type == ACCESS_ALLOWED_TYPE
+                # A write-only allow ACE grants write without read, so it must
+                # not grant read access (mirrors Windows, where write-only users
+                # cannot view the document).
+                (
+                    ace_type == ACCESS_ALLOWED_TYPE
+                    and mask != ACCESS_MASK_ALLOWED_WRITE_PERMISSION
+                )
                 or mask == ACCESS_MASK_DENIED_WRITE_PERMISSION
             ):
                 allow_permissions.extend(permissions)

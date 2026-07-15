@@ -34,6 +34,10 @@ from connectors.sources.network_drive import (
     SMBSession,
     UserAccountDisabledException,
 )
+from connectors.sources.network_drive.datasource import (
+    ACCESS_MASK_ALLOWED_WRITE_PERMISSION,
+    ACCESS_MASK_DENIED_WRITE_PERMISSION,
+)
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
 
@@ -133,7 +137,7 @@ def side_effect_function(MAX_CHUNK_SIZE):
     return b"Mock...."
 
 
-def mock_permission(sid, ace):
+def mock_permission(sid, ace, mask=234):
     mock_response = {}
 
     class MockSID:
@@ -144,7 +148,7 @@ def mock_permission(sid, ace):
     mock_response["ace_type"].value = ace
 
     mock_response["mask"] = mock.Mock()
-    mock_response["mask"].value = 234
+    mock_response["mask"].value = mask
 
     mock_response["sid"] = MockSID()
 
@@ -1127,6 +1131,92 @@ async def test_group_allow_ace_member1_allow_member2_deny_ace_then_member1_has_a
             file_path="dummy_url/file1",
             file_type="file",
             groups_info=mock_groups_info,
+        )
+        assert document_permissions[ACCESS_CONTROL] == expected_result
+
+
+@pytest.mark.asyncio
+@mock.patch.object(
+    NASDataSource,
+    "list_file_permission",
+    return_value=[
+        # User granted write-only permission (no read access)
+        mock_permission(
+            sid="S-2-21-211-411",
+            ace=0,
+            mask=ACCESS_MASK_ALLOWED_WRITE_PERMISSION,
+        ),
+    ],
+)
+async def test_write_only_allow_ace_does_not_grant_read_access(
+    mock_list_file_permission,
+):
+    expected_result = []  # Write-only users must not be able to read the document
+    async with create_source(NASDataSource) as source:
+        source._dls_enabled = MagicMock(return_value=True)
+        document_permissions = await source._decorate_with_access_control(
+            document={"id": "123", "title": "sample.py"},
+            file_path="dummy_url/file1",
+            file_type="file",
+            groups_info={},
+        )
+        assert document_permissions[ACCESS_CONTROL] == expected_result
+
+
+@pytest.mark.asyncio
+@mock.patch.object(
+    NASDataSource,
+    "list_file_permission",
+    return_value=[
+        # User 1 has a regular allow (read) permission
+        mock_permission(sid="S-2-21-211-411", ace=0),
+        # User 2 is only granted write access, so must not be able to read
+        mock_permission(
+            sid="S-3-23-222-221",
+            ace=0,
+            mask=ACCESS_MASK_ALLOWED_WRITE_PERMISSION,
+        ),
+    ],
+)
+async def test_write_only_allow_ace_excluded_while_read_allow_ace_kept(
+    mock_list_file_permission,
+):
+    expected_result = ["sid:S-2-21-211-411"]  # Only the reader retains access
+    async with create_source(NASDataSource) as source:
+        source._dls_enabled = MagicMock(return_value=True)
+        document_permissions = await source._decorate_with_access_control(
+            document={"id": "123", "title": "sample.py"},
+            file_path="dummy_url/file1",
+            file_type="file",
+            groups_info={},
+        )
+        assert document_permissions[ACCESS_CONTROL] == expected_result
+
+
+@pytest.mark.asyncio
+@mock.patch.object(
+    NASDataSource,
+    "list_file_permission",
+    return_value=[
+        # Deny ACE that only denies write must still leave read access intact
+        mock_permission(
+            sid="S-2-21-211-411",
+            ace=1,
+            mask=ACCESS_MASK_DENIED_WRITE_PERMISSION,
+        ),
+    ],
+)
+async def test_deny_write_only_ace_still_grants_read_access(
+    mock_list_file_permission,
+):
+    expected_result = ["sid:S-2-21-211-411"]  # Deny-write does not remove read
+    async with create_source(NASDataSource) as source:
+        source._dls_enabled = MagicMock(return_value=True)
+        document_permissions = await source._decorate_with_access_control(
+            document={"id": "123", "title": "sample.py"},
+            file_path="dummy_url/file1",
+            file_type="file",
+            groups_info={},
         )
         assert document_permissions[ACCESS_CONTROL] == expected_result
 
