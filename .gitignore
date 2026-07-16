@@ -20,3 +20,12 @@ config.yml
 .venv
 **/venv
 scripts/stack/connectors-config
+
+# Local secrets and credentials -- never commit these
+.env
+.env.*
+*.pem
+*.key
+*credentials*
+*secret*
+kubeconfig
