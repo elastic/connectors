@@ -137,8 +137,9 @@ def test_help_page(commands):
 def test_group_help_without_subcommands(group):
     runner = CliRunner()
     result = runner.invoke(cli, [group])
-    # Click 8.2+: no_args_is_help shows help and exits 2 (was 0 in 8.1.x).
-    assert result.exit_code == 2
+    # Groups mirror the root CLI: print help and exit 0 (not Click 8.2+
+    # no_args_is_help exit 2).
+    assert result.exit_code == 0
     assert "Usage:" in result.output
     assert "Options:" in result.output
     assert "Commands:" in result.output
