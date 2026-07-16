@@ -6368,7 +6368,7 @@ Apache Software License
 
 pyasn1
 0.6.4
-BSD License
+BSD-2-Clause
 Copyright (c) 2005-2020, Ilya Etingof <etingof@gmail.com>
 All rights reserved.
 
@@ -6396,7 +6396,7 @@ POSSIBILITY OF SUCH DAMAGE.
 
 
 pyasn1_modules
-0.4.1
+0.4.2
 BSD License
 Copyright (c) 2005-2020, Ilya Etingof <etingof@gmail.com>
 All rights reserved.
