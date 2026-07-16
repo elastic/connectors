@@ -57,7 +57,7 @@ dependencies = [
     "smbprotocol==1.10.1",
     "motor==3.4.0",
     "pyOpenSSL==24.3.0",
-    "pyasn1<0.6.1",
+    "pyasn1==0.6.4",
     "pydantic==2.10.6",
     "PyJWT==2.13.0",
     "pympler==1.0.1",
@@ -144,6 +144,11 @@ filterwarnings = [
     "ignore::pytest.PytestUnraisableExceptionWarning",
     # this error comes from 8.16 Elasticsearch client: we use some non-GA features in our CI code
     "ignore::elasticsearch.exceptions.GeneralAvailabilityWarning",
+    # ldap3 2.9.1 (last release, unmaintained) imports the deprecated pyasn1 tagMap/typeMap
+    # aliases, renamed to TAG_MAP/TYPE_MAP in pyasn1 0.6.1+. The aliases still work; the warning
+    # is benign. Needed to allow pyasn1>=0.6.4 (CVE-2026-30922 fix).
+    "ignore:tagMap is deprecated:DeprecationWarning",
+    "ignore:typeMap is deprecated:DeprecationWarning",
 ]
 
 [tool.pyright]
