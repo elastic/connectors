@@ -35,7 +35,6 @@ dependencies = [
     "click==8.1.7",
     "colorama==0.4.6",
     "cron-schedule-triggers==0.0.11",
-    "dropbox==11.36.2",
     "ecs-logging==2.0.0",
     "elastic-agent-client==0.0.1.dev2",
     "elastic-transport==8.17.1",
