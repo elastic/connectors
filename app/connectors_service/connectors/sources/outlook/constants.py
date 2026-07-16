@@ -16,8 +16,6 @@ API_SCOPE = "https://graph.microsoft.com/.default"
 EWS_ENDPOINT = "https://outlook.office365.com/EWS/Exchange.asmx"
 TOP = 999
 
-DEFAULT_TIMEZONE = "UTC"
-
 INBOX_MAIL_OBJECT = "Inbox Mails"
 SENT_MAIL_OBJECT = "Sent Mails"
 JUNK_MAIL_OBJECT = "Junk Mails"
