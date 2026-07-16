@@ -17,6 +17,7 @@ import requests.adapters
 from exchangelib import (
     IMPERSONATION,
     OAUTH2,
+    UTC,
     Account,
     Configuration,
     Credentials,
@@ -24,8 +25,24 @@ from exchangelib import (
     Identity,
     OAuth2Credentials,
 )
-from exchangelib.errors import ErrorFolderNotFound, ErrorNonExistentMailbox
-from exchangelib.items import Contact, DistributionList
+from exchangelib.attachments import FileAttachment
+from exchangelib.errors import (
+    ErrorAccessDenied,
+    ErrorFolderNotFound,
+    ErrorManagedFolderNotFound,
+    ErrorNonExistentMailbox,
+)
+from exchangelib.folders import Calendar, Messages
+from exchangelib.items import (
+    CalendarItem,
+    Contact,
+    DistributionList,
+    MeetingCancellation,
+    MeetingRequest,
+    MeetingResponse,
+    Message,
+    Task,
+)
 from exchangelib.protocol import BaseProtocol, NoVerifyHTTPAdapter
 from ldap3 import SAFE_SYNC, Connection, Server
 
@@ -57,8 +74,6 @@ OUTLOOK_CLOUD = "outlook_cloud"
 API_SCOPE = "https://graph.microsoft.com/.default"
 EWS_ENDPOINT = "https://outlook.office365.com/EWS/Exchange.asmx"
 TOP = 999
-
-DEFAULT_TIMEZONE = "UTC"
 
 INBOX_MAIL_OBJECT = "Inbox Mails"
 SENT_MAIL_OBJECT = "Sent Mails"
@@ -151,6 +166,14 @@ CALENDAR_FIELDS = [
 ]
 
 END_SIGNAL = "FINISHED"
+
+# Folder-absent faults: skip the folder, keep syncing.
+FOLDER_SKIP_ERRORS = (ErrorFolderNotFound, ErrorManagedFolderNotFound)
+
+# Item types each formatter can render; a test keeps them in sync with exchangelib.
+MAIL_ITEM_TYPES = (Message, MeetingRequest, MeetingResponse, MeetingCancellation)
+CALENDAR_ITEM_TYPES = (CalendarItem,)
+TASK_ITEM_TYPES = (Task,)
 
 
 def ews_format_to_datetime(source_datetime, timezone):
@@ -715,35 +738,51 @@ class OutlookClient:
             try:
                 # Resolve folders off the event loop (blocking exchangelib call).
                 if mail_type["folder"] == "archive":
-                    # msg_folder_root is locale-agnostic; the "Archive" leaf has no
-                    # distinguished ID, so resolve it by name and skip if absent.
+                    # "Archive" has no distinguished ID; resolve by name, skip if absent.
                     folder_object = await asyncio.to_thread(
                         lambda: account.msg_folder_root / "Archive"
                     )
+                    # A non-mail "Archive" folder can't take MAIL_FIELDS.
+                    if not isinstance(folder_object, Messages):
+                        self._logger.debug(
+                            f"Skipping 'Archive' folder for {account.primary_smtp_address}: "
+                            f"not a mail folder ({type(folder_object).__name__})"
+                        )
+                        continue
                 else:
                     folder_object = await asyncio.to_thread(
                         getattr, account, mail_type["folder"]
                     )
-            except ErrorFolderNotFound:
+            except FOLDER_SKIP_ERRORS:
                 self._logger.warning(
                     f"Could not resolve {mail_type['folder']} folder for "
                     f"{account.primary_smtp_address}, skipping."
                 )
                 continue
 
-            for mail in await asyncio.to_thread(folder_object.all().only, *MAIL_FIELDS):
+            # Materialize the queryset in the thread; iterating it lazily would
+            # run the blocking EWS fetch back on the event loop.
+            mails = await asyncio.to_thread(
+                lambda folder=folder_object: list(folder.all().only(*MAIL_FIELDS))
+            )
+            for mail in mails:
                 yield mail, mail_type
 
     async def get_calendars(self, account):
         # Resolve the folder off the event loop (blocking call); skip if absent.
         try:
             folder = await asyncio.to_thread(getattr, account, "calendar")
-        except ErrorFolderNotFound:
+        except FOLDER_SKIP_ERRORS:
             self._logger.warning(
                 f"Could not resolve Calendar folder for {account.primary_smtp_address}, skipping."
             )
             return
-        for calendar in await asyncio.to_thread(folder.all().only, *CALENDAR_FIELDS):
+        # Materialize the queryset in the thread; lazy iteration would run the
+        # blocking EWS fetch back on the event loop.
+        calendars = await asyncio.to_thread(
+            lambda: list(folder.all().only(*CALENDAR_FIELDS))
+        )
+        for calendar in calendars:
             yield calendar
 
     async def get_child_calendars(self, account):
@@ -752,28 +791,42 @@ class OutlookClient:
             child_calendars = await asyncio.to_thread(
                 lambda: list(account.calendar.children)
             )
-        except ErrorFolderNotFound:
+        except FOLDER_SKIP_ERRORS:
             self._logger.warning(
                 f"Could not resolve Calendar folder for {account.primary_smtp_address}, "
                 "skipping child calendars."
             )
             return
         for child_calendar in child_calendars:
-            for calendar in await asyncio.to_thread(
-                child_calendar.all().only, *CALENDAR_FIELDS
-            ):
+            # A non-calendar child can't take CALENDAR_FIELDS; skip it up front.
+            if not isinstance(child_calendar, Calendar):
+                self._logger.debug(
+                    f"Skipping non-calendar child folder "
+                    f"{getattr(child_calendar, 'name', 'unknown')} "
+                    f"({type(child_calendar).__name__}) for {account.primary_smtp_address}"
+                )
+                continue
+            # Materialize the queryset in the thread; lazy iteration would run the
+            # blocking EWS fetch back on the event loop.
+            calendars = await asyncio.to_thread(
+                lambda child=child_calendar: list(child.all().only(*CALENDAR_FIELDS))
+            )
+            for calendar in calendars:
                 yield calendar, child_calendar
 
     async def get_tasks(self, account):
         # Resolve the folder off the event loop (blocking call); skip if absent.
         try:
             folder = await asyncio.to_thread(getattr, account, "tasks")
-        except ErrorFolderNotFound:
+        except FOLDER_SKIP_ERRORS:
             self._logger.warning(
                 f"Could not resolve Tasks folder for {account.primary_smtp_address}, skipping."
             )
             return
-        for task in await asyncio.to_thread(folder.all().only, *TASK_FIELDS):
+        # Materialize the queryset in the thread; lazy iteration would run the
+        # blocking EWS fetch back on the event loop.
+        tasks = await asyncio.to_thread(lambda: list(folder.all().only(*TASK_FIELDS)))
+        for task in tasks:
             yield task
 
     async def get_contacts(self, account):
@@ -781,14 +834,17 @@ class OutlookClient:
         # it off the event loop (blocking call); skip if absent.
         try:
             folder = await asyncio.to_thread(getattr, account, "contacts")
-        except ErrorFolderNotFound:
+        except FOLDER_SKIP_ERRORS:
             self._logger.warning(
                 f"Could not resolve Contacts folder for {account.primary_smtp_address}, skipping."
             )
             return
-        for contact in await asyncio.to_thread(
-            folder.all().only, *CONTACT_FOLDER_FIELDS
-        ):
+        # Materialize the queryset in the thread; lazy iteration would run the
+        # blocking EWS fetch back on the event loop.
+        contacts = await asyncio.to_thread(
+            lambda: list(folder.all().only(*CONTACT_FOLDER_FIELDS))
+        )
+        for contact in contacts:
             yield contact
 
 
@@ -1062,11 +1118,25 @@ class OutlookDataSource(BaseDataSource):
         if not attachment.attachment_id:
             return
 
+        # Only FileAttachment exposes raw `content`; ItemAttachment does not.
+        if not isinstance(attachment, FileAttachment):
+            self._logger.debug(
+                f"Skipping non-file attachment {attachment.attachment_id.id} "
+                f"({type(attachment).__name__})"
+            )
+            return
+
+        # `size` is optional in EWS and may be None.
         file_size = attachment.size
-        if not (doit and file_size > 0):
+        if not (doit and file_size and file_size > 0):
             return
 
         filename = attachment.name
+        if not filename:
+            self._logger.debug(
+                f"Skipping attachment {attachment.attachment_id.id} without a filename"
+            )
+            return
         file_extension = self.get_file_extension(filename)
         if not self.can_file_be_downloaded(
             file_extension,
@@ -1122,6 +1192,14 @@ class OutlookDataSource(BaseDataSource):
 
     async def _fetch_mails(self, account, timezone):
         async for mail, mail_type in self.client.get_mails(account=account):
+            # Skip strays lacking mail fields (e.g. `sender`).
+            if not isinstance(mail, MAIL_ITEM_TYPES):
+                self._logger.warning(
+                    f"Skipping non-mail item {type(mail).__name__} "
+                    f"({getattr(mail, 'id', 'unknown')}) in "
+                    f"{mail_type['constant']} for {account.primary_smtp_address}"
+                )
+                continue
             document = self.doc_formatter.mails_doc_formatter(
                 mail=mail,
                 mail_type=mail_type,
@@ -1146,8 +1224,7 @@ class OutlookDataSource(BaseDataSource):
     async def _fetch_contacts(self, account, timezone):
         self._logger.debug(f"Fetching contacts for {account.primary_smtp_address}")
         async for contact in self.client.get_contacts(account=account):
-            # Contacts folder returns only Contact or DistributionList; any other
-            # type breaks that assumption, so fail loudly instead of guessing.
+            # Route Contact vs DistributionList; skip anything else.
             if isinstance(contact, Contact):
                 document = self.doc_formatter.contact_doc_formatter(
                     contact=contact,
@@ -1159,12 +1236,14 @@ class OutlookDataSource(BaseDataSource):
                     timezone=timezone,
                 )
             else:
-                msg = (
-                    f"Unexpected Contacts item type {type(contact).__name__} for "
+                self._logger.warning(
+                    f"Skipping unexpected Contacts item type "
+                    f"{type(contact).__name__} "
+                    f"({getattr(contact, 'id', 'unknown')}) for "
                     f"{account.primary_smtp_address}; expected Contact or "
                     "DistributionList"
                 )
-                raise TypeError(msg)
+                continue
             yield (
                 self._decorate_with_access_control(
                     document, [account.primary_smtp_address]
@@ -1175,6 +1254,14 @@ class OutlookDataSource(BaseDataSource):
     async def _fetch_tasks(self, account, timezone):
         self._logger.debug(f"Fetching tasks for {account.primary_smtp_address}")
         async for task in self.client.get_tasks(account=account):
+            # Skip strays lacking task fields (e.g. `status`).
+            if not isinstance(task, TASK_ITEM_TYPES):
+                self._logger.warning(
+                    f"Skipping non-task item {type(task).__name__} "
+                    f"({getattr(task, 'id', 'unknown')}) in tasks folder "
+                    f"for {account.primary_smtp_address}"
+                )
+                continue
             document = self.doc_formatter.task_doc_formatter(
                 task=task, timezone=timezone
             )
@@ -1221,6 +1308,15 @@ class OutlookDataSource(BaseDataSource):
                 yield doc
 
     async def _enqueue_calendars(self, calendar, child_calendar, timezone, account):
+        # Skip strays lacking calendar fields (e.g. `type`).
+        if not isinstance(calendar, CALENDAR_ITEM_TYPES):
+            self._logger.warning(
+                f"Skipping non-calendar item {type(calendar).__name__} "
+                f"({getattr(calendar, 'id', 'unknown')}) in calendar folder "
+                f"for {account.primary_smtp_address}"
+            )
+            return
+
         document = self.doc_formatter.calendar_doc_formatter(
             calendar=calendar,
             child_calendar=str(child_calendar),
@@ -1257,7 +1353,7 @@ class OutlookDataSource(BaseDataSource):
             dictionary: dictionary containing meta-data of the files.
         """
         async for account in self.client._get_user_instance.get_user_accounts():
-            timezone = account.default_timezone or DEFAULT_TIMEZONE
+            timezone = account.default_timezone or UTC
             try:
                 async for mail in self._fetch_mails(account=account, timezone=timezone):
                     yield mail
@@ -1279,13 +1375,10 @@ class OutlookDataSource(BaseDataSource):
                     account=account, timezone=timezone
                 ):
                     yield child_calendar
-            except ErrorNonExistentMailbox:
-                # A missing mailbox is specific to this account, so skip it and
-                # keep syncing the rest. Connection-wide failures (e.g. TLS
-                # errors) are intentionally not caught here: they affect every
-                # account, and silently skipping them would yield an empty but
-                # "successful" sync that deletes previously indexed documents.
+            except (ErrorNonExistentMailbox, ErrorAccessDenied) as error:
+                # Account-specific failure: skip this account. Connection-wide errors
+                # propagate so an empty "successful" sync can't wipe the index.
                 self._logger.warning(
                     f"Skipping account {account.primary_smtp_address}: "
-                    "the SMTP address has no associated mailbox."
+                    f"{error.__class__.__name__}."
                 )
