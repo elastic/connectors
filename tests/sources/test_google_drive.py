@@ -38,13 +38,18 @@ MORE_THAN_DEFAULT_FILE_SIZE_LIMIT = 10485760 + 1
 
 @asynccontextmanager
 async def create_gdrive_source(**kwargs):
-    async with create_source(
-        GoogleDriveDataSource,
-        service_account_credentials=SERVICE_ACCOUNT_CREDENTIALS,
-        use_document_level_security=False,
-        **kwargs,
-    ) as source:
-        yield source
+    # Avoid real HTTP to Google's Discovery Service (Aiogoogle.discover).
+    with mock.patch.object(
+        Aiogoogle, "discover", new_callable=mock.AsyncMock
+    ) as mock_discover:
+        mock_discover.return_value = mock.MagicMock()
+        async with create_source(
+            GoogleDriveDataSource,
+            service_account_credentials=SERVICE_ACCOUNT_CREDENTIALS,
+            use_document_level_security=False,
+            **kwargs,
+        ) as source:
+            yield source
 
 
 @pytest.mark.asyncio
