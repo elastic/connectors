@@ -20,7 +20,7 @@ classifiers = [
 requires-python = ">=3.10,<3.12"
 dependencies = [
     "aiofiles==23.2.1",
-    "aiohttp==3.12.14",
+    "aiohttp==3.13.3",
     "base64io==1.0.3",
     "fastjsonschema==2.16.2",
     "ecs-logging==2.0.0",
