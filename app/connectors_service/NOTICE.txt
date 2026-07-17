@@ -2673,8 +2673,8 @@ SOFTWARE.
 
 
 click
-8.1.7
-BSD License
+8.3.3
+BSD-3-Clause
 Copyright 2014 Pallets
 
 Redistribution and use in source and binary forms, with or without
