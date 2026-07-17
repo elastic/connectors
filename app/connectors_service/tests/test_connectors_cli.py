@@ -20,6 +20,78 @@ from connectors.protocol.connectors import JobStatus
 from connectors.protocol.connectors import SyncJob as SyncJobObject
 from tests.commons import AsyncIterator
 
+# Prompt order for `connector create` matches option definitions in
+# connectors_cli.create: --index-name, --index-language, --name (always),
+# then service-type configuration fields unless --from-file supplies them.
+# Click 8.2+ no longer applies prompt defaults on EOF, so optional fields need
+# an explicit value or a blank line.
+
+_DEFAULT_CREATE_OPTIONS = {
+    "index_name": "test_connector",
+    "language": "en",
+    "connector_name": "test-connector-name",
+}
+
+_DEFAULT_MONGODB_CONFIG = {
+    "host": "http://localhost/",
+    "user": "username",
+    "password": "password",
+    "database": "database",
+    "collection": "collection",
+    "direct_connection": "False",
+    "ssl_enabled": "False",
+    "datetime_conversion": "",  # blank line -> schema default
+}
+
+
+def _cli_stdin(*lines):
+    return "\n".join(lines) + "\n"
+
+
+def _create_option_prompts(
+    index_name=_DEFAULT_CREATE_OPTIONS["index_name"],
+    language=_DEFAULT_CREATE_OPTIONS["language"],
+    connector_name=_DEFAULT_CREATE_OPTIONS["connector_name"],
+):
+    """Stdin for Click options only (from-file creates / early Abort paths)."""
+    return _cli_stdin(index_name, language, connector_name)
+
+
+def _mongodb_config_prompts(**overrides):
+    """Stdin for interactive MongoDB configuration prompts after Click options."""
+    values = {**_DEFAULT_MONGODB_CONFIG, **overrides}
+    return _cli_stdin(
+        values["host"],
+        values["user"],
+        values["password"],
+        values["database"],
+        values["collection"],
+        values["direct_connection"],
+        values["ssl_enabled"],
+        values["datetime_conversion"],
+    )
+
+
+def _mongodb_create_cli_input(**option_kwargs):
+    """Full stdin for interactive `connector create --service-type mongodb`."""
+    return _create_option_prompts(**option_kwargs) + _mongodb_config_prompts()
+
+
+def _assert_mongodb_create_doc(doc, *, index_name, connector_name, language="en"):
+    """Assert Click option + Mongo config prompts landed in the indexed document."""
+    assert doc["index_name"] == index_name
+    assert doc["name"] == connector_name
+    assert doc["language"] == language
+    assert doc["service_type"] == "mongodb"
+    configuration = doc["configuration"]
+    assert configuration["host"]["value"] == _DEFAULT_MONGODB_CONFIG["host"]
+    assert configuration["user"]["value"] == _DEFAULT_MONGODB_CONFIG["user"]
+    assert configuration["password"]["value"] == _DEFAULT_MONGODB_CONFIG["password"]
+    assert configuration["database"]["value"] == _DEFAULT_MONGODB_CONFIG["database"]
+    assert configuration["collection"]["value"] == _DEFAULT_MONGODB_CONFIG["collection"]
+    assert configuration["direct_connection"]["value"] is False
+    assert configuration["ssl_enabled"]["value"] is False
+
 
 @pytest.fixture(autouse=True)
 def mock_cli_config():
@@ -54,6 +126,20 @@ def test_version(commands):
 def test_help_page(commands):
     runner = CliRunner()
     result = runner.invoke(cli, commands)
+    # Root group uses invoke_without_command + custom help; exit stays 0.
+    assert result.exit_code == 0
+    assert "Usage:" in result.output
+    assert "Options:" in result.output
+    assert "Commands:" in result.output
+
+
+@pytest.mark.parametrize("group", ["connector", "index", "job"])
+def test_group_help_without_subcommands(group):
+    runner = CliRunner()
+    result = runner.invoke(cli, [group])
+    # Groups mirror the root CLI: print help and exit 0 (not Click 8.2+
+    # no_args_is_help exit 2).
+    assert result.exit_code == 0
     assert "Usage:" in result.output
     assert "Options:" in result.output
     assert "Commands:" in result.output
@@ -172,20 +258,6 @@ def test_connector_list_one_connector():
 def test_connector_create(patch_click_confirm):
     runner = CliRunner()
 
-    # configuration for the MongoDB connector
-    input_params = "\n".join(
-        [
-            "test_connector",
-            "en",
-            "http://localhost/",
-            "username",
-            "password",
-            "database",
-            "collection",
-            "False",
-        ]
-    )
-
     with patch(
         "connectors.protocol.connectors.ConnectorIndex.index",
         AsyncMock(return_value={"_id": "new_connector_id"}),
@@ -193,13 +265,17 @@ def test_connector_create(patch_click_confirm):
         result = runner.invoke(
             cli,
             ["connector", "create", "--service-type", "mongodb"],
-            input=input_params,
+            input=_mongodb_create_cli_input(),
         )
 
         patched_create.assert_called_once()
         assert result.exit_code == 0
-
         assert "has been created" in result.output
+        _assert_mongodb_create_doc(
+            patched_create.call_args[0][0],
+            index_name=_DEFAULT_CREATE_OPTIONS["index_name"],
+            connector_name=_DEFAULT_CREATE_OPTIONS["connector_name"],
+        )
 
 
 @pytest.mark.parametrize(
@@ -221,20 +297,6 @@ def test_connector_create_with_native_flags(
 ):
     runner = CliRunner()
 
-    # configuration for the MongoDB connector
-    input_params = "\n".join(
-        [
-            input_index_name,
-            "en",
-            "http://localhost/",
-            "username",
-            "password",
-            "database",
-            "collection",
-            "False",
-        ]
-    )
-
     with patch(
         "connectors.protocol.connectors.ConnectorIndex.index",
         AsyncMock(return_value={"_id": "new_connector_id"}),
@@ -243,13 +305,19 @@ def test_connector_create_with_native_flags(
         if native_flag:
             args.append(native_flag)
 
-        result = runner.invoke(cli, args, input=input_params)
+        result = runner.invoke(
+            cli, args, input=_mongodb_create_cli_input(index_name=input_index_name)
+        )
 
         patched_create.assert_called_once()
         assert result.exit_code == 0
-
         assert "has been created" in result.output
         assert expected_index_name in result.output
+        _assert_mongodb_create_doc(
+            patched_create.call_args[0][0],
+            index_name=expected_index_name,
+            connector_name=_DEFAULT_CREATE_OPTIONS["connector_name"],
+        )
 
 
 @patch("click.confirm")
@@ -264,20 +332,6 @@ def test_connector_create_with_native_flags(
 def test_connector_create_from_index(patch_click_confirm):
     runner = CliRunner()
 
-    # configuration for the MongoDB connector
-    input_params = "\n".join(
-        [
-            "test-connector",
-            "en",
-            "http://localhost/",
-            "username",
-            "password",
-            "database",
-            "collection",
-            "False",
-        ]
-    )
-
     with patch(
         "connectors.protocol.connectors.ConnectorIndex.index",
         AsyncMock(return_value={"_id": "new_connector_id"}),
@@ -285,13 +339,17 @@ def test_connector_create_from_index(patch_click_confirm):
         result = runner.invoke(
             cli,
             ["connector", "create", "--service-type", "mongodb", "--from-index"],
-            input=input_params,
+            input=_mongodb_create_cli_input(index_name="test-connector"),
         )
 
         patched_create.assert_called_once()
         assert result.exit_code == 0
-
         assert "has been created" in result.output
+        _assert_mongodb_create_doc(
+            patched_create.call_args[0][0],
+            index_name="test-connector",
+            connector_name=_DEFAULT_CREATE_OPTIONS["connector_name"],
+        )
 
 
 @pytest.mark.parametrize(
@@ -314,20 +372,6 @@ def test_connector_create_fails_when_index_or_connector_exists(
 ):
     runner = CliRunner()
 
-    # configuration for the MongoDB connector
-    input_params = "\n".join(
-        [
-            "test-connector",
-            "en",
-            "http://localhost/",
-            "username",
-            "password",
-            "database",
-            "collection",
-            "False",
-        ]
-    )
-
     with patch(
         "connectors.cli.index.Index.index_or_connector_exists",
         MagicMock(return_value=[index_exists, connector_exists]),
@@ -340,11 +384,14 @@ def test_connector_create_fails_when_index_or_connector_exists(
             if from_index_flag:
                 args.append("--from-index")
 
-            result = runner.invoke(cli, args, input=input_params)
+            result = runner.invoke(
+                cli,
+                args,
+                input=_create_option_prompts(index_name="test-connector"),
+            )
 
             patched_create.assert_not_called()
             assert result.exit_code == 1
-
             assert expected_error in result.output
 
 
@@ -358,15 +405,6 @@ def test_connector_create_fails_when_index_or_connector_exists(
 )
 def test_connector_create_from_file():
     runner = CliRunner()
-
-    # configuration for the MongoDB connector
-    input_params = "\n".join(
-        [
-            "test-connector",
-            "en",
-            "test-connector-name",
-        ]
-    )
 
     with patch(
         "connectors.protocol.connectors.ConnectorIndex.index",
@@ -398,13 +436,21 @@ def test_connector_create_from_file():
                     "--service-type",
                     "mongodb",
                 ],
-                input=input_params,
+                input=_create_option_prompts(
+                    index_name="test-connector",
+                    connector_name="test-connector-name",
+                ),
             )
 
             patched_create.assert_called_once()
             assert result.exit_code == 0
-
             assert "has been created" in result.output
+
+            doc = patched_create.call_args[0][0]
+            assert doc["index_name"] == "test-connector"
+            assert doc["name"] == "test-connector-name"
+            assert doc["configuration"]["host"]["value"] == "localhost"
+            assert doc["configuration"]["user"]["value"] == "test"
 
 
 @patch(
@@ -419,20 +465,6 @@ def test_connector_create_and_update_the_service_config():
     runner = CliRunner()
     connector_id = "new_connector_id"
     service_type = "mongodb"
-
-    # configuration for the MongoDB connector
-    input_params = "\n".join(
-        [
-            "test_connector",
-            "en",
-            "http://localhost/",
-            "username",
-            "password",
-            "database",
-            "collection",
-            "False",
-        ]
-    )
 
     with patch(
         "connectors.protocol.connectors.ConnectorIndex.index",
@@ -451,7 +483,7 @@ def test_connector_create_and_update_the_service_config():
                     service_type,
                     "--update-config",
                 ],
-                input=input_params,
+                input=_mongodb_create_cli_input(),
             )
 
             config = yaml.load(open("config.yml"), Loader=yaml.FullLoader)[
@@ -466,6 +498,11 @@ def test_connector_create_and_update_the_service_config():
 
             assert result.exit_code == 0
             assert "has been created" in result.output
+            _assert_mongodb_create_doc(
+                patched_create.call_args[0][0],
+                index_name=_DEFAULT_CREATE_OPTIONS["index_name"],
+                connector_name=_DEFAULT_CREATE_OPTIONS["connector_name"],
+            )
 
 
 @patch("click.confirm")
@@ -475,20 +512,6 @@ def test_connector_create_and_update_the_service_config():
 )
 def test_connector_create_native_connector(patched_confirm):
     runner = CliRunner()
-
-    # configuration for the MongoDB connector
-    input_params = "\n".join(
-        [
-            "test-connector",
-            "en",
-            "http://localhost/",
-            "username",
-            "password",
-            "database",
-            "collection",
-            "False",
-        ]
-    )
 
     with patch(
         "connectors.cli.connector.Connector._Connector__create_api_key",
@@ -512,7 +535,7 @@ def test_connector_create_native_connector(patched_confirm):
                         "--from-index",
                         "--native",
                     ],
-                    input=input_params,
+                    input=_mongodb_create_cli_input(index_name="test-connector"),
                 )
 
                 patched_create.assert_called_once()
@@ -521,6 +544,11 @@ def test_connector_create_native_connector(patched_confirm):
                 assert call_args["is_native"] is True
                 assert call_args["api_key_id"] == "api-key-123"
                 assert call_args["api_key_secret_id"] == "secret-123"
+                _assert_mongodb_create_doc(
+                    call_args,
+                    index_name="test-connector",
+                    connector_name=_DEFAULT_CREATE_OPTIONS["connector_name"],
+                )
 
                 patched_create_api_key.assert_called_once()
                 patched_store_api_key.assert_called_once()
@@ -641,15 +669,6 @@ def test_delete_index_error():
 def test_job_help_page():
     runner = CliRunner()
     result = runner.invoke(cli, ["job", "--help"])
-    assert result.exit_code == 0
-    assert "Usage:" in result.output
-    assert "Options:" in result.output
-    assert "Commands:" in result.output
-
-
-def test_job_help_page_without_subcommands():
-    runner = CliRunner()
-    result = runner.invoke(cli, ["job"])
     assert result.exit_code == 0
     assert "Usage:" in result.output
     assert "Options:" in result.output
