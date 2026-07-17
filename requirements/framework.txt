@@ -10,6 +10,7 @@ cffi==1.16.0
 envyaml==1.10.211231
 ecs-logging==2.0.0
 pympler==1.0.1
+PyJWT==2.13.0
 cron-schedule-triggers==0.0.11
 tzcron==1.0.0
 pytz==2019.3
