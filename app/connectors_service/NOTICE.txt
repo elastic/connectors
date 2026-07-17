@@ -2761,8 +2761,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 cryptography
-44.0.3
-Apache Software License; BSD License
+46.0.0
+Apache-2.0 OR BSD-3-Clause
 This software is made available under the terms of *either* of the licenses
 found in LICENSE.APACHE or LICENSE.BSD. Contributions to cryptography are made
 under the terms of *both* these licenses.
@@ -5545,7 +5545,7 @@ Apache Software License
 
 
 msal
-1.30.0
+1.32.3
 MIT License
 The MIT License (MIT)
 
@@ -6160,7 +6160,7 @@ support library is itself covered by the above license.
 
 
 pyOpenSSL
-24.3.0
+26.0.0
 Apache Software License
 
                                  Apache License
