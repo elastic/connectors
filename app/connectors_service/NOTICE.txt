@@ -7431,7 +7431,7 @@ made under the terms of *both* these licenses.
 
 
 soupsieve
-2.8.4
+2.9
 MIT
 MIT License
 
