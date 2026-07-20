@@ -1262,8 +1262,8 @@ PERFORMANCE OF THIS SOFTWARE.
 
 
 aiohttp
-3.12.14
-Apache-2.0
+3.13.3
+Apache-2.0 AND MIT
    Copyright aio-libs contributors.
 
    Licensed under the Apache License, Version 2.0 (the "License");
@@ -6367,8 +6367,8 @@ Apache Software License
 
 
 pyasn1
-0.6.0
-BSD License
+0.6.4
+BSD-2-Clause
 Copyright (c) 2005-2020, Ilya Etingof <etingof@gmail.com>
 All rights reserved.
 
@@ -6396,7 +6396,7 @@ POSSIBILITY OF SUCH DAMAGE.
 
 
 pyasn1_modules
-0.4.1
+0.4.2
 BSD License
 Copyright (c) 2005-2020, Ilya Etingof <etingof@gmail.com>
 All rights reserved.
@@ -7431,7 +7431,7 @@ made under the terms of *both* these licenses.
 
 
 soupsieve
-2.8.4
+2.9
 MIT
 MIT License
 
@@ -8398,7 +8398,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 
 yarl
-1.24.2
+1.24.5
 Apache-2.0
 
                                  Apache License
