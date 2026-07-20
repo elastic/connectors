@@ -1262,8 +1262,8 @@ PERFORMANCE OF THIS SOFTWARE.
 
 
 aiohttp
-3.12.14
-Apache-2.0
+3.13.3
+Apache-2.0 AND MIT
    Copyright aio-libs contributors.
 
    Licensed under the Apache License, Version 2.0 (the "License");
@@ -3049,7 +3049,7 @@ Apache Software License
 
 
 elastic_agent_client
-0.0.1.dev2
+0.0.2
 Other/Proprietary License
 ELASTIC LICENSE AGREEMENT
 
@@ -4325,7 +4325,7 @@ THE SOFTWARE.
 
 
 grpcio
-1.68.1
+1.74.0
 Apache Software License
 
                                  Apache License
@@ -4940,7 +4940,7 @@ Exhibit B - "Incompatible With Secondary Licenses" Notice
 
 
 grpcio-tools
-1.68.1
+1.71.2
 Apache Software License
 UNKNOWN
 
@@ -6123,7 +6123,7 @@ Apache Software License
 
 
 protobuf
-5.28.3
+5.29.6
 3-Clause BSD License
 Copyright 2008 Google Inc.  All rights reserved.
 
@@ -7431,7 +7431,7 @@ made under the terms of *both* these licenses.
 
 
 soupsieve
-2.8.4
+2.9
 MIT
 MIT License
 
@@ -7513,8 +7513,8 @@ UNKNOWN
 UNKNOWN
 
 types-protobuf
-5.28.3.20241203
-Apache Software License
+5.29.1.20250403
+Apache-2.0
 The "typeshed" project is licensed under the terms of the Apache license, as
 reproduced below.
 
@@ -8398,7 +8398,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 
 yarl
-1.24.2
+1.24.5
 Apache-2.0
 
                                  Apache License
