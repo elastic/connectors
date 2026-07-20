@@ -1,1 +1,2 @@
-elastic-agent-client==0.0.1.dev1
+elastic-agent-client==0.0.2
+protobuf==5.29.6
