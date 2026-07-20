@@ -1799,7 +1799,7 @@ PERFORMANCE OF THIS SOFTWARE.
 
 
 yarl
-1.24.2
+1.24.5
 Apache-2.0
 
                                  Apache License
