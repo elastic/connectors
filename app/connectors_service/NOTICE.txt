@@ -1262,8 +1262,8 @@ PERFORMANCE OF THIS SOFTWARE.
 
 
 aiohttp
-3.12.14
-Apache-2.0
+3.13.3
+Apache-2.0 AND MIT
    Copyright aio-libs contributors.
 
    Licensed under the Apache License, Version 2.0 (the "License");
@@ -7431,7 +7431,7 @@ made under the terms of *both* these licenses.
 
 
 soupsieve
-2.8.4
+2.9
 MIT
 MIT License
 
