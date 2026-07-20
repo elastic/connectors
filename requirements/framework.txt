@@ -25,11 +25,11 @@ oracledb==2.3.0
 asyncpg==0.29.0
 python-tds==1.15.0
 sqlalchemy-pytds==0.3.5
-pyOpenSSL==24.3.0
+pyOpenSSL==26.0.0
 beautifulsoup4==4.12.2
 gidgethub==5.2.1
 wcmatch==8.4.1
-msal==1.30.0
+msal==1.32.3
 exchangelib==5.4.0
 ldap3==2.9.1
 lxml==6.1.0
@@ -43,7 +43,7 @@ graphql-core==3.2.3
 notion-client==2.2.1
 certifi==2024.7.4
 aioboto3==12.4.0
-pyasn1<0.6.1
+pyasn1==0.6.4
 azure-identity==1.19.0
 requests==2.32.4
 urllib3==2.7.0
