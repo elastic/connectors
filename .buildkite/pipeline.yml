@@ -1261,10 +1261,10 @@ steps:
           - test_oss_dockerfile_image_arm64
         command: ".buildkite/publish/dra/init_dra_publishing.sh"
 
-  - label: "Trigger cve-slo-status pipeline for pull docker.elastic.co/integrations/elastic-connectors:9.4.0"
+  - label: "Snyk test"
     <<: *test-agents
     <<: *retries
-    key: "lint"
+    key: "snyk"
     command: ".buildkite/run_snyk.sh"
     env:
       PYTHON_VERSION: "3.11" # We don't really care about linter on multiple versions for now
