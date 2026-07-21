@@ -1262,9 +1262,11 @@ steps:
         command: ".buildkite/publish/dra/init_dra_publishing.sh"
 
   - label: "Trigger cve-slo-status pipeline for pull docker.elastic.co/integrations/elastic-connectors:9.4.0"
-    trigger: cve-slo-status
-    build:
-      env:
-        CONTAINER: "pull docker.elastic.co/integrations/elastic-connectors:9.4.0"
-    soft_fail: true
+    <<: *test-agents
+    <<: *retries
+    key: "lint"
+    command: ".buildkite/run_snyk.sh"
+    env:
+      PYTHON_VERSION: "3.11" # We don't really care about linter on multiple versions for now
+    timeout_in_minutes: 5
 
