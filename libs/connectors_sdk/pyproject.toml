@@ -23,6 +23,7 @@ dependencies = [
     "aiohttp==3.14.1",
     "base64io==1.0.3",
     "fastjsonschema==2.16.2",
+    "idna==3.18",
     "ecs-logging==2.0.0",
 ]
 
