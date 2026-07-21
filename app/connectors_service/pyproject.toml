@@ -31,7 +31,7 @@ dependencies = [
     "azure-storage-blob==12.19.1",
     "beautifulsoup4==4.12.2",
     "certifi==2024.7.4",
-    "cffi==1.16.0",
+    "cffi==2.0.0",
     "click==8.3.3",
     "colorama==0.4.6",
     "cron-schedule-triggers==0.0.11",
