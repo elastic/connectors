@@ -43,6 +43,9 @@ lint: install .venv/bin/ruff typecheck
 test: .venv/bin/pytest
 	$(VENV_DIR)/pytest --cov-report term-missing --cov-fail-under 80 --cov-report html --cov=connectors_sdk --fail-slow=$(SLOW_TEST_THRESHOLD) -sv tests
 
+freeze: .venv/bin/python
+	.venv/bin/pip freeze requirements.txt
+
 autoformat: install .venv/bin/ruff
 	.venv/bin/ruff check connectors_sdk --fix
 	.venv/bin/ruff format connectors_sdk

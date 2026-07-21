@@ -82,6 +82,8 @@ autoformat: .venv/bin/python .venv/bin/ruff .venv/bin/elastic-ingest
 test: .venv/bin/python .venv/bin/elastic-ingest .venv/bin/pytest
 	.venv/bin/pytest --cov-report term-missing --cov-fail-under 90 --cov-report html --cov=connectors --fail-slow=$(SLOW_TEST_THRESHOLD) -sv tests
 
+freeze: .venv/bin/python .venv/bin/elastic-ingest
+	.venv/bin/pip freeze requirements.txt
 
 ftest: .venv/bin/pytest
 	tests/ftest.sh $(NAME) $(PERF8)

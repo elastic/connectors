@@ -7,7 +7,7 @@ source .buildkite/shared.sh
 
 init_python
 
-make install
+make install freeze
 
 echo "--- Logging into snyk...---"
 export SNYK_TOKEN=$(vault read -field=value secret/ci/elastic-connectors/SNYK_TOKEN)

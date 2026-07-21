@@ -53,6 +53,16 @@ steps:
       PYTHON_VERSION: "3.11" # We don't really care about notice on multiple versions
     timeout_in_minutes: 5
 
+  - label: "Snyk test"
+    <<: *test-agents
+    <<: *retries
+    key: "snyk"
+    command: ".buildkite/run_snyk.sh"
+    env:
+      PYTHON_VERSION: "3.11" # We don't really care about linter on multiple versions for now
+    timeout_in_minutes: 5
+
+
   - wait: ~
 
   - label: ":face_with_peeking_eye: Lint"
@@ -1260,13 +1270,3 @@ steps:
           - test_oss_dockerfile_image_amd64
           - test_oss_dockerfile_image_arm64
         command: ".buildkite/publish/dra/init_dra_publishing.sh"
-
-  - label: "Snyk test"
-    <<: *test-agents
-    <<: *retries
-    key: "snyk"
-    command: ".buildkite/run_snyk.sh"
-    env:
-      PYTHON_VERSION: "3.11" # We don't really care about linter on multiple versions for now
-    timeout_in_minutes: 5
-
