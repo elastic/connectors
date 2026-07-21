@@ -1260,3 +1260,11 @@ steps:
           - test_oss_dockerfile_image_amd64
           - test_oss_dockerfile_image_arm64
         command: ".buildkite/publish/dra/init_dra_publishing.sh"
+
+  - label: "Trigger cve-slo-status pipeline for pull docker.elastic.co/integrations/elastic-connectors:9.5.0"
+    trigger: cve-slo-status
+    build:
+      env:
+        CONTAINER: "pull docker.elastic.co/integrations/elastic-connectors:9.5.0"
+    soft_fail: true
+
