@@ -4,16 +4,29 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import asyncio
+import inspect
 import io
 import os
 import re
 import sys
 import traceback
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 import pytest_asyncio
+from aiohttp.client_reqrep import ClientResponse
 from aioresponses import aioresponses
+
+# aiohttp 3.14 made `stream_writer` a required kwarg of ClientResponse.__init__ that aioresponses omits.
+# Inject a no-op when absent; inert on aiohttp <3.14. See aio-libs/aiohttp#12815, pnuckowski/aioresponses#289.
+if "stream_writer" in inspect.signature(ClientResponse.__init__).parameters:
+    _orig_client_response_init = ClientResponse.__init__
+
+    def _patched_client_response_init(self, *args, **kwargs):
+        kwargs.setdefault("stream_writer", Mock(output_size=0))
+        _orig_client_response_init(self, *args, **kwargs)
+
+    ClientResponse.__init__ = _patched_client_response_init
 
 
 class Logger:
