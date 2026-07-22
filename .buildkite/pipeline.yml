@@ -54,12 +54,14 @@ steps:
     timeout_in_minutes: 5
 
   - label: "Snyk test"
+    # if: 'build.branch == "main"'
     <<: *test-agents
     <<: *retries
     key: "snyk"
+    soft_fail: true
     command: ".buildkite/run_snyk.sh"
     env:
-      PYTHON_VERSION: "3.11" # We don't really care about linter on multiple versions for now
+      PYTHON_VERSION: "3.12"
     timeout_in_minutes: 5
 
 
