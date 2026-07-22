@@ -8,7 +8,7 @@ COPY --chown=nonroot:nonroot . /app
 
 USER nonroot
 WORKDIR /app
-RUN make clean install-package
+RUN make clean install-package freeze
 RUN ln -s app/connectors_service/.venv/bin /app/bin
 
 USER root

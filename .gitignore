@@ -23,6 +23,10 @@ htmlcov
 **/venv
 app/connectors_service/scripts/stack/connectors-config
 
+# These are only for snyk scanning
+app/connectors_service/requirements.txt
+libs/connectors_sdk/requirements.txt
+
 .python-version
 
 # Local secrets and credentials -- never commit these
