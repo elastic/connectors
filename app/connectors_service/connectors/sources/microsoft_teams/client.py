@@ -28,6 +28,7 @@ syncs whatever it has access to.
 """
 
 import os
+from collections import Counter
 from enum import Enum
 
 import aiohttp
@@ -73,6 +74,7 @@ class TeamsObjectType(Enum):
 
 
 class EndSignal(Enum):
+    ENUMERATION_FINISHED = "ENUMERATION_FINISHED"
     TEAM_TASK_FINISHED = "TEAM_TASK_FINISHED"
     CHANNEL_TASK_FINISHED = "CHANNEL_TASK_FINISHED"
     CHAT_TASK_FINISHED = "CHAT_TASK_FINISHED"
@@ -197,6 +199,7 @@ class MicrosoftTeamsClient:
             raise Exception(msg)
 
         self._logger = logger
+        self._skipped = Counter()
         self._graph_api_client = MicrosoftAPISession(
             self._http_session, self.graph_api_token, "@odata.nextLink", self._logger
         )
@@ -204,6 +207,26 @@ class MicrosoftTeamsClient:
     def set_logger(self, logger_):
         self._logger = logger_
         self._graph_api_client.set_logger(self._logger)
+
+    def log_skip_summary(self):
+        """Emit an aggregate warning for resources skipped during the sync.
+
+        Per-resource 403/404s are logged at debug to avoid noise; this surfaces the
+        totals so an under-installed tenant (missing RSC / Teams app not installed)
+        is visible instead of producing a quiet, near-empty "successful" sync.
+        """
+        if not self._skipped:
+            return
+
+        details = ", ".join(
+            f"{count} {resource}" for resource, count in sorted(self._skipped.items())
+        )
+        self._logger.warning(
+            f"Skipped some resources because the connector's Teams app is not "
+            f"installed there or the required permissions are missing: {details}. "
+            f"Content in those teams/chats was not indexed."
+        )
+        self._skipped.clear()
 
     async def ping(self):
         return await self._graph_api_client.fetch(f"{BASE_URL}/teams?$top=1")
@@ -219,6 +242,7 @@ class MicrosoftTeamsClient:
             ):
                 yield members
         except (NotFound, PermissionsMissing):
+            self._skipped["teams' members"] += 1
             self._logger.debug(
                 f"Skipping members for team '{team_id}': the connector's Teams app is not installed there or 'TeamMember.Read.Group' is missing."
             )
@@ -231,6 +255,7 @@ class MicrosoftTeamsClient:
             ):
                 yield channels
         except (NotFound, PermissionsMissing):
+            self._skipped["teams' channels"] += 1
             self._logger.debug(f"Skipping channels for team '{team_id}'.")
             return
 
@@ -241,6 +266,7 @@ class MicrosoftTeamsClient:
             ):
                 yield messages
         except (NotFound, PermissionsMissing):
+            self._skipped["channels' messages"] += 1
             self._logger.debug(
                 f"Skipping messages for channel '{channel_id}' in team '{team_id}': the connector's Teams app is not installed there or 'ChannelMessage.Read.Group' is missing."
             )
@@ -288,6 +314,7 @@ class MicrosoftTeamsClient:
             ):
                 yield messages
         except (NotFound, PermissionsMissing):
+            self._skipped["chats' messages"] += 1
             self._logger.debug(
                 f"Skipping messages for chat '{chat_id}': 'Chat.Read.WhereInstalled' is missing or the connector's Teams app is not installed there."
             )

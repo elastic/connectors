@@ -8,7 +8,7 @@
 import os
 from functools import cached_property, partial
 
-from connectors_sdk.source import BaseDataSource
+from connectors_sdk.source import BaseDataSource, ConfigurableFieldValueError
 from connectors_sdk.utils import iso_zulu
 
 from connectors.access_control import (
@@ -47,7 +47,7 @@ class MicrosoftTeamsDataSource(BaseDataSource):
 
     name = "Microsoft Teams"
     service_type = "microsoft_teams"
-    incremental_sync_enabled = True
+    incremental_sync_enabled = False
     dls_enabled = True
 
     def __init__(self, configuration):
@@ -168,6 +168,17 @@ class MicrosoftTeamsDataSource(BaseDataSource):
     async def validate_config(self):
         await super().validate_config()
 
+        auth_method = self.configuration["auth_method"]
+        if auth_method == "certificate":
+            if not self.configuration["certificate"] or not self.configuration[
+                "private_key"
+            ]:
+                msg = "Both 'Content of certificate file' and 'Content of private key file' are required when the authentication method is 'Certificate'."
+                raise ConfigurableFieldValueError(msg)
+        elif not self.configuration["secret_value"]:
+            msg = "'Secret value' is required when the authentication method is 'Client Secret'."
+            raise ConfigurableFieldValueError(msg)
+
         # Check that we can obtain a Graph API token with the provided credentials
         await self.client.graph_api_token.get()
 
@@ -246,22 +257,32 @@ class MicrosoftTeamsDataSource(BaseDataSource):
 
         seen = set()
 
-        async for teams in self.client.get_teams():
-            for team in teams:
-                async for members in self.client.get_team_members(team["id"]):
-                    for member in members:
+        try:
+            async for teams in self.client.get_teams():
+                for team in teams:
+                    async for members in self.client.get_team_members(team["id"]):
+                        for member in members:
+                            doc = self._user_access_control_doc(member)
+                            if doc and doc["_id"] not in seen:
+                                seen.add(doc["_id"])
+                                yield doc
+        except PermissionsMissing:
+            self._logger.warning(
+                "Unable to enumerate teams for access control. Verify the 'Team.ReadBasic.All' application permission is granted."
+            )
+
+        try:
+            async for chats in self.client.get_chats():
+                for chat in chats:
+                    for member in chat.get("members", []):
                         doc = self._user_access_control_doc(member)
                         if doc and doc["_id"] not in seen:
                             seen.add(doc["_id"])
                             yield doc
-
-        async for chats in self.client.get_chats():
-            for chat in chats:
-                for member in chat.get("members", []):
-                    doc = self._user_access_control_doc(member)
-                    if doc and doc["_id"] not in seen:
-                        seen.add(doc["_id"])
-                        yield doc
+        except PermissionsMissing:
+            self._logger.warning(
+                "Unable to enumerate chats for access control. Verify the 'Chat.ReadBasic.WhereInstalled' application permission is granted and the connector's Teams app is installed."
+            )
 
     # -- Content extraction ------------------------------------------------
 
@@ -330,8 +351,8 @@ class MicrosoftTeamsDataSource(BaseDataSource):
             return
         if "unknownFutureValue" in (message.get("messageType") or ""):
             return
-        message_content = html_to_text(html=message.get("body", {}).get("content"))
-        if not message_content:
+        message_content = html_to_text(html=(message.get("body") or {}).get("content"))
+        if not message_content and not message.get("attachments"):
             return
         document = self.formatter.format_channel_message(
             item=message, channel_name=channel_name, message_content=message_content
@@ -472,8 +493,8 @@ class MicrosoftTeamsDataSource(BaseDataSource):
             return
         if "unknownFutureValue" in (message.get("messageType") or ""):
             return
-        message_content = html_to_text(html=message.get("body", {}).get("content"))
-        if not message_content:
+        message_content = html_to_text(html=(message.get("body") or {}).get("content"))
+        if not message_content and not message.get("attachments"):
             return
         document = self.formatter.format_chat_message(
             chat=chat,
@@ -558,14 +579,13 @@ class MicrosoftTeamsDataSource(BaseDataSource):
 
         await self.queue.put(EndSignal.CHAT_TASK_FINISHED)
 
-    async def get_docs(self, filtering=None):
-        """Executes the logic to fetch Microsoft Teams objects in an async manner.
+    async def _enumerate_producers(self):
+        """Enumerates teams and chats and schedules their producers.
 
-        Args:
-            filtering (Filtering): Object of class Filtering.
-
-        Yields:
-            tuple: A document mapping and an optional coroutine to fetch its content.
+        Runs as a single top-level task so that ``_consumer`` can drain the queue
+        concurrently. Enumerating everything up front (before consuming) can stall
+        on a large tenant: producers fill the bounded ``MemQueue`` while nothing is
+        draining it, and ``fetchers`` blocks once ``MAX_CONCURRENCY`` is reached.
         """
         try:
             async for teams in self.client.get_teams():
@@ -573,6 +593,7 @@ class MicrosoftTeamsDataSource(BaseDataSource):
                     await self.fetchers.put(partial(self.team_producer, team))
                     self.tasks += 1
         except PermissionsMissing:
+            self._teams_enumeration_failed = True
             self._logger.warning(
                 "Unable to enumerate teams. Verify the 'Team.ReadBasic.All' application permission is granted."
             )
@@ -583,11 +604,41 @@ class MicrosoftTeamsDataSource(BaseDataSource):
                     await self.fetchers.put(partial(self.chat_producer, chat))
                     self.tasks += 1
         except PermissionsMissing:
+            self._chats_enumeration_failed = True
             self._logger.warning(
                 "Unable to enumerate chats. Verify the 'Chat.ReadBasic.WhereInstalled' application permission is granted and the connector's Teams app is installed."
             )
+
+        await self.queue.put(EndSignal.ENUMERATION_FINISHED)
+
+    async def get_docs(self, filtering=None):
+        """Executes the logic to fetch Microsoft Teams objects in an async manner.
+
+        Args:
+            filtering (Filtering): Object of class Filtering.
+
+        Yields:
+            tuple: A document mapping and an optional coroutine to fetch its content.
+        """
+        self._teams_enumeration_failed = False
+        self._chats_enumeration_failed = False
+
+        await self.fetchers.put(partial(self._enumerate_producers))
+        self.tasks += 1
 
         async for item in self._consumer():
             yield item
 
         await self.fetchers.join()
+
+        self.client.log_skip_summary()
+
+        if self._teams_enumeration_failed and self._chats_enumeration_failed:
+            msg = (
+                "Both team and chat enumeration failed due to missing permissions. "
+                "Refusing to report a successful sync, as this would delete previously "
+                "indexed documents. Verify 'Team.ReadBasic.All' and "
+                "'Chat.ReadBasic.WhereInstalled' are granted and the connector's Teams "
+                "app is installed."
+            )
+            raise PermissionsMissing(msg)

@@ -39,6 +39,14 @@ app is installed:
 > members; those use the RSC permissions declared in the Teams app manifest
 > (step 3) and are only granted for teams where the app is installed.
 
+> **On the two `.All` permissions:** `Team.ReadBasic.All` and
+> `Channel.ReadBasic.All` are unavoidable. Microsoft Graph offers no narrower
+> (`.Selected` / `.WhereInstalled` / RSC) way to *enumerate* the teams and
+> channels of a tenant, and both are metadata-only (names/descriptions, not
+> message content). `Files.Read.All` is the only application permission that can
+> download attachment bytes and is required only when "Fetch attachment content"
+> is enabled.
+
 ## 3. Package and install the Teams app (RSC)
 
 1. Edit [`manifest.json`](./manifest.json):
@@ -62,12 +70,26 @@ granted per resource when the app is installed there.
 ## What gets synced
 
 - **Teams** (from groups that are teams)
-- **Channels** and their messages, replies and attachments
+- **Channels** and their messages, message **replies**, and attachments
 - **Team members**
-- **Chats** (where the app is installed) and their messages and attachments
+- **Chats** and their messages and attachments
+
+### Coverage notes and limitations
+
+- **Chat coverage is limited to chats where the connector's Teams app is
+  installed** (`Chat.*.WhereInstalled`), not "all chats of all team members."
+  Full-tenant chat coverage would require `Chat.Read.All`, which is a broad,
+  "protected" permission that this connector intentionally does not use in order
+  to stay least-privilege. Install the app in the chats you need indexed.
+- **Chats have no threaded replies in Microsoft Graph.** Reply threading exists
+  only for *channel* messages; chats are linear, so every chat message is
+  already captured by the flat message listing (a chat "reply" is just another
+  message). Only channel messages expand `replies`.
 
 Anything the app is not installed in is invisible to the connector and is
-skipped silently.
+skipped. Skipped resources are counted and reported as an aggregate warning at
+the end of each sync, so an under-installed tenant is visible in the logs rather
+than producing a quiet, near-empty sync.
 
 ## Document level security (DLS)
 

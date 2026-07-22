@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
+from connectors_sdk.source import BaseDataSource, ConfigurableFieldValueError
 
 from connectors.access_control import ACCESS_CONTROL
 from connectors.sources.microsoft_teams import (
@@ -678,3 +679,188 @@ async def test_consumer_decrements_tasks_on_end_signal():
 
         assert collected == [({"_id": "1"}, None)]
         assert source.tasks == 0
+
+
+# -- Message processing edge cases -------------------------------------------
+
+
+def _empty_body_message(with_attachment):
+    return {
+        "id": "msg-empty",
+        "messageType": "message",
+        "createdDateTime": "2023-08-16T04:47:55.794Z",
+        "lastModifiedDateTime": "2023-08-16T04:47:55.794Z",
+        "deletedDateTime": None,
+        "webUrl": None,
+        "from": {"user": {"id": "user-alice", "displayName": "Alice"}},
+        "body": {"contentType": "html", "content": ""},
+        "attachments": [{"id": "a1", "name": "f.txt", "contentType": "reference"}]
+        if with_attachment
+        else [],
+    }
+
+
+@pytest.mark.asyncio
+async def test_process_channel_message_indexes_attachment_only_message():
+    async with create_teams_source() as source:
+        await source._process_channel_message(
+            _empty_body_message(with_attachment=True), "General", []
+        )
+        assert not source.queue.empty()
+        _, (doc, _download) = source.queue.get_nowait()
+        assert doc["_id"] == "msg-empty"
+        assert doc["type"] == TeamsObjectType.CHANNEL_MESSAGE.value
+        assert doc["attached_documents"] == "f.txt"
+
+
+@pytest.mark.asyncio
+async def test_process_channel_message_drops_truly_empty_message():
+    async with create_teams_source() as source:
+        await source._process_channel_message(
+            _empty_body_message(with_attachment=False), "General", []
+        )
+        assert source.queue.empty()
+
+
+@pytest.mark.asyncio
+async def test_process_chat_message_indexes_attachment_only_message():
+    async with create_teams_source() as source:
+        await source._process_chat_message(
+            CHATS[0], _empty_body_message(with_attachment=True), "Alice,Bob", []
+        )
+        assert not source.queue.empty()
+        _, (doc, _download) = source.queue.get_nowait()
+        assert doc["_id"] == "msg-empty"
+        assert doc["type"] == TeamsObjectType.CHAT_MESSAGE.value
+        assert doc["attached_documents"] == "f.txt"
+
+
+@pytest.mark.asyncio
+async def test_process_message_handles_null_body_without_raising():
+    async with create_teams_source() as source:
+        null_body = _empty_body_message(with_attachment=False)
+        null_body["body"] = None
+        # Should not raise AttributeError; message is dropped (no text, no attachments)
+        await source._process_channel_message(null_body, "General", [])
+        await source._process_chat_message(CHATS[0], null_body, "Alice,Bob", [])
+        assert source.queue.empty()
+
+
+# -- Robustness: access control + total-failure safeguard --------------------
+
+
+@pytest.mark.asyncio
+async def test_get_access_control_tolerates_permissions_missing_on_teams():
+    async with create_teams_source(use_document_level_security=True) as source:
+        source._features = Mock()
+        source._features.document_level_security_enabled = Mock(return_value=True)
+        source.client.get_teams = MagicMock(side_effect=PermissionsMissing())
+        source.client.get_chats = MagicMock(return_value=AsyncIterator([CHATS]))
+
+        ids = [doc["_id"] async for doc in source.get_access_control()]
+
+        # teams enumeration failed but chats still produced identities
+        assert sorted(ids) == ["user-alice", "user-bob"]
+
+
+@pytest.mark.asyncio
+async def test_get_docs_raises_when_both_enumerations_fail():
+    async with create_teams_source() as source:
+        source.client.get_teams = MagicMock(side_effect=PermissionsMissing())
+        source.client.get_chats = MagicMock(side_effect=PermissionsMissing())
+
+        with pytest.raises(PermissionsMissing):
+            async for _doc, _download in source.get_docs():
+                pass
+
+
+@pytest.mark.asyncio
+async def test_get_docs_empty_tenant_does_not_raise():
+    async with create_teams_source() as source:
+        source.client.get_teams = MagicMock(return_value=AsyncIterator([]))
+        source.client.get_chats = MagicMock(return_value=AsyncIterator([]))
+
+        docs = [doc async for doc, _download in source.get_docs()]
+        assert docs == []
+
+
+# -- Skip visibility ---------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_client_counts_skipped_resources():
+    client = build_client()
+    client._graph_api_client = FakeGraphSession(
+        raises={"/members": PermissionsMissing()}
+    )
+    async for _ in client.get_team_members("team-1"):
+        pass
+    await client.close()
+    assert client._skipped["teams' members"] == 1
+
+
+@pytest.mark.asyncio
+async def test_log_skip_summary_warns_when_skips_recorded():
+    client = build_client()
+    client._logger = Mock()
+    client._skipped["teams' messages"] = 3
+    client.log_skip_summary()
+    await client.close()
+    client._logger.warning.assert_called_once()
+    # counters are reset after logging
+    assert not client._skipped
+
+
+@pytest.mark.asyncio
+async def test_log_skip_summary_silent_when_nothing_skipped():
+    client = build_client()
+    client._logger = Mock()
+    client.log_skip_summary()
+    await client.close()
+    client._logger.warning.assert_not_called()
+
+
+# -- Config validation -------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_incremental_sync_disabled():
+    assert MicrosoftTeamsDataSource.incremental_sync_enabled is False
+
+
+@asynccontextmanager
+async def _source_with_config(**overrides):
+    config = {
+        "tenant_id": "tenant-id",
+        "client_id": "client-id",
+        "auth_method": "secret",
+        "secret_value": "secret",
+        "certificate": "certificate",
+        "private_key": "private-key",
+        "use_document_level_security": False,
+        "fetch_attachment_content": True,
+    }
+    config.update(overrides)
+    async with create_source(MicrosoftTeamsDataSource, **config) as source:
+        yield source
+
+
+@pytest.mark.asyncio
+async def test_validate_config_requires_secret_value():
+    async with _source_with_config(auth_method="secret", secret_value="") as source:
+        # Prevent the client cached_property from building with invalid creds
+        source.client = MagicMock(close=AsyncMock())
+        with patch.object(BaseDataSource, "validate_config", new=AsyncMock()):
+            with pytest.raises(ConfigurableFieldValueError):
+                await source.validate_config()
+
+
+@pytest.mark.asyncio
+async def test_validate_config_requires_certificate_and_key():
+    async with _source_with_config(
+        auth_method="certificate", certificate="cert", private_key=""
+    ) as source:
+        source.client = MagicMock(close=AsyncMock())
+        with patch.object(BaseDataSource, "validate_config", new=AsyncMock()):
+            with pytest.raises(ConfigurableFieldValueError):
+                await source.validate_config()

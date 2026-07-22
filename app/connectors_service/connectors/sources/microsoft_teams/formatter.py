@@ -74,7 +74,12 @@ class MicrosoftTeamsFormatter:
                 "message": message_content,
             }
         )
-        document = {"type": TeamsObjectType.CHAT_MESSAGE.value}
+        document = {
+            "type": TeamsObjectType.CHAT_MESSAGE.value,
+            "attached_documents": self.format_attachment_names(
+                attachments=message.get("attachments")
+            ),
+        }
         self.map_document_with_schema(
             document=document, item=augmented, document_type=self.schema.chat_message
         )
