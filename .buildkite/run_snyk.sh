@@ -26,6 +26,11 @@ echo "--- Initializing venv for the test ---"
 python3 -m venv /tmp/.snyk-venv
 
 echo "--- Installing dependencies ---"
+
+cat $SDK_ROOT/requirements.txt
+
+cat $APP_ROOT/requirements.txt
+
 /tmp/.snyk-venv/bin/pip install \
         -r $SDK_ROOT/requirements.txt \
         -r $APP_ROOT/requirements.txt
