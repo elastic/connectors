@@ -5,6 +5,8 @@ set -euo pipefail
 
 source .buildkite/shared.sh
 
+BASEDIR=$(realpath $(dirname $0))
+ROOT=$(realpath $BASEDIR/../)
 APP_ROOT=$ROOT/app/connectors_service
 SDK_ROOT=$ROOT/libs/connectors_sdk
 
