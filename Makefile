@@ -26,6 +26,10 @@ test: install
 ftest: install $(DOCKERFILE_FTEST_PATH) build-connectors-base-image
 	cd $(app_dir); make ftest
 
+freeze:
+	cd $(connectors_sdk_dir); make freeze
+	cd $(app_dir); make freeze
+
 ftrace:
 	cd $(app_dir); make ftrace
 
