@@ -57,7 +57,7 @@ install-package: .venv/bin/python
 	.venv/bin/pip install -e ".[tests,ftest]"
 
 clean:
-	rm -rf bin lib .venv include elasticsearch_connectors.egg-info .coverage site-packages pyvenv.cfg include.site.python*.greenlet dist build htmlcov
+	rm -rf bin lib .venv include elasticsearch_connectors.egg-info .coverage site-packages pyvenv.cfg include.site.python*.greenlet dist build htmlcov requirements.txt
 
 typecheck: .venv/bin/python .venv/bin/elastic-ingest
 	.venv/bin/pyright connectors

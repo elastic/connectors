@@ -5,6 +5,10 @@ set -euo pipefail
 
 source .buildkite/shared.sh
 
+APP_ROOT=$ROOT/app/connectors_service
+SDK_ROOT=$ROOT/libs/connectors_sdk
+
+
 init_python
 
 make install freeze
@@ -17,7 +21,7 @@ curl -sL --retry-max-time 60 --retry 3 --retry-delay 5 https://static.snyk.io/cl
 chmod +x ./snyk
 
 echo "--- Running snyk for SDK..."
-./snyk test --file=libs/connectors_sdk/requirements.txt --command=.venv/bin/python3 -- --allow-missing
+./snyk test --file=$SDK_ROOT/requirements.txt --command=$SDK_ROOT/.venv/bin/python3 -- --allow-missing
 
-echo "--- Running snyk for SDK..."
-./snyk test --file=app/connectors_service/requirements.txt --command=.venv/bin/python3 -- --allow-missing
+echo "--- Running snyk for App..."
+./snyk test --file=$APP_ROOT/requirements.txt --command=$APP_ROOT/.venv/bin/python3 -- --allow-missing

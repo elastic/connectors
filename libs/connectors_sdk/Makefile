@@ -18,7 +18,7 @@ install-package:
 	$(VENV_DIR)/pip install dist/*.whl
 
 clean:
-	rm -rf bin lib .venv include elasticsearch_connectors_sdk.egg-info .coverage site-packages pyvenv.cfg include.site.python*.greenlet dist build htmlcov
+	rm -rf bin lib .venv include elasticsearch_connectors_sdk.egg-info .coverage site-packages pyvenv.cfg include.site.python*.greenlet dist build htmlcov requirements.txt
 
 
 .venv/bin/pytest: .venv/bin/python
