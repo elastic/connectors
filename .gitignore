@@ -29,3 +29,6 @@ scripts/stack/connectors-config
 *credentials*
 *secret*
 kubeconfig
+
+# This file is actually not real, it's derived and should only be present in the docker images as a "lock" file declaring versions that are used
+requirements.txt

@@ -82,6 +82,22 @@ ftrace: .venv/bin/pytest .venv/bin/elastic-ingest $(DOCKERFILE_FTEST_PATH)
 run: install
 	.venv/bin/elastic-ingest
 
+freeze: .venv/bin/python
+	# It looks a little insane, but hear me out.
+	# Snyk CLI does not use local PIP, it runs its own copy of it and does not really respect some things that we have in pyproject.toml
+	# For example relative file paths are not allowed, or evaluation of env variables are not possible while allowed.
+	# So to make things work we need to convert our requirements to requirements.txt file so that snyk could run its scanning against it
+	# Pipdeptree is able to actually produce requirements.txt file that contains both direct and transitive dependencies of the service
+	# So when included to a docker artefact, for example, it should give accurate description of what's actually installed into the .venv
+	# We pin <4.0.0 because 4.* requires rust toolkit and our docker images doesn't have it
+	.venv/bin/pip install --quiet "pipdeptree<4.0.0"
+	.venv/bin/pipdeptree \
+		--freeze \
+		--exclude elasticsearch-connectors,pipdeptree \
+		> requirements.txt
+	# Delete it so that it's not left in the artefacts
+	.venv/bin/pip uninstall --quiet pipdeptree -y
+
 default-config: install
 	.venv/bin/elastic-ingest --action config --service-type $(SERVICE_TYPE)
 
