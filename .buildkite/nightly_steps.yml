@@ -1,4 +1,11 @@
 definitions:
+  steps:
+    - step: &test-agents
+        agents:
+          provider: "gcp"
+          machineType: "n1-standard-8"
+          useVault: true
+          image: family/enterprise-search-ubuntu-2204-connectors-py
   retries: &retries
     retry:
       automatic:
@@ -31,6 +38,18 @@ env:
   DOCKERFILE_PATH: "Dockerfile.wolfi"
 
 steps:
+
+  - label: ":snyk: Snyk scan"
+    if: 'build.branch == "main"'
+    <<: *test-agents
+    <<: *retries
+    key: "snyk"
+    soft_fail: true
+    command: ".buildkite/run_snyk.sh"
+    env:
+      PYTHON_VERSION: "3.11"
+    timeout_in_minutes: 5
+
   - label: "🔨 [Python {{ matrix }}] MySQL"
     <<: *retries
     <<: *ftest_defaults

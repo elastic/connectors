@@ -53,18 +53,6 @@ steps:
       PYTHON_VERSION: "3.11" # We don't really care about notice on multiple versions
     timeout_in_minutes: 5
 
-  - label: "Snyk test"
-    # if: 'build.branch == "main"'
-    <<: *test-agents
-    <<: *retries
-    key: "snyk"
-    soft_fail: true
-    command: ".buildkite/run_snyk.sh"
-    env:
-      PYTHON_VERSION: "3.11"
-    timeout_in_minutes: 5
-
-
   - wait: ~
 
   - label: ":face_with_peeking_eye: Lint"
