@@ -45,7 +45,7 @@ test: .venv/bin/pytest
 
 freeze: .venv/bin/python
 	.venv/bin/pip freeze | \
-		grep -v '-e git+ssh://git@github.com/elastic/connectors-python' \
+		grep -v '-e git+ssh://git@github.com/elastic/connectors' \
 		> requirements.txt
 
 autoformat: install .venv/bin/ruff
