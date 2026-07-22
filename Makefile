@@ -26,7 +26,7 @@ test: install
 	cd $(connectors_sdk_dir); make test
 	cd $(app_dir); make test
 
-freeze: install
+freeze:
 	cd $(connectors_sdk_dir); make freeze
 	cd $(app_dir); make freeze
 
