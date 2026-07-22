@@ -33,7 +33,7 @@ echo "--- Installing dependencies ---"
         -r $APP_ROOT/requirements.txt
 
 echo "--- Running snyk for SDK..."
-./snyk test --file=$SDK_ROOT/requirements.txt --command=/tmp/.snyk-venv/bin/python3
+./snyk monitor --file=$SDK_ROOT/requirements.txt --command=/tmp/.snyk-venv/bin/python3
 
 echo "--- Running snyk for App..."
-./snyk test --file=$APP_ROOT/requirements.txt --command=/tmp/.snyk-venv/bin/python3
+./snyk monitor --file=$APP_ROOT/requirements.txt --command=/tmp/.snyk-venv/bin/python3
