@@ -953,12 +953,12 @@ class SharepointOnlineDataSource(BaseDataSource):
                 and list_item["lastModifiedDateTime"] >= self.last_sync_time()
             ):
                 # List Item IDs are unique within list.
-                # Therefore we mix in site_list id to it to make sure they are
-                # globally unique.
+                # Therefore we mix in site_list id and site id to make sure they are
+                # globally unique across site collections.
                 # Also we need to remember original ID because when a document
                 # is yielded, its "id" field is overwritten with content of "_id" field
                 list_item_natural_id = list_item["id"]
-                list_item["_id"] = f"{site_list_id}-{list_item['id']}"
+                list_item["_id"] = f"{site_id}-{site_list_id}-{list_item['id']}"
                 list_item["object_type"] = "list_item"
 
                 content_type = list_item["contentType"]["name"]
