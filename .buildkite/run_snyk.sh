@@ -23,9 +23,10 @@ curl -sL --retry-max-time 60 --retry 3 --retry-delay 5 https://static.snyk.io/cl
 chmod +x ./snyk
 
 echo "--- Initializing venv for the test ---"
-python3 -m .snyk-venv
+python3 -m /tmp/.snyk-venv
+
 echo "--- Installing dependencies ---"
-$ROOT/.snyk-venv/bin/pip install \
+/tmp/.snyk-venv/bin/pip install \
         -r $SDK_ROOT/requirements.txt \
         -r $APP_ROOT/requirements.txt
 
