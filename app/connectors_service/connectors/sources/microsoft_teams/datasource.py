@@ -170,9 +170,10 @@ class MicrosoftTeamsDataSource(BaseDataSource):
 
         auth_method = self.configuration["auth_method"]
         if auth_method == "certificate":
-            if not self.configuration["certificate"] or not self.configuration[
-                "private_key"
-            ]:
+            if (
+                not self.configuration["certificate"]
+                or not self.configuration["private_key"]
+            ):
                 msg = "Both 'Content of certificate file' and 'Content of private key file' are required when the authentication method is 'Certificate'."
                 raise ConfigurableFieldValueError(msg)
         elif not self.configuration["secret_value"]:
