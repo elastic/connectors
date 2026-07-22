@@ -48,7 +48,7 @@ steps:
     command: ".buildkite/run_snyk.sh"
     env:
       PYTHON_VERSION: "3.11"
-    timeout_in_minutes: 5
+    timeout_in_minutes: 15
 
   - label: "🔨 [Python {{ matrix }}] MySQL"
     <<: *retries
