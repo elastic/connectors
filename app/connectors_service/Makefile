@@ -82,7 +82,13 @@ autoformat: .venv/bin/python .venv/bin/ruff .venv/bin/elastic-ingest
 test: .venv/bin/python .venv/bin/elastic-ingest .venv/bin/pytest
 	.venv/bin/pytest --cov-report term-missing --cov-fail-under 90 --cov-report html --cov=connectors --fail-slow=$(SLOW_TEST_THRESHOLD) -sv tests
 
-freeze: .venv/bin/python .venv/bin/elastic-ingest
+freeze: .venv/bin/python
+	# It looks a little insane, but hear me out.
+	# Snyk CLI does not use local PIP, it runs its own copy of it and does not really respect some things that we have in pyproject.toml
+	# For example relative file paths are not allowed, or evaluation of env variables are not possible while allowed.
+	# So to make things work we need to convert our requirements to requirements.txt file so that snyk could run its scanning against it
+	# Pipdeptree is able to actually produce requirements.txt file that contains both direct and transitive dependencies of the service
+	# So when included to a docker artefact, for example, it should give accurate description of what's actually installed into the .venv
 	.venv/bin/pip install --quiet pipdeptree
 	.venv/bin/pipdeptree --freeze --exclude elasticsearch-connectors,elasticsearch-connectors-sdk > requirements.txt
 

@@ -13,7 +13,7 @@ SDK_ROOT=$ROOT/libs/connectors_sdk
 
 init_python
 
-make install freeze
+make clean install freeze
 
 echo "--- Logging into snyk...---"
 export SNYK_TOKEN=$(vault read -field=value secret/ci/elastic-connectors/SNYK_TOKEN)
@@ -23,16 +23,13 @@ curl -sL --retry-max-time 60 --retry 3 --retry-delay 5 https://static.snyk.io/cl
 chmod +x ./snyk
 
 echo "--- Initializing venv for the test ---"
+rm -rf /tmp/.snyk-venv
 python3 -m venv /tmp/.snyk-venv
 
 echo "--- Installing dependencies ---"
 
-cat $SDK_ROOT/requirements.txt
-
-cat $APP_ROOT/requirements.txt
-
+# We're only installing app dependencies because SDK dependencies are included there by `make freeze`
 /tmp/.snyk-venv/bin/pip install \
-        -r $SDK_ROOT/requirements.txt \
         -r $APP_ROOT/requirements.txt
 
 echo "--- Running snyk for SDK..."
