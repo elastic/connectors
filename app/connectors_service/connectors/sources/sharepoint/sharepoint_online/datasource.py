@@ -683,10 +683,13 @@ class SharepointOnlineDataSource(BaseDataSource):
         async for site_collection in self.site_collections():
             yield site_collection, None, OP_INDEX
 
+            # Edit operation on a drive_item doesn't update the
+            # lastModifiedDateTime of the parent site. Therefore, we
+            # set check_timestamp to False when iterating over sites.
             async for site in self.sites(
                 site_collection["siteCollection"]["hostname"],
                 self.configuration["site_collections"],
-                check_timestamp=True,
+                check_timestamp=False,
             ):
                 (
                     site_access_control,
