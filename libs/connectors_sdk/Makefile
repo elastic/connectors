@@ -44,9 +44,20 @@ test: .venv/bin/pytest
 	$(VENV_DIR)/pytest --cov-report term-missing --cov-fail-under 80 --cov-report html --cov=connectors_sdk --fail-slow=$(SLOW_TEST_THRESHOLD) -sv tests
 
 freeze: .venv/bin/python
-	.venv/bin/pip freeze | \
-		grep -v '^-e' \
+	# It looks a little insane, but hear me out.
+	# Snyk CLI does not use local PIP, it runs its own copy of it and does not really respect some things that we have in pyproject.toml
+	# For example relative file paths are not allowed, or evaluation of env variables are not possible while allowed.
+	# So to make things work we need to convert our requirements to requirements.txt file so that snyk could run its scanning against it
+	# Pipdeptree is able to actually produce requirements.txt file that contains both direct and transitive dependencies of the service
+	# So when included to a docker artefact, for example, it should give accurate description of what's actually installed into the .venv
+	# We pin <4.0.0 because 4.* requires rust toolkit and our docker images doesn't have it
+	.venv/bin/pip install --quiet "pipdeptree<4.0.0"
+	.venv/bin/pipdeptree \
+		--freeze \
+		--exclude elasticsearch-connectors-sdk,pipdeptree \
 		> requirements.txt
+	# Delete it so that it's not left in the artefacts
+	.venv/bin/pip uninstall --quiet pipdeptree -y
 
 autoformat: install .venv/bin/ruff
 	.venv/bin/ruff check connectors_sdk --fix

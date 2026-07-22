@@ -91,7 +91,10 @@ freeze: .venv/bin/python
 	# So when included to a docker artefact, for example, it should give accurate description of what's actually installed into the .venv
 	# We pin <4.0.0 because 4.* requires rust toolkit and our docker images doesn't have it
 	.venv/bin/pip install --quiet "pipdeptree<4.0.0"
-	.venv/bin/pipdeptree --freeze --exclude elasticsearch-connectors,elasticsearch-connectors-sdk > requirements.txt
+	.venv/bin/pipdeptree \
+		--freeze \
+		--exclude elasticsearch-connectors,elasticsearch-connectors-sdk,pipdeptree \
+		> requirements.txt
 	# Delete it so that it's not left in the artefacts
 	.venv/bin/pip uninstall --quiet pipdeptree -y
 
