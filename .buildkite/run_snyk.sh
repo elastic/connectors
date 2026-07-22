@@ -22,8 +22,13 @@ echo "--- Downloading snyk..."
 curl -sL --retry-max-time 60 --retry 3 --retry-delay 5 https://static.snyk.io/cli/latest/snyk-linux -o snyk
 chmod +x ./snyk
 
+echo "--- Initializing venv for the test ---"
+python3 -m .snyk-venv
+$ROOT/.snyk-venv/bin/pip install --quiet -r $SDK_ROOT/requirements.txt
+$ROOT/.snyk-venv/bin/pip install --quiet -r $APP_ROOT/requirements.txt
+
 echo "--- Running snyk for SDK..."
-./snyk test --file=$SDK_ROOT/requirements.txt --command=$SDK_ROOT/.venv/bin/python3 -- --allow-missing
+./snyk test --file=$SDK_ROOT/requirements.txt --command=$ROOT/.venv/bin/python3
 
 echo "--- Running snyk for App..."
-./snyk test --file=$APP_ROOT/requirements.txt --command=$APP_ROOT/.venv/bin/python3 -- --allow-missing
+./snyk test --file=$APP_ROOT/requirements.txt --command=$ROOT/.venv/bin/python3
