@@ -24,8 +24,10 @@ chmod +x ./snyk
 
 echo "--- Initializing venv for the test ---"
 python3 -m .snyk-venv
-$ROOT/.snyk-venv/bin/pip install --quiet -r $SDK_ROOT/requirements.txt
-$ROOT/.snyk-venv/bin/pip install --quiet -r $APP_ROOT/requirements.txt
+echo "--- Installing dependencies ---"
+$ROOT/.snyk-venv/bin/pip install \
+        -r $SDK_ROOT/requirements.txt \
+        -r $APP_ROOT/requirements.txt
 
 echo "--- Running snyk for SDK..."
 ./snyk test --file=$SDK_ROOT/requirements.txt --command=$ROOT/.venv/bin/python3
