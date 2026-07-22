@@ -332,18 +332,36 @@ class Sink:
         items and retries them with exponential backoff, optionally
         respecting a Retry-After header from the response.
 
-        After all retry attempts are exhausted, the final bulk response is
-        returned so that remaining failures can be passed to the
-        ErrorMonitor for tracking and potential abort.
+        After all retry attempts are exhausted, a merged bulk response is
+        returned containing both the originally successful items and the
+        final outcome of any retried items, so that downstream callers
+        (e.g. _process_bulk_response, _populate_stats) see every item
+        exactly once.
 
         Args:
             operations: The original flat list of operation dicts.
             pipeline_name: The ingest pipeline name to pass to bulk_insert.
 
         Returns:
-            The final bulk response dict after all retries.
+            The merged bulk response dict after all retries.
         """
         res = await self.client.bulk_insert(operations, pipeline_name)
+
+        # Track successful items from earlier calls so they are not lost
+        # when `res` is overwritten on each retry.
+        successful_items: list[dict] = []
+        successful_ids: set[str] = set()
+
+        def _collect_successful(response: dict) -> None:
+            for item in response.get("items", []):
+                for _op, data in item.items():
+                    if data.get("status") not in (429, 503):
+                        doc_id = data.get("_id")
+                        if doc_id and doc_id not in successful_ids:
+                            successful_items.append(item)
+                            successful_ids.add(doc_id)
+
+        _collect_successful(res)
 
         for attempt in range(1, self.max_retires + 1):
             failed_ops = self._extract_transient_failed_operations(res, operations)
@@ -363,13 +381,35 @@ class Sink:
             sleep_time = self.retry_interval * (2 ** (attempt - 1))
             await asyncio.sleep(sleep_time)
 
-            res = await self.client.bulk_insert(failed_ops, pipeline_name)
-
-            # Narrow the operations window to only the still-failing items
-            # so the next extraction pass operates on the correct subset.
             operations = failed_ops
+            res = await self.client.bulk_insert(failed_ops, pipeline_name)
+            _collect_successful(res)
 
-        return res
+        # Build merged response: previously successful items that are not
+        # in the latest response, plus the latest response items (which
+        # contain the final outcome of any retried items).
+        latest_ids: set[str] = set()
+        for item in res.get("items", []):
+            for _op, data in item.items():
+                doc_id = data.get("_id")
+                if doc_id:
+                    latest_ids.add(doc_id)
+
+        previously_successful = [
+            item
+            for item in successful_items
+            if list(item.values())[0].get("_id") not in latest_ids
+        ]
+
+        merged = res.copy()
+        merged["items"] = previously_successful + res.get("items", [])
+        merged["errors"] = any(
+            "error" in data
+            for item in merged["items"]
+            for data in item.values()
+        )
+
+        return merged
 
     async def _process_bulk_response(self, res, ids_to_ops, do_log=False):
         for item in res.get("items", []):
