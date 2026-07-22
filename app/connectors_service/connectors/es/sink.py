@@ -61,7 +61,6 @@ from connectors.utils import (
     MemQueue,
     aenumerate,
     get_size,
-    retryable,
     sanitize,
 )
 
@@ -96,6 +95,10 @@ ID_DUPLICATE = "_id_duplicates"
 
 # Successful results according to the docs: https://www.elastic.co/guide/en/elasticsearch/reference/current/docs-bulk.html#bulk-api-response-body
 SUCCESSFUL_RESULTS = ("created", "deleted", "updated", "noop")
+
+# Transient HTTP status codes that warrant per-item retries within a bulk response.
+# See: https://www.elastic.co/guide/en/elasticsearch/reference/current/docs-bulk.html
+TRANSIENT_STATUS_CODES = (429, 503)
 
 # Reuse the same serializer the elasticsearch client uses to send bulk
 # requests, so the cap check below sees byte-for-byte the wire payload
@@ -211,14 +214,6 @@ class Sink:
 
     @tracer.start_as_current_span("_bulk API call", slow_log=1.0)
     async def _batch_bulk(self, operations, stats):
-        # TODO: make this retry policy work with unified retry strategy
-        @retryable(retries=self.max_retires, interval=self.retry_interval)
-        async def _bulk_api_call():
-            return await self.client.client.bulk(
-                operations=operations, pipeline=self.pipeline["name"]
-            )
-
-        # TODO: treat result to retry errors like in async_streaming_bulk
         task_num = len(self.bulk_tasks)
 
         if self._logger.isEnabledFor(logging.DEBUG):
@@ -226,8 +221,13 @@ class Sink:
                 f"Task {task_num} - Sending a batch of {len(operations)} ops -- {get_mib_size(operations)}MiB"
             )
 
-        # TODO: retry 429s for individual items here
-        res = await self.client.bulk_insert(operations, self.pipeline["name"])
+        # Perform initial bulk insert and retry any items that failed with
+        # transient errors (429, 503) before passing results to the ErrorMonitor.
+        # This ensures the ErrorMonitor only sees failures after all retry
+        # attempts are exhausted, preventing premature TooManyErrors aborts.
+        res = await self._retry_transient_item_failures(
+            operations, self.pipeline["name"]
+        )
         ids_to_ops = self._map_id_to_op(operations)
         # `_process_bulk_response` can raise mid-response, so log failures and
         # populate stats in `finally` to still count already-accepted docs.
@@ -263,6 +263,153 @@ class Sink:
                     ):  # avoiding update bulk extra entries
                         result[doc["_id"]] = op
         return result
+
+    def _determine_action(self, item):
+        """Return the bulk action key (e.g. OP_INDEX) for a response item,
+        or None if the action is unrecognized."""
+        for action in (OP_INDEX, OP_DELETE, OP_CREATE, OP_UPDATE):
+            if action in item:
+                return action
+        return None
+
+    def _extract_transient_failed_operations(self, res, operations):
+        """Extract operations that failed with transient HTTP status codes.
+
+        Given a bulk response and the original operations list, returns a
+        new operations list containing only those items that received a
+        transient error (429, 503). These are candidates for retry.
+
+        Args:
+            res: The bulk API response dict.
+            operations: The flat list of operation dicts that were sent
+                        (e.g. [{"index": {...}}, {"doc": {...}}, ...]).
+
+        Returns:
+            A flat list of operation dicts for the failed items only.
+        """
+        failed_ops = []
+        # Build a lookup: doc_id -> index in the operations list
+        # Operations come in pairs: [{action: meta}, body] for index/update,
+        # or single entries for delete.
+        ops_by_id = {}
+        i = 0
+        while i < len(operations):
+            entry = operations[i]
+            if isinstance(entry, dict) and len(entry) == 1:
+                action = next(iter(entry))
+                meta = entry[action]
+                if isinstance(meta, dict) and "_id" in meta:
+                    doc_id = meta["_id"]
+                    # Grab body entry too if present (index/update have one)
+                    if i + 1 < len(operations) and action != OP_DELETE:
+                        ops_by_id[doc_id] = operations[i : i + 2]
+                        i += 2
+                        continue
+                    else:
+                        ops_by_id[doc_id] = operations[i : i + 1]
+                        i += 1
+                        continue
+            i += 1
+
+        for item in res.get("items", []):
+            action = self._determine_action(item)
+            if action is None:
+                continue
+            data = item[action]
+            status = data.get("status", 200)
+            if status in TRANSIENT_STATUS_CODES:
+                doc_id = data.get("_id")
+                if doc_id in ops_by_id:
+                    failed_ops.extend(ops_by_id[doc_id])
+
+        return failed_ops
+
+    async def _retry_transient_item_failures(self, operations, pipeline_name):
+        """Retry operations that failed with transient errors.
+
+        After an initial bulk call, some items may fail individually with
+        transient HTTP status codes (429, 503). This method collects those
+        items and retries them with exponential backoff, optionally
+        respecting a Retry-After header from the response.
+
+        After all retry attempts are exhausted, a merged bulk response is
+        returned containing both the originally successful items and the
+        final outcome of any retried items, so that downstream callers
+        (e.g. _process_bulk_response, _populate_stats) see every item
+        exactly once.
+
+        Args:
+            operations: The original flat list of operation dicts.
+            pipeline_name: The ingest pipeline name to pass to bulk_insert.
+
+        Returns:
+            The merged bulk response dict after all retries.
+        """
+        res = await self.client.bulk_insert(operations, pipeline_name)
+
+        # Track successful items from earlier calls so they are not lost
+        # when `res` is overwritten on each retry.
+        successful_items: list[dict] = []
+        successful_ids: set[str] = set()
+
+        def _collect_successful(response: dict) -> None:
+            for item in response.get("items", []):
+                for _op, data in item.items():
+                    if data.get("status") not in (429, 503):
+                        doc_id = data.get("_id")
+                        if doc_id and doc_id not in successful_ids:
+                            successful_items.append(item)
+                            successful_ids.add(doc_id)
+
+        _collect_successful(res)
+
+        for attempt in range(1, self.max_retires + 1):
+            failed_ops = self._extract_transient_failed_operations(res, operations)
+            if not failed_ops:
+                break
+
+            self._logger.warning(
+                f"Retrying {len(failed_ops)} transiently failed items "
+                f"(attempt {attempt}/{self.max_retires})"
+            )
+
+            # Exponential backoff: 1x, 2x, 4x, ... the base retry interval.
+            # Note: the Retry-After header would be the preferred delay for
+            # 429s, but bulk_insert returns a parsed body without response
+            # headers, so we rely on backoff for now. A future enhancement
+            # could plumb the Retry-After value through the ES client layer.
+            sleep_time = self.retry_interval * (2 ** (attempt - 1))
+            await asyncio.sleep(sleep_time)
+
+            operations = failed_ops
+            res = await self.client.bulk_insert(failed_ops, pipeline_name)
+            _collect_successful(res)
+
+        # Build merged response: previously successful items that are not
+        # in the latest response, plus the latest response items (which
+        # contain the final outcome of any retried items).
+        latest_ids: set[str] = set()
+        for item in res.get("items", []):
+            for _op, data in item.items():
+                doc_id = data.get("_id")
+                if doc_id:
+                    latest_ids.add(doc_id)
+
+        previously_successful = [
+            item
+            for item in successful_items
+            if list(item.values())[0].get("_id") not in latest_ids
+        ]
+
+        merged = res.copy()
+        merged["items"] = previously_successful + res.get("items", [])
+        merged["errors"] = any(
+            "error" in data
+            for item in merged["items"]
+            for data in item.values()
+        )
+
+        return merged
 
     async def _process_bulk_response(self, res, ids_to_ops, do_log=False):
         for item in res.get("items", []):
