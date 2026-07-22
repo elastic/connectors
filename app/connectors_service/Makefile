@@ -89,8 +89,11 @@ freeze: .venv/bin/python
 	# So to make things work we need to convert our requirements to requirements.txt file so that snyk could run its scanning against it
 	# Pipdeptree is able to actually produce requirements.txt file that contains both direct and transitive dependencies of the service
 	# So when included to a docker artefact, for example, it should give accurate description of what's actually installed into the .venv
-	.venv/bin/pip install --quiet pipdeptree
+	# We pin <4.0.0 because 4.* requires rust toolkit and our docker images doesn't have it
+	.venv/bin/pip install --quiet "pipdeptree<4.0.0"
 	.venv/bin/pipdeptree --freeze --exclude elasticsearch-connectors,elasticsearch-connectors-sdk > requirements.txt
+	# Delete it so that it's not left in the artefacts
+	.venv/bin/pip uninstall --quiet pipdeptree -y
 
 ftest: .venv/bin/pytest
 	tests/ftest.sh $(NAME) $(PERF8)
