@@ -3,6 +3,7 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+import asyncio
 from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
@@ -26,6 +27,7 @@ from connectors.sources.shared.microsoft.graph import (
     NotFound,
     PermissionsMissing,
 )
+from connectors.utils import ConcurrentTasks
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
 
@@ -782,6 +784,74 @@ async def test_get_docs_empty_tenant_does_not_raise():
 
         docs = [doc async for doc, _download in source.get_docs()]
         assert docs == []
+
+
+@pytest.mark.asyncio
+async def test_get_docs_raises_on_unexpected_enumeration_error():
+    # A non-PermissionsMissing error during enumeration must fail the sync, not
+    # hang it (the orchestrator runs as a pool task whose exception is swallowed
+    # by ConcurrentTasks; get_docs re-raises the recorded error instead).
+    async with create_teams_source() as source:
+        source.client.get_teams = MagicMock(side_effect=RuntimeError("boom"))
+        source.client.get_chats = MagicMock(return_value=AsyncIterator([]))
+
+        async def drain():
+            async for _doc, _download in source.get_docs():
+                pass
+
+        with pytest.raises(RuntimeError, match="boom"):
+            await asyncio.wait_for(drain(), timeout=5)
+
+
+@pytest.mark.asyncio
+async def test_get_docs_completes_under_low_concurrency():
+    # Regression: channels used to be scheduled into the same bounded pool from
+    # within team_producer. With a small pool and multiple teams that each have a
+    # channel, that nested scheduling deadlocked. Channels are now processed
+    # inline, so the sync must complete regardless of pool size.
+    two_teams = [
+        {"id": "team-1", "displayName": "Team One"},
+        {"id": "team-2", "displayName": "Team Two"},
+    ]
+    async with create_teams_source(fetch_attachment_content=False) as source:
+        source.fetchers = ConcurrentTasks(max_concurrency=2)
+        source.client.get_teams = MagicMock(return_value=AsyncIterator([two_teams]))
+        source.client.get_team_members = MagicMock(
+            side_effect=lambda *a, **k: AsyncIterator([TEAM_MEMBERS])
+        )
+        source.client.get_team_channels = MagicMock(
+            side_effect=lambda *a, **k: AsyncIterator([CHANNELS])
+        )
+        source.client.get_channel_messages = MagicMock(
+            side_effect=lambda *a, **k: AsyncIterator([[]])
+        )
+        source.client.get_chats = MagicMock(return_value=AsyncIterator([]))
+
+        async def drain():
+            return [doc async for doc, _download in source.get_docs()]
+
+        docs = await asyncio.wait_for(drain(), timeout=5)
+
+        types = {doc["type"] for doc in docs}
+        assert TeamsObjectType.TEAM.value in types
+        assert TeamsObjectType.CHANNEL.value in types
+        # both teams' channels were produced inline
+        channel_ids = [
+            doc["_id"] for doc in docs if doc["type"] == TeamsObjectType.CHANNEL.value
+        ]
+        assert len(channel_ids) == 2
+
+
+@pytest.mark.asyncio
+async def test_get_docs_calls_log_skip_summary():
+    async with create_teams_source() as source:
+        _mock_client_for_get_docs(source)
+        source.client.log_skip_summary = Mock()
+
+        async for _doc, _download in source.get_docs():
+            pass
+
+        source.client.log_skip_summary.assert_called_once()
 
 
 # -- Skip visibility ---------------------------------------------------------

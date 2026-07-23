@@ -58,6 +58,9 @@ class MicrosoftTeamsDataSource(BaseDataSource):
         """
         super().__init__(configuration=configuration)
         self.tasks = 0
+        self._teams_enumeration_failed = False
+        self._chats_enumeration_failed = False
+        self._enumeration_error: Exception | None = None
         self.queue = MemQueue(maxmemsize=QUEUE_MEM_SIZE, refresh_timeout=120)
         self.fetchers = ConcurrentTasks(max_concurrency=MAX_CONCURRENCY)
         self.schema = Schema()
@@ -390,7 +393,7 @@ class MicrosoftTeamsDataSource(BaseDataSource):
             )
         )
 
-    async def channel_producer(self, channel, team_id, team_name, access_control):
+    async def _produce_channel(self, channel, team_id, team_name, access_control):
         channel_id = channel.get("id")
         channel_name = channel.get("displayName")
 
@@ -431,56 +434,55 @@ class MicrosoftTeamsDataSource(BaseDataSource):
                                 child, team_name, channel_name, access_control
                             )
 
-        await self.queue.put(EndSignal.CHANNEL_TASK_FINISHED)
-
     async def team_producer(self, team):
         team_id = team.get("id")
         team_name = team.get("displayName")
 
-        members = []
-        async for member_page in self.client.get_team_members(team_id):
-            members.extend(member_page)
+        try:
+            members = []
+            async for member_page in self.client.get_team_members(team_id):
+                members.extend(member_page)
 
-        access_control = self._access_control_for_members(members)
+            access_control = self._access_control_for_members(members)
 
-        team_document = self.formatter.format_doc(
-            item=team,
-            document_type=self.schema.team,
-            document={
-                "type": TeamsObjectType.TEAM.value,
-                "_timestamp": iso_zulu(),
-            },
-        )
-        await self.queue.put(
-            (self._decorate_with_access_control(team_document, access_control), None)
-        )
-
-        for member in members:
-            member_document = self.formatter.format_team_member(
-                member, team_id, team_name
+            team_document = self.formatter.format_doc(
+                item=team,
+                document_type=self.schema.team,
+                document={
+                    "type": TeamsObjectType.TEAM.value,
+                    "_timestamp": iso_zulu(),
+                },
             )
-            member_document["_timestamp"] = iso_zulu()
             await self.queue.put(
                 (
-                    self._decorate_with_access_control(member_document, access_control),
+                    self._decorate_with_access_control(team_document, access_control),
                     None,
                 )
             )
 
-        async for channels in self.client.get_team_channels(team_id):
-            for channel in channels:
-                await self.fetchers.put(
-                    partial(
-                        self.channel_producer,
-                        channel,
-                        team_id,
-                        team_name,
-                        access_control,
+            for member in members:
+                member_document = self.formatter.format_team_member(
+                    member, team_id, team_name
+                )
+                member_document["_timestamp"] = iso_zulu()
+                await self.queue.put(
+                    (
+                        self._decorate_with_access_control(
+                            member_document, access_control
+                        ),
+                        None,
                     )
                 )
-                self.tasks += 1
 
-        await self.queue.put(EndSignal.TEAM_TASK_FINISHED)
+            # Channels are processed inline (not scheduled as separate pool tasks)
+            # to avoid a nested fetchers.put that could deadlock the bounded pool.
+            async for channels in self.client.get_team_channels(team_id):
+                for channel in channels:
+                    await self._produce_channel(
+                        channel, team_id, team_name, access_control
+                    )
+        finally:
+            await self.queue.put(EndSignal.TEAM_TASK_FINISHED)
 
     def _chat_member_names(self, members):
         return ",".join(
@@ -546,39 +548,43 @@ class MicrosoftTeamsDataSource(BaseDataSource):
         access_control = self._access_control_for_members(members)
         member_names = self._chat_member_names(members)
 
-        chat_document = self.formatter.format_doc(
-            item=chat,
-            document_type=self.schema.chat,
-            document={"type": TeamsObjectType.CHAT.value},
-        )
-        if not chat_document.get("title"):
-            chat_document["title"] = member_names
-        await self.queue.put(
-            (self._decorate_with_access_control(chat_document, access_control), None)
-        )
-
-        async for messages in self.client.get_chat_messages(chat_id):
-            for message in messages:
-                await self._process_chat_message(
-                    chat, message, member_names, access_control
+        try:
+            chat_document = self.formatter.format_doc(
+                item=chat,
+                document_type=self.schema.chat,
+                document={"type": TeamsObjectType.CHAT.value},
+            )
+            if not chat_document.get("title"):
+                chat_document["title"] = member_names
+            await self.queue.put(
+                (
+                    self._decorate_with_access_control(chat_document, access_control),
+                    None,
                 )
+            )
 
-                if self._attachments_enabled() and (
-                    message.get("from") and message["from"].get("user")
-                ):
-                    for attachment in message.get("attachments", []):
-                        if (
-                            attachment.get("name")
-                            and attachment.get("contentType") == "reference"
-                        ):
-                            await self._process_chat_attachment(
-                                message["from"]["user"]["id"],
-                                attachment["name"],
-                                member_names,
-                                access_control,
-                            )
+            async for messages in self.client.get_chat_messages(chat_id):
+                for message in messages:
+                    await self._process_chat_message(
+                        chat, message, member_names, access_control
+                    )
 
-        await self.queue.put(EndSignal.CHAT_TASK_FINISHED)
+                    if self._attachments_enabled() and (
+                        message.get("from") and message["from"].get("user")
+                    ):
+                        for attachment in message.get("attachments", []):
+                            if (
+                                attachment.get("name")
+                                and attachment.get("contentType") == "reference"
+                            ):
+                                await self._process_chat_attachment(
+                                    message["from"]["user"]["id"],
+                                    attachment["name"],
+                                    member_names,
+                                    access_control,
+                                )
+        finally:
+            await self.queue.put(EndSignal.CHAT_TASK_FINISHED)
 
     async def _enumerate_producers(self):
         """Enumerates teams and chats and schedules their producers.
@@ -588,29 +594,42 @@ class MicrosoftTeamsDataSource(BaseDataSource):
         on a large tenant: producers fill the bounded ``MemQueue`` while nothing is
         draining it, and ``fetchers`` blocks once ``MAX_CONCURRENCY`` is reached.
         """
+        self._teams_enumeration_failed = False
+        self._chats_enumeration_failed = False
+        self._enumeration_error = None
         try:
-            async for teams in self.client.get_teams():
-                for team in teams:
-                    await self.fetchers.put(partial(self.team_producer, team))
-                    self.tasks += 1
-        except PermissionsMissing:
-            self._teams_enumeration_failed = True
-            self._logger.warning(
-                "Unable to enumerate teams. Verify the 'Team.ReadBasic.All' application permission is granted."
-            )
+            try:
+                async for teams in self.client.get_teams():
+                    for team in teams:
+                        await self.fetchers.put(partial(self.team_producer, team))
+                        self.tasks += 1
+            except PermissionsMissing:
+                self._teams_enumeration_failed = True
+                self._logger.warning(
+                    "Unable to enumerate teams. Verify the 'Team.ReadBasic.All' application permission is granted."
+                )
 
-        try:
-            async for chats in self.client.get_chats():
-                for chat in chats:
-                    await self.fetchers.put(partial(self.chat_producer, chat))
-                    self.tasks += 1
-        except PermissionsMissing:
-            self._chats_enumeration_failed = True
-            self._logger.warning(
-                "Unable to enumerate chats. Verify the 'Chat.ReadBasic.WhereInstalled' application permission is granted and the connector's Teams app is installed."
+            try:
+                async for chats in self.client.get_chats():
+                    for chat in chats:
+                        await self.fetchers.put(partial(self.chat_producer, chat))
+                        self.tasks += 1
+            except PermissionsMissing:
+                self._chats_enumeration_failed = True
+                self._logger.warning(
+                    "Unable to enumerate chats. Verify the 'Chat.ReadBasic.WhereInstalled' application permission is granted and the connector's Teams app is installed."
+                )
+        except Exception as exc:
+            # An unexpected (non-permission) error is treated as a connection-wide
+            # failure: record it and abort so get_docs can re-raise it. The finally
+            # below still emits ENUMERATION_FINISHED so the consumer never hangs.
+            self._enumeration_error = exc
+            self._logger.error(
+                "Unexpected error while enumerating Microsoft Teams resources; aborting sync.",
+                exc_info=exc,
             )
-
-        await self.queue.put(EndSignal.ENUMERATION_FINISHED)
+        finally:
+            await self.queue.put(EndSignal.ENUMERATION_FINISHED)
 
     async def get_docs(self, filtering=None):
         """Executes the logic to fetch Microsoft Teams objects in an async manner.
@@ -621,9 +640,6 @@ class MicrosoftTeamsDataSource(BaseDataSource):
         Yields:
             tuple: A document mapping and an optional coroutine to fetch its content.
         """
-        self._teams_enumeration_failed = False
-        self._chats_enumeration_failed = False
-
         await self.fetchers.put(partial(self._enumerate_producers))
         self.tasks += 1
 
@@ -633,6 +649,9 @@ class MicrosoftTeamsDataSource(BaseDataSource):
         await self.fetchers.join()
 
         self.client.log_skip_summary()
+
+        if self._enumeration_error is not None:
+            raise self._enumeration_error
 
         if self._teams_enumeration_failed and self._chats_enumeration_failed:
             msg = (

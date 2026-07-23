@@ -29,6 +29,7 @@ syncs whatever it has access to.
 
 import os
 from collections import Counter
+from collections.abc import AsyncIterator
 from enum import Enum
 
 import aiohttp
@@ -76,7 +77,6 @@ class TeamsObjectType(Enum):
 class EndSignal(Enum):
     ENUMERATION_FINISHED = "ENUMERATION_FINISHED"
     TEAM_TASK_FINISHED = "TEAM_TASK_FINISHED"
-    CHANNEL_TASK_FINISHED = "CHANNEL_TASK_FINISHED"
     CHAT_TASK_FINISHED = "CHAT_TASK_FINISHED"
 
 
@@ -283,7 +283,9 @@ class MicrosoftTeamsClient:
             )
             return None
 
-    async def get_channel_drive_children(self, drive_id, item_id):
+    async def get_channel_drive_children(
+        self, drive_id, item_id
+    ) -> AsyncIterator[dict]:
         try:
             async for children in self._graph_api_client.scroll(
                 f"{BASE_URL}/drives/{drive_id}/items/{item_id}/children?$top=5000"
