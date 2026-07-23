@@ -88,6 +88,7 @@ def mock_connector(
     )
     connector.validate_filtering = AsyncMock()
     connector.next_sync = Mock(return_value=next_sync)
+    connector.access_control_sync_scheduling = {"enabled": True}
 
     connector.close = AsyncMock()
     connector.prepare = AsyncMock(side_effect=prepare_exception)
@@ -229,6 +230,39 @@ async def test_connector_scheduled_access_control_sync_with_insufficient_license
 
 
 @pytest.mark.asyncio
+async def test_connector_scheduled_access_control_sync_with_sync_disabled(
+    connector_index_mock,
+    sync_job_index_mock,
+    set_env,
+):
+    # DLS is supported (e.g. SharePoint Online) but the user has NOT enabled
+    # access control sync scheduling. Even on a non-Platinum license the
+    # license must not be checked and no error should be logged. (#4139)
+    connector = mock_connector(next_sync=datetime.now(timezone.utc))
+    connector.access_control_sync_scheduling = {"enabled": False}
+    connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
+    connector_index_mock.has_active_license_enabled = AsyncMock(
+        return_value=(False, License.BASIC)
+    )
+
+    await create_and_run_service(JobSchedulingService)
+
+    connector.prepare.assert_awaited()
+    connector.heartbeat.assert_awaited()
+
+    # license is not checked because access control sync scheduling is disabled
+    connector_index_mock.has_active_license_enabled.assert_not_awaited()
+
+    # only a scheduled full sync is created
+    sync_job_index_mock.create.assert_any_await(
+        connector=connector,
+        trigger_method=JobTriggerMethod.SCHEDULED,
+        job_type=JobType.FULL,
+    )
+    assert sync_job_index_mock.create.await_count == 1
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "incremental_sync_enabled, service_type, schedule_incremental_sync",
     [
@@ -272,6 +306,39 @@ async def test_connector_scheduled_incremental_sync(
         assert sync_job_index_mock.create.await_count == 2
     else:
         assert sync_job_index_mock.create.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_connector_scheduled_access_control_sync_with_sync_disabled(
+    connector_index_mock,
+    sync_job_index_mock,
+    set_env,
+):
+    # DLS is supported (e.g. SharePoint Online) but the user has NOT enabled
+    # access control sync scheduling. Even on a non-Platinum license the
+    # license must not be checked and no error should be logged. (#4139)
+    connector = mock_connector(next_sync=datetime.now(timezone.utc))
+    connector.access_control_sync_scheduling = {"enabled": False}
+    connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
+    connector_index_mock.has_active_license_enabled = AsyncMock(
+        return_value=(False, License.BASIC)
+    )
+
+    await create_and_run_service(JobSchedulingService)
+
+    connector.prepare.assert_awaited()
+    connector.heartbeat.assert_awaited()
+
+    # license is not checked because access control sync scheduling is disabled
+    connector_index_mock.has_active_license_enabled.assert_not_awaited()
+
+    # only a scheduled full sync is created
+    sync_job_index_mock.create.assert_any_await(
+        connector=connector,
+        trigger_method=JobTriggerMethod.SCHEDULED,
+        job_type=JobType.FULL,
+    )
+    assert sync_job_index_mock.create.await_count == 1
 
 
 @pytest.mark.asyncio
