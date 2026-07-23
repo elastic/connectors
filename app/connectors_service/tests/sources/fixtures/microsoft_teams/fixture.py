@@ -15,126 +15,151 @@ from tests.commons import WeightedFakeProvider
 
 fake_provider = WeightedFakeProvider()
 
-app = Flask(__name__)
-
-
 THROTTLING = os.environ.get("THROTTLING", False)
-PRE_REQUEST_SLEEP = float(os.environ.get("PRE_REQUEST_SLEEP", "0.05"))
-
-if THROTTLING:
-    limiter = Limiter(
-        get_remote_address,
-        app=app,
-        storage_uri="memory://",
-        application_limits=[
-            "6000 per minute",
-            "6000000 per day",
-        ],  # Microsoft 50k+ licences limits
-        retry_after="delta-seconds",
-        headers_enabled=True,
-        header_name_mapping={
-            HEADERS.LIMIT: "RateLimit-Limit",
-            HEADERS.RESET: "RateLimit-Reset",
-            HEADERS.REMAINING: "RateLimit-Remaining",
-        },
-    )
-
-    limiter.init_app(app)
-
-SIZES = {
-    "small": 100000,
-    "medium": 500000,
-    "large": 1000000,
-}
 
 DOC_ID_SIZE = 36
-
-
-def adjust_document_id_size(doc_id):
-    """
-    This methods make sure that all the documemts ids are min 36 bytes
-    """
-
-    bytesize = len(doc_id)
-
-    if bytesize >= DOC_ID_SIZE:
-        return doc_id
-
-    addition = "".join(["0" for _ in range(DOC_ID_SIZE - bytesize - 1)])
-    return f"{doc_id}-{addition}"
-
 
 DATA_SIZE = os.environ.get("DATA_SIZE", "medium").lower()
 
 match DATA_SIZE:
     case "small":
-        MESSAGES = 25
-        EVENTS = 50
-        CHANNEL = 3
-        FILES = 10
-        CHANNEL_MESSAGE = 50
+        TEAMS = 2
+        MEMBERS = 3
+        CHANNELS = 2
+        CHANNEL_MESSAGES = 10
+        REPLIES = 1
+        FILES = 3
+        CHATS = 3
+        CHAT_MESSAGES = 10
     case "medium":
-        MESSAGES = 50
-        EVENTS = 50
-        CHANNEL = 3
-        FILES = 50
-        CHANNEL_MESSAGE = 500
+        TEAMS = 3
+        MEMBERS = 5
+        CHANNELS = 3
+        CHANNEL_MESSAGES = 50
+        REPLIES = 2
+        FILES = 10
+        CHATS = 10
+        CHAT_MESSAGES = 50
     case "large":
-        MESSAGES = 250
-        EVENTS = 150
-        CHANNEL = 5
-        FILES = 150
-        CHANNEL_MESSAGE = 1000
+        TEAMS = 5
+        MEMBERS = 10
+        CHANNELS = 5
+        CHANNEL_MESSAGES = 100
+        REPLIES = 3
+        FILES = 20
+        CHATS = 20
+        CHAT_MESSAGES = 100
     case _:
         msg = f"Unknown DATA_SIZE: {DATA_SIZE}. Expecting 'small', 'medium' or 'large'"
         raise Exception(msg)
 
-MESSAGES_TO_DELETE = 10
-EVENTS_TO_DELETE = 1
 
-ROOT = os.environ.get("OVERRIDE_URL", "http://127.0.0.1:10971")
+def adjust_document_id_size(doc_id):
+    """Ensure document ids are at least DOC_ID_SIZE bytes."""
+    bytesize = len(doc_id)
+    if bytesize >= DOC_ID_SIZE:
+        return doc_id
+    addition = "".join(["0" for _ in range(DOC_ID_SIZE - bytesize - 1)])
+    return f"{doc_id}-{addition}"
+
+
+def expected_docs_count():
+    teams = TEAMS
+    team_members = TEAMS * MEMBERS
+    channels = TEAMS * CHANNELS
+    channel_messages = TEAMS * CHANNELS * CHANNEL_MESSAGES
+    channel_replies = TEAMS * CHANNELS * CHANNEL_MESSAGES * REPLIES
+    channel_attachments = TEAMS * CHANNELS * FILES
+    chats = CHATS
+    chat_messages = CHATS * CHAT_MESSAGES
+    # every chat message carries a single reference attachment resolving to one file
+    chat_attachments = CHATS * CHAT_MESSAGES
+    return (
+        teams
+        + team_members
+        + channels
+        + channel_messages
+        + channel_replies
+        + channel_attachments
+        + chats
+        + chat_messages
+        + chat_attachments
+    )
 
 
 def get_num_docs():
-    # I tried to do the maths, but it's not possible without diving too deep into the connector
-    # Therefore, doing naive way - just ran connector and took the number from the test
-    expected_count = 0
-    match DATA_SIZE:
-        case "small":
-            expected_count = 508
-        case "medium":
-            expected_count = 4613
-        case "large":
-            expected_count = 15435
+    print(expected_docs_count())
 
-    print(expected_count)
+
+def _message(message_id, with_replies=False):
+    replies = []
+    if with_replies:
+        for reply in range(REPLIES):
+            replies.append(_message(f"{message_id}-reply-{reply}", with_replies=False))
+    return {
+        "id": adjust_document_id_size(message_id),
+        "messageType": "message",
+        "createdDateTime": "2023-08-16T04:47:55.794Z",
+        "lastModifiedDateTime": "2023-08-16T04:47:55.794Z",
+        "deletedDateTime": None,
+        "subject": None,
+        "summary": None,
+        "webUrl": f"https://teams.microsoft.com/l/message/{message_id}",
+        "eventDetail": None,
+        "from": {"user": {"id": "sender-1", "displayName": "Dummy"}},
+        "body": {"contentType": "html", "content": fake_provider.get_html()},
+        "attachments": [],
+        "replies": replies,
+    }
+
+
+def _file(file_id, drive_id):
+    return {
+        "id": adjust_document_id_size(file_id),
+        "name": "list.txt",
+        "webUrl": f"{ROOT}/download/{file_id}",
+        "size": 45441,
+        "createdDateTime": "2023-08-16T04:47:26Z",
+        "lastModifiedDateTime": "2023-08-16T04:47:29Z",
+        "file": {"mimeType": "text/plain"},
+        "parentReference": {"driveId": drive_id, "driveType": "documentLibrary"},
+    }
+
+
+ROOT = os.environ.get("OVERRIDE_URL", "http://127.0.0.1:10971")
 
 
 class MicrosoftTeamsAPI:
     def __init__(self):
         self.app = Flask(__name__)
-        self.app.route("/me", methods=["GET"])(self.get_myself)
 
-        self.app.route("/chats", methods=["GET"])(self.get_user_chats)
-        self.app.route("/chats/<string:chat_id>/messages", methods=["GET"])(
-            self.get_user_chat_messages
-        )
-        self.app.route("/chats/<string:chat_id>/tabs", methods=["GET"])(
-            self.get_user_chat_tabs
-        )
+        if THROTTLING:
+            limiter = Limiter(
+                get_remote_address,
+                app=self.app,
+                storage_uri="memory://",
+                application_limits=["6000 per minute", "6000000 per day"],
+                retry_after="delta-seconds",
+                headers_enabled=True,
+                header_name_mapping={
+                    HEADERS.LIMIT: "RateLimit-Limit",
+                    HEADERS.RESET: "RateLimit-Reset",
+                    HEADERS.REMAINING: "RateLimit-Remaining",
+                },
+            )
+            limiter.init_app(self.app)
 
-        self.app.route("/users", methods=["GET"])(self.get_users)
-        self.app.route("/users/<string:user_id>/events", methods=["GET"])(
-            self.get_events
+        self.app.route("/<string:tenant_id>/oauth2/v2.0/token", methods=["POST"])(
+            self.get_token
         )
 
         self.app.route("/teams", methods=["GET"])(self.get_teams)
+        self.app.route("/teams/<string:team_id>/members", methods=["GET"])(
+            self.get_team_members
+        )
         self.app.route("/teams/<string:team_id>/channels", methods=["GET"])(
             self.get_channels
         )
-        self.app.route(
-            "/teams/<string:team_id>/channels/<string:channel_id>/tabs", methods=["GET"]
-        )(self.get_channel_tabs)
         self.app.route(
             "/teams/<string:team_id>/channels/<string:channel_id>/messages",
             methods=["GET"],
@@ -142,284 +167,153 @@ class MicrosoftTeamsAPI:
         self.app.route(
             "/teams/<string:team_id>/channels/<string:channel_id>/filesFolder",
             methods=["GET"],
-        )(self.get_teams_filefolder)
+        )(self.get_channel_files_folder)
+
+        self.app.route("/chats", methods=["GET"])(self.get_chats)
+        self.app.route("/chats/<string:chat_id>/messages", methods=["GET"])(
+            self.get_chat_messages
+        )
+
+        self.app.route("/users/<string:user_id>/drive", methods=["GET"])(
+            self.get_user_drive
+        )
         self.app.route(
             "/drives/<string:drive_id>/items/<string:item_id>/children",
             methods=["GET"],
-        )(self.get_teams_file)
+        )(self.get_drive_children)
+        self.app.route(
+            "/drives/<string:drive_id>/items/<string:item_id>/content",
+            methods=["GET"],
+        )(self.download_file)
 
-        self.app.route("/sites/list.txt", methods=["GET"])(self.download_file)
-
-    def get_myself(self):
+    def get_token(self, tenant_id):
         return {
-            "displayName": "Alex Wilber",
-            "givenName": "Alex",
-            "mail": "Alex@3hr2.onmicrosoft.com",
-            "userPrincipalName": "Alex@3hr2.onmicrosoft.com",
-            "id": adjust_document_id_size("me-1"),
+            "access_token": "fake-access-token",
+            "token_type": "Bearer",
+            "expires_in": 3600,
         }
-
-    def get_user_chats(self):
-        return {
-            "value": [
-                {
-                    "id": adjust_document_id_size("1"),
-                    "topic": None,
-                    "createdDateTime": "2023-07-21T21:24:18.338Z",
-                    "lastUpdatedDateTime": "2023-07-21T21:24:18.338Z",
-                    "chatType": "oneOnOne",
-                    "webUrl": "https://teams.microsoft.com/l/chat/1",
-                    "members": [
-                        {
-                            "@odata.type": "#microsoft.graph.aadUserConversationMember",
-                            "displayName": "Cervantes, Andres",
-                            "userId": "123abc",
-                            "email": "ACervantes@mlock.com",
-                        },
-                    ],
-                }
-            ]
-        }
-
-    def get_user_chat_messages(self, chat_id):
-        global MESSAGES
-        message_data = []
-        top = int(request.args.get("$top"))
-        for message in range(MESSAGES):
-            message_data.append(
-                {
-                    "id": adjust_document_id_size(f"user-chat-{message}-{MESSAGES}"),
-                    "messageType": "onetoone",
-                    "createdDateTime": "2023-07-21T21:24:18.726Z",
-                    "lastModifiedDateTime": "2023-07-21T21:24:18.726Z",
-                    "deletedDateTime": None,
-                    "subject": None,
-                    "summary": None,
-                    "webUrl": None,
-                    "from": None,
-                    "body": {"contentType": "html", "content": "<h1>dummy data</h1>"},
-                    "attachments": [],
-                    "eventDetail": None,
-                }
-            )
-        response = {
-            "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#Chats)",
-            "value": message_data,
-        }
-
-        if len(message_data) == top:
-            response["@odata.nextLink"] = f"{ROOT}/chats/{chat_id}/messages?$top=50"
-            MESSAGES -= MESSAGES_TO_DELETE  # performs deletion and pagination
-        return response
-
-    def get_user_chat_tabs(self, chat_id):
-        return {
-            "value": [
-                {
-                    "id": adjust_document_id_size("tab-1"),
-                    "displayName": "Notes",
-                    "configuration": {"websiteUrl": "https://onenote.com"},
-                }
-            ]
-        }
-
-    def get_users(self):
-        return {
-            "value": [
-                {
-                    "mail": "AdeleV@3hmnr2.onmicrosoft.com",
-                    "id": adjust_document_id_size("user-1"),
-                }
-            ]
-        }
-
-    def get_events(self, user_id):
-        global EVENTS
-        event_data = []
-        top = int(request.args.get("$top"))
-        for event in range(EVENTS):
-            event_data.append(
-                {
-                    "id": adjust_document_id_size(f"event-{user_id}"),
-                    "createdDateTime": "2023-08-10T08:22:14.5296951Z",
-                    "lastModifiedDateTime": "2023-08-10T08:25:29.3693436Z",
-                    "categories": [],
-                    "originalStartTimeZone": "India Standard Time",
-                    "originalEndTimeZone": "India Standard Time",
-                    "reminderMinutesBeforeStart": 15,
-                    "isReminderOn": True,
-                    "subject": "new meet",
-                    "bodyPreview": "Body prebiew dummy",
-                    "importance": "normal",
-                    "isAllDay": False,
-                    "isCancelled": False,
-                    "showAs": "busy",
-                    "webLink": f"https://outlook.office365.com/calendar/item/{event}",
-                    "body": {"contentType": "html", "content": "<html>dummy</html>"},
-                    "start": {
-                        "dateTime": "2023-08-10T08:00:00.0000000",
-                        "timeZone": "UTC",
-                    },
-                    "end": {
-                        "dateTime": "2023-08-10T08:30:00.0000000",
-                        "timeZone": "UTC",
-                    },
-                    "locations": [
-                        {
-                            "displayName": "Microsoft Teams Meeting",
-                        }
-                    ],
-                    "recurrence": None,
-                    "attendees": [],
-                    "organizer": {
-                        "emailAddress": {
-                            "name": "Dummy",
-                            "address": "dummy@mnr.onmicrosoft.com",
-                        }
-                    },
-                    "onlineMeeting": {"joinUrl": "https://teams.microsoft.com/meet"},
-                }
-            )
-        response = {
-            "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#events)",
-            "value": event_data,
-        }
-
-        if len(event_data) == top:
-            response["@odata.nextLink"] = f"{ROOT}/users/{user_id}/events?$top=50"
-            EVENTS -= EVENTS_TO_DELETE
-        return response
 
     def get_teams(self):
-        return {
-            "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#teams)",
-            "value": [
+        teams = []
+        for team in range(TEAMS):
+            teams.append(
                 {
-                    "id": adjust_document_id_size("team-1"),
-                    "createdDateTime": None,
-                    "displayName": "team1",
-                    "description": "team1",
-                    "webUrl": None,
-                    "summary": None,
-                },
+                    "id": adjust_document_id_size(f"team-{team}"),
+                    "displayName": f"team{team}",
+                    "description": f"team {team} description",
+                    "createdDateTime": "2023-08-16T04:46:53.056Z",
+                    "webUrl": f"https://teams.microsoft.com/l/team/{team}",
+                }
+            )
+        return {"value": teams}
+
+    def get_team_members(self, team_id):
+        members = []
+        for member in range(MEMBERS):
+            members.append(
                 {
-                    "id": adjust_document_id_size("team-2"),
-                    "createdDateTime": None,
-                    "displayName": "team2",
-                    "description": "team2",
-                    "webUrl": None,
-                    "summary": None,
-                },
-                {
-                    "id": adjust_document_id_size("team-3"),
-                    "createdDateTime": None,
-                    "displayName": "team3",
-                    "description": "team3",
-                    "webUrl": None,
-                    "summary": None,
-                },
-            ],
-        }
+                    "id": f"membership-{member}-{team_id}",
+                    "displayName": f"Member {member}",
+                    "userId": f"user-{member}",
+                    "email": f"member{member}@example.onmicrosoft.com",
+                    "roles": ["owner"] if member == 0 else [],
+                }
+            )
+        return {"value": members}
 
     def get_channels(self, team_id):
-        channel_list = []
-        for channel in range(CHANNEL):
-            channel_list.append(
+        channels = []
+        for channel in range(CHANNELS):
+            channels.append(
                 {
                     "id": adjust_document_id_size(f"channel-{channel}-{team_id}"),
-                    "createdDateTime": "2023-08-16T04:46:53.056Z",
                     "displayName": f"General-{channel}",
                     "description": "channel",
                     "webUrl": f"https://teams.microsoft.com/l/channel/{channel}/{team_id}",
+                    "createdDateTime": "2023-08-16T04:46:53.056Z",
                 }
             )
-        return {
-            "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#teams)",
-            "value": channel_list,
-        }
+        return {"value": channels}
 
     def get_channel_messages(self, team_id, channel_id):
-        message_list = []
-        for message in range(CHANNEL_MESSAGE):
-            message_list.append(
-                {
-                    "id": adjust_document_id_size(
-                        f"message-{team_id}-{channel_id}-{message}"
-                    ),
-                    "messageType": "message",
-                    "createdDateTime": "2023-08-16T04:47:55.794Z",
-                    "lastModifiedDateTime": "2023-08-16T04:47:55.794Z",
-                    "deletedDateTime": None,
-                    "subject": "",
-                    "summary": None,
-                    "webUrl": f"https://teams.microsoft.com/l/message/{team_id}/{channel_id}/{message}",
-                    "policyViolation": None,
-                    "eventDetail": None,
-                    "from": {
-                        "user": {
-                            "displayName": "Dummy",
-                        }
-                    },
-                    "body": {
-                        "contentType": "html",
-                        "content": "<div>I added a tab at the top of this channel. Check it out!</div>",
-                    },
-                    "attachments": [],
-                }
+        messages = []
+        for message in range(CHANNEL_MESSAGES):
+            messages.append(
+                _message(f"message-{team_id}-{channel_id}-{message}", with_replies=True)
             )
-        return {
-            "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#message)",
-            "value": message_list,
-        }
+        return {"value": messages}
 
-    def get_channel_tabs(self, team_id, channel_id):
+    def get_channel_files_folder(self, team_id, channel_id):
+        drive_id = f"cdrive-{team_id}-{channel_id}"
         return {
-            "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#tabs)",
-            "value": [
-                {
-                    "id": adjust_document_id_size(f"tabs-{team_id}-{channel_id}"),
-                    "displayName": "Notes",
-                    "webUrl": f"https://teams.microsoft.com/l/entity/tab/{team_id}/{channel_id}",
-                    "configuration": {"websiteUrl": "https://onenote.com"},
-                }
-            ],
-        }
-
-    def get_teams_filefolder(self, team_id, channel_id):
-        return {
-            "id": "filfolder-1",
-            "createdDateTime": "0001-01-01T00:00:00Z",
-            "lastModifiedDateTime": "2023-09-21T10:23:48Z",
+            "id": f"cfolder-{team_id}-{channel_id}",
             "name": "root",
-            "size": 351660,
-            "parentReference": {
-                "driveId": "driveid-123",
-                "driveType": "documentLibrary",
-            },
+            "parentReference": {"driveId": drive_id, "driveType": "documentLibrary"},
         }
 
-    def get_teams_file(self, drive_id, item_id):
-        files_list = []
-        for file_data in range(FILES):
-            files_list.append(
+    def get_chats(self):
+        chats = []
+        for chat in range(CHATS):
+            chats.append(
                 {
-                    "@microsoft.graph.downloadUrl": f"{ROOT}/sites/list.txt",
-                    "createdDateTime": "2023-08-16T04:47:26Z",
-                    "id": adjust_document_id_size(
-                        f"file-{file_data}-{drive_id}-{item_id}"
-                    ),
-                    "lastModifiedDateTime": "2023-08-16T04:47:29Z",
-                    "name": "list.txt",
-                    "size": 45441,
-                    "webUrl": f"{ROOT}/sites/list.html",
-                    "file": {
-                        "mimeType": "text/plain",
-                    },
+                    "id": adjust_document_id_size(f"chat-{chat}"),
+                    "topic": f"Chat {chat}",
+                    "chatType": "group",
+                    "webUrl": f"https://teams.microsoft.com/l/chat/{chat}",
+                    "createdDateTime": "2023-07-21T21:24:18.338Z",
+                    "lastUpdatedDateTime": "2023-07-21T21:24:18.338Z",
+                    "members": [
+                        {
+                            "id": f"cm-{member}-{chat}",
+                            "displayName": f"Chat member {member}",
+                            "userId": f"user-{member}",
+                            "email": f"member{member}@example.onmicrosoft.com",
+                        }
+                        for member in range(MEMBERS)
+                    ],
                 }
             )
-        return {"value": files_list}
+        return {"value": chats}
 
-    def download_file(self):
+    def get_chat_messages(self, chat_id):
+        messages = []
+        for message in range(CHAT_MESSAGES):
+            doc = _message(f"chat-message-{chat_id}-{message}", with_replies=False)
+            doc["attachments"] = [
+                {
+                    "id": f"att-{chat_id}-{message}",
+                    "name": "chat.txt",
+                    "contentType": "reference",
+                }
+            ]
+            messages.append(doc)
+        return {"value": messages}
+
+    def get_user_drive(self, user_id):
+        return {"id": f"udrive-{user_id}"}
+
+    def get_drive_children(self, drive_id, item_id):
+        if item_id == "root":
+            # OneDrive "Microsoft Teams Chat Files" folder lookup
+            return {
+                "value": [
+                    {
+                        "id": f"chatfolder-{drive_id}",
+                        "name": "Microsoft Teams Chat Files",
+                        "folder": {"childCount": 1},
+                    }
+                ]
+            }
+
+        if request.args.get("$filter"):
+            # Chat attachment resolution by name
+            return {"value": [_file(f"chatfile-{drive_id}-{item_id}", drive_id)]}
+
+        # Channel drive children
+        files = [_file(f"file-{i}-{drive_id}", drive_id) for i in range(FILES)]
+        return {"value": files}
+
+    def download_file(self, drive_id, item_id):
         return io.BytesIO(bytes(fake_provider.get_html(), encoding="utf-8"))
 
 

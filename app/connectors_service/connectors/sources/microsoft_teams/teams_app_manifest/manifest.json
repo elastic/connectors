@@ -1,0 +1,56 @@
+{
+    "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.16/MicrosoftTeams.schema.json",
+    "manifestVersion": "1.16",
+    "version": "1.0.0",
+    "id": "REPLACE_WITH_A_NEW_GUID",
+    "packageName": "co.elastic.connectors.teams",
+    "developer": {
+        "name": "Elastic",
+        "websiteUrl": "https://www.elastic.co",
+        "privacyUrl": "https://www.elastic.co/legal/privacy-statement",
+        "termsOfUseUrl": "https://www.elastic.co/legal/terms-of-service"
+    },
+    "name": {
+        "short": "Elastic Teams Connector",
+        "full": "Elastic Microsoft Teams Connector"
+    },
+    "description": {
+        "short": "Indexes Microsoft Teams content into Elasticsearch.",
+        "full": "Grants the Elastic Microsoft Teams connector resource-specific read access to teams and chats where it is installed so their content can be indexed into Elasticsearch."
+    },
+    "icons": {
+        "color": "color.png",
+        "outline": "outline.png"
+    },
+    "accentColor": "#FFFFFF",
+    "webApplicationInfo": {
+        "id": "REPLACE_WITH_ENTRA_APPLICATION_CLIENT_ID",
+        "resource": "https://REPLACE_WITH_YOUR_TENANT.onmicrosoft.com/teams-connector"
+    },
+    "authorization": {
+        "permissions": {
+            "resourceSpecific": [
+                {
+                    "name": "ChannelMessage.Read.Group",
+                    "type": "Application"
+                },
+                {
+                    "name": "ChannelSettings.Read.Group",
+                    "type": "Application"
+                },
+                {
+                    "name": "TeamMember.Read.Group",
+                    "type": "Application"
+                },
+                {
+                    "name": "ChatMessage.Read.Chat",
+                    "type": "Application"
+                },
+                {
+                    "name": "ChatMember.Read.Chat",
+                    "type": "Application"
+                }
+            ]
+        }
+    }
+}
