@@ -348,13 +348,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                     await self._access_control_for_member(member)
                 )
         except PermissionsMissing:
-            # Role assignments are only needed for Document Level Security and are
-            # served by the SharePoint REST API, which requires "Sites.FullControl.All".
-            # Rather than failing the whole sync (which happens with certificate auth
-            # when that scope is missing), degrade gracefully: skip the site-level
-            # access control. This is fail-closed - affected documents keep only the
-            # site-admin access controls collected so far, so no user gains access they
-            # would not otherwise have.
+            # DLS-only ACL read; degrade fail-closed instead of failing the whole sync.
             self._logger.warning(
                 f"Insufficient permissions to read role assignments for site '{site['webUrl']}'. "
                 f"Skipping site-level access control. {DLS_PERMISSIONS_MISSING_HINT}"
