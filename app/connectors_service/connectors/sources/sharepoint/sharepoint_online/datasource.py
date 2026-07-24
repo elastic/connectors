@@ -30,7 +30,6 @@ from connectors.sources.sharepoint.sharepoint_online.client import (
 )
 from connectors.sources.sharepoint.sharepoint_online.constants import (
     CURSOR_SITE_DRIVE_KEY,
-    DLS_PERMISSIONS_MISSING_HINT,
     MAX_DOCUMENT_SIZE,
     SPO_API_MAX_BATCH_SIZE,
     SPO_MAX_EXPAND_SIZE,
@@ -349,7 +348,14 @@ class SharepointOnlineDataSource(BaseDataSource):
                 )
         except PermissionsMissing as e:
             # Fail with an actionable error instead of the generic "unauthorized".
-            msg = f"Cannot read access control for site '{site['webUrl']}', required for Document Level Security. {DLS_PERMISSIONS_MISSING_HINT}"
+            msg = (
+                f"Cannot read access control for site '{site['webUrl']}', required "
+                "for Document Level Security. Reading SharePoint role assignments "
+                "requires the 'Sites.FullControl.All' SharePoint application "
+                "permission. Grant it to the App Registration (required for "
+                "certificate / Entra ID app-only authentication), or disable "
+                "Document Level Security if per-document permissions are not needed."
+            )
             raise PermissionsMissing(msg) from e
 
         return list(access_control), list(site_admins_access_control)

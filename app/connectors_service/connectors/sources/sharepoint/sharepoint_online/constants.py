@@ -75,13 +75,3 @@ SPO_MAX_EXPAND_SIZE = 20
 
 # Exclude specific SharePoint paths entirely at the connector level (pre sync-rules)
 EXCLUDED_SHAREPOINT_PATH_SEGMENTS = ["/contentstorage/"]
-
-# Hint for role-assignment (DLS-only) reads rejected as unauthorized.
-# See https://github.com/elastic/connectors/issues/3293
-DLS_PERMISSIONS_MISSING_HINT = (
-    "Reading SharePoint role assignments requires the 'Sites.FullControl.All' "
-    "SharePoint application permission. This is only needed for Document Level "
-    "Security. Grant 'Sites.FullControl.All' to the App Registration (required for "
-    "certificate/Entra ID app-only authentication), or disable Document Level "
-    "Security if per-document permissions are not required."
-)
