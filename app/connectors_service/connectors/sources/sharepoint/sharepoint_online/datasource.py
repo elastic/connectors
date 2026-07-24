@@ -347,12 +347,10 @@ class SharepointOnlineDataSource(BaseDataSource):
                 site_admins_access_control.update(
                     await self._access_control_for_member(member)
                 )
-        except PermissionsMissing:
-            # DLS-only ACL read; degrade fail-closed instead of failing the whole sync.
-            self._logger.warning(
-                f"Insufficient permissions to read role assignments for site '{site['webUrl']}'. "
-                f"Skipping site-level access control. {DLS_PERMISSIONS_MISSING_HINT}"
-            )
+        except PermissionsMissing as e:
+            # Fail with an actionable error instead of the generic "unauthorized".
+            msg = f"Cannot read access control for site '{site['webUrl']}', required for Document Level Security. {DLS_PERMISSIONS_MISSING_HINT}"
+            raise PermissionsMissing(msg) from e
 
         return list(access_control), list(site_admins_access_control)
 
