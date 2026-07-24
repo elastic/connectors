@@ -25,6 +25,7 @@ from connectors.access_control import (
 )
 from connectors.es.sink import OP_DELETE, OP_INDEX
 from connectors.sources.sharepoint.sharepoint_online.client import (
+    PermissionsMissing,
     SharepointOnlineClient,
 )
 from connectors.sources.sharepoint.sharepoint_online.constants import (
@@ -323,25 +324,39 @@ class SharepointOnlineDataSource(BaseDataSource):
         access_control = set()
         site_admins_access_control = set()
 
-        async for role_assignment in self.client.site_role_assignments(site["webUrl"]):
-            member = role_assignment["Member"]
-            member_access_control = set()
-            member_access_control.update(
-                await self._get_access_control_from_role_assignment(role_assignment)
+        try:
+            async for role_assignment in self.client.site_role_assignments(
+                site["webUrl"]
+            ):
+                member = role_assignment["Member"]
+                member_access_control = set()
+                member_access_control.update(
+                    await self._get_access_control_from_role_assignment(role_assignment)
+                )
+
+                if _is_site_admin(member):
+                    # These are likely in the "Owners" group for the site
+                    site_admins_access_control |= member_access_control
+
+                access_control |= member_access_control
+
+            # This fetches the "Site Collection Administrators", which is distinct from the "Owners" group of the site
+            # however, both should have access to everything in the site, regardless of unique role assignments
+            async for member in self.client.site_admins(site["webUrl"]):
+                site_admins_access_control.update(
+                    await self._access_control_for_member(member)
+                )
+        except PermissionsMissing as e:
+            # Fail with an actionable error instead of the generic "unauthorized".
+            msg = (
+                f"Cannot read access control for site '{site['webUrl']}', required "
+                "for Document Level Security. Reading SharePoint role assignments "
+                "requires the 'Sites.FullControl.All' SharePoint application "
+                "permission. Grant it to the App Registration (required for "
+                "certificate / Entra ID app-only authentication), or disable "
+                "Document Level Security if per-document permissions are not needed."
             )
-
-            if _is_site_admin(member):
-                # These are likely in the "Owners" group for the site
-                site_admins_access_control |= member_access_control
-
-            access_control |= member_access_control
-
-        # This fetches the "Site Collection Administrators", which is distinct from the "Owners" group of the site
-        # however, both should have access to everything in the site, regardless of unique role assignments
-        async for member in self.client.site_admins(site["webUrl"]):
-            site_admins_access_control.update(
-                await self._access_control_for_member(member)
-            )
+            raise PermissionsMissing(msg) from e
 
         return list(access_control), list(site_admins_access_control)
 
