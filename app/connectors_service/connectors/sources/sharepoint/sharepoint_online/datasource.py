@@ -25,10 +25,12 @@ from connectors.access_control import (
 )
 from connectors.es.sink import OP_DELETE, OP_INDEX
 from connectors.sources.sharepoint.sharepoint_online.client import (
+    PermissionsMissing,
     SharepointOnlineClient,
 )
 from connectors.sources.sharepoint.sharepoint_online.constants import (
     CURSOR_SITE_DRIVE_KEY,
+    DLS_PERMISSIONS_MISSING_HINT,
     MAX_DOCUMENT_SIZE,
     SPO_API_MAX_BATCH_SIZE,
     SPO_MAX_EXPAND_SIZE,
@@ -323,24 +325,39 @@ class SharepointOnlineDataSource(BaseDataSource):
         access_control = set()
         site_admins_access_control = set()
 
-        async for role_assignment in self.client.site_role_assignments(site["webUrl"]):
-            member = role_assignment["Member"]
-            member_access_control = set()
-            member_access_control.update(
-                await self._get_access_control_from_role_assignment(role_assignment)
-            )
+        try:
+            async for role_assignment in self.client.site_role_assignments(
+                site["webUrl"]
+            ):
+                member = role_assignment["Member"]
+                member_access_control = set()
+                member_access_control.update(
+                    await self._get_access_control_from_role_assignment(role_assignment)
+                )
 
-            if _is_site_admin(member):
-                # These are likely in the "Owners" group for the site
-                site_admins_access_control |= member_access_control
+                if _is_site_admin(member):
+                    # These are likely in the "Owners" group for the site
+                    site_admins_access_control |= member_access_control
 
-            access_control |= member_access_control
+                access_control |= member_access_control
 
-        # This fetches the "Site Collection Administrators", which is distinct from the "Owners" group of the site
-        # however, both should have access to everything in the site, regardless of unique role assignments
-        async for member in self.client.site_admins(site["webUrl"]):
-            site_admins_access_control.update(
-                await self._access_control_for_member(member)
+            # This fetches the "Site Collection Administrators", which is distinct from the "Owners" group of the site
+            # however, both should have access to everything in the site, regardless of unique role assignments
+            async for member in self.client.site_admins(site["webUrl"]):
+                site_admins_access_control.update(
+                    await self._access_control_for_member(member)
+                )
+        except PermissionsMissing:
+            # Role assignments are only needed for Document Level Security and are
+            # served by the SharePoint REST API, which requires "Sites.FullControl.All".
+            # Rather than failing the whole sync (which happens with certificate auth
+            # when that scope is missing), degrade gracefully: skip the site-level
+            # access control. This is fail-closed - affected documents keep only the
+            # site-admin access controls collected so far, so no user gains access they
+            # would not otherwise have.
+            self._logger.warning(
+                f"Insufficient permissions to read role assignments for site '{site['webUrl']}'. "
+                f"Skipping site-level access control. {DLS_PERMISSIONS_MISSING_HINT}"
             )
 
         return list(access_control), list(site_admins_access_control)

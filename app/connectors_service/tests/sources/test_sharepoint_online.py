@@ -1840,6 +1840,95 @@ class TestSharepointOnlineClient:
         assert len(returned_items) == 0
 
     @pytest.mark.asyncio
+    async def test_site_list_has_unique_role_assignments_permissions_missing(
+        self, client, patch_fetch
+    ):
+        url = f"https://{self.tenant_name}.sharepoint.com/random/totally/made/up/roleassignments"
+        site_list_name = "site_list"
+
+        patch_fetch.side_effect = PermissionsMissing()
+
+        # Degrades to "inherits site permissions" instead of failing the sync
+        assert not await client.site_list_has_unique_role_assignments(
+            url, site_list_name
+        )
+
+    @pytest.mark.asyncio
+    async def test_site_list_role_assignments_permissions_missing(
+        self, client, patch_scroll
+    ):
+        url = f"https://{self.tenant_name}.sharepoint.com/random/totally/made/up/roleassignments"
+        site_list_name = "site_list"
+
+        patch_scroll.side_effect = PermissionsMissing
+
+        role_assignments = []
+        async for role_assignment in client.site_list_role_assignments(
+            url, site_list_name
+        ):
+            role_assignments.append(role_assignment)
+
+        assert len(role_assignments) == 0
+
+    @pytest.mark.asyncio
+    async def test_site_list_item_has_unique_role_assignments_permissions_missing(
+        self, client, patch_fetch
+    ):
+        url = f"https://{self.tenant_name}.sharepoint.com/random/totally/made/up/roleassignments"
+        list_title = "list_title"
+        list_item_id = 1
+
+        patch_fetch.side_effect = PermissionsMissing()
+
+        assert not await client.site_list_item_has_unique_role_assignments(
+            url, list_title, list_item_id
+        )
+
+    @pytest.mark.asyncio
+    async def test_site_list_item_role_assignments_permissions_missing(
+        self, client, patch_scroll
+    ):
+        url = f"https://{self.tenant_name}.sharepoint.com/random/totally/made/up/roleassignments"
+        list_title = "list_title"
+        list_item_id = 1
+
+        patch_scroll.side_effect = PermissionsMissing
+
+        role_assignments = []
+        async for role_assignment in client.site_list_item_role_assignments(
+            url, list_title, list_item_id
+        ):
+            role_assignments.append(role_assignment)
+
+        assert len(role_assignments) == 0
+
+    @pytest.mark.asyncio
+    async def test_site_page_has_unique_role_assignments_permissions_missing(
+        self, client, patch_fetch
+    ):
+        url = f"https://{self.tenant_name}.sharepoint.com/random/totally/made/up/roleassignments"
+        site_page_id = 1
+
+        patch_fetch.side_effect = PermissionsMissing()
+
+        assert not await client.site_page_has_unique_role_assignments(url, site_page_id)
+
+    @pytest.mark.asyncio
+    async def test_site_page_role_assignments_permissions_missing(
+        self, client, patch_scroll
+    ):
+        url = f"https://{self.tenant_name}.sharepoint.com/random/totally/made/up/roleassignments"
+        site_page_id = 1
+
+        patch_scroll.side_effect = PermissionsMissing
+
+        returned_items = []
+        async for item in client.site_page_role_assignments(url, site_page_id):
+            returned_items.append(item)
+
+        assert len(returned_items) == 0
+
+    @pytest.mark.asyncio
     async def test_users_and_groups_for_role_assignment(self, client, patch_fetch):
         users_by_id_url = (
             f"https://{self.tenant_name}.sharepoint.com/random/totally/made/up/users"
@@ -3429,6 +3518,31 @@ class TestSharepointOnlineDataSource:
 
             assert _prefix_user(USER_ONE_EMAIL) in access_control
             assert _prefix_email(USER_TWO_EMAIL) in access_control
+
+    @pytest.mark.asyncio
+    async def test_site_access_control_permissions_missing(
+        self, patch_sharepoint_client
+    ):
+        # Regression test for https://github.com/elastic/connectors/issues/3293
+        # Reading role assignments over the SharePoint REST API requires
+        # "Sites.FullControl.All". When it is missing (e.g. certificate auth), the
+        # connector must degrade gracefully instead of failing the entire sync.
+        async with create_spo_source(use_document_level_security=True) as source:
+            patch_sharepoint_client._validate_sharepoint_rest_url = Mock()
+            patch_sharepoint_client.site_role_assignments = Mock(
+                side_effect=PermissionsMissing()
+            )
+
+            site = {"id": 1, "webUrl": "some url"}
+
+            (
+                access_control,
+                site_admin_access_control,
+            ) = await source._site_access_control(site)
+
+            # Fail-closed: no access control is applied, but the sync continues
+            assert access_control == []
+            assert site_admin_access_control == []
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(

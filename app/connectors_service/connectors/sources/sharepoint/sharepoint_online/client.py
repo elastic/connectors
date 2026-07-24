@@ -25,6 +25,7 @@ from connectors.sources.sharepoint.sharepoint_online.constants import (
     DEFAULT_RETRY_SECONDS,
     DELTA_LINK_KEY,
     DELTA_NEXT_LINK_KEY,
+    DLS_PERMISSIONS_MISSING_HINT,
     DRIVE_ITEMS_FIELDS,
     FILE_WRITE_CHUNK_SIZE,
     GRAPH_API_AUTH_URL,
@@ -916,6 +917,13 @@ class SharepointOnlineClient:
             return response.get("value", False)
         except NotFound:
             return False
+        except PermissionsMissing:
+            self._logger.warning(
+                f"Insufficient permissions to check unique role assignments for list "
+                f"'{site_list_name}' in site '{site_web_url}'. Treating the list as "
+                f"inheriting site permissions. {DLS_PERMISSIONS_MISSING_HINT}"
+            )
+            return False
 
     async def site_list_role_assignments(self, site_web_url, site_list_name):
         self._validate_sharepoint_rest_url(site_web_url)
@@ -929,6 +937,13 @@ class SharepointOnlineClient:
                 for role_assignment in page:
                     yield role_assignment
         except NotFound:
+            return
+        except PermissionsMissing:
+            self._logger.warning(
+                f"Insufficient permissions to read role assignments for list "
+                f"'{site_list_name}' in site '{site_web_url}'. Skipping unique list "
+                f"access control. {DLS_PERMISSIONS_MISSING_HINT}"
+            )
             return
 
     async def site_list_item_has_unique_role_assignments(
@@ -948,6 +963,13 @@ class SharepointOnlineClient:
                 f"Received error response when retrieving `{list_item_id}` from list: `{site_list_name}` in site: `{site_web_url}`"
             )
             return False
+        except PermissionsMissing:
+            self._logger.warning(
+                f"Insufficient permissions to check unique role assignments for item "
+                f"'{list_item_id}' in list '{site_list_name}' in site '{site_web_url}'. "
+                f"Treating the item as inheriting site permissions. {DLS_PERMISSIONS_MISSING_HINT}"
+            )
+            return False
 
     async def site_list_item_role_assignments(
         self, site_web_url, site_list_name, list_item_id
@@ -963,6 +985,13 @@ class SharepointOnlineClient:
                 for role_assignment in page:
                     yield role_assignment
         except NotFound:
+            return
+        except PermissionsMissing:
+            self._logger.warning(
+                f"Insufficient permissions to read role assignments for item "
+                f"'{list_item_id}' in list '{site_list_name}' in site '{site_web_url}'. "
+                f"Skipping unique list item access control. {DLS_PERMISSIONS_MISSING_HINT}"
+            )
             return
 
     async def site_list_items(self, site_id, list_id):
@@ -1039,6 +1068,13 @@ class SharepointOnlineClient:
             return response.get("value", False)
         except NotFound:
             return False
+        except PermissionsMissing:
+            self._logger.warning(
+                f"Insufficient permissions to check unique role assignments for page "
+                f"'{site_page_id}' in site '{site_web_url}'. Treating the page as "
+                f"inheriting site permissions. {DLS_PERMISSIONS_MISSING_HINT}"
+            )
+            return False
 
     async def site_page_role_assignments(self, site_web_url, site_page_id):
         self._validate_sharepoint_rest_url(site_web_url)
@@ -1052,6 +1088,13 @@ class SharepointOnlineClient:
                 for role_assignment in page:
                     yield role_assignment
         except NotFound:
+            return
+        except PermissionsMissing:
+            self._logger.warning(
+                f"Insufficient permissions to read role assignments for page "
+                f"'{site_page_id}' in site '{site_web_url}'. Skipping unique page "
+                f"access control. {DLS_PERMISSIONS_MISSING_HINT}"
+            )
             return
 
     async def users_and_groups_for_role_assignment(self, site_web_url, role_assignment):
