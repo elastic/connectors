@@ -1724,8 +1724,8 @@ Apache License
 
 
 annotated-types
-0.7.0
-MIT License
+0.8.0
+MIT
 The MIT License (MIT)
 
 Copyright (c) 2022 the contributors
