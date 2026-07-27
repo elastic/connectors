@@ -40,7 +40,7 @@ tests = [
     "pytest-randomly==3.13.0",
     "pytest-fail-slow==0.3.0",
     "pyright==1.1.317",
-    "requests==2.32.4",
+    "requests==2.33.0",
 ]
 
 [tool.setuptools.packages.find]
