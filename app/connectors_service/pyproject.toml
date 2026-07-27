@@ -69,7 +69,7 @@ dependencies = [
     "pywinrm==0.4.3",
     "pyyaml==6.0.1",
     "redis==5.0.1",
-    "requests==2.32.4",
+    "requests==2.33.0",
     "simple-term-menu==1.6.4",
     "sqlalchemy-pytds==0.3.5",
     "SQLAlchemy[asyncio]==2.0.1; platform_machine=='arm64'",
@@ -95,7 +95,7 @@ tests = [
     "pytest-randomly==3.13.0",
     "pytest-fail-slow==0.3.0",
     "pyright==1.1.317",
-    "requests==2.32.4",
+    "requests==2.33.0",
 ]
 
 ftest= [
