@@ -3431,6 +3431,28 @@ class TestSharepointOnlineDataSource:
             assert _prefix_email(USER_TWO_EMAIL) in access_control
 
     @pytest.mark.asyncio
+    async def test_site_access_control_permissions_missing_raises_actionable_error(
+        self, patch_sharepoint_client
+    ):
+        # Regression test for https://github.com/elastic/connectors/issues/3293
+        # Reading role assignments over the SharePoint REST API requires
+        # "Sites.FullControl.All". When it is missing (e.g. certificate auth), the
+        # sync must fail with a clear, actionable error rather than a generic one.
+        async with create_spo_source(use_document_level_security=True) as source:
+            patch_sharepoint_client._validate_sharepoint_rest_url = Mock()
+            patch_sharepoint_client.site_role_assignments = Mock(
+                side_effect=PermissionsMissing()
+            )
+
+            site = {"id": 1, "webUrl": "some url"}
+
+            with pytest.raises(PermissionsMissing) as e:
+                await source._site_access_control(site)
+
+            assert "Sites.FullControl.All" in str(e.value)
+            assert "Document Level Security" in str(e.value)
+
+    @pytest.mark.asyncio
     @pytest.mark.parametrize(
         "_dls_enabled, document, access_control, expected_decorated_document",
         [
