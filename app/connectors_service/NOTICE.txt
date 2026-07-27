@@ -7109,7 +7109,7 @@ SOFTWARE.
 
 
 requests
-2.32.4
+2.33.0
 Apache Software License
 
                                  Apache License
