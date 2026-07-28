@@ -37,6 +37,7 @@ from exchangelib.items import (
 )
 from exchangelib.protocol import BaseProtocol, NoVerifyHTTPAdapter
 
+from connectors.access_control import ACCESS_CONTROL
 from connectors.sources.outlook import OutlookDataSource
 from connectors.sources.outlook.client import (
     ExchangeUsers,
@@ -59,6 +60,7 @@ from connectors.sources.outlook.datasource import (
     TASK_ITEM_TYPES,
     OutlookDocFormatter,
 )
+from connectors.sources.outlook.utils import _prefix_email
 from connectors.utils import get_pem_format
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
@@ -1942,3 +1944,127 @@ async def test_get_access_control_for_server(user_response):
         async for access_control in source.get_access_control():
             acl.append(access_control)
         assert len(acl) == 1
+
+
+# The directory entry for the person whose mailbox MockAccount stands in for.
+MAILBOX_OWNER = {
+    "id": "60e8a9c1-4d2f-4a3b-9a1e-2f0c5d7b8e11",
+    "displayName": "Alex Wilber",
+    "mail": "alex.wilber@gmail.com",
+    "jobTitle": "Engineer",
+}
+
+
+async def _dls_documents(source, account):
+    """Both sides of DLS for one mailbox: what is granted and what is stored."""
+    source._dls_enabled = MagicMock(return_value=True)
+    source.client._get_user_instance.get_user_accounts = AsyncIterator([account])
+
+    access_control_documents = [doc async for doc in source.get_access_control()]
+    content_documents = [doc async for doc, _ in source.get_docs()]
+
+    return access_control_documents, content_documents
+
+
+def _granted_identities(access_control_document):
+    return set(access_control_document["query"]["template"]["params"]["access_control"])
+
+
+@pytest.mark.asyncio
+async def test_content_documents_are_reachable_by_their_owner():
+    # DLS filters content with a terms query over the identities the access
+    # control document grants, so the two sides have to be written in the same
+    # dialect. Where they do not intersect, the owner of a mailbox can retrieve
+    # none of their own documents.
+    async with create_outlook_source() as source:
+        source.client.is_cloud = True
+        source.client._get_user_instance.get_users = AsyncIterator(
+            [{"value": [MAILBOX_OWNER]}]
+        )
+
+        access_control_documents, content_documents = await _dls_documents(
+            source, MockAccount()
+        )
+
+    granted = _granted_identities(access_control_documents[0])
+
+    assert content_documents
+    for document in content_documents:
+        assert granted & set(document[ACCESS_CONTROL])
+
+
+@pytest.mark.asyncio
+async def test_content_documents_are_reachable_by_their_owner_on_server():
+    async with create_outlook_source() as source:
+        source.configuration.get_field("data_source").value = OUTLOOK_SERVER
+        source.client._get_user_instance.get_users = AsyncIterator(
+            [
+                {
+                    "attributes": {"mail": "dummy@es.local"},
+                    "dn": "CN=Dummy,CN=Users,DC=es,DC=local",
+                }
+            ]
+        )
+        account = MockAccount()
+        account.primary_smtp_address = "dummy@es.local"
+
+        access_control_documents, content_documents = await _dls_documents(
+            source, account
+        )
+
+    granted = _granted_identities(access_control_documents[0])
+
+    assert content_documents
+    for document in content_documents:
+        assert granted & set(document[ACCESS_CONTROL])
+
+
+@pytest.mark.asyncio
+async def test_content_documents_are_reachable_whatever_the_address_casing():
+    # Exchange reports a mailbox under the casing it was configured with, which
+    # is not necessarily the casing the directory reports for the same person.
+    async with create_outlook_source() as source:
+        source.client.is_cloud = True
+        source.client._get_user_instance.get_users = AsyncIterator(
+            [{"value": [MAILBOX_OWNER | {"mail": "Alex.Wilber@Gmail.com"}]}]
+        )
+        account = MockAccount()
+        account.primary_smtp_address = "alex.wilber@GMAIL.com"
+
+        access_control_documents, content_documents = await _dls_documents(
+            source, account
+        )
+
+    granted = _granted_identities(access_control_documents[0])
+
+    assert "email:alex.wilber@gmail.com" in granted
+    assert content_documents
+    for document in content_documents:
+        assert granted & set(document[ACCESS_CONTROL])
+
+
+@pytest.mark.asyncio
+async def test_decorate_with_access_control_drops_unknown_identities():
+    async with create_outlook_source() as source:
+        source._dls_enabled = MagicMock(return_value=True)
+
+        # A mailbox with no address prefixes to None, which must not be stored:
+        # a null in the terms list is noise no user can ever match.
+        document = source._decorate_with_access_control(
+            {"_id": "1"}, [None, "email:alex.wilber@gmail.com"]
+        )
+
+        assert document[ACCESS_CONTROL] == ["email:alex.wilber@gmail.com"]
+
+
+@pytest.mark.parametrize(
+    "email, expected",
+    [
+        ("Alex.Wilber@Example.COM", "email:alex.wilber@example.com"),
+        ("alex.wilber@example.com", "email:alex.wilber@example.com"),
+        ("", "email:"),
+        (None, None),
+    ],
+)
+def test_prefix_email_normalises_casing(email, expected):
+    assert _prefix_email(email) == expected
