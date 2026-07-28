@@ -24,11 +24,12 @@ from exchangelib.errors import (
     ErrorNonExistentMailbox,
     TransportError,
 )
-from exchangelib.folders import Calendar, Messages, Tasks
+from exchangelib.folders import BaseFolder, Calendar, Messages, Tasks
 from exchangelib.items import (
     CalendarItem,
     Contact,
     DistributionList,
+    Item,
     MeetingCancellation,
     MeetingRequest,
     MeetingResponse,
@@ -36,6 +37,7 @@ from exchangelib.items import (
     Task,
 )
 from exchangelib.protocol import BaseProtocol, NoVerifyHTTPAdapter
+from exchangelib.util import to_xml
 
 from connectors.sources.outlook import OutlookDataSource
 from connectors.sources.outlook.client import (
@@ -45,6 +47,7 @@ from connectors.sources.outlook.client import (
     NotFound,
     SSLCertificateError,
     UnauthorizedException,
+    UnknownItemTagTolerantMap,
     UsersFetchFailed,
 )
 from connectors.sources.outlook.constants import (
@@ -1786,6 +1789,80 @@ async def test_fetch_mails_accepts_all_mail_item_types(item_type):
 def test_item_type_allowlists_match_exchangelib(allowlist, folder_cls):
     # Fails if a library upgrade changes a folder's item types (update the formatter).
     assert set(allowlist) == set(folder_cls.supported_item_models)
+
+
+UNEXPECTED_ITEM_TAG = (
+    "{http://schemas.microsoft.com/exchange/services/2006/types}EndTimeZone"
+)
+# The response shape reported in the SDH: a stray EndTimeZone element sits next to
+# the CalendarItem it belongs to instead of inside it.
+UNEXPECTED_ELEMENT_RESPONSE = b"""<?xml version="1.0" encoding="utf-8"?>
+<m:Items xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages"
+         xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types">
+  <t:CalendarItem>
+    <t:ItemId Id="calendar_1" ChangeKey="change_key_1"/>
+    <t:Subject>Team sync</t:Subject>
+  </t:CalendarItem>
+  <t:EndTimeZone Id="(GMT+01:00) Amsterdam, Berlin, Bern, Rom, Stockholm, Wien"/>
+</m:Items>
+"""
+
+
+@pytest.mark.parametrize(
+    "item_model",
+    [CalendarItem, Contact, DistributionList, Item, Message, Task],
+    ids=lambda cls: cls.__name__,
+)
+def test_item_model_map_still_resolves_known_tags(item_model):
+    # The tolerant map must not shadow any model exchangelib already knows.
+    assert BaseFolder.item_model_from_tag(item_model.response_tag()) is item_model
+
+
+def test_item_model_map_degrades_unknown_tag_to_item():
+    item_model_map = UnknownItemTagTolerantMap(BaseFolder.ITEM_MODEL_MAP)
+
+    with patch("connectors.sources.outlook.client.logger") as logger:
+        assert item_model_map[UNEXPECTED_ITEM_TAG] is Item
+        assert item_model_map[UNEXPECTED_ITEM_TAG] is Item
+
+        # A folder can hold many copies of the same stray element; warn once.
+        logger.warning.assert_called_once()
+
+
+def test_unexpected_element_does_not_abort_folder_query():
+    # exchangelib used to raise ValueError here, killing the sync before a single
+    # calendar item was returned.
+    items = [
+        BaseFolder.item_model_from_tag(element.tag).from_xml(elem=element, account=None)
+        for element in to_xml(UNEXPECTED_ELEMENT_RESPONSE).getroot()
+    ]
+
+    calendar_item, unexpected_item = items
+    assert isinstance(calendar_item, CalendarItem)
+    assert calendar_item.id == "calendar_1"
+    assert type(unexpected_item) is Item
+
+
+@pytest.mark.asyncio
+async def test_enqueue_calendars_skips_degraded_unknown_item():
+    async with create_outlook_source() as source:
+        source._logger = MagicMock()
+        account = MockAccount()
+        # What the tolerant map hands the data source for an unknown element.
+        degraded_item = Item(id="unknown_1")
+
+        documents = [
+            document
+            async for document, _ in source._enqueue_calendars(
+                calendar=degraded_item,
+                child_calendar="Calendar",
+                timezone=TIMEZONE,
+                account=account,
+            )
+        ]
+
+        assert documents == []
+        source._logger.warning.assert_called_once()
 
 
 @pytest.mark.asyncio

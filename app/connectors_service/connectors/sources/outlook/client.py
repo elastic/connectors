@@ -22,7 +22,8 @@ from exchangelib import (
     OAuth2Credentials,
 )
 from exchangelib.errors import ErrorFolderNotFound, ErrorManagedFolderNotFound
-from exchangelib.folders import Calendar, Messages
+from exchangelib.folders import BaseFolder, Calendar, Messages
+from exchangelib.items import Item
 from exchangelib.protocol import BaseProtocol, NoVerifyHTTPAdapter
 from ldap3 import SAFE_SYNC, Connection, Server
 
@@ -51,6 +52,37 @@ from connectors.utils import (
 
 # Folder-absent faults: skip the folder, keep syncing.
 FOLDER_SKIP_ERRORS = (ErrorFolderNotFound, ErrorManagedFolderNotFound)
+
+
+class UnknownItemTagTolerantMap(dict):
+    """Item model map that degrades unrecognised EWS tags to the generic `Item`.
+
+    exchangelib treats every element of a response's item container as an item and
+    raises `ValueError` for any tag it cannot map, which aborts the whole sync.
+    Servers do put unmapped elements there: a stray `calendar:EndTimeZone` next to
+    the `CalendarItem` it belongs to, or `Booking` items where Microsoft Bookings
+    is installed. Degrading to `Item` keeps the surrounding items readable and
+    lets the data source's per-folder type allowlists skip the odd one out.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._reported_tags = set()
+
+    def __missing__(self, tag):
+        # Once per tag: a malformed folder can hold many of the same stray element.
+        if tag not in self._reported_tags:
+            self._reported_tags.add(tag)
+            logger.warning(
+                f"Exchange returned {tag} where an item was expected. Elements of "
+                "this type cannot be synced and will be skipped."
+            )
+        return Item
+
+
+# Every folder query resolves item tags through this one map, so replacing it
+# covers mails, contacts, tasks and calendars alike.
+BaseFolder.ITEM_MODEL_MAP = UnknownItemTagTolerantMap(BaseFolder.ITEM_MODEL_MAP)
 
 
 class TokenFetchFailed(Exception):
