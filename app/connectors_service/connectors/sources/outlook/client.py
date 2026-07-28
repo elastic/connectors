@@ -53,36 +53,23 @@ from connectors.utils import (
 # Folder-absent faults: skip the folder, keep syncing.
 FOLDER_SKIP_ERRORS = (ErrorFolderNotFound, ErrorManagedFolderNotFound)
 
+# exchangelib raises ValueError on unrecognised item tags (e.g. a stray
+# EndTimeZone). Degrade to Item so the sync continues; folder allowlists skip it.
+_reported_unexpected_item_tags = set()
 
-class UnknownItemTagTolerantMap(dict):
-    """Item model map that degrades unrecognised EWS tags to the generic `Item`.
 
-    exchangelib treats every element of a response's item container as an item and
-    raises `ValueError` for any tag it cannot map, which aborts the whole sync.
-    Servers do put unmapped elements there: a stray `calendar:EndTimeZone` next to
-    the `CalendarItem` it belongs to, or `Booking` items where Microsoft Bookings
-    is installed. Degrading to `Item` keeps the surrounding items readable and
-    lets the data source's per-folder type allowlists skip the odd one out.
-    """
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._reported_tags = set()
-
-    def __missing__(self, tag):
-        # Once per tag: a malformed folder can hold many of the same stray element.
-        if tag not in self._reported_tags:
-            self._reported_tags.add(tag)
-            logger.warning(
-                f"Exchange returned {tag} where an item was expected. Elements of "
-                "this type cannot be synced and will be skipped."
-            )
+@classmethod
+def _tolerant_item_model_from_tag(cls, tag):
+    try:
+        return cls.ITEM_MODEL_MAP[tag]
+    except KeyError:
+        if tag not in _reported_unexpected_item_tags:
+            _reported_unexpected_item_tags.add(tag)
+            logger.warning(f"Unexpected EWS item tag {tag}; skipping")
         return Item
 
 
-# Every folder query resolves item tags through this one map, so replacing it
-# covers mails, contacts, tasks and calendars alike.
-BaseFolder.ITEM_MODEL_MAP = UnknownItemTagTolerantMap(BaseFolder.ITEM_MODEL_MAP)
+BaseFolder.item_model_from_tag = _tolerant_item_model_from_tag
 
 
 class TokenFetchFailed(Exception):
