@@ -22,7 +22,8 @@ from exchangelib import (
     OAuth2Credentials,
 )
 from exchangelib.errors import ErrorFolderNotFound, ErrorManagedFolderNotFound
-from exchangelib.folders import Calendar, Messages
+from exchangelib.folders import BaseFolder, Calendar, Messages
+from exchangelib.items import Item
 from exchangelib.protocol import BaseProtocol, NoVerifyHTTPAdapter
 from ldap3 import SAFE_SYNC, Connection, Server
 
@@ -51,6 +52,24 @@ from connectors.utils import (
 
 # Folder-absent faults: skip the folder, keep syncing.
 FOLDER_SKIP_ERRORS = (ErrorFolderNotFound, ErrorManagedFolderNotFound)
+
+# exchangelib raises ValueError on unrecognised item tags (e.g. a stray
+# EndTimeZone). Degrade to Item so the sync continues; folder allowlists skip it.
+_reported_unexpected_item_tags = set()
+
+
+@classmethod
+def _tolerant_item_model_from_tag(cls, tag):
+    try:
+        return cls.ITEM_MODEL_MAP[tag]
+    except KeyError:
+        if tag not in _reported_unexpected_item_tags:
+            _reported_unexpected_item_tags.add(tag)
+            logger.warning(f"Unexpected EWS item tag {tag}; skipping")
+        return Item
+
+
+BaseFolder.item_model_from_tag = _tolerant_item_model_from_tag
 
 
 class TokenFetchFailed(Exception):
