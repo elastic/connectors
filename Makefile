@@ -16,7 +16,7 @@ config.yml:
 .venv/bin/python: | config.yml
 	$(PYTHON) -m venv .venv
 	.venv/bin/pip install --upgrade pip
-	.venv/bin/pip install setuptools==79.0.1
+	.venv/bin/pip install setuptools==83.0.0
 
 .venv/bin/pip-licenses: .venv/bin/python
 	.venv/bin/pip install pip-licenses
@@ -29,7 +29,8 @@ install-agent: .venv/bin/elastic-ingest
 .venv/bin/elastic-ingest: .venv/bin/python
 	.venv/bin/pip install -r requirements/$(ARCH).txt
 	.venv/bin/pip install -r requirements/agent.txt
-	.venv/bin/python setup.py develop
+	# Compat mode: keep repo root on sys.path (needed by tests under setuptools 83+)
+	.venv/bin/pip install -e . --config-settings editable_mode=compat
 
 .venv/bin/ruff: .venv/bin/python
 	.venv/bin/pip install -r requirements/$(ARCH).txt
