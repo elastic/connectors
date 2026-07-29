@@ -9,6 +9,7 @@ import asyncio
 import os
 from copy import copy
 from functools import partial
+from typing import NamedTuple
 
 from connectors_sdk.source import BaseDataSource, ConfigurableFieldValueError
 from connectors_sdk.utils import (
@@ -17,7 +18,10 @@ from connectors_sdk.utils import (
 )
 
 from connectors.access_control import ACCESS_CONTROL
-from connectors.sources.atlassian.confluence.client import ConfluenceClient
+from connectors.sources.atlassian.confluence.client import (
+    ConfluenceClient,
+    ContentRestrictionFetchError,
+)
 from connectors.sources.atlassian.confluence.constants import (
     BLOGPOST,
     CONFLUENCE_CLOUD,
@@ -58,6 +62,17 @@ from connectors.utils import (
     MemQueue,
     html_to_text,
 )
+
+
+class EffectiveReadAccess(NamedTuple):
+    """Resolved view ACL for a page.
+
+    When use_space is True, fall back to space permissions.
+    When use_space is False, identities is the ACL to index (may be empty).
+    """
+
+    identities: set
+    use_space: bool
 
 
 class ConfluenceDataSource(BaseDataSource):
@@ -464,26 +479,51 @@ class ConfluenceDataSource(BaseDataSource):
 
         return identities
 
-    async def _resolve_inherited_restrictions(self, ancestors, extract_identities):
-        """Return identities from the nearest ancestor with explicit read restrictions."""
-        if not self._dls_enabled():
-            return set()
+    async def _resolve_effective_read_access(
+        self, child_restrictions, ancestors, extract_identities
+    ):
+        """Resolve effective view ACL from child + ancestor explicit restrictions.
 
-        for ancestor in reversed(ancestors or []):
+        Returns EffectiveReadAccess. use_space is True only when every layer was
+        successfully evaluated and none had explicit view restrictions.
+        On ambiguous ancestor fetch failure, returns empty identities and
+        use_space=False (fail closed for DLS).
+        """
+        if not self._dls_enabled():
+            return EffectiveReadAccess(identities=set(), use_space=False)
+
+        layers = []
+        child_identities = extract_identities(response=child_restrictions)
+        if child_identities:
+            layers.append(child_identities)
+
+        for ancestor in ancestors or []:
             ancestor_id = ancestor.get("id")
             if not ancestor_id:
                 continue
 
-            restrictions = await self.confluence_client.fetch_content_restrictions(
-                content_id=ancestor_id
-            )
+            try:
+                restrictions = await self.confluence_client.fetch_content_restrictions(
+                    content_id=ancestor_id
+                )
+            except ContentRestrictionFetchError:
+                return EffectiveReadAccess(identities=set(), use_space=False)
+
+            if restrictions is None:
+                continue
+
             identities = extract_identities(
                 response=restrictions.get("restrictions", {})
             )
             if identities:
-                return identities
+                layers.append(identities)
 
-        return set()
+        if not layers:
+            return EffectiveReadAccess(identities=set(), use_space=True)
+
+        return EffectiveReadAccess(
+            identities=set.intersection(*layers), use_space=False
+        )
 
     async def close(self):
         """Closes unclosed client session"""
@@ -874,16 +914,12 @@ class ConfluenceDataSource(BaseDataSource):
                 else:
                     extract_identities = self._extract_identities_for_datacenter
 
-                access_control = list(extract_identities(response=restrictions))
-                if len(access_control) == 0:
-                    # Inherit restrictions from the nearest restricted ancestor.
-                    access_control = list(
-                        await self._resolve_inherited_restrictions(
-                            ancestors=ancestors,
-                            extract_identities=extract_identities,
-                        )
-                    )
-                if len(access_control) == 0:
+                effective_access = await self._resolve_effective_read_access(
+                    child_restrictions=restrictions,
+                    ancestors=ancestors,
+                    extract_identities=extract_identities,
+                )
+                if effective_access.use_space:
                     if self.confluence_client.data_source_type == CONFLUENCE_CLOUD:
                         # Every space has its own independent set of permissions, managed by the space admin(s),
                         # which determine the access settings for different users and groups.
@@ -903,6 +939,8 @@ class ConfluenceDataSource(BaseDataSource):
                                 )
                             )
                         )
+                else:
+                    access_control = list(effective_access.identities)
                 document = self._decorate_with_access_control(
                     document=document, access_control=access_control
                 )

@@ -70,6 +70,12 @@ class Forbidden(Exception):
     pass
 
 
+class ContentRestrictionFetchError(Exception):
+    """Raised when content restrictions cannot be evaluated safely for DLS."""
+
+    pass
+
+
 class ConfluenceClient:
     """Confluence client to handle API calls made to Confluence"""
 
@@ -355,20 +361,30 @@ class ConfluenceClient:
                 yield document, attachment_count
 
     async def fetch_content_restrictions(self, content_id):
-        """Return explicit read restrictions for content, or {} if unavailable."""
+        """Return explicit read restrictions for content.
+
+        Returns:
+            dict: Restriction payload on success (may have empty user/group lists).
+            None: Content was not found (404); caller should skip this ancestor.
+
+        Raises:
+            ContentRestrictionFetchError: Restrictions could not be evaluated
+                (403/401/5xx/other). Callers must fail closed for DLS.
+        """
         url = os.path.join(
             self.host_url, URLS[CONTENT_RESTRICTION].format(id=content_id)
         )
         try:
             response = await self.api_call(url=url)
             return await response.json()
-        except (NotFound, Forbidden):
-            return {}
+        except NotFound:
+            return None
         except Exception as exception:
             self._logger.warning(
-                f"Skipping restrictions for content '{content_id}'. Exception: {exception}."
+                f"Unable to fetch restrictions for content '{content_id}'. Exception: {exception}."
             )
-            return {}
+            msg = f"Unable to fetch restrictions for content '{content_id}'"
+            raise ContentRestrictionFetchError(msg) from exception
 
     async def fetch_attachments(self, content_id):
         async for response in self.paginated_api_call(
