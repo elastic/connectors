@@ -28,6 +28,7 @@ config.yml:
 .venv/bin/python: | config.yml
 	$(PYTHON) -m venv .venv
 	.venv/bin/pip install --upgrade pip
+	.venv/bin/pip install setuptools==83.0.0
 	.venv/bin/python -m pip install build
 
 .venv/bin/pip-licenses: .venv/bin/python
