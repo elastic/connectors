@@ -465,24 +465,7 @@ class ConfluenceDataSource(BaseDataSource):
         return identities
 
     async def _resolve_inherited_restrictions(self, ancestors, extract_identities):
-        """Resolve the effective view restrictions inherited from ancestor pages.
-
-        A Confluence page with no restrictions of its own ("No restrictions")
-        still inherits the view restrictions of its ancestors. The REST API does
-        not expose these inherited restrictions directly, so we walk the ancestor
-        chain from the closest parent up to the root and return the identities of
-        the nearest ancestor that has explicit read restrictions.
-
-        Args:
-            ancestors (list): Ancestors of the document, ordered from the root to
-                the immediate parent (as returned by the Confluence API).
-            extract_identities (callable): Function that extracts the set of
-                access-control identities from a restrictions payload.
-
-        Returns:
-            set: Identities inherited from the nearest restricted ancestor, or an
-                empty set when no ancestor has explicit read restrictions.
-        """
+        """Return identities from the nearest ancestor with explicit read restrictions."""
         if not self._dls_enabled():
             return set()
 
@@ -893,9 +876,7 @@ class ConfluenceDataSource(BaseDataSource):
 
                 access_control = list(extract_identities(response=restrictions))
                 if len(access_control) == 0:
-                    # A page with "No restrictions" of its own still inherits the
-                    # view restrictions of its ancestors, so resolve those before
-                    # falling back to the broader space-level permissions.
+                    # Inherit restrictions from the nearest restricted ancestor.
                     access_control = list(
                         await self._resolve_inherited_restrictions(
                             ancestors=ancestors,

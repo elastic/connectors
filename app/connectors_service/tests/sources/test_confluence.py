@@ -1805,47 +1805,66 @@ async def test_fetch_server_space_permission():
 
 
 @pytest.mark.asyncio
-async def test_fetch_content_restrictions_returns_payload():
+@pytest.mark.parametrize(
+    "api_side_effect, api_return, expected",
+    [
+        (
+            None,
+            CLOUD_INHERITED_RESTRICTION_RESPONSE,
+            CLOUD_INHERITED_RESTRICTION_RESPONSE,
+        ),
+        (NotFound(), None, {}),
+        (Forbidden(), None, {}),
+        (Exception("boom"), None, {}),
+    ],
+)
+async def test_fetch_content_restrictions(api_side_effect, api_return, expected):
     async with create_confluence_source() as source:
-        async_response = AsyncMock()
-        async_response.json.return_value = CLOUD_INHERITED_RESTRICTION_RESPONSE
+        if api_side_effect is not None:
+            patch_kwargs = {"side_effect": api_side_effect}
+        else:
+            async_response = AsyncMock()
+            async_response.json.return_value = api_return
+            patch_kwargs = {"return_value": async_response}
+
         with mock.patch(
             "connectors.sources.atlassian.confluence.ConfluenceClient.api_call",
-            return_value=async_response,
+            **patch_kwargs,
         ):
             response = await source.confluence_client.fetch_content_restrictions(
                 content_id="123"
             )
-            assert response == CLOUD_INHERITED_RESTRICTION_RESPONSE
+            assert response == expected
 
 
-@pytest.mark.asyncio
-@pytest.mark.parametrize("exception", [NotFound(), Forbidden(), Exception("boom")])
-async def test_fetch_content_restrictions_returns_empty_on_error(exception):
-    """Unreadable ancestors (draft/trashed/forbidden) must not break the sync."""
-    async with create_confluence_source() as source:
-        with mock.patch(
-            "connectors.sources.atlassian.confluence.ConfluenceClient.api_call",
-            side_effect=exception,
-        ):
-            response = await source.confluence_client.fetch_content_restrictions(
-                content_id="123"
-            )
-            assert response == {}
+async def _resolve_inherited(
+    source,
+    *,
+    dls_enabled,
+    ancestors,
+    extract_identities,
+    fetch_return=None,
+    fetch_side_effect=None,
+):
+    source._dls_enabled = MagicMock(return_value=dls_enabled)
+    source.confluence_client.fetch_content_restrictions = AsyncMock(
+        return_value=fetch_return, side_effect=fetch_side_effect
+    )
+    identities = await source._resolve_inherited_restrictions(
+        ancestors=ancestors, extract_identities=extract_identities
+    )
+    return identities, source.confluence_client.fetch_content_restrictions
 
 
 @pytest.mark.asyncio
 async def test_resolve_inherited_restrictions_uses_nearest_restricted_ancestor():
     async with create_confluence_source() as source:
-        source._dls_enabled = MagicMock(return_value=True)
-        # Ancestors are ordered from root to the immediate parent.
-        ancestors = [{"id": "root"}, {"id": "parent"}]
-        source.confluence_client.fetch_content_restrictions = AsyncMock(
-            return_value=CLOUD_INHERITED_RESTRICTION_RESPONSE
-        )
-
-        identities = await source._resolve_inherited_restrictions(
-            ancestors=ancestors, extract_identities=source._extract_identities
+        identities, fetch_mock = await _resolve_inherited(
+            source,
+            dls_enabled=True,
+            ancestors=[{"id": "root"}, {"id": "parent"}],
+            extract_identities=source._extract_identities,
+            fetch_return=CLOUD_INHERITED_RESTRICTION_RESPONSE,
         )
 
         assert identities == {
@@ -1853,25 +1872,18 @@ async def test_resolve_inherited_restrictions_uses_nearest_restricted_ancestor()
             "group_id:group_id_admin",
             "group_id:group_id_power",
         }
-        # The nearest ancestor (immediate parent) is queried first and wins.
-        source.confluence_client.fetch_content_restrictions.assert_called_once_with(
-            content_id="parent"
-        )
+        fetch_mock.assert_called_once_with(content_id="parent")
 
 
 @pytest.mark.asyncio
 async def test_resolve_inherited_restrictions_walks_up_until_a_restricted_ancestor():
     async with create_confluence_source() as source:
-        source._dls_enabled = MagicMock(return_value=True)
-        ancestors = [{"id": "root"}, {"id": "parent"}]
-        # The immediate parent has no restrictions; the root does.
-        source.confluence_client.fetch_content_restrictions = AsyncMock(
-            side_effect=[{}, DATA_CENTER_INHERITED_RESTRICTION_RESPONSE]
-        )
-
-        identities = await source._resolve_inherited_restrictions(
-            ancestors=ancestors,
+        identities, fetch_mock = await _resolve_inherited(
+            source,
+            dls_enabled=True,
+            ancestors=[{"id": "root"}, {"id": "parent"}],
             extract_identities=source._extract_identities_for_datacenter,
+            fetch_side_effect=[{}, DATA_CENTER_INHERITED_RESTRICTION_RESPONSE],
         )
 
         assert identities == {
@@ -1879,7 +1891,7 @@ async def test_resolve_inherited_restrictions_walks_up_until_a_restricted_ancest
             "group:group-admin",
             "group:group-power-user",
         }
-        assert source.confluence_client.fetch_content_restrictions.call_args_list == [
+        assert fetch_mock.call_args_list == [
             mock.call(content_id="parent"),
             mock.call(content_id="root"),
         ]
@@ -1888,30 +1900,27 @@ async def test_resolve_inherited_restrictions_walks_up_until_a_restricted_ancest
 @pytest.mark.asyncio
 async def test_resolve_inherited_restrictions_returns_empty_without_restricted_ancestor():
     async with create_confluence_source() as source:
-        source._dls_enabled = MagicMock(return_value=True)
-        source.confluence_client.fetch_content_restrictions = AsyncMock(return_value={})
-
-        identities = await source._resolve_inherited_restrictions(
+        identities, _ = await _resolve_inherited(
+            source,
+            dls_enabled=True,
             ancestors=[{"id": "root"}, {"id": "parent"}],
             extract_identities=source._extract_identities,
+            fetch_return={},
         )
-
         assert identities == set()
 
 
 @pytest.mark.asyncio
 async def test_resolve_inherited_restrictions_skips_calls_when_dls_disabled():
     async with create_confluence_source() as source:
-        source._dls_enabled = MagicMock(return_value=False)
-        source.confluence_client.fetch_content_restrictions = AsyncMock()
-
-        identities = await source._resolve_inherited_restrictions(
+        identities, fetch_mock = await _resolve_inherited(
+            source,
+            dls_enabled=False,
             ancestors=[{"id": "parent"}],
             extract_identities=source._extract_identities,
         )
-
         assert identities == set()
-        source.confluence_client.fetch_content_restrictions.assert_not_called()
+        fetch_mock.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -1937,20 +1946,25 @@ async def test_resolve_inherited_restrictions_skips_calls_when_dls_disabled():
 async def test_page_blog_coro_applies_inherited_restrictions_over_space_permissions(
     data_source_type, extractor_response, expected_access_control
 ):
-    """A page with no own restrictions inherits its ancestor's restrictions
-    instead of falling back to the broader space-level permissions (issue #4095)."""
     async with create_confluence_source(data_source=data_source_type) as source:
         source._dls_enabled = MagicMock(return_value=True)
         source.confluence_client.data_source_type = data_source_type
+        source.confluence_client.fetch_content_restrictions = AsyncMock(
+            return_value=extractor_response
+        )
+        source.fetch_server_space_permission = AsyncMock(
+            return_value={
+                "permissions": {"VIEWSPACE": {"groups": ["all-licensed-users"]}}
+            }
+        )
 
-        page_document = {"_id": "child_page", "type": "page", "title": "Child"}
         with mock.patch.object(
             ConfluenceDataSource,
             "fetch_documents",
             return_value=AsyncIterator(
                 [
                     [
-                        page_document,
+                        {"_id": "child_page", "type": "page", "title": "Child"},
                         0,
                         "space_key",
                         SPACE_PERMISSION_RESPONSE,
@@ -1960,20 +1974,9 @@ async def test_page_blog_coro_applies_inherited_restrictions_over_space_permissi
                 ]
             ),
         ):
-            source.confluence_client.fetch_content_restrictions = AsyncMock(
-                return_value=extractor_response
-            )
-            # The space-level fallback must not be used when a restricted ancestor exists.
-            source.fetch_server_space_permission = AsyncMock(
-                return_value={
-                    "permissions": {"VIEWSPACE": {"groups": ["all-licensed-users"]}}
-                }
-            )
-
             await source._page_blog_coro("api_query", "page")
 
-        _, item = source.queue.get_nowait()
-        queued_document, _download = item
+        _, (queued_document, _) = source.queue.get_nowait()
         assert (
             sorted(queued_document["_allow_access_control"]) == expected_access_control
         )

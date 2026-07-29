@@ -355,21 +355,7 @@ class ConfluenceClient:
                 yield document, attachment_count
 
     async def fetch_content_restrictions(self, content_id):
-        """Fetch the read restrictions applied directly to a single piece of content.
-
-        Confluence's REST API only returns restrictions set explicitly on the
-        requested content; inherited restrictions are not resolved server-side.
-        This is used to walk a page's ancestors and resolve the effective
-        (inherited) restrictions for pages that have none of their own.
-
-        Args:
-            content_id (str): Unique identifier of the Confluence content.
-
-        Returns:
-            dict: The restriction payload for the ``read`` operation, or an empty
-                dict when the content has no readable restrictions (e.g. it is a
-                draft, trashed, or otherwise inaccessible ancestor).
-        """
+        """Return explicit read restrictions for content, or {} if unavailable."""
         url = os.path.join(
             self.host_url, URLS[CONTENT_RESTRICTION].format(id=content_id)
         )
@@ -377,8 +363,6 @@ class ConfluenceClient:
             response = await self.api_call(url=url)
             return await response.json()
         except (NotFound, Forbidden):
-            # The ancestor may be a draft/trashed page or one the connector's
-            # account cannot read; treat it as having no inheritable restriction.
             return {}
         except Exception as exception:
             self._logger.warning(
