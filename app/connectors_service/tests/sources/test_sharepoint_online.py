@@ -45,6 +45,7 @@ from connectors.sources.sharepoint.sharepoint_online.client import (
 from connectors.sources.sharepoint.sharepoint_online.constants import (
     DEFAULT_BACKOFF_MULTIPLIER,
     DEFAULT_RETRY_SECONDS,
+    EXCLUDED_SHAREPOINT_LIST_NAMES,
     WILDCARD,
 )
 from connectors.sources.sharepoint.sharepoint_online.utils import (
@@ -61,6 +62,9 @@ from tests.sources.support import create_source
 SITE_LIST_ONE_NAME = "site-list-one-name"
 
 SITE_LIST_ONE_ID = "1"
+
+SHAREPOINT_HOME_CACHE_LIST_NAME = "SharePointHomeCacheList"
+SHAREPOINT_HOME_CACHE_LIST_ID = "sharepoint-home-cache-list-id"
 
 TIMESTAMP_FORMAT_PATCHED = "%Y-%m-%dT%H:%M:%SZ"
 
@@ -2597,6 +2601,123 @@ class TestSharepointOnlineDataSource:
                 for site_list in site_lists
             )
             patch_sharepoint_client.site_list_role_assignments.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_site_lists_skips_sharepoint_home_cache_list(
+        self, patch_sharepoint_client
+    ):
+        assert SHAREPOINT_HOME_CACHE_LIST_NAME in EXCLUDED_SHAREPOINT_LIST_NAMES
+        patch_sharepoint_client.site_lists = AsyncIterator(
+            [
+                {
+                    "id": SITE_LIST_ONE_ID,
+                    "name": SITE_LIST_ONE_NAME,
+                    "lastModifiedDateTime": self.day_ago,
+                },
+                {
+                    "id": SHAREPOINT_HOME_CACHE_LIST_ID,
+                    "name": SHAREPOINT_HOME_CACHE_LIST_NAME,
+                    "lastModifiedDateTime": self.day_ago,
+                },
+            ]
+        )
+
+        async with create_spo_source() as source:
+            site = {"id": "1", "webUrl": "https://example.sharepoint.com/sites/Support"}
+            names = [
+                site_list["name"]
+                async for site_list in source.site_lists(site, [])
+            ]
+
+            assert names == [SITE_LIST_ONE_NAME]
+
+    @pytest.mark.asyncio
+    async def test_site_lists_skips_sharepoint_home_cache_list_before_permission_fetch(
+        self, patch_sharepoint_client
+    ):
+        patch_sharepoint_client.site_lists = AsyncIterator(
+            [
+                {
+                    "id": SHAREPOINT_HOME_CACHE_LIST_ID,
+                    "name": SHAREPOINT_HOME_CACHE_LIST_NAME,
+                    "lastModifiedDateTime": self.day_ago,
+                },
+                {
+                    "id": SITE_LIST_ONE_ID,
+                    "name": SITE_LIST_ONE_NAME,
+                    "lastModifiedDateTime": self.day_ago,
+                },
+            ]
+        )
+        patch_sharepoint_client.site_list_role_assignments = AsyncIterator(
+            [
+                {
+                    "Member": {
+                        "odata.type": "SP.User",
+                        "UserPrincipalName": USER_TWO_NAME,
+                    },
+                }
+            ]
+        )
+
+        async with create_spo_source(use_document_level_security=True) as source:
+            site = {"id": "1", "webUrl": "https://example.sharepoint.com/sites/Support"}
+            site_lists = []
+            async for site_list in source.site_lists(site, ["site-acl"]):
+                site_lists.append(site_list)
+
+            assert [site_list["name"] for site_list in site_lists] == [
+                SITE_LIST_ONE_NAME
+            ]
+            patch_sharepoint_client.site_list_has_unique_role_assignments.assert_called_once_with(
+                site["webUrl"], SITE_LIST_ONE_NAME
+            )
+            patch_sharepoint_client.site_list_role_assignments.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_get_docs_skips_sharepoint_home_cache_list(
+        self, patch_sharepoint_client
+    ):
+        patch_sharepoint_client.site_lists = AsyncIterator(
+            [
+                {
+                    "id": SITE_LIST_ONE_ID,
+                    "name": SITE_LIST_ONE_NAME,
+                    "lastModifiedDateTime": self.day_ago,
+                },
+                {
+                    "id": SHAREPOINT_HOME_CACHE_LIST_ID,
+                    "name": SHAREPOINT_HOME_CACHE_LIST_NAME,
+                    "lastModifiedDateTime": self.day_ago,
+                },
+            ]
+        )
+        attachment_list_titles = []
+
+        async def attachments_spy(site_web_url, list_title, list_item_id):
+            attachment_list_titles.append(list_title)
+            for attachment in self.site_list_item_attachments:
+                yield attachment
+
+        patch_sharepoint_client.site_list_item_attachments = attachments_spy
+
+        async with create_spo_source() as source:
+            source._dls_enabled = Mock(return_value=False)
+
+            results = []
+            async for doc, _download_func in source.get_docs():
+                results.append(doc)
+
+            site_list_names = [
+                doc["name"]
+                for doc in results
+                if doc.get("object_type") == "site_list"
+            ]
+            assert site_list_names == [SITE_LIST_ONE_NAME]
+            assert SHAREPOINT_HOME_CACHE_LIST_NAME not in attachment_list_titles
+            assert SITE_LIST_ONE_NAME in attachment_list_titles
+            # Same document set as sync without the excluded system list
+            assert len(results) == 11
 
     @pytest.mark.asyncio
     async def test_site_lists_with_unique_role_assignments(
