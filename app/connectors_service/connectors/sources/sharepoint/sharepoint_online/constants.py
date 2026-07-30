@@ -75,3 +75,6 @@ SPO_MAX_EXPAND_SIZE = 20
 
 # Exclude specific SharePoint paths entirely at the connector level (pre sync-rules)
 EXCLUDED_SHAREPOINT_PATH_SEGMENTS = ["/contentstorage/"]
+
+# System / non-content lists that Graph may still return; skip before REST follow-ups
+EXCLUDED_SHAREPOINT_LIST_NAMES = frozenset({"SharePointHomeCacheList"})

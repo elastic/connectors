@@ -30,6 +30,7 @@ from connectors.sources.sharepoint.sharepoint_online.client import (
 )
 from connectors.sources.sharepoint.sharepoint_online.constants import (
     CURSOR_SITE_DRIVE_KEY,
+    EXCLUDED_SHAREPOINT_LIST_NAMES,
     MAX_DOCUMENT_SIZE,
     SPO_API_MAX_BATCH_SIZE,
     SPO_MAX_EXPAND_SIZE,
@@ -1067,6 +1068,14 @@ class SharepointOnlineDataSource(BaseDataSource):
 
     async def site_lists(self, site, site_access_control, check_timestamp=False):
         async for site_list in self.client.site_lists(site["id"]):
+            site_list_name = site_list.get("name")
+            if site_list_name in EXCLUDED_SHAREPOINT_LIST_NAMES:
+                self._logger.debug(
+                    f"Skipping excluded SharePoint list '{site_list_name}' "
+                    f"on site '{site.get('webUrl', site.get('id'))}'"
+                )
+                continue
+
             if not check_timestamp or (
                 check_timestamp
                 and site_list["lastModifiedDateTime"] >= self.last_sync_time()
@@ -1074,7 +1083,6 @@ class SharepointOnlineDataSource(BaseDataSource):
                 site_list["_id"] = site_list["id"]
                 site_list["object_type"] = "site_list"
                 site_url = site["webUrl"]
-                site_list_name = site_list["name"]
 
                 has_unique_role_assignments = False
 
