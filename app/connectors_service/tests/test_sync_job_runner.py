@@ -659,6 +659,33 @@ async def test_sync_job_runner_reporting_metadata(
     )
 
 
+@pytest.mark.asyncio
+async def test_update_ingestion_stats_survives_transient_errors():
+    # A ConnectionTimeout on one heartbeat must not permanently stop last_seen updates.
+    sync_job_runner = create_runner()
+    sync_job_runner.sync_orchestrator = Mock()
+    sync_job_runner.sync_orchestrator.ingestion_stats.return_value = {
+        "indexed_document_count": 1,
+        "indexed_document_volume": 1,
+        "deleted_document_count": 0,
+    }
+    sync_job_runner.reload_sync_job = AsyncMock(return_value=True)
+    sync_job_runner.sync_job.update_metadata = AsyncMock(
+        side_effect=[
+            ProtocolError("connection timeout"),
+            None,
+            asyncio.CancelledError(),
+        ]
+    )
+    sync_job_runner.sync_job.log_warning = Mock()
+
+    with pytest.raises(asyncio.CancelledError):
+        await sync_job_runner.update_ingestion_stats(interval=0)
+
+    assert sync_job_runner.sync_job.update_metadata.await_count == 3
+    sync_job_runner.sync_job.log_warning.assert_called()
+
+
 @pytest.mark.parametrize(
     "job_type", [JobType.FULL, JobType.INCREMENTAL, JobType.ACCESS_CONTROL]
 )

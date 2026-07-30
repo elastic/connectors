@@ -22,9 +22,6 @@ index_name = "fake_index"
 @pytest.mark.asyncio
 async def test_es_index_create_object_error(mock_responses):
     index = ESIndex(index_name, config)
-    mock_responses.post(
-        f"http://nowhere.com:9200/{index_name}/_refresh", headers=headers, status=200
-    )
 
     mock_responses.post(
         f"http://nowhere.com:9200/{index_name}/_search?expand_wildcards=hidden",
@@ -52,9 +49,6 @@ class FakeIndex(ESIndex):
 async def test_fetch_by_id(mock_responses):
     doc_id = "1"
     index = FakeIndex(index_name, config)
-    mock_responses.post(
-        f"http://nowhere.com:9200/{index_name}/_refresh", headers=headers, status=200
-    )
 
     mock_responses.get(
         f"http://nowhere.com:9200/{index_name}/_doc/{doc_id}",
@@ -80,9 +74,6 @@ async def test_fetch_response_by_id(mock_responses):
         "_primary_term": 1,
         "_source": {},
     }
-    mock_responses.post(
-        f"http://nowhere.com:9200/{index_name}/_refresh", headers=headers, status=200
-    )
 
     mock_responses.get(
         f"http://nowhere.com:9200/{index_name}/_doc/{doc_id}",
@@ -101,9 +92,6 @@ async def test_fetch_response_by_id(mock_responses):
 async def test_fetch_response_by_id_not_found(mock_responses):
     doc_id = "1"
     index = FakeIndex(index_name, config)
-    mock_responses.post(
-        f"http://nowhere.com:9200/{index_name}/_refresh", headers=headers, status=200
-    )
 
     mock_responses.get(
         f"http://nowhere.com:9200/{index_name}/_doc/{doc_id}",
@@ -121,9 +109,6 @@ async def test_fetch_response_by_id_not_found(mock_responses):
 async def test_fetch_response_by_id_api_error(mock_responses, patch_sleep):
     doc_id = "1"
     index = FakeIndex(index_name, config)
-    mock_responses.post(
-        f"http://nowhere.com:9200/{index_name}/_refresh", headers=headers, status=200
-    )
 
     mock_responses.get(
         f"http://nowhere.com:9200/{index_name}/_doc/{doc_id}",
@@ -204,9 +189,6 @@ async def test_update_by_script():
 @pytest.mark.asyncio
 async def test_get_all_docs_with_error(mock_responses, patch_logger, patch_sleep):
     index = FakeIndex(index_name, config)
-    mock_responses.post(
-        f"http://nowhere.com:9200/{index_name}/_refresh", headers=headers, status=200
-    )
 
     mock_responses.post(
         f"http://nowhere.com:9200/{index_name}/_search?expand_wildcards=hidden",
@@ -229,9 +211,6 @@ async def test_get_all_docs_with_error(mock_responses, patch_logger, patch_sleep
 async def test_get_all_docs(mock_responses):
     index = FakeIndex(index_name, config)
     total = 3
-    mock_responses.post(
-        f"http://nowhere.com:9200/{index_name}/_refresh", headers=headers, status=200
-    )
 
     mock_responses.post(
         f"http://nowhere.com:9200/{index_name}/_search?expand_wildcards=hidden",

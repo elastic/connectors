@@ -478,19 +478,28 @@ class SyncJobRunner:
                 raise UnsupportedJobType
 
     async def update_ingestion_stats(self, interval):
+        # Heartbeat for idle-job detection. A single ES blip must not kill this
+        # task: if last_seen stops advancing for IDLE_JOBS_THRESHOLD (5 min),
+        # job_cleanup_service marks the sync ERROR even while bulk is still
+        # running (#4311).
         while True:
             await asyncio.sleep(interval)
 
-            if not await self.reload_sync_job():
-                break
+            try:
+                if not await self.reload_sync_job():
+                    break
 
-            result = self.sync_orchestrator.ingestion_stats()
-            ingestion_stats = {
-                INDEXED_DOCUMENT_COUNT: result.get(INDEXED_DOCUMENT_COUNT, 0),
-                INDEXED_DOCUMENT_VOLUME: result.get(INDEXED_DOCUMENT_VOLUME, 0),
-                DELETED_DOCUMENT_COUNT: result.get(DELETED_DOCUMENT_COUNT, 0),
-            }
-            await self.sync_job.update_metadata(ingestion_stats=ingestion_stats)
+                result = self.sync_orchestrator.ingestion_stats()
+                ingestion_stats = {
+                    INDEXED_DOCUMENT_COUNT: result.get(INDEXED_DOCUMENT_COUNT, 0),
+                    INDEXED_DOCUMENT_VOLUME: result.get(INDEXED_DOCUMENT_VOLUME, 0),
+                    DELETED_DOCUMENT_COUNT: result.get(DELETED_DOCUMENT_COUNT, 0),
+                }
+                await self.sync_job.update_metadata(ingestion_stats=ingestion_stats)
+            except Exception as e:
+                self.sync_job.log_warning(
+                    f"Failed to update ingestion stats; will retry. Error: {e}"
+                )
 
     async def check_job(self):
         if not await self.reload_connector():
