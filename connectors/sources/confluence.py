@@ -9,6 +9,7 @@ import asyncio
 import os
 from copy import copy
 from functools import partial
+from typing import NamedTuple
 from urllib.parse import urljoin
 
 import aiohttp
@@ -52,6 +53,7 @@ ATTACHMENT = "attachment"
 CONTENT = "content"
 DOWNLOAD = "download"
 SEARCH = "search"
+CONTENT_RESTRICTION = "content_restriction"
 USER = "user"
 USERS_FOR_DATA_CENTER = "users_for_data_center"
 SEARCH_FOR_DATA_CENTER = "search_for_data_center"
@@ -71,6 +73,7 @@ URLS = {
     SPACE: "rest/api/space?{api_query}",
     SPACE_PERMISSION: "rest/extender/1.0/permission/space/{space_key}/getSpacePermissionActors/VIEWSPACE",
     CONTENT: "rest/api/content/search?{api_query}",
+    CONTENT_RESTRICTION: "rest/api/content/{id}/restriction/byOperation/read?expand=restrictions.user,restrictions.group",
     ATTACHMENT: "rest/api/content/{id}/child/attachment?{api_query}",
     SEARCH: "rest/api/search?cql={query}",
     SEARCH_FOR_DATA_CENTER: "rest/api/search?cql={query}&start={start}",
@@ -122,6 +125,23 @@ class Unauthorized(Exception):
 
 class Forbidden(Exception):
     pass
+
+
+class ContentRestrictionFetchError(Exception):
+    """Raised when content restrictions cannot be evaluated safely for DLS."""
+
+    pass
+
+
+class EffectiveReadAccess(NamedTuple):
+    """Resolved view ACL for a page.
+
+    When use_space is True, fall back to space permissions.
+    When use_space is False, identities is the ACL to index (may be empty).
+    """
+
+    identities: set
+    use_space: bool
 
 
 class ConfluenceClient:
@@ -407,6 +427,32 @@ class ConfluenceClient:
                     labels = await self.fetch_label(document["id"])
                     document["labels"] = labels
                 yield document, attachment_count
+
+    async def fetch_content_restrictions(self, content_id):
+        """Return explicit read restrictions for content.
+
+        Returns:
+            dict: Restriction payload on success (may have empty user/group lists).
+            None: Content was not found (404); caller should skip this ancestor.
+
+        Raises:
+            ContentRestrictionFetchError: Restrictions could not be evaluated
+                (403/401/5xx/other). Callers must fail closed for DLS.
+        """
+        url = os.path.join(
+            self.host_url, URLS[CONTENT_RESTRICTION].format(id=content_id)
+        )
+        try:
+            response = await self.api_call(url=url)
+            return await response.json()
+        except NotFound:
+            return None
+        except Exception as exception:
+            self._logger.warning(
+                f"Unable to fetch restrictions for content '{content_id}'. Exception: {exception}."
+            )
+            msg = f"Unable to fetch restrictions for content '{content_id}'"
+            raise ContentRestrictionFetchError(msg) from exception
 
     async def fetch_attachments(self, content_id):
         async for response in self.paginated_api_call(
@@ -853,6 +899,52 @@ class ConfluenceDataSource(BaseDataSource):
 
         return identities
 
+    async def _resolve_effective_read_access(
+        self, child_restrictions, ancestors, extract_identities
+    ):
+        """Resolve effective view ACL from child + ancestor explicit restrictions.
+
+        Returns EffectiveReadAccess. use_space is True only when every layer was
+        successfully evaluated and none had explicit view restrictions.
+        On ambiguous ancestor fetch failure, returns empty identities and
+        use_space=False (fail closed for DLS).
+        """
+        if not self._dls_enabled():
+            return EffectiveReadAccess(identities=set(), use_space=False)
+
+        layers = []
+        child_identities = extract_identities(response=child_restrictions)
+        if child_identities:
+            layers.append(child_identities)
+
+        for ancestor in ancestors or []:
+            ancestor_id = ancestor.get("id")
+            if not ancestor_id:
+                continue
+
+            try:
+                restrictions = await self.confluence_client.fetch_content_restrictions(
+                    content_id=ancestor_id
+                )
+            except ContentRestrictionFetchError:
+                return EffectiveReadAccess(identities=set(), use_space=False)
+
+            if restrictions is None:
+                continue
+
+            identities = extract_identities(
+                response=restrictions.get("restrictions", {})
+            )
+            if identities:
+                layers.append(identities)
+
+        if not layers:
+            return EffectiveReadAccess(identities=set(), use_space=True)
+
+        return EffectiveReadAccess(
+            identities=set.intersection(*layers), use_space=False
+        )
+
     async def close(self):
         """Closes unclosed client session"""
         await self.confluence_client.close_session()
@@ -936,6 +1028,7 @@ class ConfluenceDataSource(BaseDataSource):
             Integer: Number of attachments in a page/blogpost
             List: List of permissions attached to document
             Dictionary: Dictionary of restrictions attached to document
+            List: List of ancestors (with their ids) of the document
         """
         async for (
             document,
@@ -981,6 +1074,7 @@ class ConfluenceDataSource(BaseDataSource):
                 document.get("restrictions", {})
                 .get("read", {})
                 .get("restrictions", {}),
+                document.get("ancestors", []),
             )
 
     async def fetch_attachments(
@@ -1231,14 +1325,22 @@ class ConfluenceDataSource(BaseDataSource):
                 space_key,
                 permissions,
                 restrictions,
+                ancestors,
             ) in self.fetch_documents(api_query):
                 # Pages and blog posts are open to viewing or editing by default,
                 # but you can restrict either viewing or editing to certain users or groups.
                 if self.confluence_client.data_source_type == CONFLUENCE_CLOUD:
-                    access_control = list(
-                        self._extract_identities(response=restrictions)
-                    )
-                    if len(access_control) == 0:
+                    extract_identities = self._extract_identities
+                else:
+                    extract_identities = self._extract_identities_for_datacenter
+
+                effective_access = await self._resolve_effective_read_access(
+                    child_restrictions=restrictions,
+                    ancestors=ancestors,
+                    extract_identities=extract_identities,
+                )
+                if effective_access.use_space:
+                    if self.confluence_client.data_source_type == CONFLUENCE_CLOUD:
                         # Every space has its own independent set of permissions, managed by the space admin(s),
                         # which determine the access settings for different users and groups.
                         access_control = list(
@@ -1246,11 +1348,7 @@ class ConfluenceDataSource(BaseDataSource):
                                 permissions=permissions, target_type=target_type
                             )
                         )
-                else:
-                    access_control = list(
-                        self._extract_identities_for_datacenter(response=restrictions)
-                    )
-                    if len(access_control) == 0:
+                    else:
                         permission = await self.fetch_server_space_permission(
                             space_key=space_key
                         )
@@ -1261,6 +1359,8 @@ class ConfluenceDataSource(BaseDataSource):
                                 )
                             )
                         )
+                else:
+                    access_control = list(effective_access.identities)
                 document = self._decorate_with_access_control(
                     document=document, access_control=access_control
                 )
