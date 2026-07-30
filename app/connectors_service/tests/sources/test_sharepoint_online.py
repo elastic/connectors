@@ -2625,8 +2625,7 @@ class TestSharepointOnlineDataSource:
         async with create_spo_source() as source:
             site = {"id": "1", "webUrl": "https://example.sharepoint.com/sites/Support"}
             names = [
-                site_list["name"]
-                async for site_list in source.site_lists(site, [])
+                site_list["name"] async for site_list in source.site_lists(site, [])
             ]
 
             assert names == [SITE_LIST_ONE_NAME]
@@ -2709,9 +2708,7 @@ class TestSharepointOnlineDataSource:
                 results.append(doc)
 
             site_list_names = [
-                doc["name"]
-                for doc in results
-                if doc.get("object_type") == "site_list"
+                doc["name"] for doc in results if doc.get("object_type") == "site_list"
             ]
             assert site_list_names == [SITE_LIST_ONE_NAME]
             assert SHAREPOINT_HOME_CACHE_LIST_NAME not in attachment_list_titles
