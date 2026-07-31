@@ -51,6 +51,16 @@ CALENDAR_ITEM_TYPES = (CalendarItem,)
 TASK_ITEM_TYPES = (Task,)
 
 
+def _mailbox_access_control(account):
+    """Identities allowed to read everything in a mailbox.
+
+    These have to stay in the same dialect as the identities granted by
+    `_user_access_control_doc`: DLS matches the two with a terms query, so an
+    address stored here unprefixed is invisible to every user.
+    """
+    return [_prefix_email(account.primary_smtp_address)]
+
+
 class OutlookDocFormatter:
     """Format Outlook object documents to Elasticsearch document"""
 
@@ -465,8 +475,9 @@ class OutlookDataSource(BaseDataSource):
 
     def _decorate_with_access_control(self, document, access_control):
         if self._dls_enabled():
+            identities = document.get(ACCESS_CONTROL, []) + access_control
             document[ACCESS_CONTROL] = list(
-                set(document.get(ACCESS_CONTROL, []) + access_control)
+                {identity for identity in identities if identity is not None}
             )
         return document
 
@@ -553,7 +564,7 @@ class OutlookDataSource(BaseDataSource):
             )
             yield (
                 self._decorate_with_access_control(
-                    document, [account.primary_smtp_address]
+                    document, _mailbox_access_control(account)
                 ),
                 partial(
                     self.get_content, attachment=copy(attachment), timezone=timezone
@@ -577,7 +588,7 @@ class OutlookDataSource(BaseDataSource):
             )
             yield (
                 self._decorate_with_access_control(
-                    document, [account.primary_smtp_address]
+                    document, _mailbox_access_control(account)
                 ),
                 None,
             )
@@ -616,7 +627,7 @@ class OutlookDataSource(BaseDataSource):
                 continue
             yield (
                 self._decorate_with_access_control(
-                    document, [account.primary_smtp_address]
+                    document, _mailbox_access_control(account)
                 ),
                 None,
             )
@@ -637,7 +648,7 @@ class OutlookDataSource(BaseDataSource):
             )
             yield (
                 self._decorate_with_access_control(
-                    document, [account.primary_smtp_address]
+                    document, _mailbox_access_control(account)
                 ),
                 None,
             )
@@ -694,7 +705,7 @@ class OutlookDataSource(BaseDataSource):
         )
         yield (
             self._decorate_with_access_control(
-                document, [account.primary_smtp_address]
+                document, _mailbox_access_control(account)
             ),
             None,
         )
