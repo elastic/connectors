@@ -33,7 +33,11 @@ def ews_format_to_datetime(source_datetime, timezone):
 
 
 def _prefix_email(email):
-    return prefix_identity("email", email)
+    # Access control documents and content documents both route addresses
+    # through here. DLS compares them with a case-sensitive terms query, and a
+    # mailbox's primary SMTP address does not always match the directory's
+    # casing, so normalise in the one place both sides share.
+    return prefix_identity("email", email.lower() if email else email)
 
 
 def _prefix_display_name(user):
