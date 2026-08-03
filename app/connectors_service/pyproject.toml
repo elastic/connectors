@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools"]
+requires = ["setuptools>=83.0.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -49,7 +49,7 @@ dependencies = [
     "idna==3.18",
     "ldap3==2.9.1",
     "lxml==6.1.0",
-    "msal==1.32.3",
+    "msal==1.37.0",
     "notion-client==2.2.1",
     "oracledb==2.3.0",
     "pip-licenses==5.5.5",
@@ -58,7 +58,7 @@ dependencies = [
     "pymongo[srv]==4.6.3; platform_machine=='aarch64' or platform_machine=='arm64'",
     "smbprotocol==1.10.1",
     "motor==3.4.0",
-    "pyOpenSSL==26.0.0",
+    "pyOpenSSL==26.3.0",
     "pyasn1==0.6.4",
     "pydantic==2.10.6",
     "PyJWT==2.13.0",
@@ -69,7 +69,7 @@ dependencies = [
     "pywinrm==0.4.3",
     "pyyaml==6.0.1",
     "redis==5.0.1",
-    "requests==2.32.4",
+    "requests==2.33.0",
     "simple-term-menu==1.6.4",
     "sqlalchemy-pytds==0.3.5",
     "SQLAlchemy[asyncio]==2.0.1; platform_machine=='arm64'",
@@ -95,7 +95,7 @@ tests = [
     "pytest-randomly==3.13.0",
     "pytest-fail-slow==0.3.0",
     "pyright==1.1.317",
-    "requests==2.32.4",
+    "requests==2.33.0",
 ]
 
 ftest= [

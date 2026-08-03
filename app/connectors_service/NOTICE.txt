@@ -1724,8 +1724,8 @@ Apache License
 
 
 annotated-types
-0.7.0
-MIT License
+0.8.0
+MIT
 The MIT License (MIT)
 
 Copyright (c) 2022 the contributors
@@ -2946,7 +2946,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 cryptography
-46.0.7
+49.0.0
 Apache-2.0 OR BSD-3-Clause
 This software is made available under the terms of *either* of the licenses
 found in LICENSE.APACHE or LICENSE.BSD. Contributions to cryptography are made
@@ -5730,7 +5730,7 @@ Apache Software License
 
 
 msal
-1.32.3
+1.37.0
 MIT License
 The MIT License (MIT)
 
@@ -6345,7 +6345,7 @@ support library is itself covered by the above license.
 
 
 pyOpenSSL
-26.0.0
+26.3.0
 Apache Software License
 
                                  Apache License
@@ -7109,7 +7109,7 @@ SOFTWARE.
 
 
 requests
-2.32.4
+2.33.0
 Apache Software License
 
                                  Apache License

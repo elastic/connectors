@@ -4,6 +4,12 @@ on:
   issues:
     types: [opened]
 
+# The repository default is read-only, so the scopes this job needs must be
+# granted here: checkout reads the script, which then labels the issue.
+permissions:
+  contents: read
+  issues: write
+
 jobs:
   run-python-script:
     runs-on: ubuntu-latest

@@ -1,0 +1,39 @@
+#!/bin/bash
+
+# !!! WARNING DO NOT add -x to avoid leaking vault passwords
+set -euo pipefail
+
+source .buildkite/shared.sh
+
+BASEDIR=$(realpath $(dirname $0))
+ROOT=$(realpath $BASEDIR/../)
+APP_ROOT=$ROOT/app/connectors_service
+SDK_ROOT=$ROOT/libs/connectors_sdk
+
+
+init_python
+
+make clean install freeze
+
+echo "--- Logging into snyk...---"
+export SNYK_TOKEN=$(vault read -field=value secret/ci/elastic-connectors/SNYK_TOKEN)
+
+echo "--- Downloading snyk..."
+curl -sL --retry-max-time 60 --retry 3 --retry-delay 5 https://static.snyk.io/cli/latest/snyk-linux -o snyk
+chmod +x ./snyk
+
+echo "--- Initializing venv for the test ---"
+rm -rf /tmp/.snyk-venv
+python3 -m venv /tmp/.snyk-venv
+
+echo "--- Installing dependencies ---"
+
+# We're only installing app dependencies because SDK dependencies are included there by `make freeze`
+/tmp/.snyk-venv/bin/pip install \
+        -r $APP_ROOT/requirements.txt
+
+echo "--- Running snyk for SDK..."
+./snyk monitor --file=$SDK_ROOT/requirements.txt --command=/tmp/.snyk-venv/bin/python3
+
+echo "--- Running snyk for App..."
+./snyk monitor --file=$APP_ROOT/requirements.txt --command=/tmp/.snyk-venv/bin/python3

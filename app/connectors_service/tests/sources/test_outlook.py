@@ -24,11 +24,12 @@ from exchangelib.errors import (
     ErrorNonExistentMailbox,
     TransportError,
 )
-from exchangelib.folders import Calendar, Messages, Tasks
+from exchangelib.folders import BaseFolder, Calendar, Messages, Tasks
 from exchangelib.items import (
     CalendarItem,
     Contact,
     DistributionList,
+    Item,
     MeetingCancellation,
     MeetingRequest,
     MeetingResponse,
@@ -36,8 +37,11 @@ from exchangelib.items import (
     Task,
 )
 from exchangelib.protocol import BaseProtocol, NoVerifyHTTPAdapter
+from exchangelib.util import to_xml
 
+from connectors.access_control import ACCESS_CONTROL
 from connectors.sources.outlook import OutlookDataSource
+from connectors.sources.outlook import client as outlook_client
 from connectors.sources.outlook.client import (
     ExchangeUsers,
     Forbidden,
@@ -59,6 +63,7 @@ from connectors.sources.outlook.datasource import (
     TASK_ITEM_TYPES,
     OutlookDocFormatter,
 )
+from connectors.sources.outlook.utils import _prefix_email
 from connectors.utils import get_pem_format
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
@@ -1788,6 +1793,73 @@ def test_item_type_allowlists_match_exchangelib(allowlist, folder_cls):
     assert set(allowlist) == set(folder_cls.supported_item_models)
 
 
+UNEXPECTED_ITEM_TAG = (
+    "{http://schemas.microsoft.com/exchange/services/2006/types}EndTimeZone"
+)
+# Stray EndTimeZone next to CalendarItem — the SDH response shape.
+UNEXPECTED_ELEMENT_RESPONSE = b"""<?xml version="1.0" encoding="utf-8"?>
+<m:Items xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages"
+         xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types">
+  <t:CalendarItem>
+    <t:ItemId Id="calendar_1" ChangeKey="change_key_1"/>
+    <t:Subject>Team sync</t:Subject>
+  </t:CalendarItem>
+  <t:EndTimeZone Id="(GMT+01:00) Amsterdam, Berlin, Bern, Rom, Stockholm, Wien"/>
+</m:Items>
+"""
+
+
+@pytest.mark.parametrize(
+    "item_model",
+    [CalendarItem, Contact, DistributionList, Item, Message, Task],
+    ids=lambda cls: cls.__name__,
+)
+def test_item_model_from_tag_still_resolves_known_tags(item_model):
+    assert BaseFolder.item_model_from_tag(item_model.response_tag()) is item_model
+
+
+def test_item_model_from_tag_degrades_unknown_tag_to_item():
+    outlook_client._reported_unexpected_item_tags.clear()
+
+    with patch("connectors.sources.outlook.client.logger") as logger:
+        assert BaseFolder.item_model_from_tag(UNEXPECTED_ITEM_TAG) is Item
+        assert BaseFolder.item_model_from_tag(UNEXPECTED_ITEM_TAG) is Item
+        logger.warning.assert_called_once()
+
+
+def test_unexpected_element_does_not_abort_folder_query():
+    items = [
+        BaseFolder.item_model_from_tag(element.tag).from_xml(elem=element, account=None)
+        for element in to_xml(UNEXPECTED_ELEMENT_RESPONSE).getroot()
+    ]
+
+    calendar_item, unexpected_item = items
+    assert isinstance(calendar_item, CalendarItem)
+    assert calendar_item.id == "calendar_1"
+    assert type(unexpected_item) is Item
+
+
+@pytest.mark.asyncio
+async def test_enqueue_calendars_skips_degraded_unknown_item():
+    async with create_outlook_source() as source:
+        source._logger = MagicMock()
+        account = MockAccount()
+        degraded_item = Item(id="unknown_1")
+
+        documents = [
+            document
+            async for document, _ in source._enqueue_calendars(
+                calendar=degraded_item,
+                child_calendar="Calendar",
+                timezone=TIMEZONE,
+                account=account,
+            )
+        ]
+
+        assert documents == []
+        source._logger.warning.assert_called_once()
+
+
 @pytest.mark.asyncio
 async def test_fetch_tasks_skips_non_task_item():
     async with create_outlook_source() as source:
@@ -1942,3 +2014,127 @@ async def test_get_access_control_for_server(user_response):
         async for access_control in source.get_access_control():
             acl.append(access_control)
         assert len(acl) == 1
+
+
+# The directory entry for the person whose mailbox MockAccount stands in for.
+MAILBOX_OWNER = {
+    "id": "60e8a9c1-4d2f-4a3b-9a1e-2f0c5d7b8e11",
+    "displayName": "Alex Wilber",
+    "mail": "alex.wilber@gmail.com",
+    "jobTitle": "Engineer",
+}
+
+
+async def _dls_documents(source, account):
+    """Both sides of DLS for one mailbox: what is granted and what is stored."""
+    source._dls_enabled = MagicMock(return_value=True)
+    source.client._get_user_instance.get_user_accounts = AsyncIterator([account])
+
+    access_control_documents = [doc async for doc in source.get_access_control()]
+    content_documents = [doc async for doc, _ in source.get_docs()]
+
+    return access_control_documents, content_documents
+
+
+def _granted_identities(access_control_document):
+    return set(access_control_document["query"]["template"]["params"]["access_control"])
+
+
+@pytest.mark.asyncio
+async def test_content_documents_are_reachable_by_their_owner():
+    # DLS filters content with a terms query over the identities the access
+    # control document grants, so the two sides have to be written in the same
+    # dialect. Where they do not intersect, the owner of a mailbox can retrieve
+    # none of their own documents.
+    async with create_outlook_source() as source:
+        source.client.is_cloud = True
+        source.client._get_user_instance.get_users = AsyncIterator(
+            [{"value": [MAILBOX_OWNER]}]
+        )
+
+        access_control_documents, content_documents = await _dls_documents(
+            source, MockAccount()
+        )
+
+    granted = _granted_identities(access_control_documents[0])
+
+    assert content_documents
+    for document in content_documents:
+        assert granted & set(document[ACCESS_CONTROL])
+
+
+@pytest.mark.asyncio
+async def test_content_documents_are_reachable_by_their_owner_on_server():
+    async with create_outlook_source() as source:
+        source.configuration.get_field("data_source").value = OUTLOOK_SERVER
+        source.client._get_user_instance.get_users = AsyncIterator(
+            [
+                {
+                    "attributes": {"mail": "dummy@es.local"},
+                    "dn": "CN=Dummy,CN=Users,DC=es,DC=local",
+                }
+            ]
+        )
+        account = MockAccount()
+        account.primary_smtp_address = "dummy@es.local"
+
+        access_control_documents, content_documents = await _dls_documents(
+            source, account
+        )
+
+    granted = _granted_identities(access_control_documents[0])
+
+    assert content_documents
+    for document in content_documents:
+        assert granted & set(document[ACCESS_CONTROL])
+
+
+@pytest.mark.asyncio
+async def test_content_documents_are_reachable_whatever_the_address_casing():
+    # Exchange reports a mailbox under the casing it was configured with, which
+    # is not necessarily the casing the directory reports for the same person.
+    async with create_outlook_source() as source:
+        source.client.is_cloud = True
+        source.client._get_user_instance.get_users = AsyncIterator(
+            [{"value": [MAILBOX_OWNER | {"mail": "Alex.Wilber@Gmail.com"}]}]
+        )
+        account = MockAccount()
+        account.primary_smtp_address = "alex.wilber@GMAIL.com"
+
+        access_control_documents, content_documents = await _dls_documents(
+            source, account
+        )
+
+    granted = _granted_identities(access_control_documents[0])
+
+    assert "email:alex.wilber@gmail.com" in granted
+    assert content_documents
+    for document in content_documents:
+        assert granted & set(document[ACCESS_CONTROL])
+
+
+@pytest.mark.asyncio
+async def test_decorate_with_access_control_drops_unknown_identities():
+    async with create_outlook_source() as source:
+        source._dls_enabled = MagicMock(return_value=True)
+
+        # A mailbox with no address prefixes to None, which must not be stored:
+        # a null in the terms list is noise no user can ever match.
+        document = source._decorate_with_access_control(
+            {"_id": "1"}, [None, "email:alex.wilber@gmail.com"]
+        )
+
+        assert document[ACCESS_CONTROL] == ["email:alex.wilber@gmail.com"]
+
+
+@pytest.mark.parametrize(
+    "email, expected",
+    [
+        ("Alex.Wilber@Example.COM", "email:alex.wilber@example.com"),
+        ("alex.wilber@example.com", "email:alex.wilber@example.com"),
+        ("", "email:"),
+        (None, None),
+    ],
+)
+def test_prefix_email_normalises_casing(email, expected):
+    assert _prefix_email(email) == expected
