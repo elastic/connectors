@@ -88,6 +88,7 @@ def mock_connector(
     )
     connector.validate_filtering = AsyncMock()
     connector.next_sync = Mock(return_value=next_sync)
+    connector.access_control_sync_scheduling = {"enabled": True}
 
     connector.close = AsyncMock()
     connector.prepare = AsyncMock(side_effect=prepare_exception)

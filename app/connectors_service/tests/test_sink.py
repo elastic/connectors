@@ -30,7 +30,9 @@ from connectors.es.sink import (
     OP_DELETE,
     OP_INDEX,
     OP_UPDATE,
+    RESULT_ERROR,
     RESULT_SUCCESS,
+    TRANSIENT_STATUS_CODES,
     UPDATES_QUEUED,
     AsyncBulkRunningError,
     ElasticsearchOverloadedError,
@@ -2289,3 +2291,230 @@ async def test_sink_dispatches_oversized_single_doc_alone():
 
     assert in_loop_names == ["Elasticsearch Sink: _bulk batch #1"]
     assert [_doc_ids(b) for b in _dispatched_batches(sink)] == [["big"]]
+
+
+@pytest.mark.asyncio
+async def test_extract_transient_failed_operations_returns_empty_when_all_successful():
+    client = Mock()
+    sink = Sink(
+        client=client,
+        queue=None,
+        error_monitor=Mock(),
+        chunk_size=0,
+        pipeline={"name": "pipeline"},
+        chunk_mem_size=0,
+        max_concurrency=0,
+        max_retries=3,
+        retry_interval=10,
+    )
+
+    operations = [{"index": {"_index": "test", "_id": "1"}}, {"data": "value"}]
+    res = {
+        "items": [
+            {"index": {"_id": "1", "status": 201, "result": "created"}},
+        ]
+    }
+
+    failed = sink._extract_transient_failed_operations(res, operations)
+    assert failed == []
+
+
+@pytest.mark.asyncio
+async def test_extract_transient_failed_operations_returns_429_items():
+    client = Mock()
+    sink = Sink(
+        client=client,
+        queue=None,
+        error_monitor=Mock(),
+        chunk_size=0,
+        pipeline={"name": "pipeline"},
+        chunk_mem_size=0,
+        max_concurrency=0,
+        max_retries=3,
+        retry_interval=10,
+    )
+
+    operations = [
+        {"index": {"_index": "test", "_id": "1"}},
+        {"data": "doc1"},
+        {"index": {"_index": "test", "_id": "2"}},
+        {"data": "doc2"},
+        {"delete": {"_index": "test", "_id": "3"}},
+    ]
+    res = {
+        "items": [
+            {"index": {"_id": "1", "status": 200, "result": "created"}},
+            {"index": {"_id": "2", "status": 429, "error": {"type": "too_many_requests"}}},
+            {"delete": {"_id": "3", "status": 429, "error": {"type": "too_many_requests"}}},
+        ]
+    }
+
+    failed = sink._extract_transient_failed_operations(res, operations)
+    # doc 2 (index, 2 ops) and doc 3 (delete, 1 op)
+    assert len(failed) == 3
+    # Verify doc 2's index operation is included
+    assert any(
+        isinstance(op, dict) and op.get("index", {}).get("_id") == "2"
+        for op in failed
+        if isinstance(op, dict) and "index" in op
+    )
+    # Verify doc 3's delete operation is included
+    assert any(
+        isinstance(op, dict) and op.get("delete", {}).get("_id") == "3"
+        for op in failed
+        if isinstance(op, dict) and "delete" in op
+    )
+
+
+@pytest.mark.asyncio
+async def test_retry_transient_item_failures_retries_429_items():
+    config = {
+        "username": "elastic",
+        "password": "changeme",
+        "host": "http://nowhere.com:9200",
+    }
+    client = ESManagementClient(config)
+    client.client = AsyncMock()
+    sink = Sink(
+        client=client,
+        queue=None,
+        error_monitor=Mock(),
+        chunk_size=0,
+        pipeline={"name": "pipeline"},
+        chunk_mem_size=0,
+        max_concurrency=0,
+        max_retries=3,
+        retry_interval=0.01,
+    )
+
+    operations = [
+        {"index": {"_index": "test", "_id": "1"}},
+        {"data": "doc1"},
+        {"index": {"_index": "test", "_id": "2"}},
+        {"data": "doc2"},
+    ]
+
+    # First call: doc 1 succeeds, doc 2 gets 429
+    first_response = {
+        "errors": True,
+        "items": [
+            {"index": {"_id": "1", "status": 201, "result": "created"}},
+            {"index": {"_id": "2", "status": 429, "error": {"type": "too_many_requests"}}},
+        ],
+    }
+
+    # Second call: doc 2 succeeds on retry
+    second_response = {
+        "items": [
+            {"index": {"_id": "2", "status": 201, "result": "created"}},
+        ]
+    }
+
+    client.bulk_insert = AsyncMock(
+        side_effect=[first_response, second_response]
+    )
+
+    with mock.patch.object(asyncio, "sleep"):
+        final_res = await sink._retry_transient_item_failures(operations, "pipeline")
+
+    assert client.bulk_insert.await_count == 2
+    # Final response should be the successful retry of doc 2
+    assert final_res == second_response
+
+
+@pytest.mark.asyncio
+async def test_retry_transient_item_failures_gives_up_after_exhaustion():
+    config = {
+        "username": "elastic",
+        "password": "changeme",
+        "host": "http://nowhere.com:9200",
+    }
+    client = ESManagementClient(config)
+    client.client = AsyncMock()
+    sink = Sink(
+        client=client,
+        queue=None,
+        error_monitor=Mock(),
+        chunk_size=0,
+        pipeline={"name": "pipeline"},
+        chunk_mem_size=0,
+        max_concurrency=0,
+        max_retries=2,
+        retry_interval=0.01,
+    )
+
+    operations = [
+        {"index": {"_index": "test", "_id": "1"}},
+        {"data": "doc1"},
+    ]
+
+    failed_response = {
+        "errors": True,
+        "items": [
+            {"index": {"_id": "1", "status": 429, "error": {"type": "too_many_requests"}}},
+        ],
+    }
+
+    # All calls return 429
+    client.bulk_insert = AsyncMock(return_value=failed_response)
+
+    with mock.patch.object(asyncio, "sleep"):
+        final_res = await sink._retry_transient_item_failures(operations, "pipeline")
+
+    # Initial call + 2 retries = 3 total
+    assert client.bulk_insert.await_count == 3
+    # Final response still contains the 429 failure
+    assert final_res["items"][0]["index"]["status"] == 429
+
+
+@pytest.mark.asyncio
+async def test_batch_bulk_with_transient_item_retries_integration():
+    """Verify that _batch_bulk retries transient item failures before
+    passing results to the ErrorMonitor."""
+    config = {
+        "username": "elastic",
+        "password": "changeme",
+        "host": "http://nowhere.com:9200",
+    }
+    client = ESManagementClient(config)
+    client.client = AsyncMock()
+    error_monitor = Mock()
+    sink = Sink(
+        client=client,
+        queue=None,
+        error_monitor=error_monitor,
+        chunk_size=0,
+        pipeline={"name": "pipeline"},
+        chunk_mem_size=0,
+        max_concurrency=0,
+        max_retries=2,
+        retry_interval=0.01,
+    )
+
+    operations = [
+        {"index": {"_index": "test", "_id": "1"}},
+        {"data": "doc1"},
+    ]
+
+    first_response = {
+        "errors": True,
+        "items": [
+            {"index": {"_id": "1", "status": 429, "error": {"type": "too_many_requests"}}},
+        ],
+    }
+    second_response = {
+        "items": [
+            {"index": {"_id": "1", "status": 201, "result": "created"}},
+        ]
+    }
+
+    client.bulk_insert = AsyncMock(side_effect=[first_response, second_response])
+
+    stats = {OP_INDEX: {"1": 100}, OP_UPDATE: {}, OP_DELETE: {}}
+
+    with mock.patch.object(asyncio, "sleep"):
+        await sink._batch_bulk(operations, stats)
+
+    # After retry succeeds, error_monitor should see a success, not an error
+    error_monitor.track_success.assert_called_once()
+    error_monitor.track_error.assert_not_called()
