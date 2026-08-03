@@ -64,6 +64,25 @@ CHANNELS = [
         "description": "General channel",
         "webUrl": "https://teams.microsoft.com/l/channel/1",
         "createdDateTime": "2023-08-16T04:46:53.056Z",
+        "membershipType": "standard",
+    }
+]
+
+PRIVATE_CHANNEL = {
+    "id": "channel-private",
+    "displayName": "Private",
+    "description": "Private channel",
+    "webUrl": "https://teams.microsoft.com/l/channel/private",
+    "createdDateTime": "2023-08-16T04:46:53.056Z",
+    "membershipType": "private",
+}
+
+PRIVATE_CHANNEL_MEMBERS = [
+    {
+        "id": "pcm-1",
+        "displayName": "Alice",
+        "userId": "user-alice",
+        "email": "alice@example.com",
     }
 ]
 
@@ -482,6 +501,9 @@ async def test_get_access_control_yields_unique_identities():
         source.client.get_team_members = MagicMock(
             return_value=AsyncIterator([TEAM_MEMBERS])
         )
+        source.client.get_team_channels = MagicMock(
+            return_value=AsyncIterator([CHANNELS])
+        )
         source.client.get_chats = MagicMock(return_value=AsyncIterator([CHATS]))
 
         ids = []
@@ -490,6 +512,40 @@ async def test_get_access_control_yields_unique_identities():
 
         # alice and bob appear in both team and chat, but must be deduped
         assert sorted(ids) == ["user-alice", "user-bob"]
+
+
+@pytest.mark.asyncio
+async def test_get_access_control_includes_private_channel_members():
+    async with create_teams_source(use_document_level_security=True) as source:
+        source._features = Mock()
+        source._features.document_level_security_enabled = Mock(return_value=True)
+        source.client.get_teams = MagicMock(return_value=AsyncIterator([TEAMS]))
+        source.client.get_team_members = MagicMock(
+            return_value=AsyncIterator([[TEAM_MEMBERS[0]]])  # alice only on team
+        )
+        source.client.get_team_channels = MagicMock(
+            return_value=AsyncIterator([[PRIVATE_CHANNEL]])
+        )
+        # shared/private channel adds bob, who is not on the team roster above
+        source.client.get_channel_members = MagicMock(
+            return_value=AsyncIterator(
+                [
+                    [
+                        {
+                            "id": "pcm-bob",
+                            "displayName": "Bob",
+                            "userId": "user-bob",
+                            "email": "bob@example.com",
+                        }
+                    ]
+                ]
+            )
+        )
+        source.client.get_chats = MagicMock(return_value=AsyncIterator([]))
+
+        ids = [doc["_id"] async for doc in source.get_access_control()]
+        assert sorted(ids) == ["user-alice", "user-bob"]
+        source.client.get_channel_members.assert_called()
 
 
 @pytest.mark.asyncio
@@ -509,6 +565,9 @@ def _mock_client_for_get_docs(source, with_attachments=True):
         return_value=AsyncIterator([TEAM_MEMBERS])
     )
     source.client.get_team_channels = MagicMock(return_value=AsyncIterator([CHANNELS]))
+    source.client.get_channel_members = MagicMock(
+        return_value=AsyncIterator([PRIVATE_CHANNEL_MEMBERS])
+    )
     source.client.get_channel_messages = MagicMock(
         return_value=AsyncIterator([CHANNEL_MESSAGES])
     )
@@ -576,7 +635,9 @@ async def test_get_docs_without_attachments_when_disabled():
 
 
 @pytest.mark.asyncio
-async def test_get_docs_continues_when_teams_permission_missing():
+async def test_get_docs_raises_when_teams_permission_missing():
+    # One-sided enumeration failure must not succeed: that would wipe the other
+    # corpus on the next full sync.
     async with create_teams_source() as source:
         source.client.get_teams = MagicMock(side_effect=PermissionsMissing())
         source.client.get_chats = MagicMock(return_value=AsyncIterator([CHATS]))
@@ -587,12 +648,27 @@ async def test_get_docs_continues_when_teams_permission_missing():
             return_value=AsyncIterator([CHAT_ATTACHMENTS])
         )
 
-        types = set()
-        async for doc, _download in source.get_docs():
-            types.add(doc["type"])
+        with pytest.raises(PermissionsMissing, match="Enumeration failed"):
+            async for _doc, _download in source.get_docs():
+                pass
 
-        assert TeamsObjectType.CHAT.value in types
-        assert TeamsObjectType.TEAM.value not in types
+
+@pytest.mark.asyncio
+async def test_get_docs_raises_when_chats_permission_missing():
+    async with create_teams_source(fetch_attachment_content=False) as source:
+        source.client.get_teams = MagicMock(return_value=AsyncIterator([TEAMS]))
+        source.client.get_team_members = MagicMock(
+            return_value=AsyncIterator([TEAM_MEMBERS])
+        )
+        source.client.get_team_channels = MagicMock(
+            return_value=AsyncIterator([CHANNELS])
+        )
+        source.client.get_channel_messages = MagicMock(return_value=AsyncIterator([[]]))
+        source.client.get_chats = MagicMock(side_effect=PermissionsMissing())
+
+        with pytest.raises(PermissionsMissing, match="Enumeration failed"):
+            async for _doc, _download in source.get_docs():
+                pass
 
 
 # -- get_content -------------------------------------------------------------
@@ -771,7 +847,7 @@ async def test_get_docs_raises_when_both_enumerations_fail():
         source.client.get_teams = MagicMock(side_effect=PermissionsMissing())
         source.client.get_chats = MagicMock(side_effect=PermissionsMissing())
 
-        with pytest.raises(PermissionsMissing):
+        with pytest.raises(PermissionsMissing, match="Enumeration failed"):
             async for _doc, _download in source.get_docs():
                 pass
 
@@ -801,6 +877,158 @@ async def test_get_docs_raises_on_unexpected_enumeration_error():
 
         with pytest.raises(RuntimeError, match="boom"):
             await asyncio.wait_for(drain(), timeout=5)
+
+
+@pytest.mark.asyncio
+async def test_get_docs_raises_on_producer_error():
+    # Producer exceptions must fail the sync. ConcurrentTasks removes finished
+    # tasks before join returns, so get_docs re-raises the recorded error.
+    async with create_teams_source(fetch_attachment_content=False) as source:
+        source.client.get_teams = MagicMock(return_value=AsyncIterator([TEAMS]))
+        source.client.get_team_members = MagicMock(
+            side_effect=RuntimeError("team producer boom")
+        )
+        source.client.get_chats = MagicMock(return_value=AsyncIterator([]))
+
+        async def drain():
+            async for _doc, _download in source.get_docs():
+                pass
+
+        with pytest.raises(RuntimeError, match="team producer boom"):
+            await asyncio.wait_for(drain(), timeout=5)
+
+
+@pytest.mark.asyncio
+async def test_get_docs_raises_when_all_channel_messages_skipped():
+    # Teams listed via Team.ReadBasic.All but every message fetch 403/404s when
+    # the app is not installed — refuse a successful near-empty sync.
+    async with create_teams_source(fetch_attachment_content=False) as source:
+        source.client.get_teams = MagicMock(return_value=AsyncIterator([TEAMS]))
+        source.client.get_team_members = MagicMock(
+            return_value=AsyncIterator([TEAM_MEMBERS])
+        )
+        source.client.get_team_channels = MagicMock(
+            return_value=AsyncIterator([CHANNELS])
+        )
+
+        async def skip_messages(*_args, **_kwargs):
+            source.client._skipped["channels' messages"] += 1
+            if False:  # pragma: no cover - make this an async generator
+                yield None
+
+        source.client.get_channel_messages = MagicMock(side_effect=skip_messages)
+        source.client.get_chats = MagicMock(return_value=AsyncIterator([]))
+
+        with pytest.raises(PermissionsMissing, match="All channel message fetches"):
+            async for _doc, _download in source.get_docs():
+                pass
+
+
+@pytest.mark.asyncio
+async def test_private_channel_uses_channel_member_acl_when_dls_enabled():
+    async with create_teams_source(
+        use_document_level_security=True, fetch_attachment_content=False
+    ) as source:
+        source._features = Mock()
+        source._features.document_level_security_enabled = Mock(return_value=True)
+
+        source.client.get_teams = MagicMock(return_value=AsyncIterator([TEAMS]))
+        source.client.get_team_members = MagicMock(
+            return_value=AsyncIterator([TEAM_MEMBERS])
+        )
+        source.client.get_team_channels = MagicMock(
+            return_value=AsyncIterator([[PRIVATE_CHANNEL]])
+        )
+        source.client.get_channel_members = MagicMock(
+            return_value=AsyncIterator([PRIVATE_CHANNEL_MEMBERS])
+        )
+        source.client.get_channel_messages = MagicMock(
+            return_value=AsyncIterator(
+                [
+                    [
+                        {
+                            "id": "priv-msg-1",
+                            "messageType": "message",
+                            "createdDateTime": "2023-08-16T04:47:55.794Z",
+                            "lastModifiedDateTime": "2023-08-16T04:47:55.794Z",
+                            "deletedDateTime": None,
+                            "webUrl": None,
+                            "from": {"user": {"displayName": "Alice"}},
+                            "body": {
+                                "contentType": "html",
+                                "content": "<div>secret</div>",
+                            },
+                            "attachments": [],
+                            "replies": [],
+                        }
+                    ]
+                ]
+            )
+        )
+        source.client.get_chats = MagicMock(return_value=AsyncIterator([]))
+
+        channel_docs = []
+        message_docs = []
+        async for doc, _download in source.get_docs():
+            if doc["type"] == TeamsObjectType.CHANNEL.value:
+                channel_docs.append(doc)
+            if doc["type"] == TeamsObjectType.CHANNEL_MESSAGE.value:
+                message_docs.append(doc)
+
+        assert len(channel_docs) == 1
+        assert len(message_docs) == 1
+        # Only Alice (channel member), not Bob (team member outside the channel)
+        assert channel_docs[0][ACCESS_CONTROL] == [
+            "email:alice@example.com",
+            "user_id:user-alice",
+        ]
+        assert message_docs[0][ACCESS_CONTROL] == channel_docs[0][ACCESS_CONTROL]
+        source.client.get_channel_members.assert_called()
+
+
+@pytest.mark.asyncio
+async def test_private_channel_skipped_when_dls_on_and_members_unresolved():
+    async with create_teams_source(
+        use_document_level_security=True, fetch_attachment_content=False
+    ) as source:
+        source._features = Mock()
+        source._features.document_level_security_enabled = Mock(return_value=True)
+
+        source.client.get_teams = MagicMock(return_value=AsyncIterator([TEAMS]))
+        source.client.get_team_members = MagicMock(
+            return_value=AsyncIterator([TEAM_MEMBERS])
+        )
+        source.client.get_team_channels = MagicMock(
+            return_value=AsyncIterator([[PRIVATE_CHANNEL]])
+        )
+        # Empty generator simulates PermissionsMissing / not installed
+        source.client.get_channel_members = MagicMock(return_value=AsyncIterator([]))
+        source.client.get_channel_messages = MagicMock(
+            return_value=AsyncIterator([CHANNEL_MESSAGES])
+        )
+        source.client.get_chats = MagicMock(return_value=AsyncIterator([]))
+
+        docs = [doc async for doc, _download in source.get_docs()]
+        types = {doc["type"] for doc in docs}
+
+        assert TeamsObjectType.TEAM.value in types
+        assert TeamsObjectType.CHANNEL.value not in types
+        assert TeamsObjectType.CHANNEL_MESSAGE.value not in types
+        source.client.get_channel_messages.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_client_get_channel_members_swallows_permissions_missing():
+    client = build_client()
+    client._graph_api_client = FakeGraphSession(
+        raises={"/channels/channel-1/members": PermissionsMissing()}
+    )
+    result = []
+    async for page in client.get_channel_members("team-1", "channel-1"):
+        result.extend(page)
+    await client.close()
+    assert result == []
+    assert client._skipped["channels' members"] == 1
 
 
 @pytest.mark.asyncio

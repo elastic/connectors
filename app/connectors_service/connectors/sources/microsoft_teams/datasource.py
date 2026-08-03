@@ -32,6 +32,9 @@ from connectors.utils import (
 
 QUEUE_MEM_SIZE = 5 * 1024 * 1024  # Size in Megabytes
 MAX_CONCURRENCY = 80
+# Graph membershipType values whose membership differs from the parent team.
+# https://learn.microsoft.com/en-us/graph/api/resources/channel
+NON_STANDARD_CHANNEL_TYPES = frozenset({"private", "shared"})
 
 
 def _prefix_user_id(user_id):
@@ -40,6 +43,10 @@ def _prefix_user_id(user_id):
 
 def _prefix_email(email):
     return prefix_identity("email", email)
+
+
+def _channel_membership_type(channel):
+    return (channel.get("membershipType") or "standard").lower()
 
 
 class MicrosoftTeamsDataSource(BaseDataSource):
@@ -61,6 +68,9 @@ class MicrosoftTeamsDataSource(BaseDataSource):
         self._teams_enumeration_failed = False
         self._chats_enumeration_failed = False
         self._enumeration_error: Exception | None = None
+        self._producer_error: Exception | None = None
+        self._channel_message_fetches = 0
+        self._chat_message_fetches = 0
         self.queue = MemQueue(maxmemsize=QUEUE_MEM_SIZE, refresh_timeout=120)
         self.fetchers = ConcurrentTasks(max_concurrency=MAX_CONCURRENCY)
         self.schema = Schema()
@@ -270,6 +280,27 @@ class MicrosoftTeamsDataSource(BaseDataSource):
                             if doc and doc["_id"] not in seen:
                                 seen.add(doc["_id"])
                                 yield doc
+
+                    # Shared channels can include members outside the parent team;
+                    # private channels are a subset but still need an explicit fetch
+                    # when TeamMember.Read alone is insufficient for DLS identities.
+                    async for channels in self.client.get_team_channels(team["id"]):
+                        for channel in channels:
+                            if (
+                                _channel_membership_type(channel)
+                                not in NON_STANDARD_CHANNEL_TYPES
+                            ):
+                                continue
+                            async for (
+                                channel_members
+                            ) in self.client.get_channel_members(
+                                team["id"], channel["id"]
+                            ):
+                                for member in channel_members:
+                                    doc = self._user_access_control_doc(member)
+                                    if doc and doc["_id"] not in seen:
+                                        seen.add(doc["_id"])
+                                        yield doc
         except PermissionsMissing:
             self._logger.warning(
                 "Unable to enumerate teams for access control. Verify the 'Team.ReadBasic.All' application permission is granted."
@@ -393,9 +424,48 @@ class MicrosoftTeamsDataSource(BaseDataSource):
             )
         )
 
+    async def _resolve_channel_access_control(
+        self, channel, team_id, team_access_control
+    ):
+        """Return the ACL for a channel, fail-closed for private/shared when DLS is on.
+
+        Standard channels inherit the parent team's membership. Private and shared
+        channels have a different membership set; when DLS is enabled we must
+        resolve channel members. If that fails, return ``None`` so the caller
+        skips indexing the channel rather than leaking content under the team ACL.
+        """
+        if _channel_membership_type(channel) not in NON_STANDARD_CHANNEL_TYPES:
+            return team_access_control
+
+        if not self._dls_enabled():
+            return team_access_control
+
+        channel_id = channel.get("id")
+        channel_name = channel.get("displayName")
+        channel_members = []
+        async for page in self.client.get_channel_members(team_id, channel_id):
+            channel_members.extend(page)
+
+        if not channel_members:
+            self._logger.warning(
+                f"Skipping private/shared channel '{channel_name}' ({channel_id}) "
+                f"in team '{team_id}': unable to resolve channel members for DLS. "
+                f"Install the Teams app with 'ChannelMember.Read.Group', or disable "
+                f"document level security."
+            )
+            return None
+
+        return self._access_control_for_members(channel_members)
+
     async def _produce_channel(self, channel, team_id, team_name, access_control):
         channel_id = channel.get("id")
         channel_name = channel.get("displayName")
+
+        channel_access_control = await self._resolve_channel_access_control(
+            channel, team_id, access_control
+        )
+        if channel_access_control is None:
+            return
 
         channel_document = self.formatter.format_doc(
             item=channel,
@@ -407,17 +477,23 @@ class MicrosoftTeamsDataSource(BaseDataSource):
             },
         )
         await self.queue.put(
-            (self._decorate_with_access_control(channel_document, access_control), None)
+            (
+                self._decorate_with_access_control(
+                    channel_document, channel_access_control
+                ),
+                None,
+            )
         )
 
+        self._channel_message_fetches += 1
         async for messages in self.client.get_channel_messages(team_id, channel_id):
             for message in messages:
                 await self._process_channel_message(
-                    message, channel_name, access_control
+                    message, channel_name, channel_access_control
                 )
                 for reply in message.get("replies", []):
                     await self._process_channel_message(
-                        reply, channel_name, access_control
+                        reply, channel_name, channel_access_control
                     )
 
         if self._attachments_enabled():
@@ -431,7 +507,7 @@ class MicrosoftTeamsDataSource(BaseDataSource):
                     ):
                         if child.get("file"):
                             await self._process_channel_attachment(
-                                child, team_name, channel_name, access_control
+                                child, team_name, channel_name, channel_access_control
                             )
 
     async def team_producer(self, team):
@@ -481,6 +557,16 @@ class MicrosoftTeamsDataSource(BaseDataSource):
                     await self._produce_channel(
                         channel, team_id, team_name, access_control
                     )
+        except Exception as exc:
+            # ConcurrentTasks removes completed tasks before get_docs can inspect
+            # them, so record the failure here and re-raise for logging.
+            if self._producer_error is None:
+                self._producer_error = exc
+            self._logger.error(
+                f"Unexpected error while syncing team '{team_name}' ({team_id}).",
+                exc_info=exc,
+            )
+            raise
         finally:
             await self.queue.put(EndSignal.TEAM_TASK_FINISHED)
 
@@ -563,6 +649,7 @@ class MicrosoftTeamsDataSource(BaseDataSource):
                 )
             )
 
+            self._chat_message_fetches += 1
             async for messages in self.client.get_chat_messages(chat_id):
                 for message in messages:
                     await self._process_chat_message(
@@ -583,6 +670,14 @@ class MicrosoftTeamsDataSource(BaseDataSource):
                                     member_names,
                                     access_control,
                                 )
+        except Exception as exc:
+            if self._producer_error is None:
+                self._producer_error = exc
+            self._logger.error(
+                f"Unexpected error while syncing chat '{chat_id}'.",
+                exc_info=exc,
+            )
+            raise
         finally:
             await self.queue.put(EndSignal.CHAT_TASK_FINISHED)
 
@@ -597,6 +692,9 @@ class MicrosoftTeamsDataSource(BaseDataSource):
         self._teams_enumeration_failed = False
         self._chats_enumeration_failed = False
         self._enumeration_error = None
+        self._producer_error = None
+        self._channel_message_fetches = 0
+        self._chat_message_fetches = 0
         try:
             try:
                 async for teams in self.client.get_teams():
@@ -631,6 +729,44 @@ class MicrosoftTeamsDataSource(BaseDataSource):
         finally:
             await self.queue.put(EndSignal.ENUMERATION_FINISHED)
 
+    def _raise_if_content_inaccessible(self):
+        """Fail the sync when every message fetch for a corpus was skipped.
+
+        Teams/channels can still be listed with tenant-wide ``*.ReadBasic.All``
+        permissions even when the Teams app is not installed. Without this guard,
+        an under-installed tenant produces a near-empty "successful" sync that
+        deletes previously indexed messages.
+        """
+        skipped = self.client._skipped
+        channel_msg_skips = skipped.get("channels' messages", 0)
+        chat_msg_skips = skipped.get("chats' messages", 0)
+
+        if (
+            self._channel_message_fetches > 0
+            and channel_msg_skips >= self._channel_message_fetches
+        ):
+            msg = (
+                "All channel message fetches were skipped because the connector's "
+                "Teams app is not installed (or 'ChannelMessage.Read.Group' is "
+                "missing). Refusing to report a successful sync, as this would "
+                "delete previously indexed channel messages. Install the Teams app "
+                "into the teams you want to sync."
+            )
+            raise PermissionsMissing(msg)
+
+        if (
+            self._chat_message_fetches > 0
+            and chat_msg_skips >= self._chat_message_fetches
+        ):
+            msg = (
+                "All chat message fetches were skipped because the connector's "
+                "Teams app is not installed (or 'Chat.Read.WhereInstalled' is "
+                "missing). Refusing to report a successful sync, as this would "
+                "delete previously indexed chat messages. Install the Teams app "
+                "into the chats you want to sync."
+            )
+            raise PermissionsMissing(msg)
+
     async def get_docs(self, filtering=None):
         """Executes the logic to fetch Microsoft Teams objects in an async manner.
 
@@ -648,17 +784,29 @@ class MicrosoftTeamsDataSource(BaseDataSource):
 
         await self.fetchers.join()
 
+        # Inspect skip counters before log_skip_summary clears them.
+        self._raise_if_content_inaccessible()
         self.client.log_skip_summary()
 
         if self._enumeration_error is not None:
             raise self._enumeration_error
 
-        if self._teams_enumeration_failed and self._chats_enumeration_failed:
+        if self._producer_error is not None:
+            raise self._producer_error
+
+        if self._teams_enumeration_failed or self._chats_enumeration_failed:
+            failed = []
+            if self._teams_enumeration_failed:
+                failed.append("teams ('Team.ReadBasic.All')")
+            if self._chats_enumeration_failed:
+                failed.append(
+                    "chats ('Chat.ReadBasic.WhereInstalled' / Teams app install)"
+                )
+            failed_list = " and ".join(failed)
             msg = (
-                "Both team and chat enumeration failed due to missing permissions. "
-                "Refusing to report a successful sync, as this would delete previously "
-                "indexed documents. Verify 'Team.ReadBasic.All' and "
-                "'Chat.ReadBasic.WhereInstalled' are granted and the connector's Teams "
-                "app is installed."
+                f"Enumeration failed for {failed_list}. Refusing to report a "
+                f"successful sync, as this would delete previously indexed "
+                f"documents from the failed corpus. Verify the listed application "
+                f"permissions are granted and the connector's Teams app is installed."
             )
             raise PermissionsMissing(msg)

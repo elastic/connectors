@@ -64,8 +64,11 @@ app is installed:
 
 The RSC permissions declared in the manifest
 (`ChannelMessage.Read.Group`, `ChannelSettings.Read.Group`,
-`TeamMember.Read.Group`, `ChatMessage.Read.Chat`, `ChatMember.Read.Chat`) are
-granted per resource when the app is installed there.
+`TeamMember.Read.Group`, `ChannelMember.Read.Group`, `ChatMessage.Read.Chat`,
+`ChatMember.Read.Chat`) are granted per resource when the app is installed there.
+`ChannelMember.Read.Group` is required so document-level security can apply the
+correct membership ACL on private and shared channels (team-wide membership is
+not sufficient for those channel types).
 
 ## What gets synced
 
@@ -94,6 +97,20 @@ than producing a quiet, near-empty sync.
 ## Document level security (DLS)
 
 When "Enable document level security" is on, access to each document is
-restricted to the members of its team/chat. The access-control sync only creates
-identities for users that participate in synced teams/chats, so `Users.Read.All`
-is never required.
+restricted to the members of its team/chat. Private and shared channels use
+**channel** membership (via `ChannelMember.Read.Group`), not the parent team's
+roster. If channel members cannot be resolved while DLS is on, that channel's
+content is skipped rather than indexed under the wrong ACL. The access-control
+sync only creates identities for users that participate in synced teams/chats
+(including private/shared channel members), so `Users.Read.All` is never
+required.
+
+## Sync failure safeguards
+
+The connector refuses to report a successful sync when doing so would risk
+deleting previously indexed content:
+
+- Either team **or** chat enumeration failing with a permissions error.
+- Every channel (or chat) message fetch being skipped because the Teams app is
+  not installed / RSC permissions are missing.
+- An unexpected error in a team/chat producer task.

@@ -16,6 +16,8 @@ and the least-privilege permission model:
   permission `ChannelMessage.Read.Group`, granted when the connector's Teams app
   is installed in a team.
 - Reading team members uses the RSC permission `TeamMember.Read.Group`.
+- Reading private/shared channel members uses the RSC permission
+  `ChannelMember.Read.Group` (required for correct DLS ACLs on those channels).
 - Enumerating and reading chats uses `Chat.ReadBasic.WhereInstalled` and
   `Chat.Read.WhereInstalled`, which scope results to chats where the connector's
   Teams app is installed.
@@ -269,6 +271,27 @@ class MicrosoftTeamsClient:
             self._skipped["channels' messages"] += 1
             self._logger.debug(
                 f"Skipping messages for channel '{channel_id}' in team '{team_id}': the connector's Teams app is not installed there or 'ChannelMessage.Read.Group' is missing."
+            )
+            return
+
+    async def get_channel_members(self, team_id, channel_id):
+        """Yield membership pages for a channel.
+
+        Required for private/shared channels when DLS is enabled: those channels
+        have a membership set that differs from the parent team's members.
+        Uses the RSC permission ``ChannelMember.Read.Group``.
+        """
+        try:
+            async for members in self._graph_api_client.scroll(
+                f"{BASE_URL}/teams/{team_id}/channels/{channel_id}/members"
+            ):
+                yield members
+        except (NotFound, PermissionsMissing):
+            self._skipped["channels' members"] += 1
+            self._logger.debug(
+                f"Skipping members for channel '{channel_id}' in team '{team_id}': "
+                f"the connector's Teams app is not installed there or "
+                f"'ChannelMember.Read.Group' is missing."
             )
             return
 
