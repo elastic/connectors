@@ -28,9 +28,6 @@ from connectors.sources.sharepoint.sharepoint_online.client import (
     PermissionsMissing,
     SharepointOnlineClient,
 )
-from connectors.sources.sharepoint.sharepoint_online.sharepoint_metadata_enricher import (
-    SharePointMetadataEnricher,
-)
 from connectors.sources.sharepoint.sharepoint_online.constants import (
     CURSOR_SITE_DRIVE_KEY,
     EXCLUDED_SHAREPOINT_LIST_NAMES,
@@ -42,6 +39,13 @@ from connectors.sources.sharepoint.sharepoint_online.constants import (
     VIEW_PAGE_MASK,
     VIEW_ROLE_TYPES,
     WILDCARD,
+)
+from connectors.sources.sharepoint.sharepoint_online.convert_markdown_client import (
+    DEFAULT_BASE_URL,
+    ConvertMarkdownClient,
+)
+from connectors.sources.sharepoint.sharepoint_online.sharepoint_metadata_enricher import (
+    SharePointMetadataEnricher,
 )
 from connectors.sources.sharepoint.sharepoint_online.utils import (
     SyncCursorEmpty,
@@ -73,6 +77,7 @@ class SharepointOnlineDataSource(BaseDataSource):
         self._client = None
         self.site_group_cache = {}
         self._metadata_enricher = None
+        self._markdown_client = None
 
     def _set_internal_logger(self):
         self.client.set_logger(self._logger)
@@ -81,6 +86,8 @@ class SharepointOnlineDataSource(BaseDataSource):
             logger=self._logger,
             graph_api_client=self.client._graph_api_client,
         )
+        if self._markdown_client is not None:
+            self._markdown_client.set_logger(self._logger)
 
     @property
     def metadata_enricher(self):
@@ -90,6 +97,16 @@ class SharepointOnlineDataSource(BaseDataSource):
                 graph_api_client=self.client._graph_api_client,
             )
         return self._metadata_enricher
+
+    @property
+    def markdown_client(self):
+        if not self._markdown_client:
+            self._markdown_client = ConvertMarkdownClient(
+                base_url=self.configuration["convert_markdown_base_url"],
+                convert_timeout=self.configuration["convert_markdown_timeout"],
+                logger_=self._logger,
+            )
+        return self._markdown_client
 
     @property
     def client(self):
@@ -259,6 +276,35 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "type": "bool",
                 "value": True,
                 "ui_restrictions": ["advanced"],
+            },
+            "use_markdown_conversion": {
+                "display": "toggle",
+                "label": "Convert documents to Markdown",
+                "order": 18,
+                "tooltip": "Requires a separate deployment of the convert-markdown service. Converts PDF and Office documents to Markdown with table structure preserved, instead of extracting plain text. Requires that pipeline settings disable text extraction.",
+                "type": "bool",
+                "ui_restrictions": ["advanced"],
+                "value": False,
+            },
+            "convert_markdown_base_url": {
+                "depends_on": [{"field": "use_markdown_conversion", "value": True}],
+                "label": "Convert-markdown service URL",
+                "order": 19,
+                "tooltip": "Root URL of the convert-markdown service, e.g. http://convert-markdown:8000",
+                "type": "str",
+                "ui_restrictions": ["advanced"],
+                "value": DEFAULT_BASE_URL,
+            },
+            "convert_markdown_timeout": {
+                "depends_on": [{"field": "use_markdown_conversion", "value": True}],
+                "display": "numeric",
+                "label": "Conversion timeout (seconds)",
+                "order": 20,
+                "tooltip": "How long to wait for a single document to be converted. Conversion is CPU-bound and takes seconds per page, so a large document can run for tens of minutes.",
+                "type": "int",
+                "ui_restrictions": ["advanced"],
+                "validations": [{"type": "greater_than", "constraint": 0}],
+                "value": 3600,
             },
         }
 
@@ -1378,9 +1424,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                         site_page[html_field] = html_to_text(site_page[html_field])
 
                 # Enrich site page with metadata before yielding
-                site_page = self._enrich_document_with_metadata(
-                    site_page, site=site
-                )
+                site_page = self._enrich_document_with_metadata(site_page, site=site)
 
                 yield site_page
 
@@ -1426,7 +1470,7 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         if "@microsoft.graph.downloadUrl" not in drive_item:
             self._logger.debug(
-                f"Not downloading file {drive_item['name']}: field \"@microsoft.graph.downloadUrl\" is missing"
+                f'Not downloading file {drive_item["name"]}: field "@microsoft.graph.downloadUrl" is missing'
             )
             return None
 
@@ -1438,7 +1482,7 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         if "lastModifiedDateTime" not in drive_item:
             self._logger.debug(
-                f"Not downloading file {drive_item['name']}: field \"lastModifiedDateTime\" is missing"
+                f'Not downloading file {drive_item["name"]}: field "lastModifiedDateTime" is missing'
             )
             return None
 
@@ -1454,9 +1498,9 @@ class SharepointOnlineDataSource(BaseDataSource):
             )
 
             return None
-        elif (
-            drive_item["size"] > MAX_DOCUMENT_SIZE
-            and not self.configuration["use_text_extraction_service"]
+        elif drive_item["size"] > MAX_DOCUMENT_SIZE and not (
+            self.configuration["use_text_extraction_service"]
+            or self.configuration["use_markdown_conversion"]
         ):
             self._logger.warning(
                 f"Not downloading file {drive_item['name']} of size {drive_item['size']}"
@@ -1515,9 +1559,9 @@ class SharepointOnlineDataSource(BaseDataSource):
         if not (doit and document_size):
             return
 
-        if (
-            document_size > MAX_DOCUMENT_SIZE
-            and not self.configuration["use_text_extraction_service"]
+        if document_size > MAX_DOCUMENT_SIZE and not (
+            self.configuration["use_text_extraction_service"]
+            or self.configuration["use_markdown_conversion"]
         ):
             return
 
@@ -1561,7 +1605,16 @@ class SharepointOnlineDataSource(BaseDataSource):
                 # This way async_buffer will be passed from here!!!
                 await download_func(async_buffer)
 
-            if self.configuration["use_text_extraction_service"]:
+            # Only formats convert-markdown can parse go to it; anything else
+            # falls through to the existing paths rather than being indexed with
+            # an empty body.
+            if self.configuration[
+                "use_markdown_conversion"
+            ] and ConvertMarkdownClient.is_convertible(original_filename):
+                body = await self.markdown_client.convert_file(
+                    source_file_name, original_filename
+                )
+            elif self.configuration["use_text_extraction_service"]:
                 body = ""
                 if self.extraction_service._check_configured():
                     body = await self.extraction_service.extract_text(
@@ -1589,6 +1642,14 @@ class SharepointOnlineDataSource(BaseDataSource):
         await self.client.close()
         if self.extraction_service is not None:
             await self.extraction_service._end_session()
+        if self._markdown_client is not None:
+            attempts, failures, cache_hits = self._markdown_client.stats
+            if attempts:
+                self._logger.info(
+                    f"Markdown conversion: {attempts} attempted, {failures} failed, "
+                    f"{cache_hits} reused from cache"
+                )
+            await self._markdown_client.close()
 
     def advanced_rules_validators(self):
         return [SharepointOnlineAdvancedRulesValidator()]
@@ -1599,6 +1660,13 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         attachment_extension = os.path.splitext(filename)
         if attachment_extension[-1].lower() in TIKA_SUPPORTED_FILETYPES:
+            return True
+
+        # convert-markdown parses a few formats Tika is not configured for
+        # (notably .htm), so they are worth downloading when it is enabled.
+        if self.configuration[
+            "use_markdown_conversion"
+        ] and ConvertMarkdownClient.is_convertible(filename):
             return True
 
         return False

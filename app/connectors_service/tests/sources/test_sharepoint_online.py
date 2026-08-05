@@ -249,6 +249,7 @@ async def create_spo_source(
     site_collections=WILDCARD,
     use_document_level_security=False,
     use_text_extraction_service=False,
+    use_markdown_conversion=False,
     fetch_drive_item_permissions=True,
     fetch_unique_list_permissions=True,
     enumerate_all_sites=False,
@@ -265,6 +266,7 @@ async def create_spo_source(
         site_collections=site_collections,
         use_document_level_security=use_document_level_security,
         use_text_extraction_service=use_text_extraction_service,
+        use_markdown_conversion=use_markdown_conversion,
         fetch_drive_item_permissions=fetch_drive_item_permissions,
         fetch_unique_list_permissions=fetch_unique_list_permissions,
         enumerate_all_sites=enumerate_all_sites,
@@ -2355,7 +2357,7 @@ class TestSharepointOnlineDataSource:
 
             yield client
 
-    def drive_items_func(self, drive_id, url=None):
+    def drive_items_func(self, drive_id, url=None, site=None, metadata_enricher=None):
         if not url:
             return AsyncIterator(self.drive_items)
         else:
@@ -3373,6 +3375,51 @@ class TestSharepointOnlineDataSource:
                 extraction_service_mock.assert_called_once()
                 assert download_result["body"] == message
                 assert "_attachment" not in download_result
+
+    @pytest.mark.asyncio
+    async def test_get_attachment_with_markdown_conversion_enabled(
+        self, patch_sharepoint_client
+    ):
+        attachment = {"odata.id": "1", "_original_filename": "file.pdf"}
+        message = "This is the text content of drive item"
+
+        async def download_func(attachment_id, async_buffer):
+            await async_buffer.write(bytes(message, "utf-8"))
+
+        patch_sharepoint_client.download_attachment = download_func
+        async with create_spo_source(use_markdown_conversion=True) as source:
+            source._markdown_client = AsyncMock()
+            source._markdown_client.stats = (1, 0, 0)
+            source._markdown_client.convert_file = AsyncMock(return_value="# Heading")
+
+            download_result = await source.get_attachment_content(attachment, doit=True)
+
+            source._markdown_client.convert_file.assert_awaited_once()
+            assert download_result["body"] == "# Heading"
+            assert "_attachment" not in download_result
+
+    @pytest.mark.asyncio
+    async def test_markdown_conversion_falls_through_for_unconvertible_file(
+        self, patch_sharepoint_client
+    ):
+        # .ppt cannot be converted, so it must still reach the base64 attachment
+        # path rather than being indexed with an empty body.
+        attachment = {"odata.id": "1", "_original_filename": "file.ppt"}
+        message = "This is the text content of drive item"
+
+        async def download_func(attachment_id, async_buffer):
+            await async_buffer.write(bytes(message, "utf-8"))
+
+        patch_sharepoint_client.download_attachment = download_func
+        async with create_spo_source(use_markdown_conversion=True) as source:
+            source._markdown_client = AsyncMock()
+            source._markdown_client.stats = (0, 0, 0)
+
+            download_result = await source.get_attachment_content(attachment, doit=True)
+
+            source._markdown_client.convert_file.assert_not_awaited()
+            assert "_attachment" in download_result
+            assert "body" not in download_result
 
     @pytest.mark.asyncio
     @patch(

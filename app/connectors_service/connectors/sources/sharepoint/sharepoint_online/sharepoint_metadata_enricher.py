@@ -14,7 +14,6 @@ ODC_MANAGED_PROPERTIES = "ActivityID,BusinessUnit,OPDCategory,LOB,Division,Docum
 
 
 class SharePointMetadataEnricher:
-
     def __init__(self, logger=None, graph_api_client=None):
         self.logger = logger
         self._graph_api_client = graph_api_client
@@ -63,7 +62,9 @@ class SharePointMetadataEnricher:
         """Check if ODC properties should be included in Graph API calls for this site."""
         return self._is_odc_site(site)
 
-    async def get_drive_list_mapping(self, site_id, site_drives_method, site_lists_method):
+    async def get_drive_list_mapping(
+        self, site_id, site_drives_method, site_lists_method
+    ):
         """
         Get mapping between drives and their corresponding SharePoint lists.
         This is needed to fetch custom metadata for drive items.
@@ -78,7 +79,9 @@ class SharePointMetadataEnricher:
                 # Get all lists for the site
                 async for site_list in site_lists_method(site_id):
                     list_id = site_list.get("id")
-                    list_name = site_list.get("name") or site_list.get("displayName", "")
+                    list_name = site_list.get("name") or site_list.get(
+                        "displayName", ""
+                    )
 
                     # Try to match drive with list - document libraries are usually lists
                     # This is a heuristic approach - in reality the mapping can be complex
@@ -106,7 +109,9 @@ class SharePointMetadataEnricher:
         This is the working approach that retrieves SharePoint custom metadata.
         """
         if not self._graph_api_client:
-            self._log_warning("No Graph API client available for fetching metadata fields")
+            self._log_warning(
+                "No Graph API client available for fetching metadata fields"
+            )
             return {}
 
         try:
@@ -145,9 +150,7 @@ class SharePointMetadataEnricher:
                 drive_id = parent_ref.get("driveId")
 
             if not drive_id or not item_id:
-                self._log_debug(
-                    f"Missing drive_id or item_id for drive item {item_id}"
-                )
+                self._log_debug(f"Missing drive_id or item_id for drive item {item_id}")
                 return drive_item
 
             # Use the working approach: /drives/{drive_id}/items/{item_id}/listItem/fields
@@ -528,9 +531,7 @@ class SharePointMetadataEnricher:
             metadata_pairs.append(
                 {"key": "Object Type", "value": document.get("object_type")}
             )
-            metadata_pairs.append(
-                {"key": "Document ID", "value": document.get("_id")}
-            )
+            metadata_pairs.append({"key": "Document ID", "value": document.get("_id")})
             metadata_pairs.append(
                 {
                     "key": "Last Modified",

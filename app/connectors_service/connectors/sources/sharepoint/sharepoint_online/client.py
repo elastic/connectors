@@ -871,9 +871,7 @@ class SharepointOnlineClient:
             fields = f"{DRIVE_ITEMS_FIELDS},{odc_properties}"
 
         url = (
-            (
-                f"{GRAPH_API_URL}/drives/{drive_id}/root/delta?$select={fields}"
-            )
+            (f"{GRAPH_API_URL}/drives/{drive_id}/root/delta?$select={fields}")
             if not url
             else url
         )
