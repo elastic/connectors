@@ -3642,7 +3642,7 @@ Apache-2.0
 
 
 elasticsearch-connectors
-9.5.0
+9.5.1
 Elastic-2.0
 Elastic License 2.0
 
@@ -3740,7 +3740,7 @@ these terms.
 
 
 elasticsearch-connectors-sdk
-9.5.0
+9.5.1
 Elastic-2.0
 UNKNOWN
 
@@ -6093,7 +6093,7 @@ END OF TERMS AND CONDITIONS
 
 
 packaging
-26.2
+26.3
 Apache-2.0 OR BSD-2-Clause
 This software is made available under the terms of *either* of the licenses
 found in LICENSE.APACHE or LICENSE.BSD. Contributions to this software is made
