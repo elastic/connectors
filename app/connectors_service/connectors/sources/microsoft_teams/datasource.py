@@ -49,6 +49,38 @@ def _channel_membership_type(channel):
     return (channel.get("membershipType") or "standard").lower()
 
 
+def _message_body_text(message):
+    """Plain-text Graph ``body`` content (subject is stored separately)."""
+    body = html_to_text(html=(message.get("body") or {}).get("content")) or ""
+    return body.strip()
+
+
+def _message_subject(message):
+    """Graph ``subject`` (plaintext headline / file-share caption)."""
+    return (message.get("subject") or "").strip()
+
+
+def _member_ids(members):
+    """Stable list of Entra user ids from Graph conversation members."""
+    return sorted(
+        {member.get("userId") for member in members or [] if member.get("userId")}
+    )
+
+
+def _merge_user_profile(users, member):
+    """Record team-member profile data keyed by Entra user id."""
+    user_id = member.get("userId")
+    if not user_id:
+        return
+    existing = users.get(user_id) or {}
+    name = (member.get("displayName") or "").strip()
+    email = (member.get("email") or "").strip()
+    users[user_id] = {
+        "name": name or existing.get("name") or "",
+        "email": email or existing.get("email") or "",
+    }
+
+
 class MicrosoftTeamsDataSource(BaseDataSource):
     """Microsoft Teams"""
 
@@ -73,6 +105,9 @@ class MicrosoftTeamsDataSource(BaseDataSource):
         self.fetchers = ConcurrentTasks(max_concurrency=MAX_CONCURRENCY)
         self.schema = Schema()
         self.formatter = MicrosoftTeamsFormatter(self.schema)
+        # Per-sync File dedupe: union ACLs across discovery paths; download once.
+        self._file_acls = {}
+        self._file_download_scheduled = set()
 
     def _set_internal_logger(self):
         self.client.set_logger(self._logger)
@@ -153,7 +188,7 @@ class MicrosoftTeamsDataSource(BaseDataSource):
                 "display": "toggle",
                 "label": "Fetch attachment content",
                 "order": 7,
-                "tooltip": "Enable to fetch the content of channel and chat attachments. Requires the 'Files.Read.All' application permission.",
+                "tooltip": "Index channel Files-folder items and message file attachments (as File documents), and extract their content. Requires the 'Files.Read.All' application permission.",
                 "type": "bool",
                 "value": True,
             },
@@ -337,7 +372,7 @@ class MicrosoftTeamsDataSource(BaseDataSource):
         if not (doit and file_size):
             return
 
-        filename = attachment["name"]
+        filename = attachment["title"]
         file_extension = self.get_file_extension(filename)
         if not self.can_file_be_downloaded(file_extension, filename, file_size):
             return
@@ -378,91 +413,147 @@ class MicrosoftTeamsDataSource(BaseDataSource):
     def _attachments_enabled(self):
         return self.configuration["fetch_attachment_content"]
 
-    async def _process_channel_message(self, message, channel_name, access_control):
+    async def _emit_file(self, drive_item, access_control):
+        """Upsert a File document; schedule content download at most once per sync."""
+        item_id = drive_item.get("id")
+        drive_id = (drive_item.get("parentReference") or {}).get("driveId")
+        if not item_id or not drive_id:
+            return None
+
+        acl = self._file_acls.setdefault(item_id, set())
+        acl.update(access_control or [])
+
+        document = self.formatter.format_file(drive_item)
+        document = self._decorate_with_access_control(document, sorted(acl))
+
+        download = None
+        if item_id not in self._file_download_scheduled:
+            self._file_download_scheduled.add(item_id)
+            download = partial(
+                self.get_content,
+                attachment=document,
+                drive_id=drive_id,
+                item_id=item_id,
+            )
+
+        await self.queue.put((document, download))
+        return {
+            "id": item_id,
+            "title": drive_item.get("name") or "",
+        }
+
+    async def _attachments_for_message(self, message, access_control):
+        """Resolve reference attachments to File docs; return message ``attachments``."""
+        if not self._attachments_enabled():
+            return []
+
+        refs = []
+        for attachment in message.get("attachments") or []:
+            if attachment.get("contentType") != "reference":
+                continue
+            content_url = attachment.get("contentUrl")
+            if not content_url:
+                continue
+            drive_item = await self.client.get_drive_item_by_content_url(content_url)
+            if not drive_item:
+                self._logger.debug(
+                    f"Skipping message attachment '{attachment.get('name')}': "
+                    f"unable to resolve contentUrl to a driveItem."
+                )
+                continue
+            ref = await self._emit_file(drive_item, access_control)
+            if ref:
+                if not ref["title"] and attachment.get("name"):
+                    ref["title"] = attachment["name"]
+                refs.append(ref)
+        return refs
+
+    async def _process_channel_message(
+        self, message, channel_id, channel_title, access_control
+    ):
         if message.get("deletedDateTime"):
             return
         if "unknownFutureValue" in (message.get("messageType") or ""):
             return
-        message_content = html_to_text(html=(message.get("body") or {}).get("content"))
-        if not message_content and not message.get("attachments"):
+        subject = _message_subject(message)
+        message_content = _message_body_text(message)
+        if not subject and not message_content and not message.get("attachments"):
             return
+        attachments = await self._attachments_for_message(message, access_control)
         document = self.formatter.format_channel_message(
-            item=message, channel_name=channel_name, message_content=message_content
+            item=message,
+            channel_id=channel_id,
+            channel_title=channel_title,
+            message_content=message_content,
+            subject=subject,
+            attachments=attachments,
         )
         await self.queue.put(
             (self._decorate_with_access_control(document, access_control), None)
         )
 
-    async def _process_channel_attachment(
-        self, child, team_name, channel_name, access_control
-    ):
-        drive_id = child.get("parentReference", {}).get("driveId")
-        if not drive_id:
+    async def _process_channel_files(self, team_id, channel_id, access_control):
+        files_folder = await self.client.get_channel_file(team_id, channel_id)
+        if not files_folder:
             return
-        document = self.formatter.format_doc(
-            item=child,
-            document_type=self.schema.channel_attachment,
-            document={
-                "type": TeamsObjectType.CHANNEL_ATTACHMENT.value,
-                "team_name": team_name,
-                "channel_name": channel_name,
-            },
-        )
-        document = self._decorate_with_access_control(document, access_control)
-        await self.queue.put(
-            (
-                document,
-                partial(
-                    self.get_content,
-                    attachment=document,
-                    drive_id=drive_id,
-                    item_id=child["id"],
-                ),
-            )
-        )
+        drive_id = files_folder.get("parentReference", {}).get("driveId")
+        item_id = files_folder.get("id")
+        if not drive_id or not item_id:
+            return
+        async for child in self.client.get_channel_drive_children(drive_id, item_id):
+            if child.get("file"):
+                await self._emit_file(child, access_control)
 
     async def _resolve_channel_access_control(
-        self, channel, team_id, team_access_control
+        self, channel, team_id, team_members, team_access_control
     ):
-        """Return the ACL for a channel, fail-closed for private/shared when DLS is on.
+        """Return ``(access_control, members)`` for a channel, or ``None`` to skip.
 
         Standard channels inherit the parent team's membership. Private and shared
-        channels have a different membership set; when DLS is enabled we must
-        resolve channel members. If that fails, return ``None`` so the caller
+        channels have a different membership set. When DLS is enabled we must
+        resolve channel members; if that fails, return ``None`` so the caller
         skips indexing the channel rather than leaking content under the team ACL.
+        When DLS is off we still fetch channel members for ``member_ids`` when
+        possible, and fall back to an empty list if they cannot be resolved.
         """
         if _channel_membership_type(channel) not in NON_STANDARD_CHANNEL_TYPES:
-            return team_access_control
-
-        if not self._dls_enabled():
-            return team_access_control
+            return team_access_control, team_members
 
         channel_id = channel.get("id")
-        channel_name = channel.get("displayName")
+        channel_title = channel.get("displayName")
         channel_members = []
         async for page in self.client.get_channel_members(team_id, channel_id):
             channel_members.extend(page)
 
         if not channel_members:
+            if self._dls_enabled():
+                self._logger.warning(
+                    f"Skipping private/shared channel '{channel_title}' ({channel_id}) "
+                    f"in team '{team_id}': unable to resolve channel members for DLS. "
+                    f"Verify the 'ChannelMember.Read.All' application permission is "
+                    f"granted, or disable document level security."
+                )
+                return None
             self._logger.warning(
-                f"Skipping private/shared channel '{channel_name}' ({channel_id}) "
-                f"in team '{team_id}': unable to resolve channel members for DLS. "
-                f"Verify the 'ChannelMember.Read.All' application permission is "
-                f"granted, or disable document level security."
+                f"Private/shared channel '{channel_title}' ({channel_id}) in team "
+                f"'{team_id}' has no resolvable members; indexing with empty member_ids."
             )
-            return None
+            return team_access_control, []
 
-        return self._access_control_for_members(channel_members)
+        return self._access_control_for_members(channel_members), channel_members
 
-    async def _produce_channel(self, channel, team_id, team_name, access_control):
+    async def _produce_channel(
+        self, channel, team_id, team_title, team_members, access_control
+    ):
         channel_id = channel.get("id")
-        channel_name = channel.get("displayName")
+        channel_title = channel.get("displayName")
 
-        channel_access_control = await self._resolve_channel_access_control(
-            channel, team_id, access_control
+        resolved = await self._resolve_channel_access_control(
+            channel, team_id, team_members, access_control
         )
-        if channel_access_control is None:
+        if resolved is None:
             return
+        channel_access_control, channel_members = resolved
 
         channel_document = self.formatter.format_doc(
             item=channel,
@@ -470,7 +561,9 @@ class MicrosoftTeamsDataSource(BaseDataSource):
             document={
                 "type": TeamsObjectType.CHANNEL.value,
                 "_timestamp": iso_zulu(),
-                "team_name": team_name,
+                "team_id": team_id,
+                "team_title": team_title,
+                "member_ids": _member_ids(channel_members),
             },
         )
         await self.queue.put(
@@ -485,7 +578,7 @@ class MicrosoftTeamsDataSource(BaseDataSource):
         async for messages in self.client.get_channel_messages(team_id, channel_id):
             for message in messages:
                 await self._process_channel_message(
-                    message, channel_name, channel_access_control
+                    message, channel_id, channel_title, channel_access_control
                 )
                 message_id = message.get("id")
                 if not message_id:
@@ -495,26 +588,17 @@ class MicrosoftTeamsDataSource(BaseDataSource):
                 ):
                     for reply in replies:
                         await self._process_channel_message(
-                            reply, channel_name, channel_access_control
+                            reply, channel_id, channel_title, channel_access_control
                         )
 
         if self._attachments_enabled():
-            files_folder = await self.client.get_channel_file(team_id, channel_id)
-            if files_folder:
-                drive_id = files_folder.get("parentReference", {}).get("driveId")
-                item_id = files_folder.get("id")
-                if drive_id and item_id:
-                    async for child in self.client.get_channel_drive_children(
-                        drive_id, item_id
-                    ):
-                        if child.get("file"):
-                            await self._process_channel_attachment(
-                                child, team_name, channel_name, channel_access_control
-                            )
+            await self._process_channel_files(
+                team_id, channel_id, channel_access_control
+            )
 
     async def team_producer(self, team, members):
         team_id = team.get("id")
-        team_name = team.get("displayName")
+        team_title = team.get("displayName")
 
         try:
             access_control = self._access_control_for_members(members)
@@ -525,6 +609,7 @@ class MicrosoftTeamsDataSource(BaseDataSource):
                 document={
                     "type": TeamsObjectType.TEAM.value,
                     "_timestamp": iso_zulu(),
+                    "member_ids": _member_ids(members),
                 },
             )
             await self.queue.put(
@@ -534,26 +619,12 @@ class MicrosoftTeamsDataSource(BaseDataSource):
                 )
             )
 
-            for member in members:
-                member_document = self.formatter.format_team_member(
-                    member, team_id, team_name
-                )
-                member_document["_timestamp"] = iso_zulu()
-                await self.queue.put(
-                    (
-                        self._decorate_with_access_control(
-                            member_document, access_control
-                        ),
-                        None,
-                    )
-                )
-
             # Channels are processed inline (not scheduled as separate pool tasks)
             # to avoid a nested fetchers.put that could deadlock the bounded pool.
             async for channels in self.client.get_team_channels(team_id):
                 for channel in channels:
                     await self._produce_channel(
-                        channel, team_id, team_name, access_control
+                        channel, team_id, team_title, members, access_control
                     )
         except Exception as exc:
             # ConcurrentTasks removes completed tasks before get_docs can inspect
@@ -561,7 +632,7 @@ class MicrosoftTeamsDataSource(BaseDataSource):
             if self._producer_error is None:
                 self._producer_error = exc
             self._logger.error(
-                f"Unexpected error while syncing team '{team_name}' ({team_id}).",
+                f"Unexpected error while syncing team '{team_title}' ({team_id}).",
                 exc_info=exc,
             )
             raise
@@ -580,51 +651,22 @@ class MicrosoftTeamsDataSource(BaseDataSource):
             return
         if "unknownFutureValue" in (message.get("messageType") or ""):
             return
-        message_content = html_to_text(html=(message.get("body") or {}).get("content"))
-        if not message_content and not message.get("attachments"):
+        subject = _message_subject(message)
+        message_content = _message_body_text(message)
+        if not subject and not message_content and not message.get("attachments"):
             return
+        attachments = await self._attachments_for_message(message, access_control)
         document = self.formatter.format_chat_message(
             chat=chat,
             message=message,
             message_content=message_content,
+            subject=subject,
             members=member_names,
+            attachments=attachments,
         )
         await self.queue.put(
             (self._decorate_with_access_control(document, access_control), None)
         )
-
-    async def _process_chat_attachment(
-        self, sender_id, attachment_name, member_names, access_control
-    ):
-        async for attachments in self.client.get_chat_attachments(
-            sender_id, attachment_name
-        ):
-            for attachment in attachments:
-                if not attachment.get("file"):
-                    continue
-                drive_id = attachment.get("parentReference", {}).get("driveId")
-                if not drive_id:
-                    continue
-                document = self.formatter.format_doc(
-                    item=attachment,
-                    document_type=self.schema.chat_attachment,
-                    document={
-                        "type": TeamsObjectType.CHAT_ATTACHMENT.value,
-                        "members": member_names,
-                    },
-                )
-                document = self._decorate_with_access_control(document, access_control)
-                await self.queue.put(
-                    (
-                        document,
-                        partial(
-                            self.get_content,
-                            attachment=document,
-                            drive_id=drive_id,
-                            item_id=attachment["id"],
-                        ),
-                    )
-                )
 
     async def chat_producer(self, chat):
         chat_id = chat.get("id")
@@ -639,7 +681,10 @@ class MicrosoftTeamsDataSource(BaseDataSource):
             chat_document = self.formatter.format_doc(
                 item=chat,
                 document_type=self.schema.chat,
-                document={"type": TeamsObjectType.CHAT.value},
+                document={
+                    "type": TeamsObjectType.CHAT.value,
+                    "member_ids": _member_ids(members),
+                },
             )
             if not chat_document.get("title"):
                 chat_document["title"] = member_names
@@ -655,21 +700,6 @@ class MicrosoftTeamsDataSource(BaseDataSource):
                     await self._process_chat_message(
                         chat, message, member_names, access_control
                     )
-
-                    if self._attachments_enabled() and (
-                        message.get("from") and message["from"].get("user")
-                    ):
-                        for attachment in message.get("attachments", []):
-                            if (
-                                attachment.get("name")
-                                and attachment.get("contentType") == "reference"
-                            ):
-                                await self._process_chat_attachment(
-                                    message["from"]["user"]["id"],
-                                    attachment["name"],
-                                    member_names,
-                                    access_control,
-                                )
         except Exception as exc:
             if self._producer_error is None:
                 self._producer_error = exc
@@ -693,7 +723,10 @@ class MicrosoftTeamsDataSource(BaseDataSource):
         self._chats_enumeration_failed = False
         self._enumeration_error = None
         self._producer_error = None
-        user_ids = set()
+        self._file_acls = {}
+        self._file_download_scheduled = set()
+        users = {}
+        user_team_acls = {}
         try:
             try:
                 async for teams in self.client.get_teams():
@@ -705,14 +738,36 @@ class MicrosoftTeamsDataSource(BaseDataSource):
                                 team_id
                             ):
                                 members.extend(member_page)
+                            team_acl = self._access_control_for_members(members)
                             for member in members:
                                 user_id = member.get("userId")
-                                if user_id:
-                                    user_ids.add(user_id)
+                                if not user_id:
+                                    continue
+                                _merge_user_profile(users, member)
+                                user_team_acls.setdefault(user_id, set()).update(
+                                    team_acl
+                                )
                         await self.fetchers.put(
                             partial(self.team_producer, team, members)
                         )
                         self.tasks += 1
+
+                for user_id, profile in users.items():
+                    user_document = self.formatter.format_user(
+                        user_id=user_id,
+                        name=profile.get("name"),
+                        email=profile.get("email"),
+                    )
+                    user_document["_timestamp"] = iso_zulu()
+                    await self.queue.put(
+                        (
+                            self._decorate_with_access_control(
+                                user_document,
+                                sorted(user_team_acls.get(user_id, set())),
+                            ),
+                            None,
+                        )
+                    )
             except PermissionsMissing:
                 self._teams_enumeration_failed = True
                 self._logger.warning(
@@ -720,7 +775,7 @@ class MicrosoftTeamsDataSource(BaseDataSource):
                 )
 
             try:
-                async for chats in self.client.get_chats(user_ids):
+                async for chats in self.client.get_chats(users.keys()):
                     for chat in chats:
                         await self.fetchers.put(partial(self.chat_producer, chat))
                         self.tasks += 1

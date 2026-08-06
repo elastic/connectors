@@ -47,7 +47,6 @@ from connectors.sources.shared.microsoft.graph import (
     NotFound,
     PermissionsMissing,
 )
-from connectors.utils import url_encode
 
 GRAPH_ACQUIRE_TOKEN_URL = "https://graph.microsoft.com/.default"  # noqa S105
 DEFAULT_PARALLEL_CONNECTION_COUNT = 10
@@ -64,20 +63,26 @@ if "OVERRIDE_URL" in os.environ:
 else:
     BASE_URL = "https://graph.microsoft.com/v1.0"
 
-CHAT_FILES_FOLDER_NAME = "microsoft teams chat files"
+
+def encode_sharing_url(url):
+    """Encode a sharing URL for ``GET /shares/{shareIdOrEncodedUrl}``.
+
+    https://learn.microsoft.com/en-us/graph/api/shares-get
+    """
+    encoded = base64.urlsafe_b64encode(url.encode("utf-8")).decode("ascii").rstrip("=")
+    return f"u!{encoded}"
 
 
 class TeamsObjectType(Enum):
     """Document `type` values emitted by the connector."""
 
-    TEAM = "Teams"
-    TEAM_MEMBER = "Team Member"
-    CHANNEL = "Team Channel"
+    TEAM = "Team"
+    USER = "User"
+    CHANNEL = "Channel"
     CHANNEL_MESSAGE = "Channel Message"
-    CHANNEL_ATTACHMENT = "Channel Attachment"
     CHAT = "Chat"
     CHAT_MESSAGE = "Chat Message"
-    CHAT_ATTACHMENT = "Chat Attachment"
+    FILE = "File"
 
 
 class EndSignal(Enum):
@@ -94,13 +99,14 @@ class Schema:
             "_id": "id",
             "title": "displayName",
             "description": "description",
+            "url": "webUrl",
             "creation_time": "createdDateTime",
         }
 
-    def team_member(self):
+    def user(self):
         return {
             "_id": "id",
-            "title": "displayName",
+            "name": "displayName",
             "email": "email",
         }
 
@@ -121,11 +127,11 @@ class Schema:
             "creation_time": "createdDateTime",
         }
 
-    def channel_attachment(self):
+    def file(self):
         return {
             "_id": "id",
-            "name": "name",
-            "weburl": "webUrl",
+            "title": "name",
+            "url": "webUrl",
             "size_in_bytes": "size",
             "_timestamp": "lastModifiedDateTime",
             "creation_time": "createdDateTime",
@@ -146,21 +152,7 @@ class Schema:
             "_id": "id",
             "_timestamp": "lastModifiedDateTime",
             "creation_time": "createdDateTime",
-            "webUrl": "webUrl",
-            "title": "title",
-            "chatType": "chatType",
-            "sender": "sender",
-            "message": "message",
-        }
-
-    def chat_attachment(self):
-        return {
-            "_id": "id",
-            "name": "name",
-            "weburl": "webUrl",
-            "size_in_bytes": "size",
-            "_timestamp": "lastModifiedDateTime",
-            "creation_time": "createdDateTime",
+            "url": "webUrl",
         }
 
 
@@ -435,45 +427,20 @@ class MicrosoftTeamsClient:
             )
             return
 
-    async def _get_user_drive(self, user_id):
+    async def get_drive_item_by_content_url(self, content_url):
+        """Resolve a message attachment ``contentUrl`` to a driveItem via shares API.
+
+        Requires the ``Files.Read.All`` application permission.
+        """
+        if not content_url:
+            return None
+        share_id = encode_sharing_url(content_url)
         try:
             return await self._graph_api_client.fetch(
-                f"{BASE_URL}/users/{user_id}/drive"
+                f"{BASE_URL}/shares/{share_id}/driveItem"
             )
         except NotFound:
             return None
-
-    async def _get_chat_files_folder(self, drive_id):
-        try:
-            async for children in self._graph_api_client.scroll(
-                f"{BASE_URL}/drives/{drive_id}/items/root/children"
-            ):
-                for child in children:
-                    if child.get("name", "").lower() == CHAT_FILES_FOLDER_NAME:
-                        return child
-        except NotFound:
-            return None
-        return None
-
-    async def get_chat_attachments(self, sender_id, attachment_name):
-        """Resolve a chat attachment (a reference to a file in the sender's OneDrive).
-
-        Requires the `Files.Read.All` application permission.
-        """
-        drive = await self._get_user_drive(sender_id)
-        if not drive:
-            return
-        folder = await self._get_chat_files_folder(drive.get("id"))
-        if not folder:
-            return
-        escaped_name = url_encode(attachment_name).replace("'", "''")
-        try:
-            async for attachments in self._graph_api_client.scroll(
-                f"{BASE_URL}/drives/{drive.get('id')}/items/{folder.get('id')}/children?$filter=name eq '{escaped_name}'"
-            ):
-                yield attachments
-        except NotFound:
-            return
 
     async def download_drive_item(self, drive_id, item_id, async_buffer):
         await self._graph_api_client.pipe(

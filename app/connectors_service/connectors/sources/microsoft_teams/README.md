@@ -51,10 +51,18 @@ login.
 
 ## What gets synced
 
-- **Teams**, **channels**, channel **messages** / **replies**, and attachments
-- **Team members**
+- **Team**, **Channel**, channel **messages** / **replies**
+- **Users** (unique Entra users who belong to at least one synced team)
 - **Chats of team members** (discovered via team membership → each member's
-  chats), including messages and attachments
+  chats), including messages
+- **Files** (when "Fetch attachment content" is on): channel Files-folder
+  drive items plus chat/channel message file attachments resolved via
+  ``contentUrl`` → shares API. Message docs carry ``attachments: [{id, title}]``
+  linking to File ``_id`` (driveItem id).
+
+Team, Channel, and Chat documents include ``member_ids`` (Entra user ids).
+Standard channels inherit the parent team's membership; private/shared channels
+use channel-specific members.
 
 Discovery is one pass per sync: teams → team members (deduped user ids) → each
 user's chats (deduped by chat id). Chat ACL membership is always loaded with

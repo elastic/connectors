@@ -9,7 +9,7 @@ import io
 import json
 import os
 
-from flask import Flask, request
+from flask import Flask
 from flask_limiter import HEADERS, Limiter
 from flask_limiter.util import get_remote_address
 
@@ -67,25 +67,26 @@ def adjust_document_id_size(doc_id):
 
 def expected_docs_count():
     teams = TEAMS
-    team_members = TEAMS * MEMBERS
+    # Unique Entra users across teams (same user ids on every team in this fixture)
+    users = MEMBERS
     channels = TEAMS * CHANNELS
     channel_messages = TEAMS * CHANNELS * CHANNEL_MESSAGES
     channel_replies = TEAMS * CHANNELS * CHANNEL_MESSAGES * REPLIES
-    channel_attachments = TEAMS * CHANNELS * FILES
+    channel_files = TEAMS * CHANNELS * FILES
     chats = CHATS
     chat_messages = CHATS * CHAT_MESSAGES
     # every chat message carries a single reference attachment resolving to one file
-    chat_attachments = CHATS * CHAT_MESSAGES
+    chat_files = CHATS * CHAT_MESSAGES
     return (
         teams
-        + team_members
+        + users
         + channels
         + channel_messages
         + channel_replies
-        + channel_attachments
+        + channel_files
         + chats
         + chat_messages
-        + chat_attachments
+        + chat_files
     )
 
 
@@ -195,9 +196,6 @@ class MicrosoftTeamsAPI:
             self.get_chat_messages
         )
 
-        self.app.route("/users/<string:user_id>/drive", methods=["GET"])(
-            self.get_user_drive
-        )
         self.app.route(
             "/drives/<string:drive_id>/items/<string:item_id>/children",
             methods=["GET"],
@@ -206,6 +204,10 @@ class MicrosoftTeamsAPI:
             "/drives/<string:drive_id>/items/<string:item_id>/content",
             methods=["GET"],
         )(self.download_file)
+        self.app.route(
+            "/shares/<path:share_id>/driveItem",
+            methods=["GET"],
+        )(self.get_share_drive_item)
 
     def get_token(self, tenant_id):
         return {
@@ -326,37 +328,28 @@ class MicrosoftTeamsAPI:
         messages = []
         for message in range(CHAT_MESSAGES):
             doc = _message(f"chat-message-{chat_id}-{message}")
+            file_id = adjust_document_id_size(f"chatfile-{chat_id}-{message}")
             doc["attachments"] = [
                 {
                     "id": f"att-{chat_id}-{message}",
                     "name": "chat.txt",
                     "contentType": "reference",
+                    "contentUrl": f"{ROOT}/download/{file_id}",
                 }
             ]
             messages.append(doc)
         return {"value": messages}
 
-    def get_user_drive(self, user_id):
-        return {"id": f"udrive-{user_id}"}
+    def get_share_drive_item(self, share_id):
+        # Decode the Graph sharing token back to contentUrl (fixture uses real encoding).
+        token = share_id[2:] if share_id.startswith("u!") else share_id
+        padding = "=" * (-len(token) % 4)
+        content_url = base64.urlsafe_b64decode(token + padding).decode("utf-8")
+        file_id = content_url.rsplit("/", 1)[-1]
+        return _file(file_id, "share-drive")
 
     def get_drive_children(self, drive_id, item_id):
-        if item_id == "root":
-            # OneDrive "Microsoft Teams Chat Files" folder lookup
-            return {
-                "value": [
-                    {
-                        "id": f"chatfolder-{drive_id}",
-                        "name": "Microsoft Teams Chat Files",
-                        "folder": {"childCount": 1},
-                    }
-                ]
-            }
-
-        if request.args.get("$filter"):
-            # Chat attachment resolution by name
-            return {"value": [_file(f"chatfile-{drive_id}-{item_id}", drive_id)]}
-
-        # Channel drive children
+        # Channel drive children (Path B)
         files = [_file(f"file-{i}-{drive_id}", drive_id) for i in range(FILES)]
         return {"value": files}
 

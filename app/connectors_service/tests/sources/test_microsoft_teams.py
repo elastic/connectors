@@ -13,15 +13,17 @@ import pytest
 from connectors_sdk.source import BaseDataSource, ConfigurableFieldValueError
 
 from connectors.access_control import ACCESS_CONTROL
-from connectors.sources.microsoft_teams import (
-    MicrosoftTeamsClient,
-    MicrosoftTeamsDataSource,
-)
 from connectors.sources.microsoft_teams.client import (
     EndSignal,
+    MicrosoftTeamsClient,
     Schema,
     TeamsObjectType,
     _jwt_payload_roles,
+)
+from connectors.sources.microsoft_teams.datasource import (
+    MicrosoftTeamsDataSource,
+    _message_body_text,
+    _message_subject,
 )
 from connectors.sources.microsoft_teams.formatter import MicrosoftTeamsFormatter
 from connectors.sources.shared.microsoft.graph import (
@@ -113,7 +115,9 @@ CHANNEL_MESSAGES = [
         "lastModifiedDateTime": "2023-08-16T04:47:55.794Z",
         "deletedDateTime": None,
         "webUrl": "https://teams.microsoft.com/l/message/1",
-        "from": {"user": {"displayName": "Alice"}},
+        "replyToId": None,
+        "subject": None,
+        "from": {"user": {"id": "user-alice", "displayName": "Alice"}},
         "body": {"contentType": "html", "content": "<div>Hello channel</div>"},
         "attachments": [],
     },
@@ -124,7 +128,8 @@ CHANNEL_MESSAGES = [
         "lastModifiedDateTime": "2023-08-16T04:49:55.794Z",
         "deletedDateTime": "2023-08-16T04:50:55.794Z",
         "webUrl": "https://teams.microsoft.com/l/message/2",
-        "from": {"user": {"displayName": "Alice"}},
+        "replyToId": None,
+        "from": {"user": {"id": "user-alice", "displayName": "Alice"}},
         "body": {"contentType": "html", "content": "<div>deleted</div>"},
         "attachments": [],
     },
@@ -138,7 +143,8 @@ CHANNEL_REPLIES = [
         "lastModifiedDateTime": "2023-08-16T04:48:55.794Z",
         "deletedDateTime": None,
         "webUrl": "https://teams.microsoft.com/l/message/1/reply/1",
-        "from": {"user": {"displayName": "Bob"}},
+        "replyToId": "message-1",
+        "from": {"user": {"id": "user-bob", "displayName": "Bob"}},
         "body": {"contentType": "html", "content": "<div>Hi Alice</div>"},
         "attachments": [],
     }
@@ -203,23 +209,22 @@ CHAT_MESSAGES = [
                 "id": "att-1",
                 "name": "doc.txt",
                 "contentType": "reference",
+                "contentUrl": "https://example.com/doc.txt",
             }
         ],
     }
 ]
 
-CHAT_ATTACHMENTS = [
-    {
-        "id": "chat-file-1",
-        "name": "doc.txt",
-        "webUrl": "https://example.com/doc.txt",
-        "size": 10,
-        "lastModifiedDateTime": "2023-07-21T21:24:18.726Z",
-        "createdDateTime": "2023-07-21T21:24:18.726Z",
-        "file": {"mimeType": "text/plain"},
-        "parentReference": {"driveId": "drive-chat"},
-    }
-]
+CHAT_FILE = {
+    "id": "chat-file-1",
+    "name": "doc.txt",
+    "webUrl": "https://example.com/doc.txt",
+    "size": 10,
+    "lastModifiedDateTime": "2023-07-21T21:24:18.726Z",
+    "createdDateTime": "2023-07-21T21:24:18.726Z",
+    "file": {"mimeType": "text/plain"},
+    "parentReference": {"driveId": "drive-chat"},
+}
 
 
 @asynccontextmanager
@@ -561,12 +566,12 @@ async def test_ping_raises_on_error():
 # -- Formatter ---------------------------------------------------------------
 
 
-def test_formatter_team_member_id_is_prefixed_with_team():
+def test_formatter_user():
     formatter = MicrosoftTeamsFormatter(Schema())
-    doc = formatter.format_team_member(TEAM_MEMBERS[0], "team-1", "Team One")
-    assert doc["_id"] == "team-1-membership-1"
-    assert doc["type"] == TeamsObjectType.TEAM_MEMBER.value
-    assert doc["title"] == "Alice"
+    doc = formatter.format_user("user-alice", "Alice", "alice@example.com")
+    assert doc["_id"] == "user-alice"
+    assert doc["type"] == TeamsObjectType.USER.value
+    assert doc["name"] == "Alice"
     assert doc["email"] == "alice@example.com"
 
 
@@ -574,28 +579,43 @@ def test_formatter_channel_message():
     formatter = MicrosoftTeamsFormatter(Schema())
     doc = formatter.format_channel_message(
         item=CHANNEL_MESSAGES[0],
-        channel_name="General",
+        channel_id="channel-1",
+        channel_title="General",
         message_content="Hello channel",
+        subject="Channel subject",
     )
     assert doc["type"] == TeamsObjectType.CHANNEL_MESSAGE.value
-    assert doc["sender"] == "Alice"
-    assert doc["channel"] == "General"
+    assert doc["sender_name"] == "Alice"
+    assert doc["sender_id"] == "user-alice"
+    assert doc["channel_id"] == "channel-1"
+    assert doc["channel_title"] == "General"
+    assert doc["subject"] == "Channel subject"
     assert doc["message"] == "Hello channel"
+    assert doc["reply_to_id"] == ""
     assert doc["_id"] == "message-1"
+    assert doc["attachments"] == []
 
 
-def test_formatter_chat_message_uses_topic_as_title():
+def test_formatter_chat_message_uses_topic_as_chat_title():
     formatter = MicrosoftTeamsFormatter(Schema())
     doc = formatter.format_chat_message(
         chat=CHATS[0],
         message=CHAT_MESSAGES[0],
         message_content="chat body",
         members="Alice,Bob",
+        attachments=[{"id": "chat-file-1", "title": "doc.txt"}],
     )
     assert doc["type"] == TeamsObjectType.CHAT_MESSAGE.value
-    assert doc["title"] == "Project chat"
-    assert doc["sender"] == "Alice"
+    assert doc["chat_id"] == "chat-1"
+    assert doc["chat_title"] == "Project chat"
+    assert doc["sender_name"] == "Alice"
+    assert doc["sender_id"] == "user-alice"
     assert doc["message"] == "chat body"
+    assert doc["url"] == CHATS[0]["webUrl"]
+    assert doc["attachments"] == [{"id": "chat-file-1", "title": "doc.txt"}]
+    assert "reply_to_id" not in doc
+    assert "chatType" not in doc
+    assert "title" not in doc
 
 
 def test_formatter_chat_message_falls_back_to_members():
@@ -608,7 +628,7 @@ def test_formatter_chat_message_falls_back_to_members():
         message_content="chat body",
         members="Alice,Bob",
     )
-    assert doc["title"] == "Alice,Bob"
+    assert doc["chat_title"] == "Alice,Bob"
 
 
 # -- DLS ---------------------------------------------------------------------
@@ -779,9 +799,7 @@ def _mock_client_for_get_docs(source, with_attachments=True):
     source.client.get_chat_messages = MagicMock(
         return_value=AsyncIterator([CHAT_MESSAGES])
     )
-    source.client.get_chat_attachments = MagicMock(
-        return_value=AsyncIterator([CHAT_ATTACHMENTS])
-    )
+    source.client.get_drive_item_by_content_url = AsyncMock(return_value=CHAT_FILE)
 
 
 @pytest.mark.asyncio
@@ -796,14 +814,31 @@ async def test_get_docs_emits_expected_types():
         types = {doc["type"] for doc in docs}
         assert types == {
             TeamsObjectType.TEAM.value,
-            TeamsObjectType.TEAM_MEMBER.value,
+            TeamsObjectType.USER.value,
             TeamsObjectType.CHANNEL.value,
             TeamsObjectType.CHANNEL_MESSAGE.value,
-            TeamsObjectType.CHANNEL_ATTACHMENT.value,
+            TeamsObjectType.FILE.value,
             TeamsObjectType.CHAT.value,
             TeamsObjectType.CHAT_MESSAGE.value,
-            TeamsObjectType.CHAT_ATTACHMENT.value,
         }
+
+        users = [doc for doc in docs if doc["type"] == TeamsObjectType.USER.value]
+        assert {u["_id"] for u in users} == {"user-alice", "user-bob"}
+        team = next(doc for doc in docs if doc["type"] == TeamsObjectType.TEAM.value)
+        assert team["member_ids"] == ["user-alice", "user-bob"]
+        channel = next(
+            doc for doc in docs if doc["type"] == TeamsObjectType.CHANNEL.value
+        )
+        assert channel["member_ids"] == ["user-alice", "user-bob"]
+        chat = next(doc for doc in docs if doc["type"] == TeamsObjectType.CHAT.value)
+        assert chat["member_ids"] == ["user-alice", "user-bob"]
+        files = [doc for doc in docs if doc["type"] == TeamsObjectType.FILE.value]
+        assert {f["_id"] for f in files} == {"file-1", "chat-file-1"}
+        assert all(f.get("title") for f in files)
+        chat_msg = next(
+            doc for doc in docs if doc["type"] == TeamsObjectType.CHAT_MESSAGE.value
+        )
+        assert chat_msg["attachments"] == [{"id": "chat-file-1", "title": "doc.txt"}]
 
 
 @pytest.mark.asyncio
@@ -830,8 +865,7 @@ async def test_get_docs_without_attachments_when_disabled():
         async for doc, _download in source.get_docs():
             types.add(doc["type"])
 
-        assert TeamsObjectType.CHANNEL_ATTACHMENT.value not in types
-        assert TeamsObjectType.CHAT_ATTACHMENT.value not in types
+        assert TeamsObjectType.FILE.value not in types
 
 
 @pytest.mark.asyncio
@@ -847,9 +881,7 @@ async def test_get_docs_raises_when_teams_permission_missing():
         source.client.get_chat_messages = MagicMock(
             return_value=AsyncIterator([CHAT_MESSAGES])
         )
-        source.client.get_chat_attachments = MagicMock(
-            return_value=AsyncIterator([CHAT_ATTACHMENTS])
-        )
+        source.client.get_drive_item_by_content_url = AsyncMock(return_value=CHAT_FILE)
 
         with pytest.raises(PermissionsMissing, match="Enumeration failed"):
             async for _doc, _download in source.get_docs():
@@ -901,7 +933,7 @@ async def test_get_content_returns_none_for_zero_size():
         attachment = {
             "_id": "file-1",
             "_timestamp": "2023-08-16T04:47:29Z",
-            "name": "report.txt",
+            "title": "report.txt",
             "size_in_bytes": 0,
         }
         result = await source.get_content(
@@ -916,7 +948,7 @@ async def test_get_content_downloads_and_extracts():
         attachment = {
             "_id": "file-1",
             "_timestamp": "2023-08-16T04:47:29Z",
-            "name": "report.txt",
+            "title": "report.txt",
             "size_in_bytes": 42,
         }
         source.client.download_drive_item = AsyncMock()
@@ -978,7 +1010,14 @@ def _empty_body_message(with_attachment):
         "webUrl": None,
         "from": {"user": {"id": "user-alice", "displayName": "Alice"}},
         "body": {"contentType": "html", "content": ""},
-        "attachments": [{"id": "a1", "name": "f.txt", "contentType": "reference"}]
+        "attachments": [
+            {
+                "id": "a1",
+                "name": "f.txt",
+                "contentType": "reference",
+                "contentUrl": "https://example.com/f.txt",
+            }
+        ]
         if with_attachment
         else [],
     }
@@ -987,21 +1026,35 @@ def _empty_body_message(with_attachment):
 @pytest.mark.asyncio
 async def test_process_channel_message_indexes_attachment_only_message():
     async with create_teams_source() as source:
-        await source._process_channel_message(
-            _empty_body_message(with_attachment=True), "General", []
+        source.client.get_drive_item_by_content_url = AsyncMock(
+            return_value={
+                "id": "drive-f",
+                "name": "f.txt",
+                "webUrl": "https://example.com/f.txt",
+                "size": 1,
+                "lastModifiedDateTime": "2023-08-16T04:47:55.794Z",
+                "createdDateTime": "2023-08-16T04:47:55.794Z",
+                "parentReference": {"driveId": "drive-1"},
+            }
         )
-        assert not source.queue.empty()
-        _, (doc, _download) = source.queue.get_nowait()
-        assert doc["_id"] == "msg-empty"
-        assert doc["type"] == TeamsObjectType.CHANNEL_MESSAGE.value
-        assert doc["attached_documents"] == "f.txt"
+        await source._process_channel_message(
+            _empty_body_message(with_attachment=True), "channel-1", "General", []
+        )
+        docs = []
+        while not source.queue.empty():
+            _, item = source.queue.get_nowait()
+            docs.append(item[0])
+        message = next(d for d in docs if d["type"] == TeamsObjectType.CHANNEL_MESSAGE.value)
+        assert message["_id"] == "msg-empty"
+        assert message["attachments"] == [{"id": "drive-f", "title": "f.txt"}]
+        assert any(d["type"] == TeamsObjectType.FILE.value for d in docs)
 
 
 @pytest.mark.asyncio
 async def test_process_channel_message_drops_truly_empty_message():
     async with create_teams_source() as source:
         await source._process_channel_message(
-            _empty_body_message(with_attachment=False), "General", []
+            _empty_body_message(with_attachment=False), "channel-1", "General", []
         )
         assert source.queue.empty()
 
@@ -1009,14 +1062,27 @@ async def test_process_channel_message_drops_truly_empty_message():
 @pytest.mark.asyncio
 async def test_process_chat_message_indexes_attachment_only_message():
     async with create_teams_source() as source:
+        source.client.get_drive_item_by_content_url = AsyncMock(
+            return_value={
+                "id": "drive-f",
+                "name": "f.txt",
+                "webUrl": "https://example.com/f.txt",
+                "size": 1,
+                "lastModifiedDateTime": "2023-08-16T04:47:55.794Z",
+                "createdDateTime": "2023-08-16T04:47:55.794Z",
+                "parentReference": {"driveId": "drive-1"},
+            }
+        )
         await source._process_chat_message(
             CHATS[0], _empty_body_message(with_attachment=True), "Alice,Bob", []
         )
-        assert not source.queue.empty()
-        _, (doc, _download) = source.queue.get_nowait()
-        assert doc["_id"] == "msg-empty"
-        assert doc["type"] == TeamsObjectType.CHAT_MESSAGE.value
-        assert doc["attached_documents"] == "f.txt"
+        docs = []
+        while not source.queue.empty():
+            _, item = source.queue.get_nowait()
+            docs.append(item[0])
+        message = next(d for d in docs if d["type"] == TeamsObjectType.CHAT_MESSAGE.value)
+        assert message["_id"] == "msg-empty"
+        assert message["attachments"] == [{"id": "drive-f", "title": "f.txt"}]
 
 
 @pytest.mark.asyncio
@@ -1025,9 +1091,104 @@ async def test_process_message_handles_null_body_without_raising():
         null_body = _empty_body_message(with_attachment=False)
         null_body["body"] = None
         # Should not raise AttributeError; message is dropped (no text, no attachments)
-        await source._process_channel_message(null_body, "General", [])
+        await source._process_channel_message(null_body, "channel-1", "General", [])
         await source._process_chat_message(CHATS[0], null_body, "Alice,Bob", [])
         assert source.queue.empty()
+
+
+def test_message_body_and_subject_are_separate():
+    payload = {
+        "body": {"content": "<p>I just wanna see how all the lovely people doing</p>"},
+        "subject": "Hey everyone, how's it going?",
+    }
+    assert _message_body_text(payload) == "I just wanna see how all the lovely people doing"
+    assert _message_subject(payload) == "Hey everyone, how's it going?"
+
+
+def test_message_body_empty_for_attachment_stub():
+    payload = {
+        "body": {
+            "content": '<attachment id="93485830-1df1-4870-a0e3-129884eff6c6"></attachment>'
+        },
+        "subject": "Yo, here are some logs",
+    }
+    assert _message_body_text(payload) == ""
+    assert _message_subject(payload) == "Yo, here are some logs"
+
+
+@pytest.mark.asyncio
+async def test_process_channel_message_keeps_subject_and_body_separate():
+    async with create_teams_source() as source:
+        message = {
+            "id": "msg-both",
+            "messageType": "message",
+            "createdDateTime": "2023-08-16T04:47:55.794Z",
+            "lastModifiedDateTime": "2023-08-16T04:47:55.794Z",
+            "deletedDateTime": None,
+            "webUrl": "https://teams.example/msg-both",
+            "replyToId": None,
+            "subject": "Hey everyone, how's it going?",
+            "from": {"user": {"id": "user-alice", "displayName": "Alice"}},
+            "body": {
+                "contentType": "html",
+                "content": "<p>I just wanna see how all the lovely people doing</p>",
+            },
+            "attachments": [],
+        }
+        await source._process_channel_message(message, "channel-1", "General", [])
+        _, (doc, _download) = source.queue.get_nowait()
+        assert doc["subject"] == "Hey everyone, how's it going?"
+        assert doc["message"] == "I just wanna see how all the lovely people doing"
+        assert doc["sender_name"] == "Alice"
+        assert doc["sender_id"] == "user-alice"
+        assert doc["channel_id"] == "channel-1"
+        assert doc["channel_title"] == "General"
+        assert doc["reply_to_id"] == ""
+
+
+@pytest.mark.asyncio
+async def test_process_channel_message_file_share_subject_only():
+    async with create_teams_source() as source:
+        source.client.get_drive_item_by_content_url = AsyncMock(
+            return_value={
+                "id": "drive-f",
+                "name": "f.txt",
+                "webUrl": "https://example.com/f.txt",
+                "size": 1,
+                "lastModifiedDateTime": "2023-08-16T04:47:55.794Z",
+                "createdDateTime": "2023-08-16T04:47:55.794Z",
+                "parentReference": {"driveId": "drive-1"},
+            }
+        )
+        message = _empty_body_message(with_attachment=True)
+        message["body"] = {
+            "contentType": "html",
+            "content": '<attachment id="a1"></attachment>',
+        }
+        message["subject"] = "Yo, here are some logs"
+        message["replyToId"] = "root-1"
+        await source._process_channel_message(message, "channel-1", "General", [])
+        docs = []
+        while not source.queue.empty():
+            _, item = source.queue.get_nowait()
+            docs.append(item[0])
+        doc = next(d for d in docs if d["type"] == TeamsObjectType.CHANNEL_MESSAGE.value)
+        assert doc["subject"] == "Yo, here are some logs"
+        assert doc["message"] == ""
+        assert doc["attachments"] == [{"id": "drive-f", "title": "f.txt"}]
+        assert doc["sender_id"] == "user-alice"
+        assert doc["reply_to_id"] == "root-1"
+
+
+@pytest.mark.asyncio
+async def test_process_channel_message_indexes_subject_only_without_attachments():
+    async with create_teams_source() as source:
+        message = _empty_body_message(with_attachment=False)
+        message["subject"] = "Announcement only"
+        await source._process_channel_message(message, "channel-1", "General", [])
+        _, (doc, _download) = source.queue.get_nowait()
+        assert doc["subject"] == "Announcement only"
+        assert doc["message"] == ""
 
 
 # -- Robustness: access control + total-failure safeguard --------------------
@@ -1165,6 +1326,7 @@ async def test_private_channel_uses_channel_member_acl_when_dls_enabled():
 
         assert len(channel_docs) == 1
         assert len(message_docs) == 1
+        assert channel_docs[0]["member_ids"] == ["user-alice"]
         # Only Alice (channel member), not Bob (team member outside the channel)
         assert channel_docs[0][ACCESS_CONTROL] == [
             "email:alice@example.com",

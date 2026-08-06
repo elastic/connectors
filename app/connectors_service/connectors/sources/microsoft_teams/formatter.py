@@ -30,67 +30,76 @@ class MicrosoftTeamsFormatter:
         )
         return result
 
-    def format_team_member(self, member, team_id, team_name):
-        document = {
-            "type": TeamsObjectType.TEAM_MEMBER.value,
-            "team_name": team_name,
-            "user_id": member.get("userId"),
-            "roles": ", ".join(member.get("roles", []) or []),
+    def format_user(self, user_id, name, email):
+        """Build a User document keyed by Entra user id (team members only)."""
+        return {
+            "_id": user_id,
+            "type": TeamsObjectType.USER.value,
+            "name": name or "",
+            "email": email or "",
         }
+
+    def format_file(self, drive_item):
+        """Build a File document from a Graph driveItem (no parent denorm)."""
+        document = {"type": TeamsObjectType.FILE.value}
         self.map_document_with_schema(
-            document=document, item=member, document_type=self.schema.team_member
+            document=document, item=drive_item, document_type=self.schema.file
         )
-        # The membership id is not globally unique; prefix it with the team id.
-        document["_id"] = f"{team_id}-{member.get('id')}"
         return document
 
-    def format_channel_message(self, item, channel_name, message_content):
+    def format_channel_message(
+        self,
+        item,
+        channel_id,
+        channel_title,
+        message_content,
+        subject="",
+        attachments=None,
+    ):
+        sender_name, sender_id = self._sender_fields(item)
         document = {
             "type": TeamsObjectType.CHANNEL_MESSAGE.value,
-            "sender": item["from"]["user"].get("displayName")
-            if item.get("from") and item["from"].get("user")
-            else "",
-            "channel": channel_name,
+            "sender_name": sender_name,
+            "sender_id": sender_id,
+            "channel_id": channel_id,
+            "channel_title": channel_title,
+            "subject": subject,
             "message": message_content,
-            "attached_documents": self.format_attachment_names(
-                attachments=item.get("attachments")
-            ),
+            "reply_to_id": item.get("replyToId") or "",
+            "attachments": attachments or [],
         }
         self.map_document_with_schema(
             document=document, item=item, document_type=self.schema.channel_message
         )
         return document
 
-    def format_chat_message(self, chat, message, message_content, members):
-        augmented = dict(message)
-        augmented.update(
-            {
-                "title": chat.get("topic") or members,
-                "webUrl": chat.get("webUrl"),
-                "chatType": chat.get("chatType"),
-                "sender": message["from"]["user"].get("displayName")
-                if message.get("from") and message["from"].get("user")
-                else "",
-                "message": message_content,
-            }
-        )
+    def format_chat_message(
+        self,
+        chat,
+        message,
+        message_content,
+        members,
+        subject="",
+        attachments=None,
+    ):
+        sender_name, sender_id = self._sender_fields(message)
         document = {
             "type": TeamsObjectType.CHAT_MESSAGE.value,
-            "attached_documents": self.format_attachment_names(
-                attachments=message.get("attachments")
-            ),
+            "chat_id": chat.get("id"),
+            "chat_title": chat.get("topic") or members,
+            "sender_name": sender_name,
+            "sender_id": sender_id,
+            "subject": subject,
+            "message": message_content,
+            "attachments": attachments or [],
         }
         self.map_document_with_schema(
-            document=document, item=augmented, document_type=self.schema.chat_message
+            document=document, item=message, document_type=self.schema.chat_message
         )
+        if not document.get("url"):
+            document["url"] = chat.get("webUrl")
         return document
 
-    def format_attachment_names(self, attachments):
-        if not attachments:
-            return ""
-
-        return ",".join(
-            attachment.get("name")
-            for attachment in attachments
-            if attachment.get("name", "")
-        )
+    def _sender_fields(self, message):
+        user = (message.get("from") or {}).get("user") or {}
+        return (user.get("displayName") or "").strip(), user.get("id") or ""
