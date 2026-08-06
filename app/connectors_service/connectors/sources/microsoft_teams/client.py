@@ -6,27 +6,24 @@
 """Microsoft Teams client.
 
 The connector uses application-only authentication (client secret or certificate)
-and the least-privilege permission model:
+and tenant-wide Microsoft Graph application permissions (no Teams app install /
+RSC / WhereInstalled):
 
-- Enumerating teams uses the tenant-wide `Team.ReadBasic.All` application
-  permission.
-- Enumerating channels uses `Channel.ReadBasic.All` (or the resource-specific
-  `ChannelSettings.Read.Group`).
-- Reading channel messages/replies uses the resource-specific consent (RSC)
-  permission `ChannelMessage.Read.Group`, granted when the connector's Teams app
-  is installed in a team.
-- Reading team members uses the RSC permission `TeamMember.Read.Group`.
-- Reading private/shared channel members uses the RSC permission
-  `ChannelMember.Read.Group` (required for correct DLS ACLs on those channels).
-- Enumerating and reading chats uses `Chat.ReadBasic.WhereInstalled` and
-  `Chat.Read.WhereInstalled`, which scope results to chats where the connector's
-  Teams app is installed.
-- Downloading attachment content requires `Files.Read.All`.
+- Teams: `Team.ReadBasic.All`, `TeamMember.Read.All`
+- Channels: `Channel.ReadBasic.All`, `ChannelMember.Read.All`,
+  `ChannelMessage.Read.All`
+- Chats: `Chat.ReadBasic.All` (metadata/members), `Chat.Read.All` (messages).
+  Chat discovery walks team members and calls `GET /users/{id}/chats` (there is
+  no tenant-wide app-only `GET /chats`). `User.Read.All` is not required.
+- Attachments: `Files.Read.All` (optional; gated by connector config)
 
-Because RSC/WhereInstalled permissions are only granted where the app is
-installed, per-resource calls that hit a resource the app is not installed in
-respond with 403/404. Those are swallowed so a partially-installed tenant still
-syncs whatever it has access to.
+`ChannelMessage.Read.All` and `Chat.Read.All` are protected Teams APIs: admin
+consent alone may not be enough until Microsoft grants protected API access for
+the app in the tenant.
+
+Missing resources (`NotFound`) are soft-skipped where that is normal (e.g. no
+files folder). Permission failures (`PermissionsMissing`) on core reads are not
+swallowed — they fail the sync so a misconfigured app is visible.
 """
 
 import os
@@ -211,11 +208,11 @@ class MicrosoftTeamsClient:
         self._graph_api_client.set_logger(self._logger)
 
     def log_skip_summary(self):
-        """Emit an aggregate warning for resources skipped during the sync.
+        """Emit an aggregate warning for resources soft-skipped during the sync.
 
-        Per-resource 403/404s are logged at debug to avoid noise; this surfaces the
-        totals so an under-installed tenant (missing RSC / Teams app not installed)
-        is visible instead of producing a quiet, near-empty "successful" sync.
+        Per-resource ``NotFound`` cases are logged at debug; this surfaces totals
+        for optional/missing resources (e.g. no files folder) without treating
+        permission failures as silent skips.
         """
         if not self._skipped:
             return
@@ -224,9 +221,8 @@ class MicrosoftTeamsClient:
             f"{count} {resource}" for resource, count in sorted(self._skipped.items())
         )
         self._logger.warning(
-            f"Skipped some resources because the connector's Teams app is not "
-            f"installed there or the required permissions are missing: {details}. "
-            f"Content in those teams/chats was not indexed."
+            f"Skipped some resources that were not found: {details}. "
+            f"Content for those resources was not indexed."
         )
         self._skipped.clear()
 
@@ -243,10 +239,10 @@ class MicrosoftTeamsClient:
                 f"{BASE_URL}/teams/{team_id}/members"
             ):
                 yield members
-        except (NotFound, PermissionsMissing):
+        except NotFound:
             self._skipped["teams' members"] += 1
             self._logger.debug(
-                f"Skipping members for team '{team_id}': the connector's Teams app is not installed there or 'TeamMember.Read.Group' is missing."
+                f"Skipping members for team '{team_id}': team was not found."
             )
             return
 
@@ -256,9 +252,9 @@ class MicrosoftTeamsClient:
                 f"{BASE_URL}/teams/{team_id}/channels"
             ):
                 yield channels
-        except (NotFound, PermissionsMissing):
+        except NotFound:
             self._skipped["teams' channels"] += 1
-            self._logger.debug(f"Skipping channels for team '{team_id}'.")
+            self._logger.debug(f"Skipping channels for team '{team_id}': not found.")
             return
 
     async def get_channel_messages(self, team_id, channel_id):
@@ -267,10 +263,11 @@ class MicrosoftTeamsClient:
                 f"{BASE_URL}/teams/{team_id}/channels/{channel_id}/messages?$expand=replies&$top=50"
             ):
                 yield messages
-        except (NotFound, PermissionsMissing):
+        except NotFound:
             self._skipped["channels' messages"] += 1
             self._logger.debug(
-                f"Skipping messages for channel '{channel_id}' in team '{team_id}': the connector's Teams app is not installed there or 'ChannelMessage.Read.Group' is missing."
+                f"Skipping messages for channel '{channel_id}' in team '{team_id}': "
+                f"channel was not found."
             )
             return
 
@@ -279,19 +276,18 @@ class MicrosoftTeamsClient:
 
         Required for private/shared channels when DLS is enabled: those channels
         have a membership set that differs from the parent team's members.
-        Uses the RSC permission ``ChannelMember.Read.Group``.
+        Requires the ``ChannelMember.Read.All`` application permission.
         """
         try:
             async for members in self._graph_api_client.scroll(
                 f"{BASE_URL}/teams/{team_id}/channels/{channel_id}/members"
             ):
                 yield members
-        except (NotFound, PermissionsMissing):
+        except NotFound:
             self._skipped["channels' members"] += 1
             self._logger.debug(
                 f"Skipping members for channel '{channel_id}' in team '{team_id}': "
-                f"the connector's Teams app is not installed there or "
-                f"'ChannelMember.Read.Group' is missing."
+                f"channel was not found."
             )
             return
 
@@ -326,11 +322,65 @@ class MicrosoftTeamsClient:
             )
             return
 
-    async def get_chats(self):
+    async def get_user_chats(self, user_id):
+        """Yield chat pages for a user (app-only list-chats path)."""
         async for chats in self._graph_api_client.scroll(
-            f"{BASE_URL}/chats?$expand=members&$top=50"
+            f"{BASE_URL}/users/{user_id}/chats?$expand=members&$top=50"
         ):
             yield chats
+
+    async def get_chats(self):
+        """Yield unique chats of all team members.
+
+        App-only Graph has no tenant-wide ``GET /chats``. Discovery collects
+        ``userId`` values from team membership, then lists each user's chats and
+        deduplicates by chat id (issue #4145: chats for team members).
+        """
+        seen_user_ids = set()
+        seen_chat_ids = set()
+        users_queried = 0
+        users_permission_denied = 0
+
+        async for teams in self.get_teams():
+            for team in teams:
+                team_id = team.get("id")
+                if not team_id:
+                    continue
+                async for members in self.get_team_members(team_id):
+                    for member in members:
+                        user_id = member.get("userId")
+                        if not user_id or user_id in seen_user_ids:
+                            continue
+                        seen_user_ids.add(user_id)
+                        users_queried += 1
+                        try:
+                            async for chats in self.get_user_chats(user_id):
+                                unique = []
+                                for chat in chats:
+                                    chat_id = chat.get("id")
+                                    if not chat_id or chat_id in seen_chat_ids:
+                                        continue
+                                    seen_chat_ids.add(chat_id)
+                                    unique.append(chat)
+                                if unique:
+                                    yield unique
+                        except NotFound:
+                            self._logger.debug(
+                                f"Skipping chats for user '{user_id}': user was not found."
+                            )
+                        except PermissionsMissing:
+                            users_permission_denied += 1
+                            self._logger.debug(
+                                f"Skipping chats for user '{user_id}': "
+                                f"missing permission to list this user's chats."
+                            )
+
+        if users_queried > 0 and users_permission_denied == users_queried:
+            msg = (
+                "Unable to list chats for any team member. Verify the "
+                "'Chat.ReadBasic.All' application permission is granted."
+            )
+            raise PermissionsMissing(msg)
 
     async def get_chat_messages(self, chat_id):
         try:
@@ -338,10 +388,10 @@ class MicrosoftTeamsClient:
                 f"{BASE_URL}/chats/{chat_id}/messages?$top=50"
             ):
                 yield messages
-        except (NotFound, PermissionsMissing):
+        except NotFound:
             self._skipped["chats' messages"] += 1
             self._logger.debug(
-                f"Skipping messages for chat '{chat_id}': 'Chat.Read.WhereInstalled' is missing or the connector's Teams app is not installed there."
+                f"Skipping messages for chat '{chat_id}': chat was not found."
             )
             return
 

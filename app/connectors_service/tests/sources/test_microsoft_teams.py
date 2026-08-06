@@ -309,16 +309,27 @@ async def test_client_get_teams():
 
 
 @pytest.mark.asyncio
-async def test_client_get_team_members_swallows_permissions_missing():
+async def test_client_get_team_members_propagates_permissions_missing():
     client = build_client()
     client._graph_api_client = FakeGraphSession(
         raises={"/members": PermissionsMissing()}
     )
+    with pytest.raises(PermissionsMissing):
+        async for _page in client.get_team_members("team-1"):
+            pass
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_client_get_team_members_swallows_not_found():
+    client = build_client()
+    client._graph_api_client = FakeGraphSession(raises={"/members": NotFound()})
     result = []
     async for page in client.get_team_members("team-1"):
         result.extend(page)
     await client.close()
     assert result == []
+    assert client._skipped["teams' members"] == 1
 
 
 @pytest.mark.asyncio
@@ -330,6 +341,65 @@ async def test_client_get_channel_messages_swallows_not_found():
         result.extend(page)
     await client.close()
     assert result == []
+
+
+@pytest.mark.asyncio
+async def test_client_get_channel_messages_propagates_permissions_missing():
+    client = build_client()
+    client._graph_api_client = FakeGraphSession(
+        raises={"/messages": PermissionsMissing()}
+    )
+    with pytest.raises(PermissionsMissing):
+        async for _page in client.get_channel_messages("team-1", "channel-1"):
+            pass
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_client_get_chats_discovers_via_team_members_and_dedupes():
+    """Chats come from GET /users/{id}/chats; the same chat id across members is once."""
+    shared_chat = {
+        "id": "chat-shared",
+        "topic": "Shared",
+        "chatType": "group",
+        "members": [],
+    }
+    alice_only = {
+        "id": "chat-alice",
+        "topic": "Alice only",
+        "chatType": "oneOnOne",
+        "members": [],
+    }
+    client = build_client()
+    client._graph_api_client = FakeGraphSession(
+        pages={
+            "/teams?$top=999": [TEAMS],
+            "/teams/team-1/members": [TEAM_MEMBERS],
+            "/users/user-alice/chats": [[shared_chat, alice_only]],
+            "/users/user-bob/chats": [[shared_chat]],
+        }
+    )
+    chats = []
+    async for page in client.get_chats():
+        chats.extend(page)
+    await client.close()
+    assert [c["id"] for c in chats] == ["chat-shared", "chat-alice"]
+
+
+@pytest.mark.asyncio
+async def test_client_get_chats_raises_when_all_user_chat_lists_denied():
+    client = build_client()
+    client._graph_api_client = FakeGraphSession(
+        pages={
+            "/teams?$top=999": [TEAMS],
+            "/teams/team-1/members": [TEAM_MEMBERS],
+        },
+        raises={"/chats": PermissionsMissing()},
+    )
+    with pytest.raises(PermissionsMissing, match="Chat.ReadBasic.All"):
+        async for _page in client.get_chats():
+            pass
+    await client.close()
 
 
 @pytest.mark.asyncio
@@ -899,9 +969,7 @@ async def test_get_docs_raises_on_producer_error():
 
 
 @pytest.mark.asyncio
-async def test_get_docs_raises_when_all_channel_messages_skipped():
-    # Teams listed via Team.ReadBasic.All but every message fetch 403/404s when
-    # the app is not installed — refuse a successful near-empty sync.
+async def test_get_docs_raises_when_channel_message_permission_missing():
     async with create_teams_source(fetch_attachment_content=False) as source:
         source.client.get_teams = MagicMock(return_value=AsyncIterator([TEAMS]))
         source.client.get_team_members = MagicMock(
@@ -910,16 +978,12 @@ async def test_get_docs_raises_when_all_channel_messages_skipped():
         source.client.get_team_channels = MagicMock(
             return_value=AsyncIterator([CHANNELS])
         )
-
-        async def skip_messages(*_args, **_kwargs):
-            source.client._skipped["channels' messages"] += 1
-            if False:  # pragma: no cover - make this an async generator
-                yield None
-
-        source.client.get_channel_messages = MagicMock(side_effect=skip_messages)
+        source.client.get_channel_messages = MagicMock(
+            side_effect=PermissionsMissing("ChannelMessage.Read.All missing")
+        )
         source.client.get_chats = MagicMock(return_value=AsyncIterator([]))
 
-        with pytest.raises(PermissionsMissing, match="All channel message fetches"):
+        with pytest.raises(PermissionsMissing, match="ChannelMessage.Read.All"):
             async for _doc, _download in source.get_docs():
                 pass
 
@@ -1001,7 +1065,7 @@ async def test_private_channel_skipped_when_dls_on_and_members_unresolved():
         source.client.get_team_channels = MagicMock(
             return_value=AsyncIterator([[PRIVATE_CHANNEL]])
         )
-        # Empty generator simulates PermissionsMissing / not installed
+        # Empty generator simulates unresolved channel members (e.g. NotFound)
         source.client.get_channel_members = MagicMock(return_value=AsyncIterator([]))
         source.client.get_channel_messages = MagicMock(
             return_value=AsyncIterator([CHANNEL_MESSAGES])
@@ -1018,10 +1082,22 @@ async def test_private_channel_skipped_when_dls_on_and_members_unresolved():
 
 
 @pytest.mark.asyncio
-async def test_client_get_channel_members_swallows_permissions_missing():
+async def test_client_get_channel_members_propagates_permissions_missing():
     client = build_client()
     client._graph_api_client = FakeGraphSession(
         raises={"/channels/channel-1/members": PermissionsMissing()}
+    )
+    with pytest.raises(PermissionsMissing):
+        async for _page in client.get_channel_members("team-1", "channel-1"):
+            pass
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_client_get_channel_members_swallows_not_found():
+    client = build_client()
+    client._graph_api_client = FakeGraphSession(
+        raises={"/channels/channel-1/members": NotFound()}
     )
     result = []
     async for page in client.get_channel_members("team-1", "channel-1"):
@@ -1088,9 +1164,7 @@ async def test_get_docs_calls_log_skip_summary():
 @pytest.mark.asyncio
 async def test_client_counts_skipped_resources():
     client = build_client()
-    client._graph_api_client = FakeGraphSession(
-        raises={"/members": PermissionsMissing()}
-    )
+    client._graph_api_client = FakeGraphSession(raises={"/members": NotFound()})
     async for _ in client.get_team_members("team-1"):
         pass
     await client.close()
@@ -1101,10 +1175,12 @@ async def test_client_counts_skipped_resources():
 async def test_log_skip_summary_warns_when_skips_recorded():
     client = build_client()
     client._logger = Mock()
-    client._skipped["teams' messages"] = 3
+    client._skipped["channels' messages"] = 3
     client.log_skip_summary()
     await client.close()
     client._logger.warning.assert_called_once()
+    warning = client._logger.warning.call_args[0][0]
+    assert "not found" in warning
     # counters are reset after logging
     assert not client._skipped
 

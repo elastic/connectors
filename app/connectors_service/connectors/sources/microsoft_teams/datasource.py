@@ -69,8 +69,6 @@ class MicrosoftTeamsDataSource(BaseDataSource):
         self._chats_enumeration_failed = False
         self._enumeration_error: Exception | None = None
         self._producer_error: Exception | None = None
-        self._channel_message_fetches = 0
-        self._chat_message_fetches = 0
         self.queue = MemQueue(maxmemsize=QUEUE_MEM_SIZE, refresh_timeout=120)
         self.fetchers = ConcurrentTasks(max_concurrency=MAX_CONCURRENCY)
         self.schema = Schema()
@@ -316,7 +314,9 @@ class MicrosoftTeamsDataSource(BaseDataSource):
                             yield doc
         except PermissionsMissing:
             self._logger.warning(
-                "Unable to enumerate chats for access control. Verify the 'Chat.ReadBasic.WhereInstalled' application permission is granted and the connector's Teams app is installed."
+                "Unable to enumerate chats for access control. Verify the "
+                "'TeamMember.Read.All' and 'Chat.ReadBasic.All' application "
+                "permissions are granted."
             )
 
     # -- Content extraction ------------------------------------------------
@@ -450,8 +450,8 @@ class MicrosoftTeamsDataSource(BaseDataSource):
             self._logger.warning(
                 f"Skipping private/shared channel '{channel_name}' ({channel_id}) "
                 f"in team '{team_id}': unable to resolve channel members for DLS. "
-                f"Install the Teams app with 'ChannelMember.Read.Group', or disable "
-                f"document level security."
+                f"Verify the 'ChannelMember.Read.All' application permission is "
+                f"granted, or disable document level security."
             )
             return None
 
@@ -485,7 +485,6 @@ class MicrosoftTeamsDataSource(BaseDataSource):
             )
         )
 
-        self._channel_message_fetches += 1
         async for messages in self.client.get_channel_messages(team_id, channel_id):
             for message in messages:
                 await self._process_channel_message(
@@ -649,7 +648,6 @@ class MicrosoftTeamsDataSource(BaseDataSource):
                 )
             )
 
-            self._chat_message_fetches += 1
             async for messages in self.client.get_chat_messages(chat_id):
                 for message in messages:
                     await self._process_chat_message(
@@ -693,8 +691,6 @@ class MicrosoftTeamsDataSource(BaseDataSource):
         self._chats_enumeration_failed = False
         self._enumeration_error = None
         self._producer_error = None
-        self._channel_message_fetches = 0
-        self._chat_message_fetches = 0
         try:
             try:
                 async for teams in self.client.get_teams():
@@ -715,7 +711,9 @@ class MicrosoftTeamsDataSource(BaseDataSource):
             except PermissionsMissing:
                 self._chats_enumeration_failed = True
                 self._logger.warning(
-                    "Unable to enumerate chats. Verify the 'Chat.ReadBasic.WhereInstalled' application permission is granted and the connector's Teams app is installed."
+                    "Unable to enumerate chats for team members. Verify the "
+                    "'TeamMember.Read.All' and 'Chat.ReadBasic.All' application "
+                    "permissions are granted."
                 )
         except Exception as exc:
             # An unexpected (non-permission) error is treated as a connection-wide
@@ -728,44 +726,6 @@ class MicrosoftTeamsDataSource(BaseDataSource):
             )
         finally:
             await self.queue.put(EndSignal.ENUMERATION_FINISHED)
-
-    def _raise_if_content_inaccessible(self):
-        """Fail the sync when every message fetch for a corpus was skipped.
-
-        Teams/channels can still be listed with tenant-wide ``*.ReadBasic.All``
-        permissions even when the Teams app is not installed. Without this guard,
-        an under-installed tenant produces a near-empty "successful" sync that
-        deletes previously indexed messages.
-        """
-        skipped = self.client._skipped
-        channel_msg_skips = skipped.get("channels' messages", 0)
-        chat_msg_skips = skipped.get("chats' messages", 0)
-
-        if (
-            self._channel_message_fetches > 0
-            and channel_msg_skips >= self._channel_message_fetches
-        ):
-            msg = (
-                "All channel message fetches were skipped because the connector's "
-                "Teams app is not installed (or 'ChannelMessage.Read.Group' is "
-                "missing). Refusing to report a successful sync, as this would "
-                "delete previously indexed channel messages. Install the Teams app "
-                "into the teams you want to sync."
-            )
-            raise PermissionsMissing(msg)
-
-        if (
-            self._chat_message_fetches > 0
-            and chat_msg_skips >= self._chat_message_fetches
-        ):
-            msg = (
-                "All chat message fetches were skipped because the connector's "
-                "Teams app is not installed (or 'Chat.Read.WhereInstalled' is "
-                "missing). Refusing to report a successful sync, as this would "
-                "delete previously indexed chat messages. Install the Teams app "
-                "into the chats you want to sync."
-            )
-            raise PermissionsMissing(msg)
 
     async def get_docs(self, filtering=None):
         """Executes the logic to fetch Microsoft Teams objects in an async manner.
@@ -784,8 +744,6 @@ class MicrosoftTeamsDataSource(BaseDataSource):
 
         await self.fetchers.join()
 
-        # Inspect skip counters before log_skip_summary clears them.
-        self._raise_if_content_inaccessible()
         self.client.log_skip_summary()
 
         if self._enumeration_error is not None:
@@ -799,14 +757,12 @@ class MicrosoftTeamsDataSource(BaseDataSource):
             if self._teams_enumeration_failed:
                 failed.append("teams ('Team.ReadBasic.All')")
             if self._chats_enumeration_failed:
-                failed.append(
-                    "chats ('Chat.ReadBasic.WhereInstalled' / Teams app install)"
-                )
+                failed.append("chats ('TeamMember.Read.All' / 'Chat.ReadBasic.All')")
             failed_list = " and ".join(failed)
             msg = (
                 f"Enumeration failed for {failed_list}. Refusing to report a "
                 f"successful sync, as this would delete previously indexed "
                 f"documents from the failed corpus. Verify the listed application "
-                f"permissions are granted and the connector's Teams app is installed."
+                f"permissions are granted."
             )
             raise PermissionsMissing(msg)

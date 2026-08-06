@@ -170,6 +170,9 @@ class MicrosoftTeamsAPI:
         )(self.get_channel_files_folder)
 
         self.app.route("/chats", methods=["GET"])(self.get_chats)
+        self.app.route("/users/<string:user_id>/chats", methods=["GET"])(
+            self.get_user_chats
+        )
         self.app.route("/chats/<string:chat_id>/messages", methods=["GET"])(
             self.get_chat_messages
         )
@@ -252,6 +255,13 @@ class MicrosoftTeamsAPI:
         }
 
     def get_chats(self):
+        return {"value": self._chat_list()}
+
+    def get_user_chats(self, user_id):
+        # Same catalog for every team member; the connector dedupes by chat id.
+        return {"value": self._chat_list()}
+
+    def _chat_list(self):
         chats = []
         for chat in range(CHATS):
             chats.append(
@@ -273,7 +283,7 @@ class MicrosoftTeamsAPI:
                     ],
                 }
             )
-        return {"value": chats}
+        return chats
 
     def get_chat_messages(self, chat_id):
         messages = []
