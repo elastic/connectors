@@ -1054,7 +1054,9 @@ async def test_process_channel_message_indexes_attachment_only_message():
         while not source.queue.empty():
             _, item = source.queue.get_nowait()
             docs.append(item[0])
-        message = next(d for d in docs if d["type"] == TeamsObjectType.CHANNEL_MESSAGE.value)
+        message = next(
+            d for d in docs if d["type"] == TeamsObjectType.CHANNEL_MESSAGE.value
+        )
         assert message["_id"] == "msg-empty"
         assert message["attachments"] == [{"id": "drive-f", "title": "f.txt"}]
         file_doc = next(d for d in docs if d["type"] == TeamsObjectType.FILE.value)
@@ -1093,7 +1095,9 @@ async def test_process_chat_message_indexes_attachment_only_message():
         while not source.queue.empty():
             _, item = source.queue.get_nowait()
             docs.append(item[0])
-        message = next(d for d in docs if d["type"] == TeamsObjectType.CHAT_MESSAGE.value)
+        message = next(
+            d for d in docs if d["type"] == TeamsObjectType.CHAT_MESSAGE.value
+        )
         assert message["_id"] == "msg-empty"
         assert message["attachments"] == [{"id": "drive-f", "title": "f.txt"}]
         file_doc = next(d for d in docs if d["type"] == TeamsObjectType.FILE.value)
@@ -1118,7 +1122,10 @@ def test_message_body_and_subject_are_separate():
         "body": {"content": "<p>I just wanna see how all the lovely people doing</p>"},
         "subject": "Hey everyone, how's it going?",
     }
-    assert _message_body_text(payload) == "I just wanna see how all the lovely people doing"
+    assert (
+        _message_body_text(payload)
+        == "I just wanna see how all the lovely people doing"
+    )
     assert _message_subject(payload) == "Hey everyone, how's it going?"
 
 
@@ -1189,7 +1196,9 @@ async def test_process_channel_message_file_share_subject_only():
         while not source.queue.empty():
             _, item = source.queue.get_nowait()
             docs.append(item[0])
-        doc = next(d for d in docs if d["type"] == TeamsObjectType.CHANNEL_MESSAGE.value)
+        doc = next(
+            d for d in docs if d["type"] == TeamsObjectType.CHANNEL_MESSAGE.value
+        )
         assert doc["subject"] == "Yo, here are some logs"
         assert doc["message"] == ""
         assert doc["attachments"] == [{"id": "drive-f", "title": "f.txt"}]
@@ -1436,9 +1445,11 @@ async def test_get_docs_completes_under_low_concurrency():
     async with create_teams_source(fetch_attachment_content=False) as source:
         source.fetchers = ConcurrentTasks(max_concurrency=2)
         source.client.get_teams = MagicMock(return_value=AsyncIterator([two_teams]))
-        source.client.get_team = AsyncMock(side_effect=lambda team_id: next(
-            (t for t in two_teams if t["id"] == team_id), None
-        ))
+        source.client.get_team = AsyncMock(
+            side_effect=lambda team_id: next(
+                (t for t in two_teams if t["id"] == team_id), None
+            )
+        )
         source.client.get_team_members = MagicMock(
             side_effect=lambda *a, **k: AsyncIterator([TEAM_MEMBERS])
         )

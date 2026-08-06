@@ -651,9 +651,7 @@ class MicrosoftTeamsDataSource(BaseDataSource):
     async def team_producer(self, team, members):
         team_id = team.get("id")
         # List /teams often returns null webUrl / createdDateTime; enrich when needed.
-        if team_id and (
-            not team.get("webUrl") or not team.get("createdDateTime")
-        ):
+        if team_id and (not team.get("webUrl") or not team.get("createdDateTime")):
             detailed = await self.client.get_team(team_id)
             if detailed:
                 team = {**team, **{k: v for k, v in detailed.items() if v is not None}}
