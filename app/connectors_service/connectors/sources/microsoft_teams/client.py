@@ -259,6 +259,13 @@ class MicrosoftTeamsClient:
         async for teams in self._graph_api_client.scroll(f"{BASE_URL}/teams?$top=999"):
             yield teams
 
+    async def get_team(self, team_id):
+        """Fetch a single team (list often omits ``webUrl`` / ``createdDateTime``)."""
+        try:
+            return await self._graph_api_client.fetch(f"{BASE_URL}/teams/{team_id}")
+        except NotFound:
+            return None
+
     async def get_team_members(self, team_id):
         try:
             async for members in self._graph_api_client.scroll(

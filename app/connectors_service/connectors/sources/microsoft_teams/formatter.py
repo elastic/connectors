@@ -39,12 +39,19 @@ class MicrosoftTeamsFormatter:
             "email": email or "",
         }
 
-    def format_file(self, drive_item):
-        """Build a File document from a Graph driveItem (no parent denorm)."""
+    def format_file(self, drive_item, parents=None):
+        """Build a File document from a Graph driveItem.
+
+        ``parents`` may include sparse ``channel_id``/``channel_title`` and/or
+        ``chat_id``/``chat_title`` (only keys that are known).
+        """
         document = {"type": TeamsObjectType.FILE.value}
         self.map_document_with_schema(
             document=document, item=drive_item, document_type=self.schema.file
         )
+        for key, value in (parents or {}).items():
+            if value:
+                document[key] = value
         return document
 
     def format_channel_message(

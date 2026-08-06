@@ -108,6 +108,7 @@ class MicrosoftTeamsDataSource(BaseDataSource):
         # Per-sync File dedupe: union ACLs across discovery paths; download once.
         self._file_acls = {}
         self._file_download_scheduled = set()
+        self._file_parents = {}
 
     def _set_internal_logger(self):
         self.client.set_logger(self._logger)
@@ -413,8 +414,21 @@ class MicrosoftTeamsDataSource(BaseDataSource):
     def _attachments_enabled(self):
         return self.configuration["fetch_attachment_content"]
 
-    async def _emit_file(self, drive_item, access_control):
-        """Upsert a File document; schedule content download at most once per sync."""
+    async def _emit_file(
+        self,
+        drive_item,
+        access_control,
+        *,
+        channel_id=None,
+        channel_title=None,
+        chat_id=None,
+        chat_title=None,
+    ):
+        """Upsert a File document; schedule content download at most once per sync.
+
+        Parent fields are sparse: set channel_* and/or chat_* only when known.
+        Re-emitting the same driveItem merges parents and unions ACLs.
+        """
         item_id = drive_item.get("id")
         drive_id = (drive_item.get("parentReference") or {}).get("driveId")
         if not item_id or not drive_id:
@@ -423,7 +437,17 @@ class MicrosoftTeamsDataSource(BaseDataSource):
         acl = self._file_acls.setdefault(item_id, set())
         acl.update(access_control or [])
 
-        document = self.formatter.format_file(drive_item)
+        parents = self._file_parents.setdefault(item_id, {})
+        if channel_id:
+            parents["channel_id"] = channel_id
+            if channel_title:
+                parents["channel_title"] = channel_title
+        if chat_id:
+            parents["chat_id"] = chat_id
+            if chat_title:
+                parents["chat_title"] = chat_title
+
+        document = self.formatter.format_file(drive_item, parents=parents)
         document = self._decorate_with_access_control(document, sorted(acl))
 
         download = None
@@ -442,7 +466,16 @@ class MicrosoftTeamsDataSource(BaseDataSource):
             "title": drive_item.get("name") or "",
         }
 
-    async def _attachments_for_message(self, message, access_control):
+    async def _attachments_for_message(
+        self,
+        message,
+        access_control,
+        *,
+        channel_id=None,
+        channel_title=None,
+        chat_id=None,
+        chat_title=None,
+    ):
         """Resolve reference attachments to File docs; return message ``attachments``."""
         if not self._attachments_enabled():
             return []
@@ -461,7 +494,14 @@ class MicrosoftTeamsDataSource(BaseDataSource):
                     f"unable to resolve contentUrl to a driveItem."
                 )
                 continue
-            ref = await self._emit_file(drive_item, access_control)
+            ref = await self._emit_file(
+                drive_item,
+                access_control,
+                channel_id=channel_id,
+                channel_title=channel_title,
+                chat_id=chat_id,
+                chat_title=chat_title,
+            )
             if ref:
                 if not ref["title"] and attachment.get("name"):
                     ref["title"] = attachment["name"]
@@ -479,7 +519,12 @@ class MicrosoftTeamsDataSource(BaseDataSource):
         message_content = _message_body_text(message)
         if not subject and not message_content and not message.get("attachments"):
             return
-        attachments = await self._attachments_for_message(message, access_control)
+        attachments = await self._attachments_for_message(
+            message,
+            access_control,
+            channel_id=channel_id,
+            channel_title=channel_title,
+        )
         document = self.formatter.format_channel_message(
             item=message,
             channel_id=channel_id,
@@ -492,7 +537,9 @@ class MicrosoftTeamsDataSource(BaseDataSource):
             (self._decorate_with_access_control(document, access_control), None)
         )
 
-    async def _process_channel_files(self, team_id, channel_id, access_control):
+    async def _process_channel_files(
+        self, channel_id, channel_title, access_control, team_id
+    ):
         files_folder = await self.client.get_channel_file(team_id, channel_id)
         if not files_folder:
             return
@@ -502,7 +549,12 @@ class MicrosoftTeamsDataSource(BaseDataSource):
             return
         async for child in self.client.get_channel_drive_children(drive_id, item_id):
             if child.get("file"):
-                await self._emit_file(child, access_control)
+                await self._emit_file(
+                    child,
+                    access_control,
+                    channel_id=channel_id,
+                    channel_title=channel_title,
+                )
 
     async def _resolve_channel_access_control(
         self, channel, team_id, team_members, team_access_control
@@ -593,11 +645,19 @@ class MicrosoftTeamsDataSource(BaseDataSource):
 
         if self._attachments_enabled():
             await self._process_channel_files(
-                team_id, channel_id, channel_access_control
+                channel_id, channel_title, channel_access_control, team_id
             )
 
     async def team_producer(self, team, members):
         team_id = team.get("id")
+        # List /teams often returns null webUrl / createdDateTime; enrich when needed.
+        if team_id and (
+            not team.get("webUrl") or not team.get("createdDateTime")
+        ):
+            detailed = await self.client.get_team(team_id)
+            if detailed:
+                team = {**team, **{k: v for k, v in detailed.items() if v is not None}}
+
         team_title = team.get("displayName")
 
         try:
@@ -655,7 +715,12 @@ class MicrosoftTeamsDataSource(BaseDataSource):
         message_content = _message_body_text(message)
         if not subject and not message_content and not message.get("attachments"):
             return
-        attachments = await self._attachments_for_message(message, access_control)
+        attachments = await self._attachments_for_message(
+            message,
+            access_control,
+            chat_id=chat.get("id"),
+            chat_title=chat.get("topic") or member_names,
+        )
         document = self.formatter.format_chat_message(
             chat=chat,
             message=message,
@@ -725,6 +790,7 @@ class MicrosoftTeamsDataSource(BaseDataSource):
         self._producer_error = None
         self._file_acls = {}
         self._file_download_scheduled = set()
+        self._file_parents = {}
         users = {}
         user_team_acls = {}
         try:

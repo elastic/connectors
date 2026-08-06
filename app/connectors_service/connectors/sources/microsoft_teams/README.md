@@ -58,7 +58,9 @@ login.
 - **Files** (when "Fetch attachment content" is on): channel Files-folder
   drive items plus chat/channel message file attachments resolved via
   ``contentUrl`` → shares API. Message docs carry ``attachments: [{id, title}]``
-  linking to File ``_id`` (driveItem id).
+  linking to File ``_id`` (driveItem id). File docs set sparse
+  ``channel_id``/``channel_title`` and/or ``chat_id``/``chat_title`` from
+  discovery (no empty placeholders).
 
 Team, Channel, and Chat documents include ``member_ids`` (Entra user ids).
 Standard channels inherit the parent team's membership; private/shared channels

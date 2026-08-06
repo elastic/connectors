@@ -58,6 +58,7 @@ TEAMS = [
         "displayName": "Team One",
         "description": "First team",
         "createdDateTime": "2023-08-16T04:46:53.056Z",
+        "webUrl": "https://teams.microsoft.com/l/team/1",
     }
 ]
 
@@ -771,6 +772,7 @@ async def test_get_access_control_skips_when_disabled():
 
 def _mock_client_for_get_docs(source, with_attachments=True):
     source.client.get_teams = MagicMock(return_value=AsyncIterator([TEAMS]))
+    source.client.get_team = AsyncMock(return_value=TEAMS[0])
     source.client.get_team_members = MagicMock(
         return_value=AsyncIterator([TEAM_MEMBERS])
     )
@@ -835,6 +837,14 @@ async def test_get_docs_emits_expected_types():
         files = [doc for doc in docs if doc["type"] == TeamsObjectType.FILE.value]
         assert {f["_id"] for f in files} == {"file-1", "chat-file-1"}
         assert all(f.get("title") for f in files)
+        channel_file = next(f for f in files if f["_id"] == "file-1")
+        assert channel_file["channel_id"] == "channel-1"
+        assert channel_file["channel_title"] == "General"
+        assert "chat_id" not in channel_file
+        chat_file = next(f for f in files if f["_id"] == "chat-file-1")
+        assert chat_file["chat_id"] == "chat-1"
+        assert chat_file["chat_title"] == "Project chat"
+        assert "channel_id" not in chat_file
         chat_msg = next(
             doc for doc in docs if doc["type"] == TeamsObjectType.CHAT_MESSAGE.value
         )
@@ -1047,7 +1057,10 @@ async def test_process_channel_message_indexes_attachment_only_message():
         message = next(d for d in docs if d["type"] == TeamsObjectType.CHANNEL_MESSAGE.value)
         assert message["_id"] == "msg-empty"
         assert message["attachments"] == [{"id": "drive-f", "title": "f.txt"}]
-        assert any(d["type"] == TeamsObjectType.FILE.value for d in docs)
+        file_doc = next(d for d in docs if d["type"] == TeamsObjectType.FILE.value)
+        assert file_doc["channel_id"] == "channel-1"
+        assert file_doc["channel_title"] == "General"
+        assert "chat_id" not in file_doc
 
 
 @pytest.mark.asyncio
@@ -1083,6 +1096,10 @@ async def test_process_chat_message_indexes_attachment_only_message():
         message = next(d for d in docs if d["type"] == TeamsObjectType.CHAT_MESSAGE.value)
         assert message["_id"] == "msg-empty"
         assert message["attachments"] == [{"id": "drive-f", "title": "f.txt"}]
+        file_doc = next(d for d in docs if d["type"] == TeamsObjectType.FILE.value)
+        assert file_doc["chat_id"] == "chat-1"
+        assert file_doc["chat_title"] == "Project chat"
+        assert "channel_id" not in file_doc
 
 
 @pytest.mark.asyncio
@@ -1403,12 +1420,25 @@ async def test_get_docs_completes_under_low_concurrency():
     # channel, that nested scheduling deadlocked. Channels are now processed
     # inline, so the sync must complete regardless of pool size.
     two_teams = [
-        {"id": "team-1", "displayName": "Team One"},
-        {"id": "team-2", "displayName": "Team Two"},
+        {
+            "id": "team-1",
+            "displayName": "Team One",
+            "webUrl": "https://teams.example/1",
+            "createdDateTime": "2023-08-16T04:46:53.056Z",
+        },
+        {
+            "id": "team-2",
+            "displayName": "Team Two",
+            "webUrl": "https://teams.example/2",
+            "createdDateTime": "2023-08-16T04:46:53.056Z",
+        },
     ]
     async with create_teams_source(fetch_attachment_content=False) as source:
         source.fetchers = ConcurrentTasks(max_concurrency=2)
         source.client.get_teams = MagicMock(return_value=AsyncIterator([two_teams]))
+        source.client.get_team = AsyncMock(side_effect=lambda team_id: next(
+            (t for t in two_teams if t["id"] == team_id), None
+        ))
         source.client.get_team_members = MagicMock(
             side_effect=lambda *a, **k: AsyncIterator([TEAM_MEMBERS])
         )
