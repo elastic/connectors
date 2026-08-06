@@ -4,7 +4,9 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 # ruff: noqa: T201
+import base64
 import io
+import json
 import os
 
 from flask import Flask, request
@@ -91,11 +93,7 @@ def get_num_docs():
     print(expected_docs_count())
 
 
-def _message(message_id, with_replies=False):
-    replies = []
-    if with_replies:
-        for reply in range(REPLIES):
-            replies.append(_message(f"{message_id}-reply-{reply}", with_replies=False))
+def _message(message_id):
     return {
         "id": adjust_document_id_size(message_id),
         "messageType": "message",
@@ -109,8 +107,20 @@ def _message(message_id, with_replies=False):
         "from": {"user": {"id": "sender-1", "displayName": "Dummy"}},
         "body": {"contentType": "html", "content": fake_provider.get_html()},
         "attachments": [],
-        "replies": replies,
     }
+
+
+def _fake_access_token(roles):
+    """Build an unsigned JWT whose payload includes the given application roles."""
+    header = (
+        base64.urlsafe_b64encode(b'{"alg":"none","typ":"JWT"}').rstrip(b"=").decode()
+    )
+    payload = (
+        base64.urlsafe_b64encode(json.dumps({"roles": roles}).encode())
+        .rstrip(b"=")
+        .decode()
+    )
+    return f"{header}.{payload}.sig"
 
 
 def _file(file_id, drive_id):
@@ -165,6 +175,11 @@ class MicrosoftTeamsAPI:
             methods=["GET"],
         )(self.get_channel_messages)
         self.app.route(
+            "/teams/<string:team_id>/channels/<string:channel_id>/messages/"
+            "<string:message_id>/replies",
+            methods=["GET"],
+        )(self.get_channel_message_replies)
+        self.app.route(
             "/teams/<string:team_id>/channels/<string:channel_id>/filesFolder",
             methods=["GET"],
         )(self.get_channel_files_folder)
@@ -172,6 +187,9 @@ class MicrosoftTeamsAPI:
         self.app.route("/chats", methods=["GET"])(self.get_chats)
         self.app.route("/users/<string:user_id>/chats", methods=["GET"])(
             self.get_user_chats
+        )
+        self.app.route("/chats/<string:chat_id>/members", methods=["GET"])(
+            self.get_chat_members
         )
         self.app.route("/chats/<string:chat_id>/messages", methods=["GET"])(
             self.get_chat_messages
@@ -191,7 +209,18 @@ class MicrosoftTeamsAPI:
 
     def get_token(self, tenant_id):
         return {
-            "access_token": "fake-access-token",
+            "access_token": _fake_access_token(
+                [
+                    "Team.ReadBasic.All",
+                    "TeamMember.Read.All",
+                    "Channel.ReadBasic.All",
+                    "ChannelMember.Read.All",
+                    "ChannelMessage.Read.All",
+                    "Chat.ReadBasic.All",
+                    "Chat.Read.All",
+                    "Files.Read.All",
+                ]
+            ),
             "token_type": "Bearer",
             "expires_in": 3600,
         }
@@ -241,10 +270,14 @@ class MicrosoftTeamsAPI:
     def get_channel_messages(self, team_id, channel_id):
         messages = []
         for message in range(CHANNEL_MESSAGES):
-            messages.append(
-                _message(f"message-{team_id}-{channel_id}-{message}", with_replies=True)
-            )
+            messages.append(_message(f"message-{team_id}-{channel_id}-{message}"))
         return {"value": messages}
+
+    def get_channel_message_replies(self, team_id, channel_id, message_id):
+        replies = []
+        for reply in range(REPLIES):
+            replies.append(_message(f"{message_id}-reply-{reply}"))
+        return {"value": replies}
 
     def get_channel_files_folder(self, team_id, channel_id):
         drive_id = f"cdrive-{team_id}-{channel_id}"
@@ -272,23 +305,27 @@ class MicrosoftTeamsAPI:
                     "webUrl": f"https://teams.microsoft.com/l/chat/{chat}",
                     "createdDateTime": "2023-07-21T21:24:18.338Z",
                     "lastUpdatedDateTime": "2023-07-21T21:24:18.338Z",
-                    "members": [
-                        {
-                            "id": f"cm-{member}-{chat}",
-                            "displayName": f"Chat member {member}",
-                            "userId": f"user-{member}",
-                            "email": f"member{member}@example.onmicrosoft.com",
-                        }
-                        for member in range(MEMBERS)
-                    ],
                 }
             )
         return chats
 
+    def get_chat_members(self, chat_id):
+        members = []
+        for member in range(MEMBERS):
+            members.append(
+                {
+                    "id": f"cm-{member}-{chat_id}",
+                    "displayName": f"Chat member {member}",
+                    "userId": f"user-{member}",
+                    "email": f"member{member}@example.onmicrosoft.com",
+                }
+            )
+        return {"value": members}
+
     def get_chat_messages(self, chat_id):
         messages = []
         for message in range(CHAT_MESSAGES):
-            doc = _message(f"chat-message-{chat_id}-{message}", with_replies=False)
+            doc = _message(f"chat-message-{chat_id}-{message}")
             doc["attachments"] = [
                 {
                     "id": f"att-{chat_id}-{message}",

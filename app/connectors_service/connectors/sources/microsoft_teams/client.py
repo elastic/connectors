@@ -13,22 +13,28 @@ RSC / WhereInstalled):
 - Channels: `Channel.ReadBasic.All`, `ChannelMember.Read.All`,
   `ChannelMessage.Read.All`
 - Chats: `Chat.ReadBasic.All` (metadata/members), `Chat.Read.All` (messages).
-  Chat discovery walks team members and calls `GET /users/{id}/chats` (there is
-  no tenant-wide app-only `GET /chats`). `User.Read.All` is not required.
-- Attachments: `Files.Read.All` (optional; gated by connector config)
+  Chat discovery walks a provided set of team-member user ids and calls
+  `GET /users/{id}/chats` (there is no tenant-wide app-only `GET /chats`).
+  Chat membership for DLS uses dedicated `GET /chats/{id}/members`.
+  Channel replies use dedicated `GET .../messages/{id}/replies`.
+  `User.Read.All` is not required.
+- Attachments: `Files.Read.All` (required when "Fetch attachment content" is on;
+  validated via the app token ``roles`` claim)
 
 `ChannelMessage.Read.All` and `Chat.Read.All` are protected Teams APIs: admin
 consent alone may not be enough until Microsoft grants protected API access for
 the app in the tenant.
 
 Missing resources (`NotFound`) are soft-skipped where that is normal (e.g. no
-files folder). Permission failures (`PermissionsMissing`) on core reads are not
-swallowed — they fail the sync so a misconfigured app is visible.
+files folder). Permission failures (`PermissionsMissing`) are not swallowed —
+they fail the sync so a misconfigured app is visible.
 """
 
+import base64
+import json
 import os
 from collections import Counter
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterable
 from enum import Enum
 
 import aiohttp
@@ -45,6 +51,7 @@ from connectors.utils import url_encode
 
 GRAPH_ACQUIRE_TOKEN_URL = "https://graph.microsoft.com/.default"  # noqa S105
 DEFAULT_PARALLEL_CONNECTION_COUNT = 10
+FILES_READ_ALL_ROLE = "Files.Read.All"
 
 if "OVERRIDE_URL" in os.environ:
     logger.warning("x" * 50)
@@ -157,6 +164,20 @@ class Schema:
         }
 
 
+def _jwt_payload_roles(access_token):
+    """Return the ``roles`` claim from an app-only access token (unsigned decode)."""
+    try:
+        payload_segment = access_token.split(".")[1]
+        padding = "=" * (-len(payload_segment) % 4)
+        payload = json.loads(
+            base64.urlsafe_b64decode(payload_segment + padding).decode("utf-8")
+        )
+    except (IndexError, ValueError, json.JSONDecodeError, UnicodeDecodeError):
+        return []
+    roles = payload.get("roles") or []
+    return roles if isinstance(roles, list) else []
+
+
 class MicrosoftTeamsClient:
     """Client Class for API calls to Microsoft Teams via Microsoft Graph."""
 
@@ -226,6 +247,19 @@ class MicrosoftTeamsClient:
         )
         self._skipped.clear()
 
+    async def assert_files_permission(self):
+        """Fail if the app token lacks ``Files.Read.All`` (needed for attachments)."""
+        access_token = await self.graph_api_token.get()
+        roles = _jwt_payload_roles(access_token)
+        if FILES_READ_ALL_ROLE not in roles:
+            msg = (
+                "Fetch attachment content is enabled, but the application token "
+                f"does not include the '{FILES_READ_ALL_ROLE}' role. Grant "
+                f"'{FILES_READ_ALL_ROLE}' as an application permission with admin "
+                "consent, or disable 'Fetch attachment content'."
+            )
+            raise PermissionsMissing(msg)
+
     async def ping(self):
         return await self._graph_api_client.fetch(f"{BASE_URL}/teams?$top=1")
 
@@ -260,7 +294,7 @@ class MicrosoftTeamsClient:
     async def get_channel_messages(self, team_id, channel_id):
         try:
             async for messages in self._graph_api_client.scroll(
-                f"{BASE_URL}/teams/{team_id}/channels/{channel_id}/messages?$expand=replies&$top=50"
+                f"{BASE_URL}/teams/{team_id}/channels/{channel_id}/messages?$top=50"
             ):
                 yield messages
         except NotFound:
@@ -268,6 +302,22 @@ class MicrosoftTeamsClient:
             self._logger.debug(
                 f"Skipping messages for channel '{channel_id}' in team '{team_id}': "
                 f"channel was not found."
+            )
+            return
+
+    async def get_channel_message_replies(self, team_id, channel_id, message_id):
+        """Yield all replies for a channel root message (dedicated replies API)."""
+        try:
+            async for replies in self._graph_api_client.scroll(
+                f"{BASE_URL}/teams/{team_id}/channels/{channel_id}/messages/"
+                f"{message_id}/replies?$top=50"
+            ):
+                yield replies
+        except NotFound:
+            self._skipped["channels' message replies"] += 1
+            self._logger.debug(
+                f"Skipping replies for message '{message_id}' in channel "
+                f"'{channel_id}' (team '{team_id}'): message was not found."
             )
             return
 
@@ -296,7 +346,7 @@ class MicrosoftTeamsClient:
             return await self._graph_api_client.fetch(
                 f"{BASE_URL}/teams/{team_id}/channels/{channel_id}/filesFolder"
             )
-        except (NotFound, PermissionsMissing):
+        except NotFound:
             self._logger.debug(
                 f"Skipping files folder for channel '{channel_id}' in team '{team_id}'."
             )
@@ -316,71 +366,61 @@ class MicrosoftTeamsClient:
                         ):
                             yield descendant
                     yield child
-        except (NotFound, PermissionsMissing):
+        except NotFound:
             self._logger.debug(
                 f"Skipping drive children for item '{item_id}' in drive '{drive_id}'."
             )
             return
 
     async def get_user_chats(self, user_id):
-        """Yield chat pages for a user (app-only list-chats path)."""
+        """Yield chat pages for a user (app-only list-chats path; no member expand)."""
         async for chats in self._graph_api_client.scroll(
-            f"{BASE_URL}/users/{user_id}/chats?$expand=members&$top=50"
+            f"{BASE_URL}/users/{user_id}/chats?$top=50"
         ):
             yield chats
 
-    async def get_chats(self):
-        """Yield unique chats of all team members.
+    async def get_chats(self, user_ids: Iterable[str]):
+        """Yield unique chats for the given user ids.
 
-        App-only Graph has no tenant-wide ``GET /chats``. Discovery collects
-        ``userId`` values from team membership, then lists each user's chats and
-        deduplicates by chat id (issue #4145: chats for team members).
+        App-only Graph has no tenant-wide ``GET /chats``. The caller supplies
+        deduplicated team-member ``userId`` values; this method lists each user's
+        chats and deduplicates by chat id. Membership is fetched separately via
+        ``get_chat_members``.
         """
-        seen_user_ids = set()
         seen_chat_ids = set()
-        users_queried = 0
-        users_permission_denied = 0
 
-        async for teams in self.get_teams():
-            for team in teams:
-                team_id = team.get("id")
-                if not team_id:
-                    continue
-                async for members in self.get_team_members(team_id):
-                    for member in members:
-                        user_id = member.get("userId")
-                        if not user_id or user_id in seen_user_ids:
+        for user_id in user_ids:
+            if not user_id:
+                continue
+            try:
+                async for chats in self.get_user_chats(user_id):
+                    unique = []
+                    for chat in chats:
+                        chat_id = chat.get("id")
+                        if not chat_id or chat_id in seen_chat_ids:
                             continue
-                        seen_user_ids.add(user_id)
-                        users_queried += 1
-                        try:
-                            async for chats in self.get_user_chats(user_id):
-                                unique = []
-                                for chat in chats:
-                                    chat_id = chat.get("id")
-                                    if not chat_id or chat_id in seen_chat_ids:
-                                        continue
-                                    seen_chat_ids.add(chat_id)
-                                    unique.append(chat)
-                                if unique:
-                                    yield unique
-                        except NotFound:
-                            self._logger.debug(
-                                f"Skipping chats for user '{user_id}': user was not found."
-                            )
-                        except PermissionsMissing:
-                            users_permission_denied += 1
-                            self._logger.debug(
-                                f"Skipping chats for user '{user_id}': "
-                                f"missing permission to list this user's chats."
-                            )
+                        seen_chat_ids.add(chat_id)
+                        unique.append(chat)
+                    if unique:
+                        yield unique
+            except NotFound:
+                self._logger.debug(
+                    f"Skipping chats for user '{user_id}': user was not found."
+                )
 
-        if users_queried > 0 and users_permission_denied == users_queried:
-            msg = (
-                "Unable to list chats for any team member. Verify the "
-                "'Chat.ReadBasic.All' application permission is granted."
+    async def get_chat_members(self, chat_id):
+        """Yield full membership pages for a chat (dedicated members API)."""
+        try:
+            async for members in self._graph_api_client.scroll(
+                f"{BASE_URL}/chats/{chat_id}/members"
+            ):
+                yield members
+        except NotFound:
+            self._skipped["chats' members"] += 1
+            self._logger.debug(
+                f"Skipping members for chat '{chat_id}': chat was not found."
             )
-            raise PermissionsMissing(msg)
+            return
 
     async def get_chat_messages(self, chat_id):
         try:
@@ -400,7 +440,7 @@ class MicrosoftTeamsClient:
             return await self._graph_api_client.fetch(
                 f"{BASE_URL}/users/{user_id}/drive"
             )
-        except (NotFound, PermissionsMissing):
+        except NotFound:
             return None
 
     async def _get_chat_files_folder(self, drive_id):
@@ -411,7 +451,7 @@ class MicrosoftTeamsClient:
                 for child in children:
                     if child.get("name", "").lower() == CHAT_FILES_FOLDER_NAME:
                         return child
-        except (NotFound, PermissionsMissing):
+        except NotFound:
             return None
         return None
 
@@ -432,7 +472,7 @@ class MicrosoftTeamsClient:
                 f"{BASE_URL}/drives/{drive.get('id')}/items/{folder.get('id')}/children?$filter=name eq '{escaped_name}'"
             ):
                 yield attachments
-        except (NotFound, PermissionsMissing):
+        except NotFound:
             return
 
     async def download_drive_item(self, drive_id, item_id, async_buffer):

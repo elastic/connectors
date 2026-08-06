@@ -194,6 +194,9 @@ class MicrosoftTeamsDataSource(BaseDataSource):
         # Check that we can obtain a Graph API token with the provided credentials
         await self.client.graph_api_token.get()
 
+        if self._attachments_enabled():
+            await self.client.assert_files_permission()
+
     async def ping(self):
         """Verify the connection with Microsoft Teams"""
         try:
@@ -268,56 +271,50 @@ class MicrosoftTeamsDataSource(BaseDataSource):
             return
 
         seen = set()
+        user_ids = set()
 
-        try:
-            async for teams in self.client.get_teams():
-                for team in teams:
-                    async for members in self.client.get_team_members(team["id"]):
-                        for member in members:
-                            doc = self._user_access_control_doc(member)
-                            if doc and doc["_id"] not in seen:
-                                seen.add(doc["_id"])
-                                yield doc
-
-                    # Shared channels can include members outside the parent team;
-                    # private channels are a subset but still need an explicit fetch
-                    # when TeamMember.Read alone is insufficient for DLS identities.
-                    async for channels in self.client.get_team_channels(team["id"]):
-                        for channel in channels:
-                            if (
-                                _channel_membership_type(channel)
-                                not in NON_STANDARD_CHANNEL_TYPES
-                            ):
-                                continue
-                            async for (
-                                channel_members
-                            ) in self.client.get_channel_members(
-                                team["id"], channel["id"]
-                            ):
-                                for member in channel_members:
-                                    doc = self._user_access_control_doc(member)
-                                    if doc and doc["_id"] not in seen:
-                                        seen.add(doc["_id"])
-                                        yield doc
-        except PermissionsMissing:
-            self._logger.warning(
-                "Unable to enumerate teams for access control. Verify the 'Team.ReadBasic.All' application permission is granted."
-            )
-
-        try:
-            async for chats in self.client.get_chats():
-                for chat in chats:
-                    for member in chat.get("members", []):
+        async for teams in self.client.get_teams():
+            for team in teams:
+                async for members in self.client.get_team_members(team["id"]):
+                    for member in members:
+                        user_id = member.get("userId")
+                        if user_id:
+                            user_ids.add(user_id)
                         doc = self._user_access_control_doc(member)
                         if doc and doc["_id"] not in seen:
                             seen.add(doc["_id"])
                             yield doc
-        except PermissionsMissing:
-            self._logger.warning(
-                "Unable to enumerate chats for access control. Verify the "
-                "'TeamMember.Read.All' and 'Chat.ReadBasic.All' application "
-                "permissions are granted."
-            )
+
+                # Shared channels can include members outside the parent team;
+                # private channels are a subset but still need an explicit fetch
+                # when TeamMember.Read alone is insufficient for DLS identities.
+                async for channels in self.client.get_team_channels(team["id"]):
+                    for channel in channels:
+                        if (
+                            _channel_membership_type(channel)
+                            not in NON_STANDARD_CHANNEL_TYPES
+                        ):
+                            continue
+                        async for channel_members in self.client.get_channel_members(
+                            team["id"], channel["id"]
+                        ):
+                            for member in channel_members:
+                                doc = self._user_access_control_doc(member)
+                                if doc and doc["_id"] not in seen:
+                                    seen.add(doc["_id"])
+                                    yield doc
+
+        async for chats in self.client.get_chats(user_ids):
+            for chat in chats:
+                chat_id = chat.get("id")
+                if not chat_id:
+                    continue
+                async for chat_members in self.client.get_chat_members(chat_id):
+                    for member in chat_members:
+                        doc = self._user_access_control_doc(member)
+                        if doc and doc["_id"] not in seen:
+                            seen.add(doc["_id"])
+                            yield doc
 
     # -- Content extraction ------------------------------------------------
 
@@ -490,10 +487,16 @@ class MicrosoftTeamsDataSource(BaseDataSource):
                 await self._process_channel_message(
                     message, channel_name, channel_access_control
                 )
-                for reply in message.get("replies", []):
-                    await self._process_channel_message(
-                        reply, channel_name, channel_access_control
-                    )
+                message_id = message.get("id")
+                if not message_id:
+                    continue
+                async for replies in self.client.get_channel_message_replies(
+                    team_id, channel_id, message_id
+                ):
+                    for reply in replies:
+                        await self._process_channel_message(
+                            reply, channel_name, channel_access_control
+                        )
 
         if self._attachments_enabled():
             files_folder = await self.client.get_channel_file(team_id, channel_id)
@@ -509,15 +512,11 @@ class MicrosoftTeamsDataSource(BaseDataSource):
                                 child, team_name, channel_name, channel_access_control
                             )
 
-    async def team_producer(self, team):
+    async def team_producer(self, team, members):
         team_id = team.get("id")
         team_name = team.get("displayName")
 
         try:
-            members = []
-            async for member_page in self.client.get_team_members(team_id):
-                members.extend(member_page)
-
             access_control = self._access_control_for_members(members)
 
             team_document = self.formatter.format_doc(
@@ -629,11 +628,14 @@ class MicrosoftTeamsDataSource(BaseDataSource):
 
     async def chat_producer(self, chat):
         chat_id = chat.get("id")
-        members = chat.get("members", [])
-        access_control = self._access_control_for_members(members)
-        member_names = self._chat_member_names(members)
 
         try:
+            members = []
+            async for member_page in self.client.get_chat_members(chat_id):
+                members.extend(member_page)
+            access_control = self._access_control_for_members(members)
+            member_names = self._chat_member_names(members)
+
             chat_document = self.formatter.format_doc(
                 item=chat,
                 document_type=self.schema.chat,
@@ -691,11 +693,25 @@ class MicrosoftTeamsDataSource(BaseDataSource):
         self._chats_enumeration_failed = False
         self._enumeration_error = None
         self._producer_error = None
+        user_ids = set()
         try:
             try:
                 async for teams in self.client.get_teams():
                     for team in teams:
-                        await self.fetchers.put(partial(self.team_producer, team))
+                        team_id = team.get("id")
+                        members = []
+                        if team_id:
+                            async for member_page in self.client.get_team_members(
+                                team_id
+                            ):
+                                members.extend(member_page)
+                            for member in members:
+                                user_id = member.get("userId")
+                                if user_id:
+                                    user_ids.add(user_id)
+                        await self.fetchers.put(
+                            partial(self.team_producer, team, members)
+                        )
                         self.tasks += 1
             except PermissionsMissing:
                 self._teams_enumeration_failed = True
@@ -704,7 +720,7 @@ class MicrosoftTeamsDataSource(BaseDataSource):
                 )
 
             try:
-                async for chats in self.client.get_chats():
+                async for chats in self.client.get_chats(user_ids):
                     for chat in chats:
                         await self.fetchers.put(partial(self.chat_producer, chat))
                         self.tasks += 1

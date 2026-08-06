@@ -34,9 +34,9 @@ permissions:
 | `Channel.ReadBasic.All` | List channels of each team. |
 | `ChannelMember.Read.All` | Private/shared channel membership for correct DLS ACLs. |
 | `ChannelMessage.Read.All` | Channel messages and replies. |
-| `Chat.ReadBasic.All` | List chats for team members (names/members); app-only uses `GET /users/{id}/chats`. |
+| `Chat.ReadBasic.All` | List chats for team members; app-only uses `GET /users/{id}/chats`. Chat membership for DLS uses dedicated `GET /chats/{id}/members`. |
 | `Chat.Read.All` | Chat message bodies. |
-| `Files.Read.All` (optional) | Download channel/chat attachment content when "Fetch attachment content" is enabled. |
+| `Files.Read.All` | **Required** when "Fetch attachment content" is enabled (validated from the app token `roles` claim at config time). Download channel/chat attachment content. |
 
 `ChatMember.Read.All` is optional if `Chat.ReadBasic.All` or `Chat.Read.All` is
 already granted (those also authorize chat members).
@@ -56,6 +56,12 @@ login.
 - **Chats of team members** (discovered via team membership → each member's
   chats), including messages and attachments
 
+Discovery is one pass per sync: teams → team members (deduped user ids) → each
+user's chats (deduped by chat id). Chat ACL membership is always loaded with
+`GET /chats/{id}/members` (full list). Channel replies are always loaded with
+`GET .../messages/{id}/replies` (full threads). Incomplete `$expand` shortcuts are
+not used for members or replies.
+
 Chat discovery does **not** use `User.Read.All`. Users who have chats but belong
 to no team are out of scope. The same chat seen for multiple members is indexed
 once (deduped by chat id).
@@ -66,6 +72,8 @@ in the connector configuration.
 
 ## Failures
 
-Missing core application permissions fail the sync rather than producing a quiet
-near-empty index. Optional missing resources (for example no channel files
-folder) are skipped and summarized in a warning.
+Missing core application permissions (`PermissionsMissing` / HTTP 401–403) fail
+the content sync and the access-control sync rather than producing a quiet
+near-empty or incomplete index. Resources that are genuinely absent (`NotFound` /
+HTTP 404) — for example a deleted channel mid-sync or no channel files folder —
+may be soft-skipped and summarized in a warning.

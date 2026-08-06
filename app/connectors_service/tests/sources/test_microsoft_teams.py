@@ -4,6 +4,8 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import asyncio
+import base64
+import json
 from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
@@ -19,6 +21,7 @@ from connectors.sources.microsoft_teams.client import (
     EndSignal,
     Schema,
     TeamsObjectType,
+    _jwt_payload_roles,
 )
 from connectors.sources.microsoft_teams.formatter import MicrosoftTeamsFormatter
 from connectors.sources.shared.microsoft.graph import (
@@ -30,6 +33,22 @@ from connectors.sources.shared.microsoft.graph import (
 from connectors.utils import ConcurrentTasks
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
+
+
+def _fake_access_token(roles):
+    header = (
+        base64.urlsafe_b64encode(b'{"alg":"none","typ":"JWT"}').rstrip(b"=").decode()
+    )
+    payload = (
+        base64.urlsafe_b64encode(json.dumps({"roles": roles}).encode())
+        .rstrip(b"=")
+        .decode()
+    )
+    return f"{header}.{payload}.sig"
+
+
+TOKEN_WITH_FILES = _fake_access_token(["Files.Read.All", "Team.ReadBasic.All"])
+TOKEN_WITHOUT_FILES = _fake_access_token(["Team.ReadBasic.All"])
 
 TEAMS = [
     {
@@ -97,19 +116,6 @@ CHANNEL_MESSAGES = [
         "from": {"user": {"displayName": "Alice"}},
         "body": {"contentType": "html", "content": "<div>Hello channel</div>"},
         "attachments": [],
-        "replies": [
-            {
-                "id": "reply-1",
-                "messageType": "message",
-                "createdDateTime": "2023-08-16T04:48:55.794Z",
-                "lastModifiedDateTime": "2023-08-16T04:48:55.794Z",
-                "deletedDateTime": None,
-                "webUrl": "https://teams.microsoft.com/l/message/1/reply/1",
-                "from": {"user": {"displayName": "Bob"}},
-                "body": {"contentType": "html", "content": "<div>Hi Alice</div>"},
-                "attachments": [],
-            }
-        ],
     },
     {
         "id": "message-2-deleted",
@@ -121,8 +127,21 @@ CHANNEL_MESSAGES = [
         "from": {"user": {"displayName": "Alice"}},
         "body": {"contentType": "html", "content": "<div>deleted</div>"},
         "attachments": [],
-        "replies": [],
     },
+]
+
+CHANNEL_REPLIES = [
+    {
+        "id": "reply-1",
+        "messageType": "message",
+        "createdDateTime": "2023-08-16T04:48:55.794Z",
+        "lastModifiedDateTime": "2023-08-16T04:48:55.794Z",
+        "deletedDateTime": None,
+        "webUrl": "https://teams.microsoft.com/l/message/1/reply/1",
+        "from": {"user": {"displayName": "Bob"}},
+        "body": {"contentType": "html", "content": "<div>Hi Alice</div>"},
+        "attachments": [],
+    }
 ]
 
 CHANNEL_FILES_FOLDER = {
@@ -151,21 +170,22 @@ CHATS = [
         "webUrl": "https://teams.microsoft.com/l/chat/1",
         "createdDateTime": "2023-07-21T21:24:18.338Z",
         "lastUpdatedDateTime": "2023-07-21T21:24:18.338Z",
-        "members": [
-            {
-                "id": "cm-1",
-                "displayName": "Alice",
-                "userId": "user-alice",
-                "email": "alice@example.com",
-            },
-            {
-                "id": "cm-2",
-                "displayName": "Bob",
-                "userId": "user-bob",
-                "email": "bob@example.com",
-            },
-        ],
     }
+]
+
+CHAT_MEMBERS = [
+    {
+        "id": "cm-1",
+        "displayName": "Alice",
+        "userId": "user-alice",
+        "email": "alice@example.com",
+    },
+    {
+        "id": "cm-2",
+        "displayName": "Bob",
+        "userId": "user-bob",
+        "email": "bob@example.com",
+    },
 ]
 
 CHAT_MESSAGES = [
@@ -356,49 +376,117 @@ async def test_client_get_channel_messages_propagates_permissions_missing():
 
 
 @pytest.mark.asyncio
-async def test_client_get_chats_discovers_via_team_members_and_dedupes():
+async def test_client_get_chats_dedupes_across_users():
     """Chats come from GET /users/{id}/chats; the same chat id across members is once."""
     shared_chat = {
         "id": "chat-shared",
         "topic": "Shared",
         "chatType": "group",
-        "members": [],
     }
     alice_only = {
         "id": "chat-alice",
         "topic": "Alice only",
         "chatType": "oneOnOne",
-        "members": [],
     }
     client = build_client()
     client._graph_api_client = FakeGraphSession(
         pages={
-            "/teams?$top=999": [TEAMS],
-            "/teams/team-1/members": [TEAM_MEMBERS],
             "/users/user-alice/chats": [[shared_chat, alice_only]],
             "/users/user-bob/chats": [[shared_chat]],
         }
     )
     chats = []
-    async for page in client.get_chats():
+    async for page in client.get_chats(["user-alice", "user-bob"]):
         chats.extend(page)
     await client.close()
     assert [c["id"] for c in chats] == ["chat-shared", "chat-alice"]
 
 
 @pytest.mark.asyncio
-async def test_client_get_chats_raises_when_all_user_chat_lists_denied():
+async def test_client_get_chats_propagates_permissions_missing():
     client = build_client()
     client._graph_api_client = FakeGraphSession(
-        pages={
-            "/teams?$top=999": [TEAMS],
-            "/teams/team-1/members": [TEAM_MEMBERS],
-        },
-        raises={"/chats": PermissionsMissing()},
+        pages={"/users/user-alice/chats": [[{"id": "chat-1"}]]},
+        raises={"/users/user-bob/chats": PermissionsMissing()},
     )
-    with pytest.raises(PermissionsMissing, match="Chat.ReadBasic.All"):
-        async for _page in client.get_chats():
+    with pytest.raises(PermissionsMissing):
+        async for _page in client.get_chats(["user-alice", "user-bob"]):
             pass
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_client_get_chat_members_propagates_permissions_missing():
+    client = build_client()
+    client._graph_api_client = FakeGraphSession(
+        raises={"/chats/chat-1/members": PermissionsMissing()}
+    )
+    with pytest.raises(PermissionsMissing):
+        async for _page in client.get_chat_members("chat-1"):
+            pass
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_client_get_chat_members_swallows_not_found():
+    client = build_client()
+    client._graph_api_client = FakeGraphSession(
+        raises={"/chats/chat-1/members": NotFound()}
+    )
+    result = []
+    async for page in client.get_chat_members("chat-1"):
+        result.extend(page)
+    await client.close()
+    assert result == []
+    assert client._skipped["chats' members"] == 1
+
+
+@pytest.mark.asyncio
+async def test_client_get_channel_message_replies():
+    client = build_client()
+    client._graph_api_client = FakeGraphSession(
+        pages={"/messages/message-1/replies": [CHANNEL_REPLIES]}
+    )
+    replies = []
+    async for page in client.get_channel_message_replies(
+        "team-1", "channel-1", "message-1"
+    ):
+        replies.extend(page)
+    await client.close()
+    assert [r["id"] for r in replies] == ["reply-1"]
+
+
+@pytest.mark.asyncio
+async def test_client_assert_files_permission_requires_role():
+    client = build_client()
+    client.graph_api_token.get = AsyncMock(return_value=TOKEN_WITHOUT_FILES)
+    with pytest.raises(PermissionsMissing, match="Files.Read.All"):
+        await client.assert_files_permission()
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_client_assert_files_permission_passes_with_role():
+    client = build_client()
+    client.graph_api_token.get = AsyncMock(return_value=TOKEN_WITH_FILES)
+    await client.assert_files_permission()
+    await client.close()
+
+
+def test_jwt_payload_roles():
+    assert "Files.Read.All" in _jwt_payload_roles(TOKEN_WITH_FILES)
+    assert _jwt_payload_roles(TOKEN_WITHOUT_FILES) == ["Team.ReadBasic.All"]
+    assert _jwt_payload_roles("not-a-jwt") == []
+
+
+@pytest.mark.asyncio
+async def test_client_get_channel_file_propagates_permissions_missing():
+    client = build_client()
+    client._graph_api_client = FakeGraphSession(
+        raises={"/filesFolder": PermissionsMissing()}
+    )
+    with pytest.raises(PermissionsMissing):
+        await client.get_channel_file("team-1", "channel-1")
     await client.close()
 
 
@@ -441,10 +529,25 @@ async def test_client_ping_calls_teams_endpoint():
 
 @pytest.mark.asyncio
 async def test_validate_config_fetches_token():
-    async with create_teams_source() as source:
+    async with create_teams_source(fetch_attachment_content=False) as source:
         source.client.graph_api_token.get = AsyncMock(return_value="token")
         await source.validate_config()
         source.client.graph_api_token.get.assert_awaited()
+
+
+@pytest.mark.asyncio
+async def test_validate_config_requires_files_role_when_attachments_enabled():
+    async with create_teams_source(fetch_attachment_content=True) as source:
+        source.client.graph_api_token.get = AsyncMock(return_value=TOKEN_WITHOUT_FILES)
+        with pytest.raises(PermissionsMissing, match="Files.Read.All"):
+            await source.validate_config()
+
+
+@pytest.mark.asyncio
+async def test_validate_config_passes_files_role_when_attachments_enabled():
+    async with create_teams_source(fetch_attachment_content=True) as source:
+        source.client.graph_api_token.get = AsyncMock(return_value=TOKEN_WITH_FILES)
+        await source.validate_config()
 
 
 @pytest.mark.asyncio
@@ -575,6 +678,9 @@ async def test_get_access_control_yields_unique_identities():
             return_value=AsyncIterator([CHANNELS])
         )
         source.client.get_chats = MagicMock(return_value=AsyncIterator([CHATS]))
+        source.client.get_chat_members = MagicMock(
+            return_value=AsyncIterator([CHAT_MEMBERS])
+        )
 
         ids = []
         async for doc in source.get_access_control():
@@ -582,6 +688,8 @@ async def test_get_access_control_yields_unique_identities():
 
         # alice and bob appear in both team and chat, but must be deduped
         assert sorted(ids) == ["user-alice", "user-bob"]
+        source.client.get_chats.assert_called()
+        source.client.get_chat_members.assert_called()
 
 
 @pytest.mark.asyncio
@@ -619,6 +727,18 @@ async def test_get_access_control_includes_private_channel_members():
 
 
 @pytest.mark.asyncio
+async def test_get_access_control_raises_on_permissions_missing():
+    async with create_teams_source(use_document_level_security=True) as source:
+        source._features = Mock()
+        source._features.document_level_security_enabled = Mock(return_value=True)
+        source.client.get_teams = MagicMock(side_effect=PermissionsMissing())
+
+        with pytest.raises(PermissionsMissing):
+            async for _doc in source.get_access_control():
+                pass
+
+
+@pytest.mark.asyncio
 async def test_get_access_control_skips_when_disabled():
     async with create_teams_source(use_document_level_security=False) as source:
         source._features = None
@@ -641,11 +761,21 @@ def _mock_client_for_get_docs(source, with_attachments=True):
     source.client.get_channel_messages = MagicMock(
         return_value=AsyncIterator([CHANNEL_MESSAGES])
     )
+
+    async def _replies(_team_id, _channel_id, message_id):
+        if message_id == "message-1":
+            yield CHANNEL_REPLIES
+        return
+
+    source.client.get_channel_message_replies = MagicMock(side_effect=_replies)
     source.client.get_channel_file = AsyncMock(return_value=CHANNEL_FILES_FOLDER)
     source.client.get_channel_drive_children = MagicMock(
         return_value=AsyncIterator(CHANNEL_DRIVE_CHILDREN)
     )
     source.client.get_chats = MagicMock(return_value=AsyncIterator([CHATS]))
+    source.client.get_chat_members = MagicMock(
+        return_value=AsyncIterator([CHAT_MEMBERS])
+    )
     source.client.get_chat_messages = MagicMock(
         return_value=AsyncIterator([CHAT_MESSAGES])
     )
@@ -711,6 +841,9 @@ async def test_get_docs_raises_when_teams_permission_missing():
     async with create_teams_source() as source:
         source.client.get_teams = MagicMock(side_effect=PermissionsMissing())
         source.client.get_chats = MagicMock(return_value=AsyncIterator([CHATS]))
+        source.client.get_chat_members = MagicMock(
+            return_value=AsyncIterator([CHAT_MEMBERS])
+        )
         source.client.get_chat_messages = MagicMock(
             return_value=AsyncIterator([CHAT_MESSAGES])
         )
@@ -734,6 +867,9 @@ async def test_get_docs_raises_when_chats_permission_missing():
             return_value=AsyncIterator([CHANNELS])
         )
         source.client.get_channel_messages = MagicMock(return_value=AsyncIterator([[]]))
+        source.client.get_channel_message_replies = MagicMock(
+            return_value=AsyncIterator([])
+        )
         source.client.get_chats = MagicMock(side_effect=PermissionsMissing())
 
         with pytest.raises(PermissionsMissing, match="Enumeration failed"):
@@ -898,20 +1034,6 @@ async def test_process_message_handles_null_body_without_raising():
 
 
 @pytest.mark.asyncio
-async def test_get_access_control_tolerates_permissions_missing_on_teams():
-    async with create_teams_source(use_document_level_security=True) as source:
-        source._features = Mock()
-        source._features.document_level_security_enabled = Mock(return_value=True)
-        source.client.get_teams = MagicMock(side_effect=PermissionsMissing())
-        source.client.get_chats = MagicMock(return_value=AsyncIterator([CHATS]))
-
-        ids = [doc["_id"] async for doc in source.get_access_control()]
-
-        # teams enumeration failed but chats still produced identities
-        assert sorted(ids) == ["user-alice", "user-bob"]
-
-
-@pytest.mark.asyncio
 async def test_get_docs_raises_when_both_enumerations_fail():
     async with create_teams_source() as source:
         source.client.get_teams = MagicMock(side_effect=PermissionsMissing())
@@ -1023,11 +1145,13 @@ async def test_private_channel_uses_channel_member_acl_when_dls_enabled():
                                 "content": "<div>secret</div>",
                             },
                             "attachments": [],
-                            "replies": [],
                         }
                     ]
                 ]
             )
+        )
+        source.client.get_channel_message_replies = MagicMock(
+            return_value=AsyncIterator([])
         )
         source.client.get_chats = MagicMock(return_value=AsyncIterator([]))
 
@@ -1069,6 +1193,9 @@ async def test_private_channel_skipped_when_dls_on_and_members_unresolved():
         source.client.get_channel_members = MagicMock(return_value=AsyncIterator([]))
         source.client.get_channel_messages = MagicMock(
             return_value=AsyncIterator([CHANNEL_MESSAGES])
+        )
+        source.client.get_channel_message_replies = MagicMock(
+            return_value=AsyncIterator([])
         )
         source.client.get_chats = MagicMock(return_value=AsyncIterator([]))
 
@@ -1128,6 +1255,9 @@ async def test_get_docs_completes_under_low_concurrency():
         )
         source.client.get_channel_messages = MagicMock(
             side_effect=lambda *a, **k: AsyncIterator([[]])
+        )
+        source.client.get_channel_message_replies = MagicMock(
+            side_effect=lambda *a, **k: AsyncIterator([])
         )
         source.client.get_chats = MagicMock(return_value=AsyncIterator([]))
 
