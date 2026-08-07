@@ -336,10 +336,13 @@ class MicrosoftTeamsDataSource(BaseDataSource):
                 }
 
     def _access_control_for_members(self, members):
-        """Content ACL tokens: ``user_id:`` only (email/UPN live on identity docs)."""
+        """Content ACL tokens: ``user_id:`` only (email/UPN live on identity docs).
+
+        Uses Graph ``userId`` (Entra oid) only — never conversationMember ``id``.
+        """
         access_control = set()
         for member in members or []:
-            user_id = member.get("userId") or member.get("id")
+            user_id = member.get("userId")
             if user_id:
                 access_control.add(_prefix_user_id(user_id))
         return list(access_control)

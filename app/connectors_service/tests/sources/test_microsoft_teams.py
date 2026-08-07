@@ -743,6 +743,27 @@ async def test_access_control_for_members():
 
 
 @pytest.mark.asyncio
+async def test_access_control_for_members_ignores_membership_id_without_user_id():
+    """Graph conversationMember ``id`` is not an Entra oid — do not stamp it."""
+    async with create_teams_source() as source:
+        members = [
+            {
+                "id": "membership-row-not-entra",
+                "displayName": "Bot or incomplete member",
+                # no userId
+            },
+            {
+                "id": "pcm-1",
+                "displayName": "Alice",
+                "userId": "user-alice",
+            },
+        ]
+        acl = source._access_control_for_members(members)
+        assert acl == ["user_id:user-alice"]
+        assert "user_id:membership-row-not-entra" not in acl
+
+
+@pytest.mark.asyncio
 async def test_profile_from_graph_user_keeps_mail_and_upn_separate():
     from connectors.sources.microsoft_teams.datasource import (
         _mail_from_graph_user,
