@@ -906,9 +906,7 @@ class MicrosoftTeamsDataSource(BaseDataSource):
                 await self._ensure_user_profiles(team_member_ids)
 
                 for team, members in team_jobs:
-                    await self.fetchers.put(
-                        partial(self.team_producer, team, members)
-                    )
+                    await self.fetchers.put(partial(self.team_producer, team, members))
                     self.tasks += 1
 
                 for user_id in sorted(team_member_ids):

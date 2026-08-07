@@ -220,6 +220,7 @@ GRAPH_USERS = {
 async def _graph_users_by_ids(user_ids):
     return {uid: GRAPH_USERS[uid] for uid in user_ids if uid in GRAPH_USERS}
 
+
 CHAT_MESSAGES = [
     {
         "id": "chat-message-1",
@@ -760,7 +761,9 @@ async def test_profile_from_graph_user_keeps_mail_and_upn_separate():
         is None
     )
     assert (
-        _upn_from_graph_user({"mail": "mail@example.com", "userPrincipalName": "upn@example.com"})
+        _upn_from_graph_user(
+            {"mail": "mail@example.com", "userPrincipalName": "upn@example.com"}
+        )
         == "upn@example.com"
     )
     profile = _profile_from_graph_user(
@@ -791,7 +794,9 @@ async def test_user_access_control_doc_keeps_email_and_upn_dialects():
         assert doc["identity"]["user_id"] == "user_id:user-carol"
         assert doc["identity"]["email"] is None
         assert doc["identity"]["user"] == "user:carol_guest#EXT#@example.com"
-        assert "user_id:user-carol" in doc["query"]["template"]["params"]["access_control"]
+        assert (
+            "user_id:user-carol" in doc["query"]["template"]["params"]["access_control"]
+        )
         assert (
             "user:carol_guest#EXT#@example.com"
             in doc["query"]["template"]["params"]["access_control"]
@@ -1017,9 +1022,7 @@ async def test_get_docs_user_email_from_graph_not_membership():
         docs = [doc async for doc, _download in source.get_docs()]
 
         users = {
-            doc["_id"]: doc
-            for doc in docs
-            if doc["type"] == TeamsObjectType.USER.value
+            doc["_id"]: doc for doc in docs if doc["type"] == TeamsObjectType.USER.value
         }
         assert users["user-alice"]["email"] == "alice@example.com"
         assert users["user-alice"]["upn"] == "alice@example.com"
@@ -1077,9 +1080,7 @@ async def test_get_docs_user_profile_404_emits_user_without_email():
 
         docs = [doc async for doc, _download in source.get_docs()]
         users = {
-            doc["_id"]: doc
-            for doc in docs
-            if doc["type"] == TeamsObjectType.USER.value
+            doc["_id"]: doc for doc in docs if doc["type"] == TeamsObjectType.USER.value
         }
         assert users["user-alice"]["email"] == "alice@example.com"
         assert users["user-alice"]["upn"] == "alice@example.com"
@@ -1329,7 +1330,11 @@ async def test_get_content_works_after_sink_pops_id():
         source.client.download_drive_item = AsyncMock()
         source.can_file_be_downloaded = Mock(return_value=True)
         handle = AsyncMock(
-            return_value={"_id": doc_id, "_timestamp": attachment["_timestamp"], "body": "hello"}
+            return_value={
+                "_id": doc_id,
+                "_timestamp": attachment["_timestamp"],
+                "body": "hello",
+            }
         )
         source.handle_file_content_extraction = handle
 

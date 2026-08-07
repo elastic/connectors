@@ -434,8 +434,8 @@ class MicrosoftTeamsClient:
                 continue
             if status in (401, 403):
                 msg = (
-                    f"Unable to resolve user profiles. Verify the "
-                    f"'User.ReadBasic.All' application permission is granted."
+                    "Unable to resolve user profiles. Verify the "
+                    "'User.ReadBasic.All' application permission is granted."
                 )
                 raise PermissionsMissing(msg)
             if status != 200 or not user_id:
