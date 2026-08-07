@@ -59,8 +59,10 @@ login.
   chats), including messages
 - **Files** (when "Fetch attachment content" is on): channel Files-folder
   drive items plus chat/channel message file attachments resolved via
-  ``contentUrl`` → shares API. Message docs carry ``attachments: [{id, title}]``
-  linking to File ``_id`` (driveItem id). File docs set sparse
+  ``contentUrl`` → shares API. Each driveItem id becomes **one** File doc and
+  is downloaded at most once per sync (folder and message paths only
+  rediscover; they do not double-index). Message docs carry
+  ``attachments: [{id, title}]`` linking to File ``_id``. File docs set sparse
   ``channel_id``/``channel_title`` and/or ``chat_id``/``chat_title`` from
   discovery (no empty placeholders).
 

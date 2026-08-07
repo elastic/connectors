@@ -1329,6 +1329,79 @@ async def test_get_content_works_after_sink_pops_id():
 
 
 @pytest.mark.asyncio
+async def test_emit_file_queues_once_and_merges_parents_on_rediscovery():
+    """Same driveItem from message + folder must not double-queue the File."""
+    drive_item = {
+        "id": "file-1",
+        "name": "report.txt",
+        "webUrl": "https://example.com/report.txt",
+        "size": 42,
+        "lastModifiedDateTime": "2023-08-16T04:47:29Z",
+        "createdDateTime": "2023-08-16T04:47:26Z",
+        "file": {"mimeType": "text/plain"},
+        "parentReference": {"driveId": "drive-123"},
+    }
+    async with create_teams_source() as source:
+        source.queue = MagicMock()
+        source.queue.put = AsyncMock()
+
+        ref1 = await source._emit_file(
+            drive_item,
+            ["user_id:user-alice"],
+            channel_id="channel-1",
+            channel_title="General",
+        )
+        ref2 = await source._emit_file(
+            drive_item,
+            ["user_id:user-bob"],
+            channel_id="channel-1",
+            channel_title="General",
+            chat_id="chat-1",
+            chat_title="Side chat",
+        )
+
+        assert ref1 == {"id": "file-1", "title": "report.txt"}
+        assert ref2 == {"id": "file-1", "title": "report.txt"}
+        assert source.queue.put.await_count == 1
+
+        queued_doc, download = source.queue.put.await_args.args[0]
+        assert download is not None
+        assert queued_doc is source._file_docs["file-1"]
+        assert queued_doc["channel_id"] == "channel-1"
+        assert queued_doc["channel_title"] == "General"
+        assert queued_doc["chat_id"] == "chat-1"
+        assert queued_doc["chat_title"] == "Side chat"
+
+
+@pytest.mark.asyncio
+async def test_emit_file_merges_acl_on_same_doc_when_dls_enabled():
+    drive_item = {
+        "id": "file-1",
+        "name": "report.txt",
+        "size": 42,
+        "lastModifiedDateTime": "2023-08-16T04:47:29Z",
+        "createdDateTime": "2023-08-16T04:47:26Z",
+        "file": {"mimeType": "text/plain"},
+        "parentReference": {"driveId": "drive-123"},
+    }
+    async with create_teams_source(use_document_level_security=True) as source:
+        source._features = Mock()
+        source._features.document_level_security_enabled = Mock(return_value=True)
+        source.queue = MagicMock()
+        source.queue.put = AsyncMock()
+
+        await source._emit_file(drive_item, ["user_id:user-alice"], channel_id="c1")
+        await source._emit_file(drive_item, ["user_id:user-bob"], channel_id="c1")
+
+        assert source.queue.put.await_count == 1
+        doc = source._file_docs["file-1"]
+        assert sorted(doc[ACCESS_CONTROL]) == [
+            "user_id:user-alice",
+            "user_id:user-bob",
+        ]
+
+
+@pytest.mark.asyncio
 async def test_consumer_decrements_tasks_on_end_signal():
     async with create_teams_source() as source:
         source.tasks = 1

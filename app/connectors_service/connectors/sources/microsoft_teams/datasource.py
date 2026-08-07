@@ -137,9 +137,11 @@ class MicrosoftTeamsDataSource(BaseDataSource):
         self.fetchers = ConcurrentTasks(max_concurrency=MAX_CONCURRENCY)
         self.schema = Schema()
         self.formatter = MicrosoftTeamsFormatter(self.schema)
-        # Per-sync File dedupe: union ACLs across discovery paths; download once.
+        # Per-sync File dedupe: one queued doc + one download per driveItem id.
+        # Message attachments and Files-folder walks may rediscover the same id;
+        # later sights only refresh parents/ACL on the in-flight dict.
         self._file_acls = {}
-        self._file_download_scheduled = set()
+        self._file_docs = {}
         self._file_parents = {}
         # Entra userId → {name, email, user} from Graph /users (not conversationMember).
         # email = mail only; user = userPrincipalName for the ``user:`` ACL dialect.
@@ -497,10 +499,13 @@ class MicrosoftTeamsDataSource(BaseDataSource):
         chat_id=None,
         chat_title=None,
     ):
-        """Upsert a File document; schedule content download at most once per sync.
+        """Discover a File once per driveItem id for this sync.
 
-        Parent fields are sparse: set channel_* and/or chat_* only when known.
-        Re-emitting the same driveItem merges parents and unions ACLs.
+        Folder walks and message attachments may both see the same id. The first
+        sight queues the File (with download). Later sights only merge sparse
+        parents and ACLs onto that same dict so deferred indexing still sees
+        updates — they must not queue again (that would overwrite extracted
+        ``body`` with a metadata-only write).
         """
         item_id = drive_item.get("id")
         drive_id = (drive_item.get("parentReference") or {}).get("driveId")
@@ -520,23 +525,38 @@ class MicrosoftTeamsDataSource(BaseDataSource):
             if chat_title:
                 parents["chat_title"] = chat_title
 
+        title = drive_item.get("name") or ""
+        existing = self._file_docs.get(item_id)
+        if existing is not None:
+            for key, value in parents.items():
+                if value:
+                    existing[key] = value
+            if title and not existing.get("title"):
+                existing["title"] = title
+            self._decorate_with_access_control(existing, sorted(acl))
+            return {
+                "id": item_id,
+                "title": existing.get("title") or title,
+            }
+
         document = self.formatter.format_file(drive_item, parents=parents)
         document = self._decorate_with_access_control(document, sorted(acl))
+        self._file_docs[item_id] = document
 
-        download = None
-        if item_id not in self._file_download_scheduled:
-            self._file_download_scheduled.add(item_id)
-            download = partial(
-                self.get_content,
-                attachment=document,
-                drive_id=drive_id,
-                item_id=item_id,
+        await self.queue.put(
+            (
+                document,
+                partial(
+                    self.get_content,
+                    attachment=document,
+                    drive_id=drive_id,
+                    item_id=item_id,
+                ),
             )
-
-        await self.queue.put((document, download))
+        )
         return {
             "id": item_id,
-            "title": drive_item.get("name") or "",
+            "title": title,
         }
 
     async def _attachments_for_message(
@@ -860,7 +880,7 @@ class MicrosoftTeamsDataSource(BaseDataSource):
         self._enumeration_error = None
         self._producer_error = None
         self._file_acls = {}
-        self._file_download_scheduled = set()
+        self._file_docs = {}
         self._file_parents = {}
         self._user_profiles = {}
         self._member_names = {}
