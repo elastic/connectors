@@ -472,9 +472,11 @@ class MicrosoftTeamsDataSource(BaseDataSource):
         if not self.can_file_be_downloaded(file_extension, filename, file_size):
             return
 
+        # Sink pops ``_id`` from this same dict before deferred download runs;
+        # prefer ``item_id`` / surviving ``id`` over ``_id``.
         document = {
-            "_id": attachment["_id"],
-            "_timestamp": attachment["_timestamp"],
+            "_id": item_id or attachment.get("id") or attachment.get("_id"),
+            "_timestamp": attachment.get("_timestamp") or timestamp,
         }
 
         async with self.create_temp_file(file_extension) as async_buffer:

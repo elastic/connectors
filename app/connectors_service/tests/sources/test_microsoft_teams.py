@@ -1286,6 +1286,51 @@ async def test_get_content_downloads_and_extracts():
 
 
 @pytest.mark.asyncio
+async def test_get_content_works_after_sink_pops_id():
+    """Framework pops ``_id`` before deferred download; content must still extract."""
+    async with create_teams_source() as source:
+        attachment = {
+            "_id": "file-1",
+            "id": "file-1",
+            "_timestamp": "2023-08-16T04:47:29Z",
+            "title": "report.txt",
+            "size_in_bytes": 42,
+        }
+        # Mirror SyncJobRunner / Extractor: pop ``_id``, keep ``id``.
+        doc_id = attachment.pop("_id")
+        attachment["id"] = doc_id
+
+        source.client.download_drive_item = AsyncMock()
+        source.can_file_be_downloaded = Mock(return_value=True)
+        handle = AsyncMock(
+            return_value={
+                "_id": doc_id,
+                "_timestamp": attachment["_timestamp"],
+                "body": "hello",
+            }
+        )
+        source.handle_file_content_extraction = handle
+
+        @asynccontextmanager
+        async def fake_temp(_ext):
+            buffer = MagicMock()
+            buffer.name = "/tmp/report.txt"
+            buffer.close = AsyncMock()
+            yield buffer
+
+        source.create_temp_file = fake_temp
+
+        result = await source.get_content(
+            attachment, drive_id="drive-123", item_id=doc_id, doit=True
+        )
+
+        assert result is not None
+        assert result["_id"] == doc_id
+        assert result["body"] == "hello"
+        source.client.download_drive_item.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_consumer_decrements_tasks_on_end_signal():
     async with create_teams_source() as source:
         source.tasks = 1
