@@ -601,6 +601,30 @@ async def test_ping_raises_on_error():
             await source.ping()
 
 
+@pytest.mark.asyncio
+async def test_close_ends_extraction_session_when_configured():
+    async with create_teams_source() as source:
+        source.client.close = AsyncMock()
+        source.extraction_service = MagicMock()
+        source.extraction_service._end_session = AsyncMock()
+
+        await source.close()
+
+        source.client.close.assert_awaited_once()
+        source.extraction_service._end_session.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_close_skips_extraction_session_when_absent():
+    async with create_teams_source() as source:
+        source.client.close = AsyncMock()
+        source.extraction_service = None
+
+        await source.close()
+
+        source.client.close.assert_awaited_once()
+
+
 # -- Formatter ---------------------------------------------------------------
 
 

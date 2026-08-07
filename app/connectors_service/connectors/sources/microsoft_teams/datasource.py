@@ -282,8 +282,10 @@ class MicrosoftTeamsDataSource(BaseDataSource):
             raise
 
     async def close(self):
-        """Closes unclosed client session"""
+        """Closes Graph and extraction HTTP sessions."""
         await self.client.close()
+        if self.extraction_service is not None:
+            await self.extraction_service._end_session()
 
     # -- Document level security -------------------------------------------
 
