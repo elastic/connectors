@@ -31,7 +31,7 @@ permissions:
 | --- | --- |
 | `Team.ReadBasic.All` | Enumerate teams in the tenant. |
 | `TeamMember.Read.All` | Team membership (DLS) and user ids for chat discovery. |
-| `User.ReadBasic.All` | Resolve team-member (and ACL participant) profiles for User docs and consistent DLS identities (`mail` → `email:`, UPN → `user:`, plus `user_id:`). |
+| `User.ReadBasic.All` | Resolve team-member (and ACL-participant) profiles for User content docs and identity docs (`mail` → `email:`, UPN → `user:`, plus `user_id:`). |
 | `Channel.ReadBasic.All` | List channels of each team. |
 | `ChannelMember.Read.All` | Private/shared channel membership for correct DLS ACLs. |
 | `ChannelMessage.Read.All` | Channel messages and replies. |
@@ -53,7 +53,8 @@ login.
 ## What gets synced
 
 - **Team**, **Channel**, channel **messages** / **replies**
-- **Users** (unique Entra users who belong to at least one synced team)
+- **Users** (unique Entra users who belong to at least one synced team), with
+  ``name``, ``email`` (Graph ``mail``), and ``upn`` (Graph ``userPrincipalName``)
 - **Chats of team members** (discovered via team membership → each member's
   chats), including messages
 - **Files** (when "Fetch attachment content" is on): channel Files-folder
@@ -81,11 +82,17 @@ members of at least one synced team. Users who have chats but belong to no team
 are out of scope. The same chat seen for multiple members is indexed once
 (deduped by chat id).
 
-Document level security restricts search results to members of the relevant
-team, private/shared channel, or chat. Content and identity ACLs use
-``user_id:``, ``email:`` (Graph ``mail`` only), and ``user:`` (Graph
-``userPrincipalName``, SPO-aligned). Enable "Enable document level security"
-in the connector configuration.
+Document level security restricts search results for Teams, Channels, Chats,
+messages, and Files to members of the relevant team, private/shared channel, or
+chat. Those content documents stamp ``user_id:`` only on
+``_allow_access_control``. Access-control (identity) documents carry
+``user_id:``, ``email:`` (Graph ``mail``), and ``user:`` (Graph
+``userPrincipalName``, SPO-aligned) so email/UPN login can still match
+``user_id:``-only content ACLs.
+
+User content documents are directory metadata for synced team members and are
+**not** DLS-restricted (no ``_allow_access_control`` field). Enable "Enable
+document level security" in the connector configuration.
 
 ## Failures
 

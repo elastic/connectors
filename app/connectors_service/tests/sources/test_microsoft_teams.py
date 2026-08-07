@@ -606,11 +606,21 @@ async def test_ping_raises_on_error():
 
 def test_formatter_user():
     formatter = MicrosoftTeamsFormatter(Schema())
-    doc = formatter.format_user("user-alice", "Alice", "alice@example.com")
+    doc = formatter.format_user(
+        "user-alice", "Alice", "alice@example.com", upn="alice@contoso.onmicrosoft.com"
+    )
     assert doc["_id"] == "user-alice"
     assert doc["type"] == TeamsObjectType.USER.value
     assert doc["name"] == "Alice"
     assert doc["email"] == "alice@example.com"
+    assert doc["upn"] == "alice@contoso.onmicrosoft.com"
+
+
+def test_formatter_user_empty_upn_defaults_to_empty_string():
+    formatter = MicrosoftTeamsFormatter(Schema())
+    doc = formatter.format_user("user-alice", "Alice", None)
+    assert doc["email"] == ""
+    assert doc["upn"] == ""
 
 
 def test_formatter_channel_message():
@@ -700,35 +710,11 @@ async def test_dls_disabled_when_features_missing():
 @pytest.mark.asyncio
 async def test_access_control_for_members():
     async with create_teams_source() as source:
-        # Without profiles, membership email is used as fallback.
+        # Content ACLs are user_id: only; email/UPN belong on identity docs.
         acl = source._access_control_for_members(TEAM_MEMBERS)
-        assert "user_id:user-alice" in acl
-        assert "email:alice@example.com" in acl
-        assert "user_id:user-bob" in acl
-
-
-@pytest.mark.asyncio
-async def test_access_control_prefers_resolved_profile_email():
-    async with create_teams_source() as source:
-        source._user_profiles = {
-            "user-alice": {
-                "name": "Alice",
-                "email": "alice.resolved@example.com",
-                "user": "alice.upn@example.com",
-            }
-        }
-        members = [
-            {
-                "userId": "user-alice",
-                "displayName": "Alice",
-                "email": "",  # membership often null
-            }
-        ]
-        acl = source._access_control_for_members(members)
-        assert "user_id:user-alice" in acl
-        assert "email:alice.resolved@example.com" in acl
-        assert "user:alice.upn@example.com" in acl
-        assert "email:alice@example.com" not in acl
+        assert sorted(acl) == ["user_id:user-alice", "user_id:user-bob"]
+        assert not any(token.startswith("email:") for token in acl)
+        assert not any(token.startswith("user:") for token in acl)
 
 
 @pytest.mark.asyncio
@@ -766,8 +752,10 @@ async def test_profile_from_graph_user_keeps_mail_and_upn_separate():
 
 
 @pytest.mark.asyncio
-async def test_access_control_upn_only_when_mail_missing():
-    async with create_teams_source() as source:
+async def test_user_access_control_doc_keeps_email_and_upn_dialects():
+    async with create_teams_source(use_document_level_security=True) as source:
+        source._features = Mock()
+        source._features.document_level_security_enabled = Mock(return_value=True)
         source._user_profiles = {
             "user-carol": {
                 "name": "Carol",
@@ -775,11 +763,15 @@ async def test_access_control_upn_only_when_mail_missing():
                 "user": "carol_guest#EXT#@example.com",
             }
         }
-        members = [{"userId": "user-carol", "displayName": "Carol", "email": None}]
-        acl = source._access_control_for_members(members)
-        assert "user_id:user-carol" in acl
-        assert "user:carol_guest#EXT#@example.com" in acl
-        assert not any(token.startswith("email:") for token in acl)
+        doc = source._user_access_control_doc("user-carol")
+        assert doc["identity"]["user_id"] == "user_id:user-carol"
+        assert doc["identity"]["email"] is None
+        assert doc["identity"]["user"] == "user:carol_guest#EXT#@example.com"
+        assert "user_id:user-carol" in doc["query"]["template"]["params"]["access_control"]
+        assert (
+            "user:carol_guest#EXT#@example.com"
+            in doc["query"]["template"]["params"]["access_control"]
+        )
 
 
 @pytest.mark.asyncio
@@ -1006,13 +998,17 @@ async def test_get_docs_user_email_from_graph_not_membership():
             if doc["type"] == TeamsObjectType.USER.value
         }
         assert users["user-alice"]["email"] == "alice@example.com"
+        assert users["user-alice"]["upn"] == "alice@example.com"
         assert users["user-bob"]["email"] == "bob@example.com"
+        assert users["user-bob"]["upn"] == "bob@example.com"
+        assert ACCESS_CONTROL not in users["user-alice"]
+        assert ACCESS_CONTROL not in users["user-bob"]
 
         chat = next(doc for doc in docs if doc["type"] == TeamsObjectType.CHAT.value)
-        assert "email:alice@example.com" in chat[ACCESS_CONTROL]
-        assert "email:bob@example.com" in chat[ACCESS_CONTROL]
-        assert "user:alice@example.com" in chat[ACCESS_CONTROL]
-        assert "user:bob@example.com" in chat[ACCESS_CONTROL]
+        assert sorted(chat[ACCESS_CONTROL]) == [
+            "user_id:user-alice",
+            "user_id:user-bob",
+        ]
         source.client.get_users_by_ids.assert_called()
         # Chat discovery still uses team-member ids
         source.client.get_chats.assert_called()
@@ -1062,10 +1058,16 @@ async def test_get_docs_user_profile_404_emits_user_without_email():
             if doc["type"] == TeamsObjectType.USER.value
         }
         assert users["user-alice"]["email"] == "alice@example.com"
+        assert users["user-alice"]["upn"] == "alice@example.com"
         assert users["user-bob"]["email"] == ""
+        assert users["user-bob"]["upn"] == ""
         assert users["user-bob"]["name"] == "Bob"  # membership fallback
+        assert ACCESS_CONTROL not in users["user-bob"]
         team = next(doc for doc in docs if doc["type"] == TeamsObjectType.TEAM.value)
-        assert "user_id:user-bob" in team[ACCESS_CONTROL]
+        assert sorted(team[ACCESS_CONTROL]) == [
+            "user_id:user-alice",
+            "user_id:user-bob",
+        ]
         assert "email:bob@example.com" not in team[ACCESS_CONTROL]
         # Chat discovery still receives both team member ids
         called_ids = set(source.client.get_chats.call_args[0][0])
@@ -1303,11 +1305,7 @@ async def test_get_content_works_after_sink_pops_id():
         source.client.download_drive_item = AsyncMock()
         source.can_file_be_downloaded = Mock(return_value=True)
         handle = AsyncMock(
-            return_value={
-                "_id": doc_id,
-                "_timestamp": attachment["_timestamp"],
-                "body": "hello",
-            }
+            return_value={"_id": doc_id, "_timestamp": attachment["_timestamp"], "body": "hello"}
         )
         source.handle_file_content_extraction = handle
 
@@ -1694,11 +1692,7 @@ async def test_private_channel_uses_channel_member_acl_when_dls_enabled():
         assert len(message_docs) == 1
         assert channel_docs[0]["member_ids"] == ["user-alice"]
         # Only Alice (channel member), not Bob (team member outside the channel)
-        assert channel_docs[0][ACCESS_CONTROL] == [
-            "email:alice@example.com",
-            "user:alice@example.com",
-            "user_id:user-alice",
-        ]
+        assert channel_docs[0][ACCESS_CONTROL] == ["user_id:user-alice"]
         assert message_docs[0][ACCESS_CONTROL] == channel_docs[0][ACCESS_CONTROL]
         source.client.get_channel_members.assert_called()
 

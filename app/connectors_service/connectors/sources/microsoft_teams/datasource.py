@@ -331,37 +331,14 @@ class MicrosoftTeamsDataSource(BaseDataSource):
                     "user": "",
                 }
 
-    def _add_profile_acl_identities(self, access_control, user_id, *, member=None):
-        """Add ``email:`` / ``user:`` tokens from profile cache (membership email fallback)."""
-        profile = self._user_profiles.get(user_id) if user_id else None
-        email = (profile or {}).get("email") or None
-        if not email and member is not None:
-            email = (member.get("email") or "").strip() or None
-        if email:
-            access_control.add(_prefix_email(email))
-
-        upn = (profile or {}).get("user") or None
-        if upn:
-            access_control.add(_prefix_user(upn))
-
     def _access_control_for_members(self, members):
+        """Content ACL tokens: ``user_id:`` only (email/UPN live on identity docs)."""
         access_control = set()
         for member in members or []:
             user_id = member.get("userId") or member.get("id")
             if user_id:
                 access_control.add(_prefix_user_id(user_id))
-            self._add_profile_acl_identities(access_control, user_id, member=member)
         return list(access_control)
-
-    def _access_control_for_user_ids(self, user_ids):
-        """Build ACL tokens for a set of Entra ids using the profile cache."""
-        access_control = set()
-        for user_id in user_ids or []:
-            if not user_id:
-                continue
-            access_control.add(_prefix_user_id(user_id))
-            self._add_profile_acl_identities(access_control, user_id)
-        return access_control
 
     def _user_access_control_doc(self, user_id):
         if not user_id:
@@ -688,8 +665,6 @@ class MicrosoftTeamsDataSource(BaseDataSource):
             )
             return team_access_control, []
 
-        self._remember_member_names(channel_members)
-        await self._ensure_user_profiles(_member_ids(channel_members))
         return self._access_control_for_members(channel_members), channel_members
 
     async def _produce_channel(
@@ -836,8 +811,6 @@ class MicrosoftTeamsDataSource(BaseDataSource):
             members = []
             async for member_page in self.client.get_chat_members(chat_id):
                 members.extend(member_page)
-            self._remember_member_names(members)
-            await self._ensure_user_profiles(_member_ids(members))
             access_control = self._access_control_for_members(members)
             member_names = self._chat_member_names(members)
 
@@ -893,7 +866,6 @@ class MicrosoftTeamsDataSource(BaseDataSource):
         self._member_names = {}
         team_jobs = []
         team_member_ids = set()
-        user_team_member_ids = {}
         try:
             try:
                 async for teams in self.client.get_teams():
@@ -906,12 +878,7 @@ class MicrosoftTeamsDataSource(BaseDataSource):
                             ):
                                 members.extend(member_page)
                             self._remember_member_names(members)
-                            member_ids = _member_ids(members)
-                            team_member_ids.update(member_ids)
-                            for user_id in member_ids:
-                                user_team_member_ids.setdefault(user_id, set()).update(
-                                    member_ids
-                                )
+                            team_member_ids.update(_member_ids(members))
                         team_jobs.append((team, members))
 
                 await self._ensure_user_profiles(team_member_ids)
@@ -928,16 +895,12 @@ class MicrosoftTeamsDataSource(BaseDataSource):
                         user_id=user_id,
                         name=profile.get("name") or self._member_names.get(user_id),
                         email=profile.get("email"),
+                        upn=profile.get("user"),
                     )
                     user_document["_timestamp"] = iso_zulu()
-                    teammate_ids = user_team_member_ids.get(user_id, {user_id})
-                    user_acl = sorted(self._access_control_for_user_ids(teammate_ids))
-                    await self.queue.put(
-                        (
-                            self._decorate_with_access_control(user_document, user_acl),
-                            None,
-                        )
-                    )
+                    # User docs are directory metadata: no DLS field (unrestricted
+                    # within the search index). Membership content uses user_id: ACLs.
+                    await self.queue.put((user_document, None))
             except PermissionsMissing:
                 self._teams_enumeration_failed = True
                 self._logger.warning(

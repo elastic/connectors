@@ -112,6 +112,7 @@ class Schema:
             "_id": "id",
             "name": "displayName",
             "email": "mail",
+            "upn": "userPrincipalName",
         }
 
     def channel(self):
