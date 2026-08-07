@@ -3,224 +3,115 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-from calendar import month_name
-from datetime import datetime
-
-from connectors.sources.microsoft_teams.client import TeamEndpointName, UserEndpointName
+from connectors.sources.microsoft_teams.client import TeamsObjectType
 
 
 class MicrosoftTeamsFormatter:
-    """Format documents"""
+    """Format Microsoft Graph objects into Elasticsearch documents."""
 
     def __init__(self, schema):
         self.schema = schema
 
-    def map_document_with_schema(
-        self,
-        document,
-        item,
-        document_type,
-    ):
-        """Prepare key mappings for documents
+    def map_document_with_schema(self, document, item, document_type):
+        """Prepare key mappings for documents.
 
         Args:
-            document(dictionary): Modified document
-            item (dictionary): Document from Microsoft Teams.
-            document_type(string): Name of function to be called for fetching the mapping.
-
-        Returns:
-            dictionary: Modified document with the help of adapter schema.
+            document (dict): Document being built.
+            item (dict): Object returned by Microsoft Graph.
+            document_type (callable): Schema method returning the field mapping.
         """
-        for elasticsearch_field, sharepoint_field in document_type().items():
-            document[elasticsearch_field] = item.get(sharepoint_field)
+        for elasticsearch_field, graph_field in document_type().items():
+            document[elasticsearch_field] = item.get(graph_field)
 
-    def format_doc(self, item, document_type, **kwargs):
-        document = {}
-        for elasticsearch_field, sharepoint_field in kwargs["document"].items():
-            document[elasticsearch_field] = sharepoint_field
+    def format_doc(self, item, document_type, document):
+        result = dict(document)
         self.map_document_with_schema(
-            document=document, item=item, document_type=document_type
+            document=result, item=item, document_type=document_type
         )
-        return document
+        return result
 
-    def format_user_chat_meeting_recording(self, item, url):
-        document = {"type": UserEndpointName.MEETING_RECORDING.value}
-        document.update(
-            {
-                "_id": item.get("eventDetail", {}).get("callId"),
-                "title": item.get("eventDetail", {}).get("callRecordingDisplayName"),
-                "url": url,
-                "_timestamp": item.get("lastModifiedDateTime"),
-            }
-        )
-        return document
+    def format_user(self, user_id, name, email, upn=None):
+        """Build a User document keyed by Entra user id (team members only).
 
-    def get_calendar_detail(self, calendar):
-        body = ""
-        organizer = calendar.get("organizer", {}).get("emailAddress").get("name")
-        calendar_recurrence = calendar.get("recurrence")
-        if calendar_recurrence:
-            recurrence_range = calendar_recurrence.get("range")
-            pattern = calendar_recurrence.get("pattern")
-            occurrence = f"{pattern['interval']}" if pattern.get("interval") else ""
-            pattern_type = pattern.get("type", "")
+        ``name`` / ``email`` / ``upn`` should come from Graph ``/users`` profiles
+        (``displayName``, ``mail``, ``userPrincipalName``).
+        """
+        return {
+            "_id": user_id,
+            "type": TeamsObjectType.USER.value,
+            "name": name or "",
+            "email": email or "",
+            "upn": upn or "",
+        }
 
-            # In case type of meeting is daily so body will be: Recurrence: Occurs every 1 day starting {startdate}
-            # until {enddate}
-            if pattern_type == "daily":
-                days = f"{occurrence} day"
+    def format_file(self, drive_item, parents=None):
+        """Build a File document from a Graph driveItem.
 
-            # If type of meeting  is yearly so body will be: Recurrence: Occurs every year on day 5 of march starting
-            # {date} until {enddate}
-            elif pattern_type in ["absoluteYearly", "relativeYearly"]:
-                day_pattern = (
-                    f"on day {pattern['dayOfMonth']}"
-                    if pattern.get("dayOfMonth")
-                    else f"on {pattern['index']} {','.join(pattern['daysOfWeek'])}"
-                )
-                days = f"year {day_pattern} of {month_name[pattern['month']]}"
-
-            # If type of meeting  is monthly so body will be: Recurrence: Occurs every month on day 5 of march
-            # starting {date} until {enddate}
-            elif pattern_type in ["absoluteMonthly", "relativeMonthly"]:
-                days_pattern = (
-                    f"on day {pattern['dayOfMonth']}"
-                    if pattern.get("dayOfMonth")
-                    else f"on {pattern['index']} {','.join(pattern['daysOfWeek'])}"
-                )
-                days = f"{occurrence} month {days_pattern}"
-
-            # Else goes in weekly situation where body will be: Recurrence: Occurs Every 3 week on monday,tuesday,
-            # wednesday starting {date} until {enddate}
-            else:
-                week = ",".join(pattern.get("daysOfWeek"))
-                days = f"{occurrence} week on {week}"
-
-            date = (
-                f"{recurrence_range.get('startDate')}"
-                if recurrence_range.get("type", "") == "noEnd"
-                else f"{recurrence_range.get('startDate')} until {recurrence_range.get('endDate')}"
-            )
-            recurrence = f"Occurs Every {days} starting {date}"
-            body = f"Recurrence: {recurrence} Organizer: {organizer}"
-
-        else:
-            start_time = datetime.strptime(
-                calendar["start"]["dateTime"][:-4], USER_MEETING_DATETIME_FORMAT
-            ).strftime("%d %b, %Y at %H:%M")
-            end_time = datetime.strptime(
-                calendar["end"]["dateTime"][:-4], USER_MEETING_DATETIME_FORMAT
-            ).strftime("%d %b, %Y at %H:%M")
-            body = f"Schedule: {start_time} to {end_time} Organizer: {organizer}"
-        return body
-
-    def format_user_calendars(self, item):
-        document = {"type": UserEndpointName.MEETING.value}
-        attendee_list = (
-            [
-                f"{attendee.get('emailAddress', {}).get('name')}({attendee.get('emailAddress', {}).get('address')})"
-                for attendee in item["attendees"]
-            ]
-            if item.get("attendees")
-            else []
-        )
-        document.update(
-            {  # pyright: ignore
-                "attendees": attendee_list,
-                "online_meeting_url": item["onlineMeeting"].get("joinUrl")
-                if item.get("onlineMeeting")
-                else "",
-                "description": item.get("bodyPreview"),
-                "meeting_detail": self.get_calendar_detail(calendar=item),
-                "location": [
-                    f"{location['displayName']}" for location in item["locations"]
-                ]
-                if item.get("locations")
-                else [],
-            }
-        )
+        ``parents`` may include sparse ``channel_id``/``channel_title`` and/or
+        ``chat_id``/``chat_title`` (only keys that are known).
+        """
+        document = {"type": TeamsObjectType.FILE.value}
         self.map_document_with_schema(
-            document=document, item=item, document_type=self.schema.meeting
+            document=document, item=drive_item, document_type=self.schema.file
         )
+        for key, value in (parents or {}).items():
+            if value:
+                document[key] = value
         return document
 
-    def format_channel_message(self, item, channel_name, message_content):
-        document = {"type": TeamEndpointName.MESSAGE.value}
-        document.update(
-            {  # pyright: ignore
-                "sender": item["from"]["user"].get("displayName")
-                if item.get("from") and item["from"].get("user")
-                else "",
-                "channel": channel_name,
-                "message": message_content,
-                "attached_documents": self.format_attachment_names(
-                    attachments=item.get("attachments")
-                ),
-            }
-        )
+    def format_channel_message(
+        self,
+        item,
+        channel_id,
+        channel_title,
+        message_content,
+        subject="",
+        attachments=None,
+    ):
+        sender_name, sender_id = self._sender_fields(item)
+        document = {
+            "type": TeamsObjectType.CHANNEL_MESSAGE.value,
+            "sender_name": sender_name,
+            "sender_id": sender_id,
+            "channel_id": channel_id,
+            "channel_title": channel_title,
+            "subject": subject,
+            "message": message_content,
+            "reply_to_id": item.get("replyToId") or "",
+            "attachments": attachments or [],
+        }
         self.map_document_with_schema(
             document=document, item=item, document_type=self.schema.channel_message
         )
         return document
 
-    def format_channel_meeting(self, reply):
-        document = {"type": TeamEndpointName.MEETING.value}
-        event = reply["eventDetail"]
-        if event.get("@odata.type") == "#microsoft.graph.callEndedEventMessageDetail":
-            participant_list = []
-            for participant in event.get("callParticipants", []):
-                user = participant.get("participant", {}).get("user")
-                if user:
-                    participant_list.append(user.get("displayName"))
-            participant_names = ", ".join(participant_list)
-            document.update(
-                {
-                    "_id": event.get("callId"),
-                    "_timestamp": reply.get("lastModifiedDateTime"),
-                    "participants": participant_names,
-                }
-            )
-        elif (
-            event.get("@odata.type")
-            == "#microsoft.graph.callRecordingEventMessageDetail"
-        ):
-            if event.get("callRecordingUrl") and (
-                ".sharepoint.com" in event["callRecordingUrl"]
-            ):
-                document.update(
-                    {
-                        "title": event.get("callRecordingDisplayName"),
-                        "recording_url": event.get("callRecordingUrl"),
-                    }
-                )
+    def format_chat_message(
+        self,
+        chat,
+        message,
+        message_content,
+        members,
+        subject="",
+        attachments=None,
+    ):
+        sender_name, sender_id = self._sender_fields(message)
+        document = {
+            "type": TeamsObjectType.CHAT_MESSAGE.value,
+            "chat_id": chat.get("id"),
+            "chat_title": chat.get("topic") or members,
+            "sender_name": sender_name,
+            "sender_id": sender_id,
+            "subject": subject,
+            "message": message_content,
+            "attachments": attachments or [],
+        }
+        self.map_document_with_schema(
+            document=document, item=message, document_type=self.schema.chat_message
+        )
+        if not document.get("url"):
+            document["url"] = chat.get("webUrl")
         return document
 
-    async def format_user_chat_messages(self, chat, message, message_content, members):
-        if chat.get("topic"):
-            message.update({"title": chat["topic"]})
-        else:
-            message.update({"title": members})
-        message.update(
-            {
-                "webUrl": chat.get("webUrl"),
-                "chatType": chat.get("chatType"),
-                "sender": message["from"]["user"].get("displayName")
-                if message.get("from") and message["from"].get("user")
-                else "",
-                "message": message_content,
-            }
-        )
-        return message
-
-    def format_attachment_names(self, attachments):
-        if not attachments:
-            return ""
-
-        return ",".join(
-            attachment.get("name")
-            for attachment in attachments
-            if attachment.get("name", "")
-        )
-
-
-USER_MEETING_DATETIME_FORMAT = "%Y-%m-%dT%H:%M:%S.%f"
+    def _sender_fields(self, message):
+        user = (message.get("from") or {}).get("user") or {}
+        return (user.get("displayName") or "").strip(), user.get("id") or ""
