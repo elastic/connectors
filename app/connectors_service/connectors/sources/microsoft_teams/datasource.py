@@ -45,6 +45,11 @@ def _prefix_email(email):
     return prefix_identity("email", email)
 
 
+def _prefix_user(user_principal_name):
+    """Prefix Entra UPN (SPO-aligned ``user:`` dialect, not a mailbox)."""
+    return prefix_identity("user", user_principal_name)
+
+
 def _channel_membership_type(channel):
     return (channel.get("membershipType") or "standard").lower()
 
@@ -67,18 +72,45 @@ def _member_ids(members):
     )
 
 
-def _merge_user_profile(users, member):
-    """Record team-member profile data keyed by Entra user id."""
-    user_id = member.get("userId")
-    if not user_id:
-        return
-    existing = users.get(user_id) or {}
-    name = (member.get("displayName") or "").strip()
-    email = (member.get("email") or "").strip()
-    users[user_id] = {
-        "name": name or existing.get("name") or "",
-        "email": email or existing.get("email") or "",
+def _mail_from_graph_user(user):
+    """Real mailbox from Graph ``mail`` only (never UPN)."""
+    if not user:
+        return None
+    mail = (user.get("mail") or "").strip()
+    return mail or None
+
+
+def _upn_from_graph_user(user):
+    """Entra login name from Graph ``userPrincipalName``."""
+    if not user:
+        return None
+    upn = (user.get("userPrincipalName") or "").strip()
+    return upn or None
+
+
+def _profile_from_graph_user(user):
+    """Normalize a Graph user resource into ``{name, email, user}``.
+
+    ``email`` is mailbox (``mail``) only; ``user`` is UPN for the ``user:`` ACL dialect.
+    """
+    return {
+        "name": (user.get("displayName") or "").strip() if user else "",
+        "email": _mail_from_graph_user(user) or "",
+        "user": _upn_from_graph_user(user) or "",
     }
+
+
+def _member_display_names(members):
+    """Fallback display names from membership payloads keyed by userId."""
+    names = {}
+    for member in members or []:
+        user_id = member.get("userId")
+        if not user_id:
+            continue
+        name = (member.get("displayName") or "").strip()
+        if name and user_id not in names:
+            names[user_id] = name
+    return names
 
 
 class MicrosoftTeamsDataSource(BaseDataSource):
@@ -109,6 +141,11 @@ class MicrosoftTeamsDataSource(BaseDataSource):
         self._file_acls = {}
         self._file_download_scheduled = set()
         self._file_parents = {}
+        # Entra userId → {name, email, user} from Graph /users (not conversationMember).
+        # email = mail only; user = userPrincipalName for the ``user:`` ACL dialect.
+        self._user_profiles = {}
+        # Membership displayName fallback when /users/{id} 404s.
+        self._member_names = {}
 
     def _set_internal_logger(self):
         self.client.set_logger(self._logger)
@@ -267,35 +304,88 @@ class MicrosoftTeamsDataSource(BaseDataSource):
             )
         return document
 
+    def _remember_member_names(self, members):
+        for user_id, name in _member_display_names(members).items():
+            if user_id not in self._member_names:
+                self._member_names[user_id] = name
+
+    async def _ensure_user_profiles(self, user_ids):
+        """Resolve missing Graph user profiles into ``_user_profiles``."""
+        missing = [
+            user_id
+            for user_id in {uid for uid in (user_ids or []) if uid}
+            if user_id not in self._user_profiles
+        ]
+        if not missing:
+            return
+        users = await self.client.get_users_by_ids(missing)
+        for user_id in missing:
+            graph_user = users.get(user_id)
+            if graph_user is not None:
+                self._user_profiles[user_id] = _profile_from_graph_user(graph_user)
+            else:
+                # Mark as resolved-empty so we do not re-fetch; name may come from members.
+                self._user_profiles[user_id] = {
+                    "name": self._member_names.get(user_id) or "",
+                    "email": "",
+                    "user": "",
+                }
+
+    def _add_profile_acl_identities(self, access_control, user_id, *, member=None):
+        """Add ``email:`` / ``user:`` tokens from profile cache (membership email fallback)."""
+        profile = self._user_profiles.get(user_id) if user_id else None
+        email = (profile or {}).get("email") or None
+        if not email and member is not None:
+            email = (member.get("email") or "").strip() or None
+        if email:
+            access_control.add(_prefix_email(email))
+
+        upn = (profile or {}).get("user") or None
+        if upn:
+            access_control.add(_prefix_user(upn))
+
     def _access_control_for_members(self, members):
         access_control = set()
         for member in members or []:
             user_id = member.get("userId") or member.get("id")
             if user_id:
                 access_control.add(_prefix_user_id(user_id))
-            email = member.get("email")
-            if email:
-                access_control.add(_prefix_email(email))
+            self._add_profile_acl_identities(access_control, user_id, member=member)
         return list(access_control)
 
-    def _user_access_control_doc(self, member):
-        user_id = member.get("userId") or member.get("id")
+    def _access_control_for_user_ids(self, user_ids):
+        """Build ACL tokens for a set of Entra ids using the profile cache."""
+        access_control = set()
+        for user_id in user_ids or []:
+            if not user_id:
+                continue
+            access_control.add(_prefix_user_id(user_id))
+            self._add_profile_acl_identities(access_control, user_id)
+        return access_control
+
+    def _user_access_control_doc(self, user_id):
         if not user_id:
             return None
 
-        email = member.get("email")
+        profile = self._user_profiles.get(user_id) or {}
+        email = profile.get("email") or None
+        upn = profile.get("user") or None
         prefixed_user_id = _prefix_user_id(user_id)
         prefixed_email = _prefix_email(email) if email else None
+        prefixed_user = _prefix_user(upn) if upn else None
 
         access_control = [prefixed_user_id]
         if prefixed_email:
             access_control.append(prefixed_email)
+        if prefixed_user:
+            access_control.append(prefixed_user)
 
         return {
             "_id": user_id,
             "identity": {
                 "user_id": prefixed_user_id,
                 "email": prefixed_email,
+                "user": prefixed_user,
             },
             "created_at": iso_zulu(),
         } | self.access_control_query(access_control)
@@ -306,24 +396,21 @@ class MicrosoftTeamsDataSource(BaseDataSource):
             self._logger.warning("DLS is not enabled. Skipping access control sync.")
             return
 
-        seen = set()
-        user_ids = set()
+        self._user_profiles = {}
+        self._member_names = {}
+        identity_ids = set()
+        team_member_ids = set()
 
         async for teams in self.client.get_teams():
             for team in teams:
                 async for members in self.client.get_team_members(team["id"]):
+                    self._remember_member_names(members)
                     for member in members:
                         user_id = member.get("userId")
                         if user_id:
-                            user_ids.add(user_id)
-                        doc = self._user_access_control_doc(member)
-                        if doc and doc["_id"] not in seen:
-                            seen.add(doc["_id"])
-                            yield doc
+                            identity_ids.add(user_id)
+                            team_member_ids.add(user_id)
 
-                # Shared channels can include members outside the parent team;
-                # private channels are a subset but still need an explicit fetch
-                # when TeamMember.Read alone is insufficient for DLS identities.
                 async for channels in self.client.get_team_channels(team["id"]):
                     for channel in channels:
                         if (
@@ -334,23 +421,30 @@ class MicrosoftTeamsDataSource(BaseDataSource):
                         async for channel_members in self.client.get_channel_members(
                             team["id"], channel["id"]
                         ):
+                            self._remember_member_names(channel_members)
                             for member in channel_members:
-                                doc = self._user_access_control_doc(member)
-                                if doc and doc["_id"] not in seen:
-                                    seen.add(doc["_id"])
-                                    yield doc
+                                user_id = member.get("userId")
+                                if user_id:
+                                    identity_ids.add(user_id)
 
-        async for chats in self.client.get_chats(user_ids):
+        async for chats in self.client.get_chats(team_member_ids):
             for chat in chats:
                 chat_id = chat.get("id")
                 if not chat_id:
                     continue
                 async for chat_members in self.client.get_chat_members(chat_id):
+                    self._remember_member_names(chat_members)
                     for member in chat_members:
-                        doc = self._user_access_control_doc(member)
-                        if doc and doc["_id"] not in seen:
-                            seen.add(doc["_id"])
-                            yield doc
+                        user_id = member.get("userId")
+                        if user_id:
+                            identity_ids.add(user_id)
+
+        await self._ensure_user_profiles(identity_ids)
+
+        for user_id in sorted(identity_ids):
+            doc = self._user_access_control_doc(user_id)
+            if doc:
+                yield doc
 
     # -- Content extraction ------------------------------------------------
 
@@ -592,6 +686,8 @@ class MicrosoftTeamsDataSource(BaseDataSource):
             )
             return team_access_control, []
 
+        self._remember_member_names(channel_members)
+        await self._ensure_user_profiles(_member_ids(channel_members))
         return self._access_control_for_members(channel_members), channel_members
 
     async def _produce_channel(
@@ -738,6 +834,8 @@ class MicrosoftTeamsDataSource(BaseDataSource):
             members = []
             async for member_page in self.client.get_chat_members(chat_id):
                 members.extend(member_page)
+            self._remember_member_names(members)
+            await self._ensure_user_profiles(_member_ids(members))
             access_control = self._access_control_for_members(members)
             member_names = self._chat_member_names(members)
 
@@ -789,8 +887,11 @@ class MicrosoftTeamsDataSource(BaseDataSource):
         self._file_acls = {}
         self._file_download_scheduled = set()
         self._file_parents = {}
-        users = {}
-        user_team_acls = {}
+        self._user_profiles = {}
+        self._member_names = {}
+        team_jobs = []
+        team_member_ids = set()
+        user_team_member_ids = {}
         try:
             try:
                 async for teams in self.client.get_teams():
@@ -802,44 +903,49 @@ class MicrosoftTeamsDataSource(BaseDataSource):
                                 team_id
                             ):
                                 members.extend(member_page)
-                            team_acl = self._access_control_for_members(members)
-                            for member in members:
-                                user_id = member.get("userId")
-                                if not user_id:
-                                    continue
-                                _merge_user_profile(users, member)
-                                user_team_acls.setdefault(user_id, set()).update(
-                                    team_acl
+                            self._remember_member_names(members)
+                            member_ids = _member_ids(members)
+                            team_member_ids.update(member_ids)
+                            for user_id in member_ids:
+                                user_team_member_ids.setdefault(user_id, set()).update(
+                                    member_ids
                                 )
-                        await self.fetchers.put(
-                            partial(self.team_producer, team, members)
-                        )
-                        self.tasks += 1
+                        team_jobs.append((team, members))
 
-                for user_id, profile in users.items():
+                await self._ensure_user_profiles(team_member_ids)
+
+                for team, members in team_jobs:
+                    await self.fetchers.put(
+                        partial(self.team_producer, team, members)
+                    )
+                    self.tasks += 1
+
+                for user_id in sorted(team_member_ids):
+                    profile = self._user_profiles.get(user_id) or {}
                     user_document = self.formatter.format_user(
                         user_id=user_id,
-                        name=profile.get("name"),
+                        name=profile.get("name") or self._member_names.get(user_id),
                         email=profile.get("email"),
                     )
                     user_document["_timestamp"] = iso_zulu()
+                    teammate_ids = user_team_member_ids.get(user_id, {user_id})
+                    user_acl = sorted(self._access_control_for_user_ids(teammate_ids))
                     await self.queue.put(
                         (
-                            self._decorate_with_access_control(
-                                user_document,
-                                sorted(user_team_acls.get(user_id, set())),
-                            ),
+                            self._decorate_with_access_control(user_document, user_acl),
                             None,
                         )
                     )
             except PermissionsMissing:
                 self._teams_enumeration_failed = True
                 self._logger.warning(
-                    "Unable to enumerate teams. Verify the 'Team.ReadBasic.All' application permission is granted."
+                    "Unable to enumerate teams or resolve user profiles. Verify the "
+                    "'Team.ReadBasic.All', 'TeamMember.Read.All', and "
+                    "'User.ReadBasic.All' application permissions are granted."
                 )
 
             try:
-                async for chats in self.client.get_chats(users.keys()):
+                async for chats in self.client.get_chats(team_member_ids):
                     for chat in chats:
                         await self.fetchers.put(partial(self.chat_producer, chat))
                         self.tasks += 1
@@ -890,7 +996,10 @@ class MicrosoftTeamsDataSource(BaseDataSource):
         if self._teams_enumeration_failed or self._chats_enumeration_failed:
             failed = []
             if self._teams_enumeration_failed:
-                failed.append("teams ('Team.ReadBasic.All')")
+                failed.append(
+                    "teams/users ('Team.ReadBasic.All' / 'TeamMember.Read.All' / "
+                    "'User.ReadBasic.All')"
+                )
             if self._chats_enumeration_failed:
                 failed.append("chats ('TeamMember.Read.All' / 'Chat.ReadBasic.All')")
             failed_list = " and ".join(failed)

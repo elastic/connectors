@@ -195,6 +195,31 @@ CHAT_MEMBERS = [
     },
 ]
 
+GRAPH_USERS = {
+    "user-alice": {
+        "id": "user-alice",
+        "displayName": "Alice",
+        "mail": "alice@example.com",
+        "userPrincipalName": "alice@example.com",
+    },
+    "user-bob": {
+        "id": "user-bob",
+        "displayName": "Bob",
+        "mail": "bob@example.com",
+        "userPrincipalName": "bob@example.com",
+    },
+    "user-carol": {
+        "id": "user-carol",
+        "displayName": "Carol",
+        "mail": None,
+        "userPrincipalName": "carol_guest#EXT#@example.com",
+    },
+}
+
+
+async def _graph_users_by_ids(user_ids):
+    return {uid: GRAPH_USERS[uid] for uid in user_ids if uid in GRAPH_USERS}
+
 CHAT_MESSAGES = [
     {
         "id": "chat-message-1",
@@ -251,10 +276,11 @@ async def create_teams_source(
 class FakeGraphSession:
     """Minimal MicrosoftAPISession stand-in for client tests."""
 
-    def __init__(self, pages=None, fetches=None, raises=None):
+    def __init__(self, pages=None, fetches=None, raises=None, posts=None):
         self._pages = pages or {}
         self._fetches = fetches or {}
         self._raises = raises or {}
+        self._posts = posts or {}
         self.set_logger = Mock()
         self.close = Mock()
 
@@ -277,6 +303,17 @@ class FakeGraphSession:
             if key in url:
                 return value
         return None
+
+    async def post(self, url, payload):
+        for key, exc in self._raises.items():
+            if key in url:
+                raise exc
+        for key, value in self._posts.items():
+            if key in url:
+                if callable(value):
+                    return value(payload)
+                return value
+        return {"responses": []}
 
 
 def build_client():
@@ -663,10 +700,86 @@ async def test_dls_disabled_when_features_missing():
 @pytest.mark.asyncio
 async def test_access_control_for_members():
     async with create_teams_source() as source:
+        # Without profiles, membership email is used as fallback.
         acl = source._access_control_for_members(TEAM_MEMBERS)
         assert "user_id:user-alice" in acl
         assert "email:alice@example.com" in acl
         assert "user_id:user-bob" in acl
+
+
+@pytest.mark.asyncio
+async def test_access_control_prefers_resolved_profile_email():
+    async with create_teams_source() as source:
+        source._user_profiles = {
+            "user-alice": {
+                "name": "Alice",
+                "email": "alice.resolved@example.com",
+                "user": "alice.upn@example.com",
+            }
+        }
+        members = [
+            {
+                "userId": "user-alice",
+                "displayName": "Alice",
+                "email": "",  # membership often null
+            }
+        ]
+        acl = source._access_control_for_members(members)
+        assert "user_id:user-alice" in acl
+        assert "email:alice.resolved@example.com" in acl
+        assert "user:alice.upn@example.com" in acl
+        assert "email:alice@example.com" not in acl
+
+
+@pytest.mark.asyncio
+async def test_profile_from_graph_user_keeps_mail_and_upn_separate():
+    from connectors.sources.microsoft_teams.datasource import (
+        _mail_from_graph_user,
+        _profile_from_graph_user,
+        _upn_from_graph_user,
+    )
+
+    assert (
+        _mail_from_graph_user(
+            {"mail": "mail@example.com", "userPrincipalName": "upn@example.com"}
+        )
+        == "mail@example.com"
+    )
+    assert (
+        _mail_from_graph_user({"mail": "", "userPrincipalName": "upn@example.com"})
+        is None
+    )
+    assert (
+        _upn_from_graph_user({"mail": "mail@example.com", "userPrincipalName": "upn@example.com"})
+        == "upn@example.com"
+    )
+    profile = _profile_from_graph_user(
+        {
+            "displayName": "Alice",
+            "mail": "",
+            "userPrincipalName": "upn@example.com",
+        }
+    )
+    assert profile["email"] == ""
+    assert profile["user"] == "upn@example.com"
+    assert profile["name"] == "Alice"
+
+
+@pytest.mark.asyncio
+async def test_access_control_upn_only_when_mail_missing():
+    async with create_teams_source() as source:
+        source._user_profiles = {
+            "user-carol": {
+                "name": "Carol",
+                "email": "",
+                "user": "carol_guest#EXT#@example.com",
+            }
+        }
+        members = [{"userId": "user-carol", "displayName": "Carol", "email": None}]
+        acl = source._access_control_for_members(members)
+        assert "user_id:user-carol" in acl
+        assert "user:carol_guest#EXT#@example.com" in acl
+        assert not any(token.startswith("email:") for token in acl)
 
 
 @pytest.mark.asyncio
@@ -702,15 +815,21 @@ async def test_get_access_control_yields_unique_identities():
         source.client.get_chat_members = MagicMock(
             return_value=AsyncIterator([CHAT_MEMBERS])
         )
+        source.client.get_users_by_ids = AsyncMock(side_effect=_graph_users_by_ids)
 
-        ids = []
+        docs = []
         async for doc in source.get_access_control():
-            ids.append(doc["_id"])
+            docs.append(doc)
 
+        ids = [doc["_id"] for doc in docs]
         # alice and bob appear in both team and chat, but must be deduped
         assert sorted(ids) == ["user-alice", "user-bob"]
+        alice = next(doc for doc in docs if doc["_id"] == "user-alice")
+        assert alice["identity"]["email"] == "email:alice@example.com"
+        assert alice["identity"]["user"] == "user:alice@example.com"
         source.client.get_chats.assert_called()
         source.client.get_chat_members.assert_called()
+        source.client.get_users_by_ids.assert_called()
 
 
 @pytest.mark.asyncio
@@ -741,10 +860,12 @@ async def test_get_access_control_includes_private_channel_members():
             )
         )
         source.client.get_chats = MagicMock(return_value=AsyncIterator([]))
+        source.client.get_users_by_ids = AsyncMock(side_effect=_graph_users_by_ids)
 
         ids = [doc["_id"] async for doc in source.get_access_control()]
         assert sorted(ids) == ["user-alice", "user-bob"]
         source.client.get_channel_members.assert_called()
+        source.client.get_users_by_ids.assert_called()
 
 
 @pytest.mark.asyncio
@@ -802,6 +923,7 @@ def _mock_client_for_get_docs(source, with_attachments=True):
         return_value=AsyncIterator([CHAT_MESSAGES])
     )
     source.client.get_drive_item_by_content_url = AsyncMock(return_value=CHAT_FILE)
+    source.client.get_users_by_ids = AsyncMock(side_effect=_graph_users_by_ids)
 
 
 @pytest.mark.asyncio
@@ -852,6 +974,175 @@ async def test_get_docs_emits_expected_types():
 
 
 @pytest.mark.asyncio
+async def test_get_docs_user_email_from_graph_not_membership():
+    """User docs and ACLs use /users profiles even when membership email is empty."""
+    members_without_email = [
+        {
+            "id": "membership-1",
+            "displayName": "Alice",
+            "userId": "user-alice",
+            "email": None,
+        },
+        {
+            "id": "membership-2",
+            "displayName": "Bob",
+            "userId": "user-bob",
+            "email": "",
+        },
+    ]
+    async with create_teams_source(use_document_level_security=True) as source:
+        source._features = Mock()
+        source._features.document_level_security_enabled = Mock(return_value=True)
+        _mock_client_for_get_docs(source)
+        source.client.get_team_members = MagicMock(
+            return_value=AsyncIterator([members_without_email])
+        )
+
+        docs = [doc async for doc, _download in source.get_docs()]
+
+        users = {
+            doc["_id"]: doc
+            for doc in docs
+            if doc["type"] == TeamsObjectType.USER.value
+        }
+        assert users["user-alice"]["email"] == "alice@example.com"
+        assert users["user-bob"]["email"] == "bob@example.com"
+
+        chat = next(doc for doc in docs if doc["type"] == TeamsObjectType.CHAT.value)
+        assert "email:alice@example.com" in chat[ACCESS_CONTROL]
+        assert "email:bob@example.com" in chat[ACCESS_CONTROL]
+        assert "user:alice@example.com" in chat[ACCESS_CONTROL]
+        assert "user:bob@example.com" in chat[ACCESS_CONTROL]
+        source.client.get_users_by_ids.assert_called()
+        # Chat discovery still uses team-member ids
+        source.client.get_chats.assert_called()
+        called_ids = set(source.client.get_chats.call_args[0][0])
+        assert called_ids == {"user-alice", "user-bob"}
+
+
+@pytest.mark.asyncio
+async def test_get_docs_user_profile_404_emits_user_without_email():
+    members_without_email = [
+        {
+            "id": "membership-1",
+            "displayName": "Alice",
+            "userId": "user-alice",
+            "email": None,
+        },
+        {
+            "id": "membership-2",
+            "displayName": "Bob",
+            "userId": "user-bob",
+            "email": None,
+        },
+    ]
+
+    async def _partial_users(user_ids):
+        # Alice resolves; Bob is missing from Graph
+        return {
+            uid: GRAPH_USERS[uid]
+            for uid in user_ids
+            if uid == "user-alice" and uid in GRAPH_USERS
+        }
+
+    async with create_teams_source(use_document_level_security=True) as source:
+        source._features = Mock()
+        source._features.document_level_security_enabled = Mock(return_value=True)
+        _mock_client_for_get_docs(source)
+        source.client.get_team_members = MagicMock(
+            return_value=AsyncIterator([members_without_email])
+        )
+        source.client.get_users_by_ids = AsyncMock(side_effect=_partial_users)
+        source.client.get_chats = MagicMock(return_value=AsyncIterator([]))
+
+        docs = [doc async for doc, _download in source.get_docs()]
+        users = {
+            doc["_id"]: doc
+            for doc in docs
+            if doc["type"] == TeamsObjectType.USER.value
+        }
+        assert users["user-alice"]["email"] == "alice@example.com"
+        assert users["user-bob"]["email"] == ""
+        assert users["user-bob"]["name"] == "Bob"  # membership fallback
+        team = next(doc for doc in docs if doc["type"] == TeamsObjectType.TEAM.value)
+        assert "user_id:user-bob" in team[ACCESS_CONTROL]
+        assert "email:bob@example.com" not in team[ACCESS_CONTROL]
+        # Chat discovery still receives both team member ids
+        called_ids = set(source.client.get_chats.call_args[0][0])
+        assert called_ids == {"user-alice", "user-bob"}
+
+
+@pytest.mark.asyncio
+async def test_get_docs_raises_when_user_profile_permission_missing():
+    async with create_teams_source(fetch_attachment_content=False) as source:
+        source.client.get_teams = MagicMock(return_value=AsyncIterator([TEAMS]))
+        source.client.get_team_members = MagicMock(
+            return_value=AsyncIterator([TEAM_MEMBERS])
+        )
+        source.client.get_users_by_ids = AsyncMock(side_effect=PermissionsMissing())
+        source.client.get_chats = MagicMock(return_value=AsyncIterator([]))
+
+        with pytest.raises(PermissionsMissing, match="Enumeration failed"):
+            async for _doc, _download in source.get_docs():
+                pass
+
+
+@pytest.mark.asyncio
+async def test_client_get_users_by_ids_batch_success():
+    client = build_client()
+
+    def _batch_response(payload):
+        responses = []
+        for request in payload["requests"]:
+            user_id = request["id"]
+            responses.append(
+                {"id": user_id, "status": 200, "body": GRAPH_USERS[user_id]}
+            )
+        return {"responses": responses}
+
+    client._graph_api_client = FakeGraphSession(posts={"/$batch": _batch_response})
+    users = await client.get_users_by_ids(["user-alice", "user-bob"])
+    await client.close()
+    assert set(users) == {"user-alice", "user-bob"}
+    assert users["user-alice"]["mail"] == "alice@example.com"
+
+
+@pytest.mark.asyncio
+async def test_client_get_users_by_ids_falls_back_on_batch_not_found():
+    client = build_client()
+    client._graph_api_client = FakeGraphSession(
+        raises={"/$batch": NotFound()},
+        fetches={
+            "/users/user-alice": GRAPH_USERS["user-alice"],
+            "/users/user-bob": GRAPH_USERS["user-bob"],
+        },
+    )
+    users = await client.get_users_by_ids(["user-alice", "user-bob"])
+    await client.close()
+    assert set(users) == {"user-alice", "user-bob"}
+
+
+@pytest.mark.asyncio
+async def test_client_get_user_swallows_not_found():
+    client = build_client()
+    client._graph_api_client = FakeGraphSession(raises={"/users/missing": NotFound()})
+    assert await client.get_user("missing") is None
+    await client.close()
+    assert client._skipped["users"] == 1
+
+
+@pytest.mark.asyncio
+async def test_client_get_users_by_ids_propagates_permissions_missing():
+    client = build_client()
+    client._graph_api_client = FakeGraphSession(
+        raises={"/$batch": PermissionsMissing()}
+    )
+    with pytest.raises(PermissionsMissing):
+        await client.get_users_by_ids(["user-alice"])
+    await client.close()
+
+
+@pytest.mark.asyncio
 async def test_get_docs_skips_deleted_channel_messages():
     async with create_teams_source() as source:
         _mock_client_for_get_docs(source)
@@ -884,6 +1175,7 @@ async def test_get_docs_raises_when_teams_permission_missing():
     # corpus on the next full sync.
     async with create_teams_source() as source:
         source.client.get_teams = MagicMock(side_effect=PermissionsMissing())
+        source.client.get_users_by_ids = AsyncMock(side_effect=_graph_users_by_ids)
         source.client.get_chats = MagicMock(return_value=AsyncIterator([CHATS]))
         source.client.get_chat_members = MagicMock(
             return_value=AsyncIterator([CHAT_MEMBERS])
@@ -912,6 +1204,7 @@ async def test_get_docs_raises_when_chats_permission_missing():
         source.client.get_channel_message_replies = MagicMock(
             return_value=AsyncIterator([])
         )
+        source.client.get_users_by_ids = AsyncMock(side_effect=_graph_users_by_ids)
         source.client.get_chats = MagicMock(side_effect=PermissionsMissing())
 
         with pytest.raises(PermissionsMissing, match="Enumeration failed"):
@@ -1284,6 +1577,7 @@ async def test_get_docs_raises_when_channel_message_permission_missing():
         source.client.get_team_members = MagicMock(
             return_value=AsyncIterator([TEAM_MEMBERS])
         )
+        source.client.get_users_by_ids = AsyncMock(side_effect=_graph_users_by_ids)
         source.client.get_team_channels = MagicMock(
             return_value=AsyncIterator([CHANNELS])
         )
@@ -1309,6 +1603,7 @@ async def test_private_channel_uses_channel_member_acl_when_dls_enabled():
         source.client.get_team_members = MagicMock(
             return_value=AsyncIterator([TEAM_MEMBERS])
         )
+        source.client.get_users_by_ids = AsyncMock(side_effect=_graph_users_by_ids)
         source.client.get_team_channels = MagicMock(
             return_value=AsyncIterator([[PRIVATE_CHANNEL]])
         )
@@ -1356,6 +1651,7 @@ async def test_private_channel_uses_channel_member_acl_when_dls_enabled():
         # Only Alice (channel member), not Bob (team member outside the channel)
         assert channel_docs[0][ACCESS_CONTROL] == [
             "email:alice@example.com",
+            "user:alice@example.com",
             "user_id:user-alice",
         ]
         assert message_docs[0][ACCESS_CONTROL] == channel_docs[0][ACCESS_CONTROL]
@@ -1374,6 +1670,7 @@ async def test_private_channel_skipped_when_dls_on_and_members_unresolved():
         source.client.get_team_members = MagicMock(
             return_value=AsyncIterator([TEAM_MEMBERS])
         )
+        source.client.get_users_by_ids = AsyncMock(side_effect=_graph_users_by_ids)
         source.client.get_team_channels = MagicMock(
             return_value=AsyncIterator([[PRIVATE_CHANNEL]])
         )
@@ -1453,6 +1750,7 @@ async def test_get_docs_completes_under_low_concurrency():
         source.client.get_team_members = MagicMock(
             side_effect=lambda *a, **k: AsyncIterator([TEAM_MEMBERS])
         )
+        source.client.get_users_by_ids = AsyncMock(side_effect=_graph_users_by_ids)
         source.client.get_team_channels = MagicMock(
             side_effect=lambda *a, **k: AsyncIterator([CHANNELS])
         )

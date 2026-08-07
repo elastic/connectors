@@ -17,7 +17,9 @@ RSC / WhereInstalled):
   `GET /users/{id}/chats` (there is no tenant-wide app-only `GET /chats`).
   Chat membership for DLS uses dedicated `GET /chats/{id}/members`.
   Channel replies use dedicated `GET .../messages/{id}/replies`.
-  `User.Read.All` is not required.
+- Users: `User.ReadBasic.All` to resolve profiles (`mail` / UPN / displayName)
+  for User docs and consistent DLS ``email:`` tokens. Chat discovery itself
+  does not need User.Read*; there is no tenant-wide user list sync.
 - Attachments: `Files.Read.All` (required when "Fetch attachment content" is on;
   validated via the app token ``roles`` claim)
 
@@ -51,6 +53,8 @@ from connectors.sources.shared.microsoft.graph import (
 GRAPH_ACQUIRE_TOKEN_URL = "https://graph.microsoft.com/.default"  # noqa S105
 DEFAULT_PARALLEL_CONNECTION_COUNT = 10
 FILES_READ_ALL_ROLE = "Files.Read.All"
+USER_PROFILE_SELECT = "id,mail,userPrincipalName,displayName"
+USER_PROFILE_BATCH_SIZE = 20
 
 if "OVERRIDE_URL" in os.environ:
     logger.warning("x" * 50)
@@ -107,7 +111,7 @@ class Schema:
         return {
             "_id": "id",
             "name": "displayName",
-            "email": "email",
+            "email": "mail",
         }
 
     def channel(self):
@@ -370,6 +374,77 @@ class MicrosoftTeamsClient:
                 f"Skipping drive children for item '{item_id}' in drive '{drive_id}'."
             )
             return
+
+    async def get_user(self, user_id):
+        """Fetch a single user profile, or ``None`` if the user was not found."""
+        if not user_id:
+            return None
+        try:
+            return await self._graph_api_client.fetch(
+                f"{BASE_URL}/users/{user_id}?$select={USER_PROFILE_SELECT}"
+            )
+        except NotFound:
+            self._skipped["users"] += 1
+            self._logger.debug(f"Skipping user '{user_id}': user was not found.")
+            return None
+
+    async def get_users_by_ids(self, user_ids: Iterable[str]) -> dict:
+        """Resolve Graph user profiles for the given Entra ids.
+
+        Uses ``$batch`` of ``GET /users/{id}`` (≤20 per request). Shared Graph
+        batch error handling cannot soft-skip a single item ``404``, so a batch
+        that hits ``NotFound`` falls back to per-id ``get_user`` for that chunk.
+        Missing ``User.ReadBasic.All`` raises ``PermissionsMissing``.
+        """
+        result = {}
+        unique_ids = sorted({user_id for user_id in (user_ids or []) if user_id})
+        for offset in range(0, len(unique_ids), USER_PROFILE_BATCH_SIZE):
+            chunk = unique_ids[offset : offset + USER_PROFILE_BATCH_SIZE]
+            await self._fetch_users_chunk(chunk, result)
+        return result
+
+    async def _fetch_users_chunk(self, user_ids, result):
+        requests = [
+            {
+                "id": user_id,
+                "method": "GET",
+                "url": f"/users/{user_id}?$select={USER_PROFILE_SELECT}",
+            }
+            for user_id in user_ids
+        ]
+        try:
+            batch_response = await self._graph_api_client.post(
+                f"{BASE_URL}/$batch", {"requests": requests}
+            )
+        except NotFound:
+            # Shared $batch handling raises when any item is 404; resolve one-by-one.
+            for user_id in user_ids:
+                user = await self.get_user(user_id)
+                if user is not None:
+                    result[user_id] = user
+            return
+
+        for response in batch_response.get("responses", []) or []:
+            user_id = response.get("id")
+            status = response.get("status", 200)
+            if status == 404:
+                self._skipped["users"] += 1
+                self._logger.debug(f"Skipping user '{user_id}': user was not found.")
+                continue
+            if status in (401, 403):
+                msg = (
+                    f"Unable to resolve user profiles. Verify the "
+                    f"'User.ReadBasic.All' application permission is granted."
+                )
+                raise PermissionsMissing(msg)
+            if status != 200 or not user_id:
+                self._logger.warning(
+                    f"Skipping user profile batch item '{user_id}' with status {status}."
+                )
+                continue
+            body = response.get("body") or {}
+            if isinstance(body, dict):
+                result[user_id] = body
 
     async def get_user_chats(self, user_id):
         """Yield chat pages for a user (app-only list-chats path; no member expand)."""

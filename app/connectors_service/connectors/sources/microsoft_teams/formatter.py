@@ -31,7 +31,11 @@ class MicrosoftTeamsFormatter:
         return result
 
     def format_user(self, user_id, name, email):
-        """Build a User document keyed by Entra user id (team members only)."""
+        """Build a User document keyed by Entra user id (team members only).
+
+        ``name`` / ``email`` should come from Graph ``/users`` profiles
+        (``displayName``, ``mail`` only — not UPN).
+        """
         return {
             "_id": user_id,
             "type": TeamsObjectType.USER.value,

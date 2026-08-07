@@ -31,6 +31,7 @@ permissions:
 | --- | --- |
 | `Team.ReadBasic.All` | Enumerate teams in the tenant. |
 | `TeamMember.Read.All` | Team membership (DLS) and user ids for chat discovery. |
+| `User.ReadBasic.All` | Resolve team-member (and ACL participant) profiles for User docs and consistent DLS identities (`mail` → `email:`, UPN → `user:`, plus `user_id:`). |
 | `Channel.ReadBasic.All` | List channels of each team. |
 | `ChannelMember.Read.All` | Private/shared channel membership for correct DLS ACLs. |
 | `ChannelMessage.Read.All` | Channel messages and replies. |
@@ -66,18 +67,24 @@ Team, Channel, and Chat documents include ``member_ids`` (Entra user ids).
 Standard channels inherit the parent team's membership; private/shared channels
 use channel-specific members.
 
-Discovery is one pass per sync: teams → team members (deduped user ids) → each
-user's chats (deduped by chat id). Chat ACL membership is always loaded with
+Discovery is one pass per sync: teams → team members (deduped user ids) →
+resolve profiles via ``GET /users/{id}`` (batched) → each user's chats
+(deduped by chat id). Chat ACL membership is always loaded with
 `GET /chats/{id}/members` (full list). Channel replies are always loaded with
 `GET .../messages/{id}/replies` (full threads). Incomplete `$expand` shortcuts are
 not used for members or replies.
 
-Chat discovery does **not** use `User.Read.All`. Users who have chats but belong
-to no team are out of scope. The same chat seen for multiple members is indexed
-once (deduped by chat id).
+Profile hydration requires `User.ReadBasic.All`. Chat discovery itself does not
+need User.Read* — it only needs team-member ids plus Chat permissions. There is
+no tenant-wide ``GET /users`` sync: User content documents are only emitted for
+members of at least one synced team. Users who have chats but belong to no team
+are out of scope. The same chat seen for multiple members is indexed once
+(deduped by chat id).
 
 Document level security restricts search results to members of the relevant
-team, private/shared channel, or chat. Enable "Enable document level security"
+team, private/shared channel, or chat. Content and identity ACLs use
+``user_id:``, ``email:`` (Graph ``mail`` only), and ``user:`` (Graph
+``userPrincipalName``, SPO-aligned). Enable "Enable document level security"
 in the connector configuration.
 
 ## Failures
