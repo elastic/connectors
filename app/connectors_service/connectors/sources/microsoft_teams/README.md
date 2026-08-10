@@ -29,13 +29,13 @@ permissions:
 
 | Permission | Why |
 | --- | --- |
-| `Team.ReadBasic.All` | Enumerate teams. |
-| `TeamMember.Read.All` | Team membership (DLS) and user ids for chat discovery. |
-| `User.ReadBasic.All` | User profiles for User docs and DLS identity (`mail`, UPN). |
-| `Channel.ReadBasic.All` | List channels. |
-| `ChannelMember.Read.All` | Private/shared channel membership for DLS. |
+| `Team.ReadBasic.All` | Discover teams. |
+| `TeamMember.Read.All` | Team `member_ids`, content ACLs, and user ids for chat discovery. |
+| `User.ReadBasic.All` | User docs and identity profiles (`mail`, UPN, display name). |
+| `Channel.ReadBasic.All` | Discover channels. |
+| `ChannelMember.Read.All` | Channel `member_ids` and content ACLs. |
 | `ChannelMessage.Read.All` | Channel messages and replies. |
-| `Chat.Read.All` | Chat list, members (DLS), and messages. |
+| `Chat.Read.All` | Discover chats, chat `member_ids`/ACLs, and chat messages. |
 | `Files.Read.All` | File content when "Fetch attachment content" is enabled. |
 
 ### Protected APIs
@@ -49,9 +49,9 @@ login.
 ## What gets synced
 
 - **Team**, **Channel**, channel **messages** / **replies**
-- **Users** (every Entra user who participates in synced Teams content: team
-  members, private/shared channel members, and chat members), with ``name``,
-  ``email`` (Graph ``mail``), and ``upn`` (Graph ``userPrincipalName``)
+- **Users** (every Entra user who participates in synced Teams content: team,
+  channel, and chat members), with ``name``, ``email`` (Graph ``mail``), and
+  ``upn`` (Graph ``userPrincipalName``)
 - **Chats of team members** (discovered via team membership → each member's
   chats), including messages
 - **Files** (when "Fetch attachment content" is on): channel Files-folder
@@ -64,10 +64,10 @@ login.
   discovery (no empty placeholders).
 
 Team, Channel, and Chat documents include ``member_ids`` (Entra user ids).
-Standard channels inherit the parent team's membership; private/shared channels
-use channel-specific members.
+Channels with ``membershipType`` other than ``standard`` resolve members via
+the channel members API; standard channels inherit the parent team's membership.
 
-Discovery is one pass per sync: teams → team members (deduped) → private/shared
+Discovery is one pass per sync: teams → team members (deduped) → non-standard
 channel members (deduped) → each team member's chats (deduped by chat id) → chat
 members (deduped) → resolve profiles via ``GET /users/{id}`` (batched) for the
 union of those participant ids. Chat ACL membership is always loaded with
@@ -84,8 +84,8 @@ in the same chat. The same chat seen for multiple members is indexed once
 (deduped by chat id).
 
 Document level security restricts search results for Teams, Channels, Chats,
-messages, and Files to members of the relevant team, private/shared channel, or
-chat. Those content documents stamp ``user_id:`` only on
+messages, and Files to members of the relevant team, channel, or chat. Those
+content documents stamp ``user_id:`` only on
 ``_allow_access_control``. Access-control (identity) documents carry
 ``user_id:``, ``email:`` (Graph ``mail``), and ``user:`` (Graph
 ``userPrincipalName``, SPO-aligned) so email/UPN login can still match
