@@ -12,7 +12,7 @@ RSC / WhereInstalled):
 - Teams: `Team.ReadBasic.All`, `TeamMember.Read.All`
 - Channels: `Channel.ReadBasic.All`, `ChannelMember.Read.All`,
   `ChannelMessage.Read.All`
-- Chats: `Chat.ReadBasic.All` (metadata/members), `Chat.Read.All` (messages).
+- Chats: `Chat.Read.All` (list chats, members for DLS, and messages).
   Chat discovery walks a provided set of team-member user ids and calls
   `GET /users/{id}/chats` (there is no tenant-wide app-only `GET /chats`).
   Chat membership for DLS uses dedicated `GET /chats/{id}/members`.

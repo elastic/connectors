@@ -214,6 +214,12 @@ GRAPH_USERS = {
         "mail": None,
         "userPrincipalName": "carol_guest#EXT#@example.com",
     },
+    "user-dave": {
+        "id": "user-dave",
+        "displayName": "Dave",
+        "mail": "dave@example.com",
+        "userPrincipalName": "dave@example.com",
+    },
 }
 
 
@@ -939,9 +945,11 @@ def _mock_client_for_get_docs(source, with_attachments=True):
     source.client.get_team_members = MagicMock(
         return_value=AsyncIterator([TEAM_MEMBERS])
     )
-    source.client.get_team_channels = MagicMock(return_value=AsyncIterator([CHANNELS]))
+    source.client.get_team_channels = MagicMock(
+        side_effect=lambda *a, **k: AsyncIterator([CHANNELS])
+    )
     source.client.get_channel_members = MagicMock(
-        return_value=AsyncIterator([PRIVATE_CHANNEL_MEMBERS])
+        side_effect=lambda *a, **k: AsyncIterator([PRIVATE_CHANNEL_MEMBERS])
     )
     source.client.get_channel_messages = MagicMock(
         return_value=AsyncIterator([CHANNEL_MESSAGES])
@@ -957,9 +965,9 @@ def _mock_client_for_get_docs(source, with_attachments=True):
     source.client.get_channel_drive_children = MagicMock(
         return_value=AsyncIterator(CHANNEL_DRIVE_CHILDREN)
     )
-    source.client.get_chats = MagicMock(return_value=AsyncIterator([CHATS]))
+    source.client.get_chats = MagicMock(side_effect=lambda *a, **k: AsyncIterator([CHATS]))
     source.client.get_chat_members = MagicMock(
-        return_value=AsyncIterator([CHAT_MEMBERS])
+        side_effect=lambda *a, **k: AsyncIterator([CHAT_MEMBERS])
     )
     source.client.get_chat_messages = MagicMock(
         return_value=AsyncIterator([CHAT_MESSAGES])
@@ -1013,6 +1021,89 @@ async def test_get_docs_emits_expected_types():
             doc for doc in docs if doc["type"] == TeamsObjectType.CHAT_MESSAGE.value
         )
         assert chat_msg["attachments"] == [{"id": "chat-file-1", "title": "doc.txt"}]
+
+
+@pytest.mark.asyncio
+async def test_get_docs_emits_user_for_chat_only_participant():
+    """Chat-only tenant users get User docs when they appear in a synced chat."""
+    chat_members_with_guest = [
+        CHAT_MEMBERS[0],
+        {
+            "id": "cm-dave",
+            "displayName": "Dave",
+            "userId": "user-dave",
+            "email": "dave@example.com",
+        },
+    ]
+    async with create_teams_source(fetch_attachment_content=False) as source:
+        source.client.get_teams = MagicMock(return_value=AsyncIterator([TEAMS]))
+        source.client.get_team = AsyncMock(return_value=TEAMS[0])
+        source.client.get_team_members = MagicMock(
+            return_value=AsyncIterator([[TEAM_MEMBERS[0]]])
+        )
+        source.client.get_team_channels = MagicMock(
+            side_effect=lambda *a, **k: AsyncIterator([CHANNELS])
+        )
+        source.client.get_channel_messages = MagicMock(
+            return_value=AsyncIterator([[]])
+        )
+        source.client.get_channel_message_replies = MagicMock(
+            return_value=AsyncIterator([])
+        )
+        source.client.get_chats = MagicMock(
+            side_effect=lambda *a, **k: AsyncIterator([CHATS])
+        )
+        source.client.get_chat_members = MagicMock(
+            side_effect=lambda *a, **k: AsyncIterator([chat_members_with_guest])
+        )
+        source.client.get_chat_messages = MagicMock(return_value=AsyncIterator([[]]))
+        source.client.get_users_by_ids = AsyncMock(side_effect=_graph_users_by_ids)
+
+        docs = [doc async for doc, _download in source.get_docs()]
+        users = {doc["_id"] for doc in docs if doc["type"] == TeamsObjectType.USER.value}
+        assert users == {"user-alice", "user-dave"}
+        chat = next(doc for doc in docs if doc["type"] == TeamsObjectType.CHAT.value)
+        assert chat["member_ids"] == ["user-alice", "user-dave"]
+
+
+@pytest.mark.asyncio
+async def test_get_docs_emits_user_for_private_channel_only_member():
+    """Private-channel members who are not on the team roster still get User docs."""
+    async with create_teams_source(fetch_attachment_content=False) as source:
+        source.client.get_teams = MagicMock(return_value=AsyncIterator([TEAMS]))
+        source.client.get_team = AsyncMock(return_value=TEAMS[0])
+        source.client.get_team_members = MagicMock(
+            return_value=AsyncIterator([[TEAM_MEMBERS[0]]])
+        )
+        source.client.get_team_channels = MagicMock(
+            side_effect=lambda *a, **k: AsyncIterator([[PRIVATE_CHANNEL]])
+        )
+        source.client.get_channel_members = MagicMock(
+            side_effect=lambda *a, **k: AsyncIterator(
+                [
+                    [
+                        {
+                            "id": "pcm-bob",
+                            "displayName": "Bob",
+                            "userId": "user-bob",
+                            "email": "bob@example.com",
+                        }
+                    ]
+                ]
+            )
+        )
+        source.client.get_channel_messages = MagicMock(
+            return_value=AsyncIterator([[]])
+        )
+        source.client.get_channel_message_replies = MagicMock(
+            return_value=AsyncIterator([])
+        )
+        source.client.get_chats = MagicMock(return_value=AsyncIterator([]))
+        source.client.get_users_by_ids = AsyncMock(side_effect=_graph_users_by_ids)
+
+        docs = [doc async for doc, _download in source.get_docs()]
+        users = {doc["_id"] for doc in docs if doc["type"] == TeamsObjectType.USER.value}
+        assert users == {"user-alice", "user-bob"}
 
 
 @pytest.mark.asyncio
@@ -1128,6 +1219,9 @@ async def test_get_docs_raises_when_user_profile_permission_missing():
             return_value=AsyncIterator([TEAM_MEMBERS])
         )
         source.client.get_users_by_ids = AsyncMock(side_effect=PermissionsMissing())
+        source.client.get_team_channels = MagicMock(
+            side_effect=lambda *a, **k: AsyncIterator([CHANNELS])
+        )
         source.client.get_chats = MagicMock(return_value=AsyncIterator([]))
 
         with pytest.raises(PermissionsMissing, match="Enumeration failed"):
@@ -1745,7 +1839,7 @@ async def test_get_docs_raises_when_channel_message_permission_missing():
         )
         source.client.get_users_by_ids = AsyncMock(side_effect=_graph_users_by_ids)
         source.client.get_team_channels = MagicMock(
-            return_value=AsyncIterator([CHANNELS])
+            side_effect=lambda *a, **k: AsyncIterator([CHANNELS])
         )
         source.client.get_channel_messages = MagicMock(
             side_effect=PermissionsMissing("ChannelMessage.Read.All missing")
@@ -1771,10 +1865,10 @@ async def test_private_channel_uses_channel_member_acl_when_dls_enabled():
         )
         source.client.get_users_by_ids = AsyncMock(side_effect=_graph_users_by_ids)
         source.client.get_team_channels = MagicMock(
-            return_value=AsyncIterator([[PRIVATE_CHANNEL]])
+            side_effect=lambda *a, **k: AsyncIterator([[PRIVATE_CHANNEL]])
         )
         source.client.get_channel_members = MagicMock(
-            return_value=AsyncIterator([PRIVATE_CHANNEL_MEMBERS])
+            side_effect=lambda *a, **k: AsyncIterator([PRIVATE_CHANNEL_MEMBERS])
         )
         source.client.get_channel_messages = MagicMock(
             return_value=AsyncIterator(
@@ -1834,10 +1928,12 @@ async def test_private_channel_skipped_when_dls_on_and_members_unresolved():
         )
         source.client.get_users_by_ids = AsyncMock(side_effect=_graph_users_by_ids)
         source.client.get_team_channels = MagicMock(
-            return_value=AsyncIterator([[PRIVATE_CHANNEL]])
+            side_effect=lambda *a, **k: AsyncIterator([[PRIVATE_CHANNEL]])
         )
         # Empty generator simulates unresolved channel members (e.g. NotFound)
-        source.client.get_channel_members = MagicMock(return_value=AsyncIterator([]))
+        source.client.get_channel_members = MagicMock(
+            side_effect=lambda *a, **k: AsyncIterator([])
+        )
         source.client.get_channel_messages = MagicMock(
             return_value=AsyncIterator([CHANNEL_MESSAGES])
         )
