@@ -965,7 +965,9 @@ def _mock_client_for_get_docs(source, with_attachments=True):
     source.client.get_channel_drive_children = MagicMock(
         return_value=AsyncIterator(CHANNEL_DRIVE_CHILDREN)
     )
-    source.client.get_chats = MagicMock(side_effect=lambda *a, **k: AsyncIterator([CHATS]))
+    source.client.get_chats = MagicMock(
+        side_effect=lambda *a, **k: AsyncIterator([CHATS])
+    )
     source.client.get_chat_members = MagicMock(
         side_effect=lambda *a, **k: AsyncIterator([CHAT_MEMBERS])
     )
@@ -1044,9 +1046,7 @@ async def test_get_docs_emits_user_for_chat_only_participant():
         source.client.get_team_channels = MagicMock(
             side_effect=lambda *a, **k: AsyncIterator([CHANNELS])
         )
-        source.client.get_channel_messages = MagicMock(
-            return_value=AsyncIterator([[]])
-        )
+        source.client.get_channel_messages = MagicMock(return_value=AsyncIterator([[]]))
         source.client.get_channel_message_replies = MagicMock(
             return_value=AsyncIterator([])
         )
@@ -1060,7 +1060,9 @@ async def test_get_docs_emits_user_for_chat_only_participant():
         source.client.get_users_by_ids = AsyncMock(side_effect=_graph_users_by_ids)
 
         docs = [doc async for doc, _download in source.get_docs()]
-        users = {doc["_id"] for doc in docs if doc["type"] == TeamsObjectType.USER.value}
+        users = {
+            doc["_id"] for doc in docs if doc["type"] == TeamsObjectType.USER.value
+        }
         assert users == {"user-alice", "user-dave"}
         chat = next(doc for doc in docs if doc["type"] == TeamsObjectType.CHAT.value)
         assert chat["member_ids"] == ["user-alice", "user-dave"]
@@ -1092,9 +1094,7 @@ async def test_get_docs_emits_user_for_private_channel_only_member():
                 ]
             )
         )
-        source.client.get_channel_messages = MagicMock(
-            return_value=AsyncIterator([[]])
-        )
+        source.client.get_channel_messages = MagicMock(return_value=AsyncIterator([[]]))
         source.client.get_channel_message_replies = MagicMock(
             return_value=AsyncIterator([])
         )
@@ -1102,7 +1102,9 @@ async def test_get_docs_emits_user_for_private_channel_only_member():
         source.client.get_users_by_ids = AsyncMock(side_effect=_graph_users_by_ids)
 
         docs = [doc async for doc, _download in source.get_docs()]
-        users = {doc["_id"] for doc in docs if doc["type"] == TeamsObjectType.USER.value}
+        users = {
+            doc["_id"] for doc in docs if doc["type"] == TeamsObjectType.USER.value
+        }
         assert users == {"user-alice", "user-bob"}
 
 

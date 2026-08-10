@@ -379,7 +379,9 @@ class MicrosoftTeamsDataSource(BaseDataSource):
                                 not in NON_STANDARD_CHANNEL_TYPES
                             ):
                                 continue
-                            async for channel_members in self.client.get_channel_members(
+                            async for (
+                                channel_members
+                            ) in self.client.get_channel_members(
                                 team_id, channel["id"]
                             ):
                                 self._remember_member_names(channel_members)
@@ -458,9 +460,11 @@ class MicrosoftTeamsDataSource(BaseDataSource):
         self._user_profiles = {}
         self._member_names = {}
         chats = []
-        _team_jobs, team_member_ids, participant_ids = (
-            await self._collect_team_participants()
-        )
+        (
+            _team_jobs,
+            team_member_ids,
+            participant_ids,
+        ) = await self._collect_team_participants()
         await self._collect_chat_participants(team_member_ids, participant_ids, chats)
         await self._ensure_user_profiles(participant_ids)
 
@@ -934,9 +938,11 @@ class MicrosoftTeamsDataSource(BaseDataSource):
         chats = []
         try:
             try:
-                team_jobs, team_member_ids, participant_ids = (
-                    await self._collect_team_participants()
-                )
+                (
+                    team_jobs,
+                    team_member_ids,
+                    participant_ids,
+                ) = await self._collect_team_participants()
             except PermissionsMissing:
                 self._teams_enumeration_failed = True
                 self._logger.warning(
@@ -973,7 +979,10 @@ class MicrosoftTeamsDataSource(BaseDataSource):
                         "'User.ReadBasic.All' application permission is granted."
                     )
 
-            if not self._chats_enumeration_failed and not self._teams_enumeration_failed:
+            if (
+                not self._chats_enumeration_failed
+                and not self._teams_enumeration_failed
+            ):
                 for chat in chats:
                     await self.fetchers.put(partial(self.chat_producer, chat))
                     self.tasks += 1
