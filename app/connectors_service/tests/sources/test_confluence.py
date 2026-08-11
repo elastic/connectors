@@ -39,6 +39,8 @@ from connectors.sources.atlassian.confluence.constants import (
     CONFLUENCE_SERVER,
     CONTENT_QUERY_CLOUD,
     CONTENT_QUERY_DATA_CENTER,
+    DATA_CENTER_BASIC_AUTH,
+    DATA_CENTER_PERSONAL_ACCESS_TOKEN,
     SPACE_QUERY_CLOUD,
     SPACE_QUERY_DATA_CENTER,
 )
@@ -606,13 +608,24 @@ EXPECTED_QUERY_RESPONSE = {
 
 @asynccontextmanager
 async def create_confluence_source(
-    use_text_extraction_service=False, data_source=CONFLUENCE_SERVER
+    use_text_extraction_service=False,
+    data_source=CONFLUENCE_SERVER,
+    data_center_auth_method=DATA_CENTER_BASIC_AUTH,
+    data_center_username="admin",
+    data_center_password="changeme",
+    data_center_personal_access_token="dc-pat-token",
 ):
     async with create_source(
         ConfluenceDataSource,
         data_source=data_source,
         username="admin",
         password="changeme",
+        account_email="me@example.com",
+        api_token="abc#123",
+        data_center_auth_method=data_center_auth_method,
+        data_center_username=data_center_username,
+        data_center_password=data_center_password,
+        data_center_personal_access_token=data_center_personal_access_token,
         confluence_url=HOST_URL,
         spaces="*",
         ssl_enabled=False,
@@ -667,8 +680,19 @@ async def test_validate_configuration_with_invalid_concurrent_downloads():
             # Confluence Data Center with blank dependent fields
             {
                 "data_source": CONFLUENCE_DATA_CENTER,
+                "data_center_auth_method": DATA_CENTER_BASIC_AUTH,
                 "data_center_username": "",
                 "data_center_password": "",
+                "account_email": "foo@bar.me",
+                "api_token": "foo",
+            }
+        ),
+        (
+            # Confluence Data Center PAT with blank token
+            {
+                "data_source": CONFLUENCE_DATA_CENTER,
+                "data_center_auth_method": DATA_CENTER_PERSONAL_ACCESS_TOKEN,
+                "data_center_personal_access_token": "",
                 "account_email": "foo@bar.me",
                 "api_token": "foo",
             }
@@ -712,11 +736,24 @@ async def test_validate_configuration_with_invalid_dependency_fields_raises_erro
             }
         ),
         (
-            # Confluence Data Center with blank dependent fields
+            # Confluence Data Center with blank non-dependent fields
             {
                 "data_source": CONFLUENCE_DATA_CENTER,
+                "data_center_auth_method": DATA_CENTER_BASIC_AUTH,
                 "data_center_username": "foo",
                 "data_center_password": "bar",
+                "account_email": "",
+                "api_token": "",
+            }
+        ),
+        (
+            # Confluence Data Center PAT with blank basic auth fields
+            {
+                "data_source": CONFLUENCE_DATA_CENTER,
+                "data_center_auth_method": DATA_CENTER_PERSONAL_ACCESS_TOKEN,
+                "data_center_username": "",
+                "data_center_password": "",
+                "data_center_personal_access_token": "confluence-dc-pat",
                 "account_email": "",
                 "api_token": "",
             }
@@ -847,23 +884,31 @@ class MockSSL:
 
 
 @pytest.mark.parametrize(
-    "field, data_source",
+    "field, data_source, auth_method",
     [
-        ("confluence_url", "confluence_cloud"),
-        ("account_email", "confluence_cloud"),
-        ("api_token", "confluence_cloud"),
-        ("username", "confluence_server"),
-        ("password", "confluence_server"),
-        ("data_center_username", "confluence_data_center"),
-        ("data_center_password", "confluence_data_center"),
+        ("confluence_url", "confluence_cloud", DATA_CENTER_BASIC_AUTH),
+        ("account_email", "confluence_cloud", DATA_CENTER_BASIC_AUTH),
+        ("api_token", "confluence_cloud", DATA_CENTER_BASIC_AUTH),
+        ("username", "confluence_server", DATA_CENTER_BASIC_AUTH),
+        ("password", "confluence_server", DATA_CENTER_BASIC_AUTH),
+        ("data_center_username", "confluence_data_center", DATA_CENTER_BASIC_AUTH),
+        ("data_center_password", "confluence_data_center", DATA_CENTER_BASIC_AUTH),
+        (
+            "data_center_personal_access_token",
+            "confluence_data_center",
+            DATA_CENTER_PERSONAL_ACCESS_TOKEN,
+        ),
     ],
 )
 @pytest.mark.asyncio
-async def test_validate_configuration_for_empty_fields(field, data_source):
+async def test_validate_configuration_for_empty_fields(field, data_source, auth_method):
     async with create_confluence_source() as source:
         source.confluence_client.configuration.get_field(
             "data_source"
         ).value = data_source
+        source.confluence_client.configuration.get_field(
+            "data_center_auth_method"
+        ).value = auth_method
         source.confluence_client.configuration.get_field(field).value = ""
 
         # Execute
@@ -1416,6 +1461,43 @@ async def test_get_session(data_source_type):
             pytest.fail(
                 f"Should not raise for valid data source type '{data_source_type}'. Exception: {e}"
             )
+
+
+@pytest.mark.asyncio
+async def test_get_session_data_center_basic_auth():
+    async with create_confluence_source(
+        data_source=CONFLUENCE_DATA_CENTER,
+        data_center_auth_method=DATA_CENTER_BASIC_AUTH,
+        data_center_username="dc-user",
+        data_center_password="dc-pass",
+    ) as source:
+        session = source.confluence_client._get_session()
+        assert isinstance(session._default_auth, aiohttp.BasicAuth)
+        assert session._default_auth.login == "dc-user"
+        assert session._default_auth.password == "dc-pass"
+        assert "Authorization" not in session.headers
+
+
+@pytest.mark.asyncio
+async def test_get_session_data_center_personal_access_token():
+    async with create_confluence_source(
+        data_source=CONFLUENCE_DATA_CENTER,
+        data_center_auth_method=DATA_CENTER_PERSONAL_ACCESS_TOKEN,
+        data_center_personal_access_token="confluence-dc-pat",
+    ) as source:
+        session = source.confluence_client._get_session()
+        assert session._default_auth is None
+        assert session.headers["Authorization"] == "Bearer confluence-dc-pat"
+
+
+@pytest.mark.asyncio
+async def test_get_session_data_center_invalid_auth_method():
+    async with create_confluence_source(data_source=CONFLUENCE_DATA_CENTER) as source:
+        source.confluence_client.configuration.get_field(
+            "data_center_auth_method"
+        ).value = "invalid"
+        with pytest.raises(InvalidConfluenceDataSourceTypeError):
+            source.confluence_client._get_session()
 
 
 @pytest.mark.asyncio
