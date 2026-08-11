@@ -49,6 +49,8 @@ URLS = {
 JIRA_CLOUD = "jira_cloud"
 JIRA_SERVER = "jira_server"
 JIRA_DATA_CENTER = "jira_data_center"
+DATA_CENTER_BASIC_AUTH = "basic"
+DATA_CENTER_PERSONAL_ACCESS_TOKEN = "personal_access_token"  # noqa: S105
 ATLASSIAN = "atlassian"
 USER_QUERY = "expand=groups,applicationRoles"
 # Bounded JQL catch-all for "all issues". The newer Cloud issue-search API only accepts
