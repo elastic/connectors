@@ -1251,7 +1251,6 @@ steps:
           find .artifacts -type f -name '*.tar.gz*' -exec trivy image --quiet --input {} \;
 
       - label: ":truck: Publish DRA Items"
-        <<: *test-agents
         key: "publish-dra-artifacts"
         timeout_in_minutes: 45
         depends_on:
@@ -1259,4 +1258,8 @@ steps:
           - test_docker_image_arm64
           - test_oss_dockerfile_image_amd64
           - test_oss_dockerfile_image_arm64
-        command: ".buildkite/publish/dra/init_dra_publishing.sh"
+        command: "bash .buildkite/publish/dra/upload-dra-pipeline.sh | buildkite-agent pipeline upload"
+        agents:
+          provider: "gcp"
+          image: family/core-ubuntu-2204
+          machineType: "n1-standard-4"
