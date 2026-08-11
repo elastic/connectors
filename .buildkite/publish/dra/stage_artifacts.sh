@@ -51,11 +51,6 @@ for f in app/connectors_service/dist/*.whl app/connectors_service/dist/*.tar.gz 
   cp "$f" "artifacts/${newname}"
 done
 
-echo "--- :page_facing_up: Generating dependency report"
-make -C app/connectors_service install deps-csv
-cp "app/connectors_service/dist/dependencies.csv" \
-   "artifacts/dependencies-${VERSION}${WORKFLOW_SUFFIX}.csv"
-
 chmod -R a+r artifacts/
 chmod -R a+w artifacts/
 
