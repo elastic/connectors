@@ -31,6 +31,8 @@ from connectors.sources.atlassian.jira.client import (
     NotFound,
 )
 from connectors.sources.atlassian.jira.constants import (
+    DATA_CENTER_BASIC_AUTH,
+    DATA_CENTER_PERSONAL_ACCESS_TOKEN,
     JIRA_CLOUD,
     JIRA_DATA_CENTER,
     JIRA_SERVER,
@@ -338,6 +340,10 @@ async def create_jira_source(
     use_text_extraction_service=False,
     data_source="jira_cloud",
     jira_url="http://127.0.0.1:8080",
+    data_center_auth_method=DATA_CENTER_BASIC_AUTH,
+    data_center_username="admin",
+    data_center_password="changeme",
+    data_center_personal_access_token="dc-pat-token",
 ):
     async with create_source(
         JiraDataSource,
@@ -346,6 +352,10 @@ async def create_jira_source(
         password="changeme",
         account_email="me@example.com",
         api_token="abc#123",
+        data_center_auth_method=data_center_auth_method,
+        data_center_username=data_center_username,
+        data_center_password=data_center_password,
+        data_center_personal_access_token=data_center_personal_access_token,
         jira_url=jira_url,
         projects="*",
         ssl_enabled=False,
@@ -464,22 +474,30 @@ def side_effect_function(url, ssl):
 
 
 @pytest.mark.parametrize(
-    "field, data_source",
+    "field, data_source, auth_method",
     [
-        ("jira_url", "jira_cloud"),
-        ("projects", "jira_cloud"),
-        ("api_token", "jira_cloud"),
-        ("account_email", "jira_cloud"),
-        ("username", "jira_server"),
-        ("password", "jira_server"),
-        ("data_center_username", "jira_data_center"),
-        ("data_center_password", "jira_data_center"),
+        ("jira_url", "jira_cloud", DATA_CENTER_BASIC_AUTH),
+        ("projects", "jira_cloud", DATA_CENTER_BASIC_AUTH),
+        ("api_token", "jira_cloud", DATA_CENTER_BASIC_AUTH),
+        ("account_email", "jira_cloud", DATA_CENTER_BASIC_AUTH),
+        ("username", "jira_server", DATA_CENTER_BASIC_AUTH),
+        ("password", "jira_server", DATA_CENTER_BASIC_AUTH),
+        ("data_center_username", "jira_data_center", DATA_CENTER_BASIC_AUTH),
+        ("data_center_password", "jira_data_center", DATA_CENTER_BASIC_AUTH),
+        (
+            "data_center_personal_access_token",
+            "jira_data_center",
+            DATA_CENTER_PERSONAL_ACCESS_TOKEN,
+        ),
     ],
 )
 @pytest.mark.asyncio
-async def test_validate_configuration_for_empty_fields(field, data_source):
+async def test_validate_configuration_for_empty_fields(field, data_source, auth_method):
     async with create_jira_source() as source:
         source.jira_client.configuration.get_field("data_source").value = data_source
+        source.jira_client.configuration.get_field(
+            "data_center_auth_method"
+        ).value = auth_method
         source.jira_client.configuration.get_field(field).value = ""
 
         with pytest.raises(ConfigurableFieldValueError):
@@ -726,6 +744,55 @@ async def test_get_session(data_source_type):
             pytest.fail(
                 f"Should not raise for valid data source type '{data_source_type}'. Exception: {e}"
             )
+
+
+@pytest.mark.asyncio
+async def test_get_session_data_center_basic_auth():
+    async with create_jira_source(
+        data_source=JIRA_DATA_CENTER,
+        data_center_auth_method=DATA_CENTER_BASIC_AUTH,
+        data_center_username="dc-user",
+        data_center_password="dc-pass",
+    ) as source:
+        session = source.jira_client._get_session()
+        assert isinstance(session._default_auth, aiohttp.BasicAuth)
+        assert session._default_auth.login == "dc-user"
+        assert session._default_auth.password == "dc-pass"
+        assert "Authorization" not in session.headers
+
+
+@pytest.mark.asyncio
+async def test_get_session_data_center_personal_access_token():
+    async with create_jira_source(
+        data_source=JIRA_DATA_CENTER,
+        data_center_auth_method=DATA_CENTER_PERSONAL_ACCESS_TOKEN,
+        data_center_personal_access_token="jira-dc-pat",
+    ) as source:
+        session = source.jira_client._get_session()
+        assert session._default_auth is None
+        assert session.headers["Authorization"] == "Bearer jira-dc-pat"
+
+
+@pytest.mark.asyncio
+async def test_get_session_data_center_invalid_auth_method():
+    async with create_jira_source(data_source=JIRA_DATA_CENTER) as source:
+        source.jira_client.configuration.get_field(
+            "data_center_auth_method"
+        ).value = "invalid"
+        with pytest.raises(InvalidJiraDataSourceTypeError):
+            source.jira_client._get_session()
+
+
+@pytest.mark.asyncio
+async def test_validate_config_data_center_pat_ignores_empty_basic_fields():
+    async with create_jira_source(
+        data_source=JIRA_DATA_CENTER,
+        data_center_auth_method=DATA_CENTER_PERSONAL_ACCESS_TOKEN,
+        data_center_username="",
+        data_center_password="",
+        data_center_personal_access_token="jira-dc-pat",
+    ) as source:
+        await source.validate_config()
 
 
 @pytest.mark.asyncio
