@@ -54,4 +54,6 @@ END_SIGNAL = "FINISHED_TASK"
 CONFLUENCE_CLOUD = "confluence_cloud"
 CONFLUENCE_SERVER = "confluence_server"
 CONFLUENCE_DATA_CENTER = "confluence_data_center"
+DATA_CENTER_BASIC_AUTH = "basic"
+DATA_CENTER_PERSONAL_ACCESS_TOKEN = "personal_access_token"  # noqa: S105
 WILDCARD = "*"
