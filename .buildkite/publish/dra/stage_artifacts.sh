@@ -5,7 +5,7 @@ set -euo pipefail
 WORKFLOW="${DRA_WORKFLOW:?DRA_WORKFLOW is required}"
 VERSION=$(cat "${PROJECT_ROOT}/app/connectors_service/connectors/VERSION")
 PROJECT_NAME="connectors"
-DOCKER_ARTIFACT_KEY="elastic-connectors"
+DOCKER_ARTIFACT_KEY="elastic-connectors-docker"
 
 WORKFLOW_SUFFIX=""
 if [[ "${WORKFLOW}" == "snapshot" ]]; then
