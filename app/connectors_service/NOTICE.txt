@@ -2832,7 +2832,7 @@ documentation is licensed as follows:
 
 
 charset-normalizer
-3.4.9
+3.5.0
 MIT
 MIT License
 
