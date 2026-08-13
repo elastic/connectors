@@ -36,7 +36,7 @@ from connectors.utils import truncate_id
 UTF_8 = "utf-8"
 
 JOB_REPORTING_INTERVAL = 10
-JOB_CHECK_INTERVAL = 1
+JOB_CHECK_INTERVAL = 5
 ES_ID_SIZE_LIMIT = 512
 
 
