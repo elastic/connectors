@@ -173,9 +173,7 @@ class ESIndex(ESClient):
         return self._create_object(resp_body)
 
     async def fetch_response_by_id(self, doc_id):
-        # No indices.refresh: the Get API is realtime, and during an active sync
-        # check_job() hits this path every second — refreshing first was a major
-        # source of ES load / ConnectionTimeout on long jobs (see #4311, #3155).
+        # Get is realtime; refresh before every reload caused ES timeouts (#4311, #3155).
         try:
             resp = await self._retrier.execute_with_retry(
                 partial(self.client.get, index=self.index_name, id=doc_id)
@@ -239,10 +237,7 @@ class ESIndex(ESClient):
         Returns:
             Iterator
         """
-        # Skip indices.refresh. Pollers call this every ~30s; forcing a refresh
-        # each time contributed to ES overload on long syncs (#4311, #3155).
-        # Search is near-real-time within refresh_interval (default 1s), which is
-        # enough for scheduling / idle detection (5-minute threshold).
+        # Search is NRT; refresh on every poll was unnecessary load (#4311, #3155).
         if query is None:
             query = {"match_all": {}}
 

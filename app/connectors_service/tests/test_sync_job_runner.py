@@ -661,7 +661,7 @@ async def test_sync_job_runner_reporting_metadata(
 
 @pytest.mark.asyncio
 async def test_update_ingestion_stats_survives_transient_errors():
-    # A ConnectionTimeout on one heartbeat must not permanently stop last_seen updates.
+    # Transient ES errors must not permanently stop last_seen updates.
     sync_job_runner = create_runner()
     sync_job_runner.sync_orchestrator = Mock()
     sync_job_runner.sync_orchestrator.ingestion_stats.return_value = {

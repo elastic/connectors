@@ -478,10 +478,7 @@ class SyncJobRunner:
                 raise UnsupportedJobType
 
     async def update_ingestion_stats(self, interval):
-        # Heartbeat for idle-job detection. A single ES blip must not kill this
-        # task: if last_seen stops advancing for IDLE_JOBS_THRESHOLD (5 min),
-        # job_cleanup_service marks the sync ERROR even while bulk is still
-        # running (#4311).
+        # Retry on failure so last_seen keeps advancing during active syncs (#4311).
         while True:
             await asyncio.sleep(interval)
 
