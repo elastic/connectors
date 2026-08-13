@@ -10,6 +10,7 @@ import pytest
 from connectors_sdk.filtering.validation import Filter, InvalidFilteringError
 from connectors_sdk.source import BaseDataSource
 from elasticsearch import (
+    ApiError,
     ConflictError,
 )
 
@@ -684,6 +685,38 @@ async def test_update_ingestion_stats_survives_transient_errors():
 
     assert sync_job_runner.sync_job.update_metadata.await_count == 3
     sync_job_runner.sync_job.log_warning.assert_called()
+    _, kwargs = sync_job_runner.sync_job.log_warning.call_args
+    assert kwargs.get("exc_info") is True
+
+
+@pytest.mark.asyncio
+async def test_update_ingestion_stats_survives_reload_errors():
+    sync_job_runner = create_runner()
+    sync_job_runner.sync_orchestrator = Mock()
+    sync_job_runner.sync_orchestrator.ingestion_stats.return_value = {
+        "indexed_document_count": 1,
+        "indexed_document_volume": 1,
+        "deleted_document_count": 0,
+    }
+    sync_job_runner.reload_sync_job = AsyncMock(
+        side_effect=[
+            ApiError(503, meta=Mock(), body="error"),
+            True,
+        ]
+    )
+    sync_job_runner.sync_job.update_metadata = AsyncMock(
+        side_effect=asyncio.CancelledError()
+    )
+    sync_job_runner.sync_job.log_warning = Mock()
+
+    with pytest.raises(asyncio.CancelledError):
+        await sync_job_runner.update_ingestion_stats(interval=0)
+
+    assert sync_job_runner.reload_sync_job.await_count == 2
+    sync_job_runner.sync_job.update_metadata.assert_awaited_once()
+    sync_job_runner.sync_job.log_warning.assert_called_once()
+    _, kwargs = sync_job_runner.sync_job.log_warning.call_args
+    assert kwargs.get("exc_info") is True
 
 
 @pytest.mark.parametrize(
