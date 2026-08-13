@@ -39,10 +39,12 @@ EOF
 
 echo "steps:"
 
-# Snapshot: always on active branches
-emit_dra_pair "snapshot"
+# Snapshot: main and version branches only (e.g. 9.5, 8.19)
+if [[ "${BUILDKITE_BRANCH}" =~ ^(main|[0-9]+\.[0-9x]+)$ ]]; then
+  emit_dra_pair "snapshot"
+fi
 
 # Staging: version branches only (not main)
-if [[ "${BUILDKITE_BRANCH}" != "main" ]]; then
+if [[ "${BUILDKITE_BRANCH}" =~ ^[0-9]+\.[0-9x]+$ ]]; then
   emit_dra_pair "staging"
 fi
