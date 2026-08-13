@@ -173,7 +173,6 @@ class ESIndex(ESClient):
         return self._create_object(resp_body)
 
     async def fetch_response_by_id(self, doc_id):
-        # Get is realtime; refresh before every reload caused ES timeouts (#4311, #3155).
         try:
             resp = await self._retrier.execute_with_retry(
                 partial(self.client.get, index=self.index_name, id=doc_id)
@@ -237,7 +236,6 @@ class ESIndex(ESClient):
         Returns:
             Iterator
         """
-        # Search is NRT; refresh on every poll was unnecessary load (#4311, #3155).
         if query is None:
             query = {"match_all": {}}
 

@@ -489,7 +489,6 @@ class SyncJobRunner:
                 raise UnsupportedJobType
 
     async def update_ingestion_stats(self, interval):
-        # Retry on failure so last_seen keeps advancing during active syncs (#4311).
         while True:
             await asyncio.sleep(interval)
 
