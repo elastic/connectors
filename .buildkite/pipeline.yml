@@ -1091,6 +1091,23 @@ steps:
       - "test_packages"
     steps:
       # ----
+      # Python packages + dependency CSV
+      # ----
+      - label: ":snake: Build Python packages and dependency CSV"
+        <<: *test-agents
+        key: "build_python_packages"
+        env:
+          PYTHON_VERSION: "${DRA_PYTHON_VERSION}"
+        command: ".buildkite/publish/build-python-packages.sh"
+        timeout_in_minutes: 15
+        artifact_paths:
+          - "app/connectors_service/dist/*.whl"
+          - "app/connectors_service/dist/*.tar.gz"
+          - "app/connectors_service/dist/dependencies.csv"
+          - "libs/connectors_sdk/dist/*.whl"
+          - "libs/connectors_sdk/dist/*.tar.gz"
+
+      # ----
       # Docker builds for amd64
       # ----
       - label: "Building amd64 Docker image"
@@ -1254,6 +1271,7 @@ steps:
         key: "publish-dra-artifacts"
         timeout_in_minutes: 45
         depends_on:
+          - build_python_packages
           - test_docker_image_amd64
           - test_docker_image_arm64
           - test_oss_dockerfile_image_amd64
