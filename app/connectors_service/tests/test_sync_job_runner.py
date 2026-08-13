@@ -719,6 +719,42 @@ async def test_update_ingestion_stats_survives_reload_errors():
     assert kwargs.get("exc_info") is True
 
 
+@pytest.mark.asyncio
+@patch("connectors.sync_job_runner.JOB_REPORTING_INTERVAL", 0)
+@patch("connectors.sync_job_runner.JOB_CHECK_INTERVAL", 0)
+async def test_sync_job_runner_survives_transient_check_job_errors(
+    sync_orchestrator_mock,
+):
+    ingestion_stats = {
+        "indexed_document_count": 1,
+        "indexed_document_volume": 1,
+        "deleted_document_count": 0,
+    }
+    sync_orchestrator_mock.ingestion_stats.return_value = ingestion_stats
+    sync_orchestrator_mock.done.side_effect = [False, False, True]
+    sync_job_runner = create_runner()
+    sync_job_runner.sync_job.log_warning = Mock()
+
+    check_job_calls = 0
+
+    async def check_job_side_effect():
+        nonlocal check_job_calls
+        check_job_calls += 1
+        if check_job_calls == 1:
+            raise ApiError(503, meta=Mock(), body="error")
+
+    sync_job_runner.check_job = check_job_side_effect
+
+    await sync_job_runner.execute()
+
+    assert check_job_calls == 2
+    sync_job_runner.sync_job.fail.assert_not_awaited()
+    sync_job_runner.sync_job.done.assert_awaited()
+    sync_job_runner.sync_job.log_warning.assert_called_once()
+    _, kwargs = sync_job_runner.sync_job.log_warning.call_args
+    assert kwargs.get("exc_info") is True
+
+
 @pytest.mark.parametrize(
     "job_type", [JobType.FULL, JobType.INCREMENTAL, JobType.ACCESS_CONTROL]
 )

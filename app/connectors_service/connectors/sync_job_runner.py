@@ -200,7 +200,20 @@ class SyncJobRunner:
             )
 
             while not self.sync_orchestrator.done():
-                await self.check_job()
+                try:
+                    await self.check_job()
+                except (
+                    ConnectorJobCanceledError,
+                    ConnectorJobNotRunningError,
+                    ConnectorNotFoundError,
+                    ConnectorJobNotFoundError,
+                ):
+                    raise
+                except _RETRIABLE_INGESTION_STATS_ERRORS as e:
+                    self.sync_job.log_warning(
+                        f"Failed to check job status; will retry. Error: {e}",
+                        exc_info=True,
+                    )
                 await asyncio.sleep(JOB_CHECK_INTERVAL)
             sync_error = self.sync_orchestrator.get_error()
             sync_status = JobStatus.COMPLETED if sync_error is None else JobStatus.ERROR
