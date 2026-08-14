@@ -40,7 +40,8 @@ EOF
 echo "steps:"
 
 # Snapshot: main and version branches only (e.g. 9.5, 8.19)
-if [[ "${BUILDKITE_BRANCH}" =~ ^(main|[0-9]+\.[0-9x]+)$ ]]; then
+# TEST: temporarily allow gh-dra-prep-migration for post-review DRA validation
+if [[ "${BUILDKITE_BRANCH}" =~ ^(main|[0-9]+\.[0-9x]+)$ ]] || [[ "${BUILDKITE_BRANCH}" == "gh-dra-prep-migration" ]]; then
   emit_dra_pair "snapshot"
 fi
 
