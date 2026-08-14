@@ -30,6 +30,8 @@ from connectors.sources.atlassian.confluence.constants import (
     CONTENT,
     CONTENT_QUERY_CLOUD,
     CONTENT_QUERY_DATA_CENTER,
+    DATA_CENTER_BASIC_AUTH,
+    DATA_CENTER_PERSONAL_ACCESS_TOKEN,
     END_SIGNAL,
     MAX_CONCURRENCY,
     MAX_CONCURRENT_DOWNLOADS,
@@ -146,52 +148,93 @@ class ConfluenceDataSource(BaseDataSource):
                 "order": 3,
                 "type": "str",
             },
-            "data_center_username": {
+            "data_center_auth_method": {
                 "depends_on": [
                     {"field": "data_source", "value": CONFLUENCE_DATA_CENTER}
                 ],
-                "label": "Confluence Data Center username",
+                "display": "dropdown",
+                "label": "Confluence Data Center authentication method",
+                "options": [
+                    {
+                        "label": "Basic authentication",
+                        "value": DATA_CENTER_BASIC_AUTH,
+                    },
+                    {
+                        "label": "Personal access token",
+                        "value": DATA_CENTER_PERSONAL_ACCESS_TOKEN,
+                    },
+                ],
                 "order": 4,
+                "type": "str",
+                "value": DATA_CENTER_BASIC_AUTH,
+            },
+            "data_center_username": {
+                "depends_on": [
+                    {"field": "data_source", "value": CONFLUENCE_DATA_CENTER},
+                    {
+                        "field": "data_center_auth_method",
+                        "value": DATA_CENTER_BASIC_AUTH,
+                    },
+                ],
+                "label": "Confluence Data Center username",
+                "order": 5,
                 "type": "str",
             },
             "data_center_password": {
                 "depends_on": [
-                    {"field": "data_source", "value": CONFLUENCE_DATA_CENTER}
+                    {"field": "data_source", "value": CONFLUENCE_DATA_CENTER},
+                    {
+                        "field": "data_center_auth_method",
+                        "value": DATA_CENTER_BASIC_AUTH,
+                    },
                 ],
                 "label": "Confluence Data Center password",
                 "sensitive": True,
-                "order": 5,
+                "order": 6,
+                "type": "str",
+            },
+            "data_center_personal_access_token": {
+                "depends_on": [
+                    {"field": "data_source", "value": CONFLUENCE_DATA_CENTER},
+                    {
+                        "field": "data_center_auth_method",
+                        "value": DATA_CENTER_PERSONAL_ACCESS_TOKEN,
+                    },
+                ],
+                "label": "Confluence Data Center personal access token",
+                "sensitive": True,
+                "order": 7,
                 "type": "str",
             },
             "account_email": {
                 "depends_on": [{"field": "data_source", "value": CONFLUENCE_CLOUD}],
                 "label": "Confluence Cloud account email",
-                "order": 6,
+                "order": 8,
                 "type": "str",
             },
             "api_token": {
                 "depends_on": [{"field": "data_source", "value": CONFLUENCE_CLOUD}],
                 "label": "Confluence Cloud API token",
                 "sensitive": True,
-                "order": 7,
+                "order": 9,
                 "type": "str",
             },
             "confluence_url": {
                 "label": "Confluence URL",
-                "order": 8,
+                "order": 10,
                 "type": "str",
             },
             "spaces": {
                 "display": "textarea",
                 "label": "Confluence space keys",
-                "order": 9,
+                "order": 11,
                 "tooltip": "This configurable field is ignored when Advanced Sync Rules are used.",
                 "type": "list",
             },
             "index_labels": {
                 "display": "toggle",
                 "label": "Enable indexing labels",
-                "order": 10,
+                "order": 12,
                 "tooltip": "Enabling this will increase the amount of network calls to the source, and may decrease performance",
                 "type": "bool",
                 "value": False,
@@ -199,21 +242,21 @@ class ConfluenceDataSource(BaseDataSource):
             "ssl_enabled": {
                 "display": "toggle",
                 "label": "Enable SSL",
-                "order": 11,
+                "order": 13,
                 "type": "bool",
                 "value": False,
             },
             "ssl_ca": {
                 "depends_on": [{"field": "ssl_enabled", "value": True}],
                 "label": "SSL certificate",
-                "order": 12,
+                "order": 14,
                 "type": "str",
             },
             "retry_count": {
                 "default_value": 3,
                 "display": "numeric",
                 "label": "Retries per request",
-                "order": 13,
+                "order": 15,
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
@@ -222,7 +265,7 @@ class ConfluenceDataSource(BaseDataSource):
                 "default_value": MAX_CONCURRENT_DOWNLOADS,
                 "display": "numeric",
                 "label": "Maximum concurrent downloads",
-                "order": 14,
+                "order": 16,
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
@@ -233,7 +276,7 @@ class ConfluenceDataSource(BaseDataSource):
             "use_document_level_security": {
                 "display": "toggle",
                 "label": "Enable document level security",
-                "order": 15,
+                "order": 17,
                 "tooltip": "Document level security ensures identities and permissions set in confluence are maintained in Elasticsearch. This enables you to restrict and personalize read-access users have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
                 "type": "bool",
                 "value": False,
@@ -241,7 +284,7 @@ class ConfluenceDataSource(BaseDataSource):
             "use_text_extraction_service": {
                 "display": "toggle",
                 "label": "Use text extraction service",
-                "order": 16,
+                "order": 18,
                 "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
                 "type": "bool",
                 "ui_restrictions": ["advanced"],
