@@ -21,6 +21,34 @@ class SyncCursorEmpty(Exception):
     pass
 
 
+class DeltaLinkExpired(Exception):
+    """Raised when Microsoft Graph returns 410 Gone for a delta link."""
+
+    pass
+
+
+def graph_site_page_to_document(graph_page):
+    """Map a Microsoft Graph sitePage resource to the connector document shape."""
+    page_id = graph_page.get("id")
+    description = graph_page.get("description") or ""
+
+    return {
+        "Id": page_id,
+        "Title": graph_page.get("title") or graph_page.get("name"),
+        "webUrl": graph_page.get("webUrl"),
+        "LayoutWebpartsContent": graph_page.get("layoutWebpartsContent"),
+        "CanvasContent1": graph_page.get("canvasContent1") or description,
+        "WikiField": graph_page.get("wikiField") or description,
+        "Description": description,
+        "Created": graph_page.get("createdDateTime"),
+        "Modified": graph_page.get("lastModifiedDateTime"),
+        "AuthorId": graph_page.get("authorId"),
+        "EditorId": graph_page.get("editorId"),
+        "odata.id": page_id,
+        "OData__UIVersionString": graph_page.get("uiVersionString"),
+    }
+
+
 def _prefix_group(group):
     return prefix_identity("group", group)
 

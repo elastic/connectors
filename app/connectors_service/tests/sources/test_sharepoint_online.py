@@ -49,12 +49,14 @@ from connectors.sources.sharepoint.sharepoint_online.constants import (
     WILDCARD,
 )
 from connectors.sources.sharepoint.sharepoint_online.utils import (
+    DeltaLinkExpired,
     SyncCursorEmpty,
     _get_login_name,
     _prefix_email,
     _prefix_group,
     _prefix_user,
     _prefix_user_id,
+    graph_site_page_to_document,
 )
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
@@ -1005,6 +1007,26 @@ class TestMicrosoftAPISession:
 
         assert e.match(error_message)
 
+    @pytest.mark.asyncio
+    async def test_call_api_with_410(
+        self,
+        microsoft_api_session,
+        mock_responses,
+        patch_sleep,
+        patch_cancellable_sleeps,
+    ):
+        url = "http://localhost:1234/delta-link"
+
+        gone_error = ClientResponseError(MagicMock(), MagicMock())
+        gone_error.status = 410
+        gone_error.message = "Gone"
+
+        mock_responses.get(url, exception=gone_error)
+
+        with pytest.raises(DeltaLinkExpired):
+            async with microsoft_api_session._get(url) as _:
+                pass
+
 
 class TestSharepointOnlineClient:
     @property
@@ -1339,6 +1361,47 @@ class TestSharepointOnlineClient:
         assert returned_drive_items == items_page_1 + items_page_2
 
     @pytest.mark.asyncio
+    async def test_drive_items_delta_yields_empty_page_with_delta_link(
+        self, client, patch_scroll_delta_url
+    ):
+        delta_url = "https://sharepoint.com/delta-link"
+        next_delta_url = "https://sharepoint.com/delta-link/next"
+
+        patch_scroll_delta_url.return_value = AsyncIterator(
+            [{"@odata.deltaLink": next_delta_url, "value": []}]
+        )
+
+        returned_pages = []
+        async for page in client.drive_items_delta(delta_url):
+            returned_pages.append(page)
+
+        assert len(returned_pages) == 1
+        assert list(returned_pages[0]) == []
+        assert returned_pages[0].delta_link() == next_delta_url
+
+    @pytest.mark.asyncio
+    async def test_drive_items_recovers_from_expired_delta_link(self, client):
+        drive_id = "drive-1"
+        stored_delta_url = "https://sharepoint.com/stale-delta"
+        fresh_items = ["item-1"]
+
+        async def drive_items_delta_mock(url):
+            if url == stored_delta_url:
+                msg = "expired"
+                raise DeltaLinkExpired(msg)
+            yield DriveItemsPage(fresh_items, "https://sharepoint.com/fresh-delta")
+
+        with patch.object(
+            client, "drive_items_delta", side_effect=drive_items_delta_mock
+        ):
+            returned_items = []
+            async for page in client.drive_items(drive_id, url=stored_delta_url):
+                for item in page:
+                    returned_items.append(item)
+
+        assert returned_items == fresh_items
+
+    @pytest.mark.asyncio
     async def test_drive_items(self, client, patch_fetch):
         drive_id = "12345"
         delta_url_next_sync = "https://sharepoint.com/delta-link-lalal/page-2"
@@ -1436,6 +1499,84 @@ class TestSharepointOnlineClient:
             returned_items.append(attachment)
 
         assert len(returned_items) == 0
+
+    @pytest.mark.asyncio
+    async def test_graph_site_list_item_attachments(self, client, patch_scroll):
+        site_id = "site-1"
+        list_id = "list-1"
+        list_item_id = "item-1"
+        actual_attachments = [
+            {"id": "attachment-1", "name": "notes.txt"},
+            {"id": "attachment-2", "name": "image.png"},
+        ]
+
+        returned_items = await self._execute_scrolling_method(
+            partial(
+                client.graph_site_list_item_attachments,
+                site_id,
+                list_id,
+                list_item_id,
+            ),
+            patch_scroll,
+            actual_attachments,
+        )
+
+        assert len(returned_items) == len(actual_attachments)
+        assert returned_items[0]["FileName"] == "notes.txt"
+        assert returned_items[0]["graph_attachment_id"] == "attachment-1"
+
+    @pytest.mark.asyncio
+    async def test_graph_site_list_item_attachments_not_found(
+        self, client, patch_scroll
+    ):
+        patch_scroll.side_effect = NotFound()
+
+        returned_items = []
+        async for attachment in client.graph_site_list_item_attachments(
+            "site-1", "list-1", "item-1"
+        ):
+            returned_items.append(attachment)
+
+        assert returned_items == []
+
+    @pytest.mark.asyncio
+    async def test_graph_site_pages(self, client, patch_scroll):
+        site_id = "site-1"
+        actual_items = [
+            {
+                "id": "page-1",
+                "title": "Home",
+                "webUrl": "https://example.sharepoint.com/sitepages/home.aspx",
+                "description": "Welcome",
+                "createdDateTime": "2024-01-01T00:00:00Z",
+                "lastModifiedDateTime": "2024-01-02T00:00:00Z",
+            }
+        ]
+
+        returned_items = await self._execute_scrolling_method(
+            partial(client.graph_site_pages, site_id), patch_scroll, actual_items
+        )
+
+        assert len(returned_items) == 1
+        assert returned_items[0]["Title"] == "Home"
+        assert returned_items[0]["Modified"] == "2024-01-02T00:00:00Z"
+
+    @pytest.mark.asyncio
+    async def test_graph_site_page_to_document(self):
+        graph_page = {
+            "id": "page-1",
+            "title": "Home",
+            "webUrl": "https://example.sharepoint.com/sitepages/home.aspx",
+            "description": "Welcome",
+            "createdDateTime": "2024-01-01T00:00:00Z",
+            "lastModifiedDateTime": "2024-01-02T00:00:00Z",
+        }
+
+        document = graph_site_page_to_document(graph_page)
+
+        assert document["Id"] == "page-1"
+        assert document["CanvasContent1"] == "Welcome"
+        assert document["Modified"] == "2024-01-02T00:00:00Z"
 
     @pytest.mark.asyncio
     async def test_site_list_item_attachments_wrong_tenant(self, client):
@@ -2131,8 +2272,22 @@ class TestSharepointOnlineDataSource:
     @property
     def site_list_item_attachments(self):
         return [
-            {"odata.id": "9", "name": "attachment 1.txt"},
-            {"odata.id": "10", "name": "attachment 2.txt"},
+            {
+                "odata.id": "9",
+                "FileName": "attachment 1.txt",
+                "graph_site_id": "site-1",
+                "graph_list_id": SITE_LIST_ONE_ID,
+                "graph_list_item_id": "1",
+                "graph_attachment_id": "9",
+            },
+            {
+                "odata.id": "10",
+                "FileName": "attachment 2.txt",
+                "graph_site_id": "site-1",
+                "graph_list_id": SITE_LIST_ONE_ID,
+                "graph_list_item_id": "1",
+                "graph_attachment_id": "10",
+            },
         ]
 
     @property
@@ -2340,10 +2495,10 @@ class TestSharepointOnlineDataSource:
                 return_value=self.site_list_has_unique_role_assignments
             )
             client.site_list_items = AsyncIterator(self.site_list_items)
-            client.site_list_item_attachments = AsyncIterator(
+            client.graph_site_list_item_attachments = AsyncIterator(
                 self.site_list_item_attachments
             )
-            client.site_pages = AsyncIterator(self.site_pages)
+            client.graph_site_pages = AsyncIterator(self.site_pages)
 
             client.graph_api_token = AsyncMock()
             client.graph_api_token.get.return_value = self.graph_api_token
@@ -2691,14 +2846,14 @@ class TestSharepointOnlineDataSource:
                 },
             ]
         )
-        attachment_list_titles = []
+        attachment_list_ids = []
 
-        async def attachments_spy(site_web_url, list_title, list_item_id):
-            attachment_list_titles.append(list_title)
+        async def attachments_spy(site_id, list_id, list_item_id):
+            attachment_list_ids.append(list_id)
             for attachment in self.site_list_item_attachments:
                 yield attachment
 
-        patch_sharepoint_client.site_list_item_attachments = attachments_spy
+        patch_sharepoint_client.graph_site_list_item_attachments = attachments_spy
 
         async with create_spo_source() as source:
             source._dls_enabled = Mock(return_value=False)
@@ -2711,8 +2866,8 @@ class TestSharepointOnlineDataSource:
                 doc["name"] for doc in results if doc.get("object_type") == "site_list"
             ]
             assert site_list_names == [SITE_LIST_ONE_NAME]
-            assert SHAREPOINT_HOME_CACHE_LIST_NAME not in attachment_list_titles
-            assert SITE_LIST_ONE_NAME in attachment_list_titles
+            assert SHAREPOINT_HOME_CACHE_LIST_ID not in attachment_list_ids
+            assert SITE_LIST_ONE_ID in attachment_list_ids
             # Same document set as sync without the excluded system list
             assert len(results) == 11
 
