@@ -173,11 +173,6 @@ class ESIndex(ESClient):
         return self._create_object(resp_body)
 
     async def fetch_response_by_id(self, doc_id):
-        if not self.serverless:
-            await self._retrier.execute_with_retry(
-                partial(self.client.indices.refresh, index=self.index_name)
-            )
-
         try:
             resp = await self._retrier.execute_with_retry(
                 partial(self.client.get, index=self.index_name, id=doc_id)
@@ -241,11 +236,6 @@ class ESIndex(ESClient):
         Returns:
             Iterator
         """
-        if not self.serverless:
-            await self._retrier.execute_with_retry(
-                partial(self.client.indices.refresh, index=self.index_name)
-            )
-
         if query is None:
             query = {"match_all": {}}
 
