@@ -15,6 +15,10 @@ elif [[ "${WORKFLOW}" != "staging" ]]; then
   exit 1
 fi
 
+echo "--- :package: Building zip artifact"
+# Run before downloading Python artifacts — make clean deletes dist/ in both subprojects
+make clean zip
+
 echo "--- :compression: Downloading ${WORKFLOW} artifacts"
 
 mkdir -p artifacts/
@@ -23,14 +27,13 @@ mkdir -p artifacts/
 buildkite-agent artifact download '.artifacts/*.tar.gz' . --step build_docker_image_amd64
 buildkite-agent artifact download '.artifacts/*.tar.gz' . --step build_docker_image_arm64
 
-# Python packages — required
-buildkite-agent artifact download 'app/connectors_service/dist/*.whl' .
-buildkite-agent artifact download 'app/connectors_service/dist/*.tar.gz' .
-buildkite-agent artifact download 'libs/connectors_sdk/dist/*.whl' .
-buildkite-agent artifact download 'libs/connectors_sdk/dist/*.tar.gz' .
+# Python packages and dependency CSV — built by build_python_packages step
+buildkite-agent artifact download 'app/connectors_service/dist/*.whl' . --step build_python_packages
+buildkite-agent artifact download 'app/connectors_service/dist/*.tar.gz' . --step build_python_packages
+buildkite-agent artifact download 'libs/connectors_sdk/dist/*.whl' . --step build_python_packages
+buildkite-agent artifact download 'libs/connectors_sdk/dist/*.tar.gz' . --step build_python_packages
+buildkite-agent artifact download 'app/connectors_service/dist/dependencies.csv' . --step build_python_packages
 
-echo "--- :package: Building zip artifact"
-make clean zip
 cp "elasticsearch_connectors-${VERSION}.zip" "artifacts/${PROJECT_NAME}-${VERSION}${WORKFLOW_SUFFIX}.zip"
 
 echo "--- :package: Staging ${WORKFLOW} artifacts"
@@ -40,6 +43,10 @@ mv ".artifacts/${DOCKER_ARTIFACT_KEY}-${VERSION}-amd64.tar.gz" \
    "artifacts/${PROJECT_NAME}-${VERSION}${WORKFLOW_SUFFIX}-docker-image-linux-amd64.tar.gz"
 mv ".artifacts/${DOCKER_ARTIFACT_KEY}-${VERSION}-arm64.tar.gz" \
    "artifacts/${PROJECT_NAME}-${VERSION}${WORKFLOW_SUFFIX}-docker-image-linux-arm64.tar.gz"
+
+# Dependency CSV — named with version and workflow suffix for DRA
+cp "app/connectors_service/dist/dependencies.csv" \
+   "artifacts/${PROJECT_NAME}-${VERSION}${WORKFLOW_SUFFIX}-dependencies.csv"
 
 # Python packages — add workflow suffix
 for f in app/connectors_service/dist/*.whl app/connectors_service/dist/*.tar.gz \
