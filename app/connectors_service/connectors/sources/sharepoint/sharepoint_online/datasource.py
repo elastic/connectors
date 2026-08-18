@@ -1283,6 +1283,11 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         self._sync_cursor[CURSOR_SITE_DRIVE_KEY][drive_id] = link
 
+    def clear_drive_delta_link(self, drive_id):
+        site_drives = self._sync_cursor.get(CURSOR_SITE_DRIVE_KEY)
+        if site_drives and drive_id in site_drives:
+            del site_drives[drive_id]
+
     def get_drive_delta_link(self, drive_id):
         return nested_get_from_dict(
             self._sync_cursor, [CURSOR_SITE_DRIVE_KEY, drive_id]

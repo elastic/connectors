@@ -867,18 +867,30 @@ class SharepointOnlineClient:
         )
         effective_url = fresh_url if not url else url
 
-        try:
-            async for page in self.drive_items_delta(effective_url):
-                yield page
-        except DeltaLinkExpired:
-            if not url:
-                raise
+        async for page in self._drive_items_with_delta_recovery(
+            drive_id, effective_url, fresh_url
+        ):
+            yield page
 
-            self._logger.warning(
-                f"Drive delta link expired for drive '{drive_id}'; restarting from root/delta"
-            )
-            async for page in self.drive_items_delta(fresh_url):
-                yield page
+    async def _drive_items_with_delta_recovery(
+        self, drive_id, url, fresh_url, *, allow_restart=True
+    ):
+        current_url = url
+        while True:
+            try:
+                async for page in self.drive_items_delta(current_url):
+                    yield page
+                return
+            except DeltaLinkExpired:
+                if not allow_restart:
+                    raise
+
+                self._logger.warning(
+                    f"Drive delta link expired for drive '{drive_id}'; "
+                    "restarting enumeration from root/delta"
+                )
+                current_url = fresh_url
+                allow_restart = False
 
     async def drive_items_permissions_batch(self, drive_id, drive_item_ids):
         requests = []
@@ -998,8 +1010,9 @@ class SharepointOnlineClient:
             async for page in self._graph_api_client.scroll(url):
                 for attachment in page:
                     attachment_id = attachment.get("id")
+                    stable_id = f"{list_id}-{list_item_id}-attachment-{attachment_id}"
                     yield {
-                        "odata.id": attachment_id,
+                        "odata.id": stable_id,
                         "FileName": attachment.get("name"),
                         "graph_site_id": site_id,
                         "graph_list_id": list_id,
@@ -1041,13 +1054,27 @@ class SharepointOnlineClient:
         )
 
     async def graph_site_pages(self, site_id):
-        select = "id,name,title,webUrl,description,createdDateTime,lastModifiedDateTime"
+        list_select = (
+            "id,name,title,webUrl,description,createdDateTime,lastModifiedDateTime"
+        )
+        detail_select = "id,description,canvasLayout,sharepointIds"
 
         try:
             async for page in self._graph_api_client.scroll(
-                f"{GRAPH_API_URL}/sites/{site_id}/pages?$select={select}"
+                f"{GRAPH_API_URL}/sites/{site_id}/pages?$select={list_select}"
             ):
                 for graph_page in page:
+                    page_id = graph_page.get("id")
+                    if page_id:
+                        try:
+                            detail = await self._graph_api_client.fetch(
+                                f"{GRAPH_API_URL}/sites/{site_id}/pages/{page_id}"
+                                f"?$select={detail_select}"
+                            )
+                            graph_page = {**graph_page, **detail}
+                        except NotFound:
+                            pass
+
                     yield graph_site_page_to_document(graph_page)
         except NotFound:
             return
