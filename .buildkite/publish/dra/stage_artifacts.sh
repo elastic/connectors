@@ -27,11 +27,7 @@ mkdir -p artifacts/
 buildkite-agent artifact download '.artifacts/*.tar.gz' . --step build_docker_image_amd64
 buildkite-agent artifact download '.artifacts/*.tar.gz' . --step build_docker_image_arm64
 
-# Python packages and dependency CSV — built by build_python_packages step
-buildkite-agent artifact download 'app/connectors_service/dist/*.whl' . --step build_python_packages
-buildkite-agent artifact download 'app/connectors_service/dist/*.tar.gz' . --step build_python_packages
-buildkite-agent artifact download 'libs/connectors_sdk/dist/*.whl' . --step build_python_packages
-buildkite-agent artifact download 'libs/connectors_sdk/dist/*.tar.gz' . --step build_python_packages
+# Dependency CSV — built by build_python_packages step
 buildkite-agent artifact download 'app/connectors_service/dist/dependencies.csv' . --step build_python_packages
 
 cp "elasticsearch_connectors-${VERSION}.zip" "artifacts/${PROJECT_NAME}-${VERSION}${WORKFLOW_SUFFIX}.zip"
@@ -47,21 +43,6 @@ mv ".artifacts/${DOCKER_ARTIFACT_KEY}-${VERSION}-arm64.tar.gz" \
 # Dependency CSV — named with version and workflow suffix for DRA
 cp "app/connectors_service/dist/dependencies.csv" \
    "artifacts/${PROJECT_NAME}-${VERSION}${WORKFLOW_SUFFIX}-dependencies.csv"
-
-# Python packages — add workflow suffix
-for f in app/connectors_service/dist/*.whl app/connectors_service/dist/*.tar.gz \
-          libs/connectors_sdk/dist/*.whl libs/connectors_sdk/dist/*.tar.gz; do
-  [[ -f "$f" ]] || continue
-  filename=$(basename "$f")
-  # whl: name-VERSION-py3-none-any.whl  → suffix inserted before -py3
-  # sdist: name-VERSION.tar.gz          → suffix inserted before .tar.gz
-  if [[ "${filename}" == *"-${VERSION}-"* ]]; then
-    newname="${filename/-${VERSION}-/-${VERSION}${WORKFLOW_SUFFIX}-}"
-  else
-    newname="${filename/-${VERSION}./-${VERSION}${WORKFLOW_SUFFIX}.}"
-  fi
-  cp "$f" "artifacts/${newname}"
-done
 
 chmod -R a+r artifacts/
 chmod -R a+w artifacts/
