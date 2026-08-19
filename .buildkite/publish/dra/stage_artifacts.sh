@@ -40,9 +40,10 @@ mv ".artifacts/${DOCKER_ARTIFACT_KEY}-${VERSION}-amd64.tar.gz" \
 mv ".artifacts/${DOCKER_ARTIFACT_KEY}-${VERSION}-arm64.tar.gz" \
    "artifacts/${PROJECT_NAME}-${VERSION}${WORKFLOW_SUFFIX}-docker-image-linux-arm64.tar.gz"
 
-# Dependency CSV — named with version and workflow suffix for DRA
+# Dependency CSV — named to match the DRA convention expected by
+# unified-release's release-manager DSL (dependencies-{VERSION}[-SNAPSHOT].csv).
 cp "app/connectors_service/dist/dependencies.csv" \
-   "artifacts/${PROJECT_NAME}-${VERSION}${WORKFLOW_SUFFIX}-dependencies.csv"
+   "artifacts/dependencies-${VERSION}${WORKFLOW_SUFFIX}.csv"
 
 chmod -R a+r artifacts/
 chmod -R a+w artifacts/
