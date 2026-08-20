@@ -280,6 +280,14 @@ class SharepointOnlineDataSource(BaseDataSource):
             msg = f"The specified SharePoint sites [{', '.join(missing)}] could not be retrieved during sync. Examples of sites available on the tenant:[{', '.join(retrieved_sites[:5])}]."
             raise Exception(msg)
 
+        if self.configuration["auth_method"] == "secret" and self._dls_enabled():
+            self._logger.warning(
+                "Document Level Security is enabled with client-secret authentication. "
+                "SharePoint REST permission calls may fail on some tenants. "
+                "Certificate authentication with SharePoint application permissions is "
+                "recommended for reliable DLS."
+            )
+
     def _site_path_from_web_url(self, web_url):
         url_parts = web_url.split("/sites/")
         site_path_parts = url_parts[1:]
@@ -1030,8 +1038,8 @@ class SharepointOnlineDataSource(BaseDataSource):
                 if "Attachments" in list_item["fields"]:
                     async for (
                         list_item_attachment
-                    ) in self.client.site_list_item_attachments(
-                        site_web_url, site_list_name, list_item_natural_id
+                    ) in self.client.graph_site_list_item_attachments(
+                        site_id, site_list_id, list_item_natural_id
                     ):
                         list_item_attachment["_id"] = list_item_attachment["odata.id"]
                         list_item_attachment["object_type"] = "list_item_attachment"
@@ -1195,7 +1203,7 @@ class SharepointOnlineDataSource(BaseDataSource):
     async def site_pages(self, site, site_access_control, check_timestamp=False):
         site_id = site["id"]
         url = site["webUrl"]
-        async for site_page in self.client.site_pages(url):
+        async for site_page in self.client.graph_site_pages(site_id):
             if not check_timestamp or (
                 check_timestamp and site_page["Modified"] >= self.last_sync_time()
             ):
@@ -1274,6 +1282,11 @@ class SharepointOnlineDataSource(BaseDataSource):
             return
 
         self._sync_cursor[CURSOR_SITE_DRIVE_KEY][drive_id] = link
+
+    def clear_drive_delta_link(self, drive_id):
+        site_drives = self._sync_cursor.get(CURSOR_SITE_DRIVE_KEY)
+        if site_drives and drive_id in site_drives:
+            del site_drives[drive_id]
 
     def get_drive_delta_link(self, drive_id):
         return nested_get_from_dict(
@@ -1372,8 +1385,21 @@ class SharepointOnlineDataSource(BaseDataSource):
             "_timestamp": new_timestamp,
         }
 
+        if attachment.get("graph_attachment_id"):
+            download_func = partial(
+                self.client.graph_download_attachment,
+                attachment["graph_site_id"],
+                attachment["graph_list_id"],
+                attachment["graph_list_item_id"],
+                attachment["graph_attachment_id"],
+            )
+        else:
+            download_func = partial(
+                self.client.download_attachment, attachment["odata.id"]
+            )
+
         attached_file, body = await self._download_content(
-            partial(self.client.download_attachment, attachment["odata.id"]),
+            download_func,
             attachment["_original_filename"],
         )
 

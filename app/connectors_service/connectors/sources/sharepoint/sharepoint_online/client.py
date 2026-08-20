@@ -33,7 +33,9 @@ from connectors.sources.sharepoint.sharepoint_online.constants import (
     WILDCARD,
 )
 from connectors.sources.sharepoint.sharepoint_online.utils import (
+    DeltaLinkExpired,
     _is_excluded_sharepoint_url,
+    graph_site_page_to_document,
 )
 from connectors.utils import (
     CacheWithTimeout,
@@ -296,7 +298,7 @@ def retryable_aiohttp_call(retries):
                     async for item in func(*args, **kwargs, retry_count=retry):
                         yield item
                     break
-                except (NotFound, BadRequestError):
+                except (NotFound, BadRequestError, DeltaLinkExpired):
                     raise
                 except Exception:
                     if retry >= retries:
@@ -476,6 +478,9 @@ class MicrosoftAPISession:
             raise PermissionsMissing(msg) from e
         elif e.status == 404:
             raise NotFound from e  # We wanna catch it in the code that uses this and ignore in some cases
+        elif e.status == 410:
+            msg = f"Delta link expired for {absolute_url}"
+            raise DeltaLinkExpired(msg) from e
         elif e.status == 500:
             raise InternalServerError from e
         elif e.status == 400:
@@ -852,20 +857,40 @@ class SharepointOnlineClient:
             delta_link = (
                 response[DELTA_LINK_KEY] if DELTA_LINK_KEY in response else None
             )
-            if "value" in response and len(response["value"]) > 0:
-                yield DriveItemsPage(response["value"], delta_link)
+            items = response.get("value", [])
+            if items or delta_link:
+                yield DriveItemsPage(items, delta_link)
 
     async def drive_items(self, drive_id, url=None):
-        url = (
-            (
-                f"{GRAPH_API_URL}/drives/{drive_id}/root/delta?$select={DRIVE_ITEMS_FIELDS}"
-            )
-            if not url
-            else url
+        fresh_url = (
+            f"{GRAPH_API_URL}/drives/{drive_id}/root/delta?$select={DRIVE_ITEMS_FIELDS}"
         )
+        effective_url = fresh_url if not url else url
 
-        async for page in self.drive_items_delta(url):
+        async for page in self._drive_items_with_delta_recovery(
+            drive_id, effective_url, fresh_url
+        ):
             yield page
+
+    async def _drive_items_with_delta_recovery(
+        self, drive_id, url, fresh_url, *, allow_restart=True
+    ):
+        current_url = url
+        while True:
+            try:
+                async for page in self.drive_items_delta(current_url):
+                    yield page
+                return
+            except DeltaLinkExpired:
+                if not allow_restart:
+                    raise
+
+                self._logger.warning(
+                    f"Drive delta link expired for drive '{drive_id}'; "
+                    "restarting enumeration from root/delta"
+                )
+                current_url = fresh_url
+                allow_restart = False
 
     async def drive_items_permissions_batch(self, drive_id, drive_item_ids):
         requests = []
@@ -975,6 +1000,37 @@ class SharepointOnlineClient:
             for site_list in page:
                 yield site_list
 
+    async def graph_site_list_item_attachments(self, site_id, list_id, list_item_id):
+        url = (
+            f"{GRAPH_API_URL}/sites/{site_id}/lists/{list_id}/items/"
+            f"{list_item_id}/attachments"
+        )
+
+        try:
+            async for page in self._graph_api_client.scroll(url):
+                for attachment in page:
+                    attachment_id = attachment.get("id")
+                    stable_id = f"{list_id}-{list_item_id}-attachment-{attachment_id}"
+                    yield {
+                        "odata.id": stable_id,
+                        "FileName": attachment.get("name"),
+                        "graph_site_id": site_id,
+                        "graph_list_id": list_id,
+                        "graph_list_item_id": list_item_id,
+                        "graph_attachment_id": attachment_id,
+                    }
+        except NotFound:
+            return
+
+    async def graph_download_attachment(
+        self, site_id, list_id, list_item_id, attachment_id, async_buffer
+    ):
+        url = (
+            f"{GRAPH_API_URL}/sites/{site_id}/lists/{list_id}/items/"
+            f"{list_item_id}/attachments/{attachment_id}/content"
+        )
+        await self._graph_api_client.pipe(url, async_buffer)
+
     async def site_list_item_attachments(self, site_web_url, list_title, list_item_id):
         self._validate_sharepoint_rest_url(site_web_url)
 
@@ -996,6 +1052,32 @@ class SharepointOnlineClient:
         await self._rest_api_client.pipe(
             f"{attachment_absolute_path}/$value", async_buffer
         )
+
+    async def graph_site_pages(self, site_id):
+        list_select = (
+            "id,name,title,webUrl,description,createdDateTime,lastModifiedDateTime"
+        )
+        detail_select = "id,description,canvasLayout,sharepointIds"
+
+        try:
+            async for page in self._graph_api_client.scroll(
+                f"{GRAPH_API_URL}/sites/{site_id}/pages?$select={list_select}"
+            ):
+                for graph_page in page:
+                    page_id = graph_page.get("id")
+                    if page_id:
+                        try:
+                            detail = await self._graph_api_client.fetch(
+                                f"{GRAPH_API_URL}/sites/{site_id}/pages/{page_id}"
+                                f"?$select={detail_select}"
+                            )
+                            graph_page = {**graph_page, **detail}
+                        except NotFound:
+                            pass
+
+                    yield graph_site_page_to_document(graph_page)
+        except NotFound:
+            return
 
     async def site_pages(self, site_web_url):
         self._validate_sharepoint_rest_url(site_web_url)
