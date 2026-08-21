@@ -550,7 +550,7 @@ class TestEntraAPIToken:
         certificate_credential_mock.close = AsyncMock()
 
         with patch(
-            "connectors.sources.sharepoint.sharepoint_online.client.CertificateCredential",
+            "connectors.sources.shared.microsoft.graph.CertificateCredential",
             return_value=certificate_credential_mock,
         ):
             actual_token, actual_expires_at = await token._fetch_token()
@@ -579,7 +579,7 @@ class TestEntraAPIToken:
         certificate_credential_mock.get_token = AsyncMock(side_effect=effect())
 
         with patch(
-            "connectors.sources.sharepoint.sharepoint_online.client.CertificateCredential",
+            "connectors.sources.shared.microsoft.graph.CertificateCredential",
             return_value=certificate_credential_mock,
         ):
             actual_token, actual_expires_at = await token._fetch_token()
