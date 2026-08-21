@@ -7,8 +7,7 @@ permissions. No Teams app package, RSC, or per-team/per-chat install is required
 
 Privacy for end users searching Elasticsearch is enforced with **document level
 security (DLS)** from team/channel/chat membership. The connector app itself can
-read content granted by the Graph permissions below (including private chats of
-team members).
+read content granted by the Graph permissions below (including private chats).
 
 ## 1. Register an Entra (Azure AD) application
 
@@ -30,8 +29,8 @@ permissions:
 | Permission | Why |
 | --- | --- |
 | `Team.ReadBasic.All` | Discover teams. |
-| `TeamMember.Read.All` | Team `member_ids`, content ACLs, and user ids for chat discovery. |
-| `User.ReadBasic.All` | User docs and identity profiles (`mail`, UPN, display name). |
+| `TeamMember.Read.All` | Team `member_ids` and content ACLs. |
+| `User.ReadBasic.All` | List directory users for User docs, identity profiles (`mail`, UPN, display name), and chat discovery seed. |
 | `Channel.ReadBasic.All` | Discover channels. |
 | `ChannelMember.Read.All` | Channel `member_ids` and content ACLs. |
 | `ChannelMessage.Read.All` | Channel messages and replies. |
@@ -49,11 +48,10 @@ login.
 ## What gets synced
 
 - **Team**, **Channel**, channel **messages** / **replies**
-- **Users** (every Entra user who participates in synced Teams content: team,
-  channel, and chat members), with ``name``, ``email`` (Graph ``mail``), and
-  ``upn`` (Graph ``userPrincipalName``)
-- **Chats of team members** (discovered via team membership → each member's
-  chats), including messages
+- **Users** (every Entra user from tenant ``GET /users``), with ``name``,
+  ``email`` (Graph ``mail``), and ``upn`` (Graph ``userPrincipalName``)
+- **Chats** of directory users (discovered via each user's chats, deduped by
+  chat id), including messages
 - **Files** (when "Fetch attachment content" is on): channel Files-folder
   drive items plus chat/channel message file attachments resolved via
   ``contentUrl`` → shares API. Each driveItem id becomes **one** File doc and
@@ -67,21 +65,17 @@ Team, Channel, and Chat documents include ``member_ids`` (Entra user ids).
 Channels with ``membershipType`` other than ``standard`` resolve members via
 the channel members API; standard channels inherit the parent team's membership.
 
-Discovery is one pass per sync: teams → team members (deduped) → non-standard
-channel members (deduped) → each team member's chats (deduped by chat id) → chat
-members (deduped) → resolve profiles via ``GET /users/{id}`` (batched) for the
-union of those participant ids. Chat ACL membership is always loaded with
-`GET /chats/{id}/members` (full list). Channel replies are always loaded with
-`GET .../messages/{id}/replies` (full threads). Incomplete `$expand` shortcuts are
-not used for members or replies.
+Discovery is one pass per sync:
 
-Profile hydration requires `User.ReadBasic.All`. Chat discovery itself does not
-need User.Read* — it only needs team-member ids plus Chat permissions. There is
-no tenant-wide ``GET /users`` sync: User content documents are only emitted for
-people who appear in synced team, channel, or chat membership. Users who have
-chats but belong to no team are out of scope unless a team member participates
-in the same chat. The same chat seen for multiple members is indexed once
-(deduped by chat id).
+1. List all directory users via ``GET /users`` → User docs and DLS identities.
+2. Enumerate teams / channels (membership for ACLs and ``member_ids``).
+3. For each directory user, list chats via ``GET /users/{id}/chats``; keep each
+   chat id once; sync Chat then messages once per unique chat.
+
+Chat ACL membership is always loaded with `GET /chats/{id}/members` (full list)
+when that chat is synced — not during discovery. Channel replies are always
+loaded with `GET .../messages/{id}/replies` (full threads). Incomplete `$expand`
+shortcuts are not used for members or replies.
 
 Document level security restricts search results for Teams, Channels, Chats,
 messages, and Files to members of the relevant team, channel, or chat. Those
@@ -91,9 +85,9 @@ content documents stamp ``user_id:`` only on
 ``userPrincipalName``, SPO-aligned) so email/UPN login can still match
 ``user_id:``-only content ACLs.
 
-User content documents are directory metadata for synced Teams participants and are
-**not** DLS-restricted (no ``_allow_access_control`` field). Enable "Enable
-document level security" in the connector configuration.
+User content documents are directory metadata and are **not** DLS-restricted
+(no ``_allow_access_control`` field). Enable "Enable document level security"
+in the connector configuration.
 
 ## Failures
 

@@ -223,8 +223,14 @@ GRAPH_USERS = {
 }
 
 
-async def _graph_users_by_ids(user_ids):
-    return {uid: GRAPH_USERS[uid] for uid in user_ids if uid in GRAPH_USERS}
+def _directory_users(*user_ids):
+    """Graph user resources for a mocked ``GET /users`` page."""
+    ids = user_ids or ("user-alice", "user-bob")
+    return [GRAPH_USERS[uid] for uid in ids if uid in GRAPH_USERS]
+
+
+def _mock_directory_users(*user_ids):
+    return MagicMock(return_value=AsyncIterator([_directory_users(*user_ids)]))
 
 
 CHAT_MESSAGES = [
@@ -852,68 +858,30 @@ async def test_get_access_control_yields_unique_identities():
     async with create_teams_source(use_document_level_security=True) as source:
         source._features = Mock()
         source._features.document_level_security_enabled = Mock(return_value=True)
-        source.client.get_teams = MagicMock(return_value=AsyncIterator([TEAMS]))
-        source.client.get_team_members = MagicMock(
-            return_value=AsyncIterator([TEAM_MEMBERS])
-        )
-        source.client.get_team_channels = MagicMock(
-            return_value=AsyncIterator([CHANNELS])
-        )
-        source.client.get_chats = MagicMock(return_value=AsyncIterator([CHATS]))
-        source.client.get_chat_members = MagicMock(
-            return_value=AsyncIterator([CHAT_MEMBERS])
-        )
-        source.client.get_users_by_ids = AsyncMock(side_effect=_graph_users_by_ids)
+        source.client.get_users = _mock_directory_users()
 
         docs = []
         async for doc in source.get_access_control():
             docs.append(doc)
 
         ids = [doc["_id"] for doc in docs]
-        # alice and bob appear in both team and chat, but must be deduped
         assert sorted(ids) == ["user-alice", "user-bob"]
         alice = next(doc for doc in docs if doc["_id"] == "user-alice")
         assert alice["identity"]["email"] == "email:alice@example.com"
         assert alice["identity"]["user"] == "user:alice@example.com"
-        source.client.get_chats.assert_called()
-        source.client.get_chat_members.assert_called()
-        source.client.get_users_by_ids.assert_called()
+        source.client.get_users.assert_called()
 
 
 @pytest.mark.asyncio
-async def test_get_access_control_includes_private_channel_members():
+async def test_get_access_control_lists_directory_users():
     async with create_teams_source(use_document_level_security=True) as source:
         source._features = Mock()
         source._features.document_level_security_enabled = Mock(return_value=True)
-        source.client.get_teams = MagicMock(return_value=AsyncIterator([TEAMS]))
-        source.client.get_team_members = MagicMock(
-            return_value=AsyncIterator([[TEAM_MEMBERS[0]]])  # alice only on team
-        )
-        source.client.get_team_channels = MagicMock(
-            return_value=AsyncIterator([[PRIVATE_CHANNEL]])
-        )
-        # shared/private channel adds bob, who is not on the team roster above
-        source.client.get_channel_members = MagicMock(
-            return_value=AsyncIterator(
-                [
-                    [
-                        {
-                            "id": "pcm-bob",
-                            "displayName": "Bob",
-                            "userId": "user-bob",
-                            "email": "bob@example.com",
-                        }
-                    ]
-                ]
-            )
-        )
-        source.client.get_chats = MagicMock(return_value=AsyncIterator([]))
-        source.client.get_users_by_ids = AsyncMock(side_effect=_graph_users_by_ids)
+        source.client.get_users = _mock_directory_users("user-alice", "user-bob")
 
         ids = [doc["_id"] async for doc in source.get_access_control()]
         assert sorted(ids) == ["user-alice", "user-bob"]
-        source.client.get_channel_members.assert_called()
-        source.client.get_users_by_ids.assert_called()
+        source.client.get_users.assert_called()
 
 
 @pytest.mark.asyncio
@@ -921,7 +889,7 @@ async def test_get_access_control_raises_on_permissions_missing():
     async with create_teams_source(use_document_level_security=True) as source:
         source._features = Mock()
         source._features.document_level_security_enabled = Mock(return_value=True)
-        source.client.get_teams = MagicMock(side_effect=PermissionsMissing())
+        source.client.get_users = MagicMock(side_effect=PermissionsMissing())
 
         with pytest.raises(PermissionsMissing):
             async for _doc in source.get_access_control():
@@ -975,7 +943,7 @@ def _mock_client_for_get_docs(source, with_attachments=True):
         return_value=AsyncIterator([CHAT_MESSAGES])
     )
     source.client.get_drive_item_by_content_url = AsyncMock(return_value=CHAT_FILE)
-    source.client.get_users_by_ids = AsyncMock(side_effect=_graph_users_by_ids)
+    source.client.get_users = _mock_directory_users()
 
 
 @pytest.mark.asyncio
@@ -1027,7 +995,7 @@ async def test_get_docs_emits_expected_types():
 
 @pytest.mark.asyncio
 async def test_get_docs_emits_user_for_chat_only_participant():
-    """Chat-only tenant users get User docs when they appear in a synced chat."""
+    """Directory users get User docs; chat members drive chat member_ids only."""
     chat_members_with_guest = [
         CHAT_MEMBERS[0],
         {
@@ -1038,6 +1006,7 @@ async def test_get_docs_emits_user_for_chat_only_participant():
         },
     ]
     async with create_teams_source(fetch_attachment_content=False) as source:
+        source.client.get_users = _mock_directory_users("user-alice", "user-dave")
         source.client.get_teams = MagicMock(return_value=AsyncIterator([TEAMS]))
         source.client.get_team = AsyncMock(return_value=TEAMS[0])
         source.client.get_team_members = MagicMock(
@@ -1057,7 +1026,6 @@ async def test_get_docs_emits_user_for_chat_only_participant():
             side_effect=lambda *a, **k: AsyncIterator([chat_members_with_guest])
         )
         source.client.get_chat_messages = MagicMock(return_value=AsyncIterator([[]]))
-        source.client.get_users_by_ids = AsyncMock(side_effect=_graph_users_by_ids)
 
         docs = [doc async for doc, _download in source.get_docs()]
         users = {
@@ -1066,12 +1034,15 @@ async def test_get_docs_emits_user_for_chat_only_participant():
         assert users == {"user-alice", "user-dave"}
         chat = next(doc for doc in docs if doc["type"] == TeamsObjectType.CHAT.value)
         assert chat["member_ids"] == ["user-alice", "user-dave"]
+        called_ids = set(source.client.get_chats.call_args[0][0])
+        assert called_ids == {"user-alice", "user-dave"}
 
 
 @pytest.mark.asyncio
-async def test_get_docs_emits_user_for_private_channel_only_member():
-    """Private-channel members who are not on the team roster still get User docs."""
+async def test_get_docs_emits_user_for_directory_member_not_on_team():
+    """Users from GET /users are emitted even when absent from the team roster."""
     async with create_teams_source(fetch_attachment_content=False) as source:
+        source.client.get_users = _mock_directory_users("user-alice", "user-bob")
         source.client.get_teams = MagicMock(return_value=AsyncIterator([TEAMS]))
         source.client.get_team = AsyncMock(return_value=TEAMS[0])
         source.client.get_team_members = MagicMock(
@@ -1099,7 +1070,6 @@ async def test_get_docs_emits_user_for_private_channel_only_member():
             return_value=AsyncIterator([])
         )
         source.client.get_chats = MagicMock(return_value=AsyncIterator([]))
-        source.client.get_users_by_ids = AsyncMock(side_effect=_graph_users_by_ids)
 
         docs = [doc async for doc, _download in source.get_docs()]
         users = {
@@ -1150,15 +1120,16 @@ async def test_get_docs_user_email_from_graph_not_membership():
             "user_id:user-alice",
             "user_id:user-bob",
         ]
-        source.client.get_users_by_ids.assert_called()
-        # Chat discovery still uses team-member ids
+        source.client.get_users.assert_called()
+        # Chat discovery is seeded from directory user ids
         source.client.get_chats.assert_called()
         called_ids = set(source.client.get_chats.call_args[0][0])
         assert called_ids == {"user-alice", "user-bob"}
 
 
 @pytest.mark.asyncio
-async def test_get_docs_user_profile_404_emits_user_without_email():
+async def test_get_docs_omits_users_absent_from_directory():
+    """Team members not returned by GET /users do not get User docs."""
     members_without_email = [
         {
             "id": "membership-1",
@@ -1174,55 +1145,45 @@ async def test_get_docs_user_profile_404_emits_user_without_email():
         },
     ]
 
-    async def _partial_users(user_ids):
-        # Alice resolves; Bob is missing from Graph
-        return {
-            uid: GRAPH_USERS[uid]
-            for uid in user_ids
-            if uid == "user-alice" and uid in GRAPH_USERS
-        }
-
     async with create_teams_source(use_document_level_security=True) as source:
         source._features = Mock()
         source._features.document_level_security_enabled = Mock(return_value=True)
         _mock_client_for_get_docs(source)
+        source.client.get_users = _mock_directory_users("user-alice")
         source.client.get_team_members = MagicMock(
             return_value=AsyncIterator([members_without_email])
         )
-        source.client.get_users_by_ids = AsyncMock(side_effect=_partial_users)
         source.client.get_chats = MagicMock(return_value=AsyncIterator([]))
 
         docs = [doc async for doc, _download in source.get_docs()]
         users = {
             doc["_id"]: doc for doc in docs if doc["type"] == TeamsObjectType.USER.value
         }
+        assert set(users) == {"user-alice"}
         assert users["user-alice"]["email"] == "alice@example.com"
-        assert users["user-alice"]["upn"] == "alice@example.com"
-        assert users["user-bob"]["email"] == ""
-        assert users["user-bob"]["upn"] == ""
-        assert users["user-bob"]["name"] == "Bob"  # membership fallback
-        assert ACCESS_CONTROL not in users["user-bob"]
         team = next(doc for doc in docs if doc["type"] == TeamsObjectType.TEAM.value)
         assert sorted(team[ACCESS_CONTROL]) == [
             "user_id:user-alice",
             "user_id:user-bob",
         ]
-        assert "email:bob@example.com" not in team[ACCESS_CONTROL]
-        # Chat discovery still receives both team member ids
         called_ids = set(source.client.get_chats.call_args[0][0])
-        assert called_ids == {"user-alice", "user-bob"}
+        assert called_ids == {"user-alice"}
 
 
 @pytest.mark.asyncio
-async def test_get_docs_raises_when_user_profile_permission_missing():
+async def test_get_docs_raises_when_user_directory_permission_missing():
     async with create_teams_source(fetch_attachment_content=False) as source:
+        source.client.get_users = MagicMock(side_effect=PermissionsMissing())
         source.client.get_teams = MagicMock(return_value=AsyncIterator([TEAMS]))
         source.client.get_team_members = MagicMock(
             return_value=AsyncIterator([TEAM_MEMBERS])
         )
-        source.client.get_users_by_ids = AsyncMock(side_effect=PermissionsMissing())
         source.client.get_team_channels = MagicMock(
             side_effect=lambda *a, **k: AsyncIterator([CHANNELS])
+        )
+        source.client.get_channel_messages = MagicMock(return_value=AsyncIterator([[]]))
+        source.client.get_channel_message_replies = MagicMock(
+            return_value=AsyncIterator([])
         )
         source.client.get_chats = MagicMock(return_value=AsyncIterator([]))
 
@@ -1232,57 +1193,32 @@ async def test_get_docs_raises_when_user_profile_permission_missing():
 
 
 @pytest.mark.asyncio
-async def test_client_get_users_by_ids_batch_success():
-    client = build_client()
-
-    def _batch_response(payload):
-        responses = []
-        for request in payload["requests"]:
-            user_id = request["id"]
-            responses.append(
-                {"id": user_id, "status": 200, "body": GRAPH_USERS[user_id]}
-            )
-        return {"responses": responses}
-
-    client._graph_api_client = FakeGraphSession(posts={"/$batch": _batch_response})
-    users = await client.get_users_by_ids(["user-alice", "user-bob"])
-    await client.close()
-    assert set(users) == {"user-alice", "user-bob"}
-    assert users["user-alice"]["mail"] == "alice@example.com"
-
-
-@pytest.mark.asyncio
-async def test_client_get_users_by_ids_falls_back_on_batch_not_found():
+async def test_client_get_users_scrolls_directory():
     client = build_client()
     client._graph_api_client = FakeGraphSession(
-        raises={"/$batch": NotFound()},
-        fetches={
-            "/users/user-alice": GRAPH_USERS["user-alice"],
-            "/users/user-bob": GRAPH_USERS["user-bob"],
-        },
+        pages={
+            "/users?$select=": [
+                [GRAPH_USERS["user-alice"]],
+                [GRAPH_USERS["user-bob"]],
+            ]
+        }
     )
-    users = await client.get_users_by_ids(["user-alice", "user-bob"])
+    users = []
+    async for page in client.get_users():
+        users.extend(page)
     await client.close()
-    assert set(users) == {"user-alice", "user-bob"}
+    assert {user["id"] for user in users} == {"user-alice", "user-bob"}
 
 
 @pytest.mark.asyncio
-async def test_client_get_user_swallows_not_found():
-    client = build_client()
-    client._graph_api_client = FakeGraphSession(raises={"/users/missing": NotFound()})
-    assert await client.get_user("missing") is None
-    await client.close()
-    assert client._skipped["users"] == 1
-
-
-@pytest.mark.asyncio
-async def test_client_get_users_by_ids_propagates_permissions_missing():
+async def test_client_get_users_propagates_permissions_missing():
     client = build_client()
     client._graph_api_client = FakeGraphSession(
-        raises={"/$batch": PermissionsMissing()}
+        raises={"/users?$select=": PermissionsMissing()}
     )
     with pytest.raises(PermissionsMissing):
-        await client.get_users_by_ids(["user-alice"])
+        async for _page in client.get_users():
+            pass
     await client.close()
 
 
@@ -1319,7 +1255,7 @@ async def test_get_docs_raises_when_teams_permission_missing():
     # corpus on the next full sync.
     async with create_teams_source() as source:
         source.client.get_teams = MagicMock(side_effect=PermissionsMissing())
-        source.client.get_users_by_ids = AsyncMock(side_effect=_graph_users_by_ids)
+        source.client.get_users = _mock_directory_users()
         source.client.get_chats = MagicMock(return_value=AsyncIterator([CHATS]))
         source.client.get_chat_members = MagicMock(
             return_value=AsyncIterator([CHAT_MEMBERS])
@@ -1348,12 +1284,41 @@ async def test_get_docs_raises_when_chats_permission_missing():
         source.client.get_channel_message_replies = MagicMock(
             return_value=AsyncIterator([])
         )
-        source.client.get_users_by_ids = AsyncMock(side_effect=_graph_users_by_ids)
+        source.client.get_users = _mock_directory_users()
         source.client.get_chats = MagicMock(side_effect=PermissionsMissing())
 
         with pytest.raises(PermissionsMissing, match="Enumeration failed"):
             async for _doc, _download in source.get_docs():
                 pass
+
+
+@pytest.mark.asyncio
+async def test_get_docs_syncs_each_chat_once_when_shared_across_users():
+    """Same chat listed for two directory users → one Chat doc and one messages fetch."""
+    shared_chat = CHATS[0]
+    async with create_teams_source(fetch_attachment_content=False) as source:
+        source.client.get_users = _mock_directory_users("user-alice", "user-bob")
+        source.client.get_teams = MagicMock(return_value=AsyncIterator([]))
+        source.client.get_chats = MagicMock(
+            side_effect=lambda *a, **k: AsyncIterator([[shared_chat]])
+        )
+        source.client.get_chat_members = MagicMock(
+            side_effect=lambda *a, **k: AsyncIterator([CHAT_MEMBERS])
+        )
+        source.client.get_chat_messages = MagicMock(
+            return_value=AsyncIterator([CHAT_MESSAGES])
+        )
+
+        docs = [doc async for doc, _download in source.get_docs()]
+        chats = [doc for doc in docs if doc["type"] == TeamsObjectType.CHAT.value]
+        chat_messages = [
+            doc for doc in docs if doc["type"] == TeamsObjectType.CHAT_MESSAGE.value
+        ]
+        assert len(chats) == 1
+        assert chats[0]["_id"] == "chat-1"
+        assert len(chat_messages) == 1
+        assert source.client.get_chat_messages.call_count == 1
+        assert source.client.get_chat_members.call_count == 1
 
 
 # -- get_content -------------------------------------------------------------
@@ -1778,6 +1743,7 @@ async def test_process_channel_message_indexes_subject_only_without_attachments(
 @pytest.mark.asyncio
 async def test_get_docs_raises_when_both_enumerations_fail():
     async with create_teams_source() as source:
+        source.client.get_users = _mock_directory_users()
         source.client.get_teams = MagicMock(side_effect=PermissionsMissing())
         source.client.get_chats = MagicMock(side_effect=PermissionsMissing())
 
@@ -1789,6 +1755,7 @@ async def test_get_docs_raises_when_both_enumerations_fail():
 @pytest.mark.asyncio
 async def test_get_docs_empty_tenant_does_not_raise():
     async with create_teams_source() as source:
+        source.client.get_users = MagicMock(return_value=AsyncIterator([]))
         source.client.get_teams = MagicMock(return_value=AsyncIterator([]))
         source.client.get_chats = MagicMock(return_value=AsyncIterator([]))
 
@@ -1802,6 +1769,7 @@ async def test_get_docs_raises_on_unexpected_enumeration_error():
     # hang it (the orchestrator runs as a pool task whose exception is swallowed
     # by ConcurrentTasks; get_docs re-raises the recorded error instead).
     async with create_teams_source() as source:
+        source.client.get_users = _mock_directory_users()
         source.client.get_teams = MagicMock(side_effect=RuntimeError("boom"))
         source.client.get_chats = MagicMock(return_value=AsyncIterator([]))
 
@@ -1818,6 +1786,7 @@ async def test_get_docs_raises_on_producer_error():
     # Producer exceptions must fail the sync. ConcurrentTasks removes finished
     # tasks before join returns, so get_docs re-raises the recorded error.
     async with create_teams_source(fetch_attachment_content=False) as source:
+        source.client.get_users = _mock_directory_users()
         source.client.get_teams = MagicMock(return_value=AsyncIterator([TEAMS]))
         source.client.get_team_members = MagicMock(
             side_effect=RuntimeError("team producer boom")
@@ -1839,7 +1808,7 @@ async def test_get_docs_raises_when_channel_message_permission_missing():
         source.client.get_team_members = MagicMock(
             return_value=AsyncIterator([TEAM_MEMBERS])
         )
-        source.client.get_users_by_ids = AsyncMock(side_effect=_graph_users_by_ids)
+        source.client.get_users = _mock_directory_users()
         source.client.get_team_channels = MagicMock(
             side_effect=lambda *a, **k: AsyncIterator([CHANNELS])
         )
@@ -1865,7 +1834,7 @@ async def test_private_channel_uses_channel_member_acl_when_dls_enabled():
         source.client.get_team_members = MagicMock(
             return_value=AsyncIterator([TEAM_MEMBERS])
         )
-        source.client.get_users_by_ids = AsyncMock(side_effect=_graph_users_by_ids)
+        source.client.get_users = _mock_directory_users()
         source.client.get_team_channels = MagicMock(
             side_effect=lambda *a, **k: AsyncIterator([[PRIVATE_CHANNEL]])
         )
@@ -1928,7 +1897,7 @@ async def test_private_channel_skipped_when_dls_on_and_members_unresolved():
         source.client.get_team_members = MagicMock(
             return_value=AsyncIterator([TEAM_MEMBERS])
         )
-        source.client.get_users_by_ids = AsyncMock(side_effect=_graph_users_by_ids)
+        source.client.get_users = _mock_directory_users()
         source.client.get_team_channels = MagicMock(
             side_effect=lambda *a, **k: AsyncIterator([[PRIVATE_CHANNEL]])
         )
@@ -2010,7 +1979,7 @@ async def test_get_docs_completes_under_low_concurrency():
         source.client.get_team_members = MagicMock(
             side_effect=lambda *a, **k: AsyncIterator([TEAM_MEMBERS])
         )
-        source.client.get_users_by_ids = AsyncMock(side_effect=_graph_users_by_ids)
+        source.client.get_users = _mock_directory_users()
         source.client.get_team_channels = MagicMock(
             side_effect=lambda *a, **k: AsyncIterator([CHANNELS])
         )

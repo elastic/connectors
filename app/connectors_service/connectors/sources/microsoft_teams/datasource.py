@@ -100,19 +100,6 @@ def _profile_from_graph_user(user):
     }
 
 
-def _member_display_names(members):
-    """Fallback display names from membership payloads keyed by userId."""
-    names = {}
-    for member in members or []:
-        user_id = member.get("userId")
-        if not user_id:
-            continue
-        name = (member.get("displayName") or "").strip()
-        if name and user_id not in names:
-            names[user_id] = name
-    return names
-
-
 class MicrosoftTeamsDataSource(BaseDataSource):
     """Microsoft Teams"""
 
@@ -143,11 +130,9 @@ class MicrosoftTeamsDataSource(BaseDataSource):
         self._file_acls = {}
         self._file_docs = {}
         self._file_parents = {}
-        # Entra userId → {name, email, user} from Graph /users (not conversationMember).
+        # Entra userId → {name, email, user} from Graph GET /users.
         # email = mail only; user = userPrincipalName for the ``user:`` ACL dialect.
         self._user_profiles = {}
-        # Membership displayName fallback when /users/{id} 404s.
-        self._member_names = {}
 
     def _set_internal_logger(self):
         self.client.set_logger(self._logger)
@@ -308,33 +293,6 @@ class MicrosoftTeamsDataSource(BaseDataSource):
             )
         return document
 
-    def _remember_member_names(self, members):
-        for user_id, name in _member_display_names(members).items():
-            if user_id not in self._member_names:
-                self._member_names[user_id] = name
-
-    async def _ensure_user_profiles(self, user_ids):
-        """Resolve missing Graph user profiles into ``_user_profiles``."""
-        missing = [
-            user_id
-            for user_id in {uid for uid in (user_ids or []) if uid}
-            if user_id not in self._user_profiles
-        ]
-        if not missing:
-            return
-        users = await self.client.get_users_by_ids(missing)
-        for user_id in missing:
-            graph_user = users.get(user_id)
-            if graph_user is not None:
-                self._user_profiles[user_id] = _profile_from_graph_user(graph_user)
-            else:
-                # Mark as resolved-empty so we do not re-fetch; name may come from members.
-                self._user_profiles[user_id] = {
-                    "name": self._member_names.get(user_id) or "",
-                    "email": "",
-                    "user": "",
-                }
-
     def _access_control_for_members(self, members):
         """Content ACL tokens: ``user_id:`` only (email/UPN live on identity docs).
 
@@ -347,19 +305,25 @@ class MicrosoftTeamsDataSource(BaseDataSource):
                 access_control.add(_prefix_user_id(user_id))
         return list(access_control)
 
-    async def _collect_team_participants(self):
-        """Enumerate teams and non-standard channel membership.
+    async def _load_directory_users(self):
+        """List tenant users into ``_user_profiles``; return sorted Entra user ids."""
+        user_ids = set()
+        async for users in self.client.get_users():
+            for graph_user in users or []:
+                user_id = graph_user.get("id")
+                if not user_id:
+                    continue
+                user_ids.add(user_id)
+                self._user_profiles[user_id] = _profile_from_graph_user(graph_user)
+        return sorted(user_ids)
+
+    async def _collect_teams(self):
+        """Enumerate teams and their members for content producers.
 
         Returns:
-            tuple: ``(team_jobs, team_member_ids, participant_ids)`` where
-            ``team_jobs`` is a list of ``(team, members)`` pairs,
-            ``team_member_ids`` anchors chat discovery, and ``participant_ids``
-            is the deduped union of team and private/shared channel members so far.
+            list: ``(team, members)`` pairs for ``team_producer``.
         """
         team_jobs = []
-        team_member_ids = set()
-        participant_ids = set()
-
         async for teams in self.client.get_teams():
             for team in teams:
                 team_id = team.get("id")
@@ -367,55 +331,29 @@ class MicrosoftTeamsDataSource(BaseDataSource):
                 if team_id:
                     async for member_page in self.client.get_team_members(team_id):
                         members.extend(member_page)
-                    self._remember_member_names(members)
-                    for user_id in _member_ids(members):
-                        team_member_ids.add(user_id)
-                        participant_ids.add(user_id)
-
-                    async for channels in self.client.get_team_channels(team_id):
-                        for channel in channels:
-                            if (
-                                _channel_membership_type(channel)
-                                not in NON_STANDARD_CHANNEL_TYPES
-                            ):
-                                continue
-                            async for (
-                                channel_members
-                            ) in self.client.get_channel_members(
-                                team_id, channel["id"]
-                            ):
-                                self._remember_member_names(channel_members)
-                                for user_id in _member_ids(channel_members):
-                                    participant_ids.add(user_id)
-
                 team_jobs.append((team, members))
+        return team_jobs
 
-        return team_jobs, team_member_ids, participant_ids
-
-    async def _collect_chat_participants(self, team_member_ids, participant_ids, chats):
-        """Discover chats for team members and add every chat member to ``participant_ids``."""
+    async def _discover_chats(self, user_ids):
+        """Return unique chats for ``user_ids`` (discovery only; no members fetch)."""
+        chats = []
         seen_chat_ids = set()
-
-        async for chat_pages in self.client.get_chats(team_member_ids):
+        async for chat_pages in self.client.get_chats(user_ids):
             for chat in chat_pages:
                 chat_id = chat.get("id")
-                if not chat_id:
+                if not chat_id or chat_id in seen_chat_ids:
                     continue
-                if chat_id not in seen_chat_ids:
-                    seen_chat_ids.add(chat_id)
-                    chats.append(chat)
-                async for chat_members in self.client.get_chat_members(chat_id):
-                    self._remember_member_names(chat_members)
-                    for user_id in _member_ids(chat_members):
-                        participant_ids.add(user_id)
+                seen_chat_ids.add(chat_id)
+                chats.append(chat)
+        return chats
 
-    async def _queue_user_documents(self, participant_ids):
-        """Emit one User content doc per Teams participant (directory metadata)."""
-        for user_id in sorted(participant_ids):
+    async def _queue_user_documents(self, user_ids):
+        """Emit one User content doc per directory user."""
+        for user_id in user_ids:
             profile = self._user_profiles.get(user_id) or {}
             user_document = self.formatter.format_user(
                 user_id=user_id,
-                name=profile.get("name") or self._member_names.get(user_id),
+                name=profile.get("name"),
                 email=profile.get("email"),
                 upn=profile.get("user"),
             )
@@ -452,23 +390,15 @@ class MicrosoftTeamsDataSource(BaseDataSource):
         } | self.access_control_query(access_control)
 
     async def get_access_control(self):
-        """Yields an access control document for every Teams participant."""
+        """Yields an access control document for every directory user."""
         if not self._dls_enabled():
             self._logger.warning("DLS is not enabled. Skipping access control sync.")
             return
 
         self._user_profiles = {}
-        self._member_names = {}
-        chats = []
-        (
-            _team_jobs,
-            team_member_ids,
-            participant_ids,
-        ) = await self._collect_team_participants()
-        await self._collect_chat_participants(team_member_ids, participant_ids, chats)
-        await self._ensure_user_profiles(participant_ids)
+        user_ids = await self._load_directory_users()
 
-        for user_id in sorted(participant_ids):
+        for user_id in user_ids:
             doc = self._user_access_control_doc(user_id)
             if doc:
                 yield doc
@@ -916,7 +846,7 @@ class MicrosoftTeamsDataSource(BaseDataSource):
             await self.queue.put(EndSignal.CHAT_TASK_FINISHED)
 
     async def _enumerate_producers(self):
-        """Enumerates teams and chats and schedules their producers.
+        """Enumerates users, teams, and chats and schedules their producers.
 
         Runs as a single top-level task so that ``_consumer`` can drain the queue
         concurrently. Enumerating everything up front (before consuming) can stall
@@ -931,18 +861,29 @@ class MicrosoftTeamsDataSource(BaseDataSource):
         self._file_docs = {}
         self._file_parents = {}
         self._user_profiles = {}
-        self._member_names = {}
+        user_ids = []
         team_jobs = []
-        team_member_ids = set()
-        participant_ids = set()
         chats = []
+        users_ok = False
         try:
             try:
-                (
-                    team_jobs,
-                    team_member_ids,
-                    participant_ids,
-                ) = await self._collect_team_participants()
+                user_ids = await self._load_directory_users()
+                await self._queue_user_documents(user_ids)
+                users_ok = True
+            except PermissionsMissing:
+                self._teams_enumeration_failed = True
+                self._logger.warning(
+                    "Unable to list directory users. Verify the "
+                    "'User.ReadBasic.All' application permission is granted."
+                )
+
+            try:
+                team_jobs = await self._collect_teams()
+                for team, members in team_jobs:
+                    await self.fetchers.put(
+                        partial(self.team_producer, team, members)
+                    )
+                    self.tasks += 1
             except PermissionsMissing:
                 self._teams_enumeration_failed = True
                 self._logger.warning(
@@ -950,42 +891,18 @@ class MicrosoftTeamsDataSource(BaseDataSource):
                     "and 'TeamMember.Read.All' application permissions are granted."
                 )
 
-            if not self._teams_enumeration_failed:
+            if users_ok:
                 try:
-                    await self._collect_chat_participants(
-                        team_member_ids, participant_ids, chats
-                    )
+                    chats = await self._discover_chats(user_ids)
+                    for chat in chats:
+                        await self.fetchers.put(partial(self.chat_producer, chat))
+                        self.tasks += 1
                 except PermissionsMissing:
                     self._chats_enumeration_failed = True
                     self._logger.warning(
-                        "Unable to enumerate chats for team members. Verify the "
-                        "'Chat.ReadBasic.All' application permission is granted."
+                        "Unable to enumerate chats for directory users. Verify the "
+                        "'Chat.Read.All' application permission is granted."
                     )
-
-            if not self._teams_enumeration_failed:
-                try:
-                    await self._ensure_user_profiles(participant_ids)
-                    await self._queue_user_documents(participant_ids)
-
-                    for team, members in team_jobs:
-                        await self.fetchers.put(
-                            partial(self.team_producer, team, members)
-                        )
-                        self.tasks += 1
-                except PermissionsMissing:
-                    self._teams_enumeration_failed = True
-                    self._logger.warning(
-                        "Unable to resolve user profiles. Verify the "
-                        "'User.ReadBasic.All' application permission is granted."
-                    )
-
-            if (
-                not self._chats_enumeration_failed
-                and not self._teams_enumeration_failed
-            ):
-                for chat in chats:
-                    await self.fetchers.put(partial(self.chat_producer, chat))
-                    self.tasks += 1
         except Exception as exc:
             # An unexpected (non-permission) error is treated as a connection-wide
             # failure: record it and abort so get_docs can re-raise it. The finally
@@ -1031,7 +948,7 @@ class MicrosoftTeamsDataSource(BaseDataSource):
                     "'User.ReadBasic.All')"
                 )
             if self._chats_enumeration_failed:
-                failed.append("chats ('TeamMember.Read.All' / 'Chat.ReadBasic.All')")
+                failed.append("chats ('User.ReadBasic.All' / 'Chat.Read.All')")
             failed_list = " and ".join(failed)
             msg = (
                 f"Enumeration failed for {failed_list}. Refusing to report a "
