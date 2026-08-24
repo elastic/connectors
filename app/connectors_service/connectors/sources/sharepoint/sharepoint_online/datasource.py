@@ -1280,9 +1280,7 @@ class SharepointOnlineDataSource(BaseDataSource):
     async def _sync_drive_items(self, drive_id):
         try:
             async for page in self.client.drive_items(
-                drive_id,
-                url=self.get_drive_delta_link(drive_id),
-                on_delta_reset=self.clear_drive_delta_link,
+                drive_id, url=self.get_drive_delta_link(drive_id)
             ):
                 yield page
         except DeltaLinkExpired as e:

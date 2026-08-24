@@ -873,24 +873,15 @@ class SharepointOnlineClient:
         fresh_url = (
             f"{GRAPH_API_URL}/drives/{drive_id}/root/delta?$select={DRIVE_ITEMS_FIELDS}"
         )
-        effective_url = fresh_url if not url else url
+        current_url = url or fresh_url
 
-        async for page in self._drive_items_with_delta_recovery(
-            drive_id, effective_url, fresh_url, on_delta_reset=on_delta_reset
-        ):
-            yield page
-
-    async def _drive_items_with_delta_recovery(
-        self, drive_id, url, fresh_url, *, allow_restart=True, on_delta_reset=None
-    ):
-        current_url = url
-        while True:
+        for attempt in (0, 1):
             try:
                 async for page in self.drive_items_delta(current_url):
                     yield page
                 return
             except DeltaLinkExpired:
-                if not allow_restart:
+                if attempt == 1:
                     raise
 
                 self._logger.warning(
@@ -900,7 +891,6 @@ class SharepointOnlineClient:
                 if on_delta_reset is not None:
                     on_delta_reset(drive_id)
                 current_url = fresh_url
-                allow_restart = False
 
     async def drive_items_permissions_batch(self, drive_id, drive_item_ids):
         requests = []
