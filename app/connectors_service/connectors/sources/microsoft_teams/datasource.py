@@ -880,9 +880,7 @@ class MicrosoftTeamsDataSource(BaseDataSource):
             try:
                 team_jobs = await self._collect_teams()
                 for team, members in team_jobs:
-                    await self.fetchers.put(
-                        partial(self.team_producer, team, members)
-                    )
+                    await self.fetchers.put(partial(self.team_producer, team, members))
                     self.tasks += 1
             except PermissionsMissing:
                 self._teams_enumeration_failed = True
