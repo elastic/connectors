@@ -11,6 +11,8 @@ from enum import Enum
 from connectors_sdk.logger import logger, set_extra_logger
 from elastic_transport import (
     ConnectionError as TransportConnectionError,
+)
+from elastic_transport import (
     ConnectionTimeout,
     SerializationError,
 )
@@ -257,11 +259,21 @@ class TransientElasticsearchRetrier:
             try:
                 result = await func()
                 return result
-            except (
-                ConnectionTimeout,
-                TransportConnectionError,
-                SerializationError,
-            ) as e:
+            except (ConnectionTimeout, TransportConnectionError) as e:
+                self._logger.warning(
+                    f"Client method '{func_name}' retry {retry}: "
+                    f"{type(e).__name__}: {e}"
+                )
+
+                if retry >= self._max_retries:
+                    raise
+            except SerializationError as e:
+                # Retry response deserialize failures (e.g. proxy body
+                # "Client Closed Request"). Request serialize failures will
+                # never succeed and must not burn the retry budget.
+                if not str(e).startswith("Unable to deserialize"):
+                    raise
+
                 self._logger.warning(
                     f"Client method '{func_name}' retry {retry}: "
                     f"{type(e).__name__}: {e}"

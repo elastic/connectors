@@ -361,11 +361,12 @@ class TestTransientElasticsearchRetrier:
             nonlocal attempt
             if attempt < nr_failed_requests:
                 attempt += 1
-                raise elasticsearch.ConnectionError("connection reset")
+                msg = "connection reset"
+                raise elasticsearch.ConnectionError(msg)
 
         await retrier.execute_with_retry(_func)
 
-        assert patch_sleep.awaited_exactly(2)
+        assert patch_sleep.await_count == 2
 
     @pytest.mark.asyncio
     async def test_execute_with_retry_connection_error_no_recovery(self, patch_sleep):
@@ -374,12 +375,14 @@ class TestTransientElasticsearchRetrier:
         )
 
         async def _func():
-            raise elasticsearch.ConnectionError("connection reset")
+            msg = "connection reset"
+            raise elasticsearch.ConnectionError(msg)
 
         with pytest.raises(elasticsearch.ConnectionError):
             await retrier.execute_with_retry(_func)
 
-        assert patch_sleep.awaited_exactly(self.max_retries)
+        # Final attempt raises without sleeping.
+        assert patch_sleep.await_count == self.max_retries - 1
 
     @pytest.mark.asyncio
     async def test_execute_with_retry_serialization_error_with_recovery(
@@ -396,29 +399,46 @@ class TestTransientElasticsearchRetrier:
             nonlocal attempt
             if attempt < nr_failed_requests:
                 attempt += 1
-                raise SerializationError(
-                    "Unable to deserialize as JSON: b'Client Closed Request'"
-                )
+                msg = "Unable to deserialize as JSON: b'Client Closed Request'"
+                raise SerializationError(msg)
 
         await retrier.execute_with_retry(_func)
 
-        assert patch_sleep.awaited_exactly(2)
+        assert patch_sleep.await_count == 2
 
     @pytest.mark.asyncio
-    async def test_execute_with_retry_serialization_error_no_recovery(self, patch_sleep):
+    async def test_execute_with_retry_serialization_error_no_recovery(
+        self, patch_sleep
+    ):
         retrier = TransientElasticsearchRetrier(
             self.logger_mock, self.max_retries, self.retry_interval
         )
 
         async def _func():
-            raise SerializationError(
-                "Unable to deserialize as JSON: b'Client Closed Request'"
-            )
+            msg = "Unable to deserialize as JSON: b'Client Closed Request'"
+            raise SerializationError(msg)
 
         with pytest.raises(SerializationError):
             await retrier.execute_with_retry(_func)
 
-        assert patch_sleep.awaited_exactly(self.max_retries)
+        assert patch_sleep.await_count == self.max_retries - 1
+
+    @pytest.mark.asyncio
+    async def test_execute_with_retry_serialization_error_not_retriable(
+        self, patch_sleep
+    ):
+        retrier = TransientElasticsearchRetrier(
+            self.logger_mock, self.max_retries, self.retry_interval
+        )
+
+        async def _func():
+            msg = "Unable to serialize to JSON: <object>"
+            raise SerializationError(msg)
+
+        with pytest.raises(SerializationError, match="Unable to serialize"):
+            await retrier.execute_with_retry(_func)
+
+        assert patch_sleep.await_count == 0
 
     @pytest.mark.asyncio
     async def test_execute_with_retry_cancelled_midway(self, patch_sleep):

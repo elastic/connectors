@@ -366,16 +366,24 @@ class ConcurrentTasks:
             await asyncio.gather(*self.tasks, return_exceptions=(not raise_on_error))
         except:
             self.cancel()
+            self._errors.clear()
             raise
 
         if raise_on_error and self._errors:
+            error = self._errors[0]
+            self._errors.clear()
             self.cancel()
-            raise self._errors[0]
+            raise error
+
+        # Drop retained failures so long-lived pools cannot raise stale errors.
+        self._errors.clear()
 
     def raise_any_exception(self):
         if self._errors:
+            error = self._errors[0]
+            self._errors.clear()
             self.cancel()
-            raise self._errors[0]
+            raise error
 
         for task in self.tasks:
             if task.done() and not task.cancelled():

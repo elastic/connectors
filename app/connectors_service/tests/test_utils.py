@@ -592,6 +592,9 @@ async def test_concurrent_tasks_raise_any_exception_after_callback():
     with pytest.raises(Exception, match="This task had an error"):
         runner.raise_any_exception()
 
+    # Error is consumed so a later check does not re-raise a stale failure.
+    runner.raise_any_exception()
+
 
 @pytest.mark.asyncio
 async def test_concurrent_tasks_join_raise_on_error():
@@ -645,6 +648,9 @@ async def test_concurrent_tasks_join_raise_on_error_after_callback():
     assert len(runner) == 0
     with pytest.raises(Exception, match="This task had an error"):
         await runner.join(raise_on_error=True)
+
+    # Sticky errors must not survive a completed join.
+    runner.raise_any_exception()
 
 
 class CustomException(Exception):
