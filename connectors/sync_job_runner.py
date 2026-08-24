@@ -7,6 +7,10 @@ import asyncio
 import time
 
 import elasticsearch
+from elastic_transport import ConnectionError as ElasticTransportConnectionError
+from elasticsearch import (
+    ApiError,
+)
 from elasticsearch import (
     AuthorizationException as ElasticAuthorizationException,
 )
@@ -31,6 +35,7 @@ from connectors.protocol.connectors import (
     DELETED_DOCUMENT_COUNT,
     INDEXED_DOCUMENT_COUNT,
     INDEXED_DOCUMENT_VOLUME,
+    ProtocolError,
 )
 from connectors.source import BaseDataSource
 from connectors.utils import truncate_id
@@ -38,8 +43,14 @@ from connectors.utils import truncate_id
 UTF_8 = "utf-8"
 
 JOB_REPORTING_INTERVAL = 10
-JOB_CHECK_INTERVAL = 1
+JOB_CHECK_INTERVAL = 5
 ES_ID_SIZE_LIMIT = 512
+
+_RETRIABLE_INGESTION_STATS_ERRORS = (
+    ApiError,
+    ElasticTransportConnectionError,
+    ProtocolError,
+)
 
 
 class SyncJobRunningError(Exception):
@@ -199,7 +210,20 @@ class SyncJobRunner:
             )
 
             while not self.sync_orchestrator.done():
-                await self.check_job()
+                try:
+                    await self.check_job()
+                except (
+                    ConnectorJobCanceledError,
+                    ConnectorJobNotRunningError,
+                    ConnectorNotFoundError,
+                    ConnectorJobNotFoundError,
+                ):
+                    raise
+                except _RETRIABLE_INGESTION_STATS_ERRORS as e:
+                    self.sync_job.log_warning(
+                        f"Failed to check job status; will retry. Error: {e}",
+                        exc_info=True,
+                    )
                 await asyncio.sleep(JOB_CHECK_INTERVAL)
             sync_error = self.sync_orchestrator.get_error()
             sync_status = JobStatus.COMPLETED if sync_error is None else JobStatus.ERROR
@@ -519,16 +543,22 @@ class SyncJobRunner:
         while True:
             await asyncio.sleep(interval)
 
-            if not await self.reload_sync_job():
-                break
+            try:
+                if not await self.reload_sync_job():
+                    break
 
-            result = self.sync_orchestrator.ingestion_stats()
-            ingestion_stats = {
-                INDEXED_DOCUMENT_COUNT: result.get(INDEXED_DOCUMENT_COUNT, 0),
-                INDEXED_DOCUMENT_VOLUME: result.get(INDEXED_DOCUMENT_VOLUME, 0),
-                DELETED_DOCUMENT_COUNT: result.get(DELETED_DOCUMENT_COUNT, 0),
-            }
-            await self.sync_job.update_metadata(ingestion_stats=ingestion_stats)
+                result = self.sync_orchestrator.ingestion_stats()
+                ingestion_stats = {
+                    INDEXED_DOCUMENT_COUNT: result.get(INDEXED_DOCUMENT_COUNT, 0),
+                    INDEXED_DOCUMENT_VOLUME: result.get(INDEXED_DOCUMENT_VOLUME, 0),
+                    DELETED_DOCUMENT_COUNT: result.get(DELETED_DOCUMENT_COUNT, 0),
+                }
+                await self.sync_job.update_metadata(ingestion_stats=ingestion_stats)
+            except _RETRIABLE_INGESTION_STATS_ERRORS as e:
+                self.sync_job.log_warning(
+                    f"Failed to update ingestion stats; will retry. Error: {e}",
+                    exc_info=True,
+                )
 
     async def check_job(self):
         if not await self.reload_connector():
