@@ -31,6 +31,7 @@ from connectors.sources.sharepoint.sharepoint_online.client import (
     BadRequestError,
     DriveItemsPage,
     EntraAPIToken,
+    GoneError,
     GraphAPIToken,
     InternalServerError,
     InvalidSharepointTenant,
@@ -49,6 +50,7 @@ from connectors.sources.sharepoint.sharepoint_online.constants import (
     WILDCARD,
 )
 from connectors.sources.sharepoint.sharepoint_online.utils import (
+    DeltaLinkExpired,
     SyncCursorEmpty,
     _get_login_name,
     _prefix_email,
@@ -1005,6 +1007,26 @@ class TestMicrosoftAPISession:
 
         assert e.match(error_message)
 
+    @pytest.mark.asyncio
+    async def test_call_api_with_410(
+        self,
+        microsoft_api_session,
+        mock_responses,
+        patch_sleep,
+        patch_cancellable_sleeps,
+    ):
+        url = "http://localhost:1234/some-resource"
+
+        gone_error = ClientResponseError(MagicMock(), MagicMock())
+        gone_error.status = 410
+        gone_error.message = "Gone"
+
+        mock_responses.get(url, exception=gone_error)
+
+        with pytest.raises(GoneError):
+            async with microsoft_api_session._get(url) as _:
+                pass
+
 
 class TestSharepointOnlineClient:
     @property
@@ -1337,6 +1359,129 @@ class TestSharepointOnlineClient:
 
         assert len(returned_drive_items) == len(items_page_1) + len(items_page_2)
         assert returned_drive_items == items_page_1 + items_page_2
+
+    @pytest.mark.asyncio
+    async def test_drive_items_delta_yields_empty_page_with_delta_link(
+        self, client, patch_scroll_delta_url
+    ):
+        delta_url = "https://sharepoint.com/delta-link"
+        next_delta_url = "https://sharepoint.com/delta-link/next"
+
+        patch_scroll_delta_url.return_value = AsyncIterator(
+            [{"@odata.deltaLink": next_delta_url, "value": []}]
+        )
+
+        returned_pages = []
+        async for page in client.drive_items_delta(delta_url):
+            returned_pages.append(page)
+
+        assert len(returned_pages) == 1
+        assert list(returned_pages[0]) == []
+        assert returned_pages[0].delta_link() == next_delta_url
+
+    @pytest.mark.asyncio
+    async def test_drive_items_delta_maps_gone_to_delta_link_expired(
+        self, client, patch_scroll_delta_url
+    ):
+        delta_url = "https://sharepoint.com/stale-delta"
+        patch_scroll_delta_url.side_effect = GoneError()
+
+        with pytest.raises(DeltaLinkExpired) as exc_info:
+            async for _page in client.drive_items_delta(delta_url):
+                pass
+
+        assert delta_url in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_drive_items_recovers_from_expired_delta_link(self, client):
+        drive_id = "drive-1"
+        stored_delta_url = "https://sharepoint.com/stale-delta"
+        fresh_items = ["item-1"]
+
+        async def drive_items_delta_mock(url):
+            if url == stored_delta_url:
+                msg = "expired"
+                raise DeltaLinkExpired(msg)
+            yield DriveItemsPage(fresh_items, "https://sharepoint.com/fresh-delta")
+
+        with patch.object(
+            client, "drive_items_delta", side_effect=drive_items_delta_mock
+        ):
+            returned_items = []
+            async for page in client.drive_items(drive_id, url=stored_delta_url):
+                for item in page:
+                    returned_items.append(item)
+
+        assert returned_items == fresh_items
+
+    @pytest.mark.asyncio
+    async def test_drive_items_recovers_from_410_on_full_sync(self, client):
+        drive_id = "drive-1"
+        fresh_items = ["item-1"]
+        call_count = 0
+
+        async def drive_items_delta_mock(url):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                msg = "expired"
+                raise DeltaLinkExpired(msg)
+            yield DriveItemsPage(fresh_items, "https://sharepoint.com/fresh-delta")
+
+        with patch.object(
+            client, "drive_items_delta", side_effect=drive_items_delta_mock
+        ):
+            returned_items = []
+            async for page in client.drive_items(drive_id):
+                for item in page:
+                    returned_items.append(item)
+
+        assert returned_items == fresh_items
+        assert call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_drive_items_does_not_retry_410_infinitely(self, client):
+        drive_id = "drive-1"
+
+        async def drive_items_delta_mock(url):
+            msg = "expired"
+            raise DeltaLinkExpired(msg)
+            yield  # pragma: no cover - makes this an async generator for patching
+
+        with patch.object(
+            client, "drive_items_delta", side_effect=drive_items_delta_mock
+        ):
+            with pytest.raises(DeltaLinkExpired):
+                async for _page in client.drive_items(drive_id):
+                    pass
+
+    @pytest.mark.asyncio
+    async def test_drive_items_calls_on_delta_reset(self, client):
+        drive_id = "drive-1"
+        stored_delta_url = "https://sharepoint.com/stale-delta"
+        fresh_items = ["item-1"]
+        reset_calls = []
+
+        async def drive_items_delta_mock(url):
+            if url == stored_delta_url:
+                msg = "expired"
+                raise DeltaLinkExpired(msg)
+            yield DriveItemsPage(fresh_items, "https://sharepoint.com/fresh-delta")
+
+        with patch.object(
+            client, "drive_items_delta", side_effect=drive_items_delta_mock
+        ):
+            returned_items = []
+            async for page in client.drive_items(
+                drive_id,
+                url=stored_delta_url,
+                on_delta_reset=reset_calls.append,
+            ):
+                for item in page:
+                    returned_items.append(item)
+
+        assert returned_items == fresh_items
+        assert reset_calls == [drive_id]
 
     @pytest.mark.asyncio
     async def test_drive_items(self, client, patch_fetch):
@@ -2355,7 +2500,7 @@ class TestSharepointOnlineDataSource:
 
             yield client
 
-    def drive_items_func(self, drive_id, url=None):
+    def drive_items_func(self, drive_id, url=None, on_delta_reset=None):
         if not url:
             return AsyncIterator(self.drive_items)
         else:
@@ -2715,6 +2860,33 @@ class TestSharepointOnlineDataSource:
             assert SITE_LIST_ONE_NAME in attachment_list_titles
             # Same document set as sync without the excluded system list
             assert len(results) == 11
+
+    @pytest.mark.asyncio
+    async def test_sync_drive_items_clears_cursor_on_failure(
+        self, patch_sharepoint_client
+    ):
+        drive_id = "drive-to-fail"
+
+        async def failing_drive_items(drive_id, url=None, on_delta_reset=None):
+            msg = "still expired after reset"
+            raise DeltaLinkExpired(msg)
+            yield  # pragma: no cover
+
+        patch_sharepoint_client.drive_items = failing_drive_items
+
+        async with create_spo_source() as source:
+            source.init_sync_cursor()
+            source.update_drive_delta_link(
+                drive_id, "https://sharepoint.com/stale-delta"
+            )
+
+            with pytest.raises(DeltaLinkExpired) as exc_info:
+                async for _page in source._sync_drive_items(drive_id):
+                    pass
+
+            assert drive_id in str(exc_info.value)
+            assert "410 Gone" in str(exc_info.value)
+            assert source.get_drive_delta_link(drive_id) is None
 
     @pytest.mark.asyncio
     async def test_site_lists_with_unique_role_assignments(
