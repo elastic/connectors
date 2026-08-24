@@ -74,7 +74,7 @@ SOFTWARE.
 
 
 Pygments
-2.20.0
+2.21.0
 BSD-2-Clause
 Copyright (c) 2006-2022 by the respective authors (see AUTHORS file).
 All rights reserved.
@@ -2832,7 +2832,7 @@ documentation is licensed as follows:
 
 
 charset-normalizer
-3.4.9
+3.5.1
 MIT
 MIT License
 
@@ -4475,7 +4475,7 @@ SOFTWARE.
 
 
 greenlet
-3.5.4
+3.5.5
 MIT AND PSF-2.0
 The following files are derived from Stackless Python and are subject to the
 same license as Stackless Python:
