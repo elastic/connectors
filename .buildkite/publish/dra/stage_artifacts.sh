@@ -34,11 +34,13 @@ cp "elasticsearch_connectors-${VERSION}.zip" "artifacts/${PROJECT_NAME}-${VERSIO
 
 echo "--- :package: Staging ${WORKFLOW} artifacts"
 
-# Docker tarballs — rename to DRA layout and add workflow suffix
+# Docker tarballs — rename to DRA layout and add workflow suffix. Named after
+# the docker image itself, not "${PROJECT_NAME}", since downstream DRA
+# consumers key off the image name rather than the project/repo name.
 mv ".artifacts/${DOCKER_ARTIFACT_KEY}-${VERSION}-amd64.tar.gz" \
-   "artifacts/${PROJECT_NAME}-${VERSION}${WORKFLOW_SUFFIX}-docker-image-linux-amd64.tar.gz"
+   "artifacts/elastic-connectors-${VERSION}${WORKFLOW_SUFFIX}-docker-image-linux-amd64.tar.gz"
 mv ".artifacts/${DOCKER_ARTIFACT_KEY}-${VERSION}-arm64.tar.gz" \
-   "artifacts/${PROJECT_NAME}-${VERSION}${WORKFLOW_SUFFIX}-docker-image-linux-arm64.tar.gz"
+   "artifacts/elastic-connectors-${VERSION}${WORKFLOW_SUFFIX}-docker-image-linux-arm64.tar.gz"
 
 # Dependency CSV — named to match the DRA convention expected by
 # unified-release's release-manager DSL (dependencies-{VERSION}[-SNAPSHOT].csv).
