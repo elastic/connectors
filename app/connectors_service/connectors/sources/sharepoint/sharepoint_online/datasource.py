@@ -41,6 +41,7 @@ from connectors.sources.sharepoint.sharepoint_online.constants import (
     WILDCARD,
 )
 from connectors.sources.sharepoint.sharepoint_online.utils import (
+    DeltaLinkExpired,
     SyncCursorEmpty,
     _get_login_name,
     _parse_created_date_time,
@@ -619,7 +620,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                         None,
                     )
 
-                    async for page in self.client.drive_items(site_drive["id"]):
+                    async for page in self._sync_drive_items(site_drive["id"]):
                         for drive_items_batch in iterable_batches_generator(
                             page.items, SPO_API_MAX_BATCH_SIZE
                         ):
@@ -727,11 +728,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                         OP_INDEX,
                     )
 
-                    delta_link = self.get_drive_delta_link(site_drive["id"])
-
-                    async for page in self.client.drive_items(
-                        drive_id=site_drive["id"], url=delta_link
-                    ):
+                    async for page in self._sync_drive_items(site_drive["id"]):
                         for drive_items_batch in iterable_batches_generator(
                             page.items, SPO_API_MAX_BATCH_SIZE
                         ):
@@ -1274,6 +1271,25 @@ class SharepointOnlineDataSource(BaseDataSource):
             return
 
         self._sync_cursor[CURSOR_SITE_DRIVE_KEY][drive_id] = link
+
+    def clear_drive_delta_link(self, drive_id):
+        site_drives = self._sync_cursor.get(CURSOR_SITE_DRIVE_KEY)
+        if site_drives and drive_id in site_drives:
+            del site_drives[drive_id]
+
+    async def _sync_drive_items(self, drive_id):
+        try:
+            async for page in self.client.drive_items(
+                drive_id, url=self.get_drive_delta_link(drive_id)
+            ):
+                yield page
+        except DeltaLinkExpired as e:
+            self.clear_drive_delta_link(drive_id)
+            msg = (
+                f"Drive delta sync failed for drive '{drive_id}' after 410 Gone "
+                "recovery attempt. Run a full sync after the issue is resolved."
+            )
+            raise DeltaLinkExpired(msg) from e
 
     def get_drive_delta_link(self, drive_id):
         return nested_get_from_dict(
