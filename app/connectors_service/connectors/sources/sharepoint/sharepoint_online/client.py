@@ -35,7 +35,6 @@ from connectors.sources.sharepoint.sharepoint_online.constants import (
 from connectors.sources.sharepoint.sharepoint_online.utils import (
     DeltaLinkExpired,
     _is_excluded_sharepoint_url,
-    graph_site_page_to_document,
 )
 from connectors.utils import (
     CacheWithTimeout,
@@ -861,19 +860,19 @@ class SharepointOnlineClient:
             if items or delta_link:
                 yield DriveItemsPage(items, delta_link)
 
-    async def drive_items(self, drive_id, url=None):
+    async def drive_items(self, drive_id, url=None, on_delta_reset=None):
         fresh_url = (
             f"{GRAPH_API_URL}/drives/{drive_id}/root/delta?$select={DRIVE_ITEMS_FIELDS}"
         )
         effective_url = fresh_url if not url else url
 
         async for page in self._drive_items_with_delta_recovery(
-            drive_id, effective_url, fresh_url
+            drive_id, effective_url, fresh_url, on_delta_reset=on_delta_reset
         ):
             yield page
 
     async def _drive_items_with_delta_recovery(
-        self, drive_id, url, fresh_url, *, allow_restart=True
+        self, drive_id, url, fresh_url, *, allow_restart=True, on_delta_reset=None
     ):
         current_url = url
         while True:
@@ -889,6 +888,8 @@ class SharepointOnlineClient:
                     f"Drive delta link expired for drive '{drive_id}'; "
                     "restarting enumeration from root/delta"
                 )
+                if on_delta_reset is not None:
+                    on_delta_reset(drive_id)
                 current_url = fresh_url
                 allow_restart = False
 
@@ -1000,37 +1001,6 @@ class SharepointOnlineClient:
             for site_list in page:
                 yield site_list
 
-    async def graph_site_list_item_attachments(self, site_id, list_id, list_item_id):
-        url = (
-            f"{GRAPH_API_URL}/sites/{site_id}/lists/{list_id}/items/"
-            f"{list_item_id}/attachments"
-        )
-
-        try:
-            async for page in self._graph_api_client.scroll(url):
-                for attachment in page:
-                    attachment_id = attachment.get("id")
-                    stable_id = f"{list_id}-{list_item_id}-attachment-{attachment_id}"
-                    yield {
-                        "odata.id": stable_id,
-                        "FileName": attachment.get("name"),
-                        "graph_site_id": site_id,
-                        "graph_list_id": list_id,
-                        "graph_list_item_id": list_item_id,
-                        "graph_attachment_id": attachment_id,
-                    }
-        except NotFound:
-            return
-
-    async def graph_download_attachment(
-        self, site_id, list_id, list_item_id, attachment_id, async_buffer
-    ):
-        url = (
-            f"{GRAPH_API_URL}/sites/{site_id}/lists/{list_id}/items/"
-            f"{list_item_id}/attachments/{attachment_id}/content"
-        )
-        await self._graph_api_client.pipe(url, async_buffer)
-
     async def site_list_item_attachments(self, site_web_url, list_title, list_item_id):
         self._validate_sharepoint_rest_url(site_web_url)
 
@@ -1052,32 +1022,6 @@ class SharepointOnlineClient:
         await self._rest_api_client.pipe(
             f"{attachment_absolute_path}/$value", async_buffer
         )
-
-    async def graph_site_pages(self, site_id):
-        list_select = (
-            "id,name,title,webUrl,description,createdDateTime,lastModifiedDateTime"
-        )
-        detail_select = "id,description,canvasLayout,sharepointIds"
-
-        try:
-            async for page in self._graph_api_client.scroll(
-                f"{GRAPH_API_URL}/sites/{site_id}/pages?$select={list_select}"
-            ):
-                for graph_page in page:
-                    page_id = graph_page.get("id")
-                    if page_id:
-                        try:
-                            detail = await self._graph_api_client.fetch(
-                                f"{GRAPH_API_URL}/sites/{site_id}/pages/{page_id}"
-                                f"?$select={detail_select}"
-                            )
-                            graph_page = {**graph_page, **detail}
-                        except NotFound:
-                            pass
-
-                    yield graph_site_page_to_document(graph_page)
-        except NotFound:
-            return
 
     async def site_pages(self, site_web_url):
         self._validate_sharepoint_rest_url(site_web_url)
