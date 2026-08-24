@@ -71,6 +71,12 @@ class InternalServerError(Exception):
     pass
 
 
+class GoneError(Exception):
+    """Raised when the API returns HTTP 410 Gone."""
+
+    pass
+
+
 class ThrottledError(Exception):
     """Internal exception class to indicate that request was throttled by the API"""
 
@@ -297,7 +303,7 @@ def retryable_aiohttp_call(retries):
                     async for item in func(*args, **kwargs, retry_count=retry):
                         yield item
                     break
-                except (NotFound, BadRequestError, DeltaLinkExpired):
+                except (NotFound, BadRequestError, GoneError):
                     raise
                 except Exception:
                     if retry >= retries:
@@ -478,8 +484,7 @@ class MicrosoftAPISession:
         elif e.status == 404:
             raise NotFound from e  # We wanna catch it in the code that uses this and ignore in some cases
         elif e.status == 410:
-            msg = f"Delta link expired for {absolute_url}"
-            raise DeltaLinkExpired(msg) from e
+            raise GoneError from e
         elif e.status == 500:
             raise InternalServerError from e
         elif e.status == 400:
@@ -852,13 +857,17 @@ class SharepointOnlineClient:
                 yield site_drive
 
     async def drive_items_delta(self, url):
-        async for response in self._graph_api_client.scroll_delta_url(url):
-            delta_link = (
-                response[DELTA_LINK_KEY] if DELTA_LINK_KEY in response else None
-            )
-            items = response.get("value", [])
-            if items or delta_link:
-                yield DriveItemsPage(items, delta_link)
+        try:
+            async for response in self._graph_api_client.scroll_delta_url(url):
+                delta_link = (
+                    response[DELTA_LINK_KEY] if DELTA_LINK_KEY in response else None
+                )
+                items = response.get("value", [])
+                if items or delta_link:
+                    yield DriveItemsPage(items, delta_link)
+        except GoneError as e:
+            msg = f"Delta link expired for {url}"
+            raise DeltaLinkExpired(msg) from e
 
     async def drive_items(self, drive_id, url=None, on_delta_reset=None):
         fresh_url = (

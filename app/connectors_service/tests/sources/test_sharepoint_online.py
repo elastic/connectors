@@ -31,6 +31,7 @@ from connectors.sources.sharepoint.sharepoint_online.client import (
     BadRequestError,
     DriveItemsPage,
     EntraAPIToken,
+    GoneError,
     GraphAPIToken,
     InternalServerError,
     InvalidSharepointTenant,
@@ -1014,7 +1015,7 @@ class TestMicrosoftAPISession:
         patch_sleep,
         patch_cancellable_sleeps,
     ):
-        url = "http://localhost:1234/delta-link"
+        url = "http://localhost:1234/some-resource"
 
         gone_error = ClientResponseError(MagicMock(), MagicMock())
         gone_error.status = 410
@@ -1022,7 +1023,7 @@ class TestMicrosoftAPISession:
 
         mock_responses.get(url, exception=gone_error)
 
-        with pytest.raises(DeltaLinkExpired):
+        with pytest.raises(GoneError):
             async with microsoft_api_session._get(url) as _:
                 pass
 
@@ -1377,6 +1378,19 @@ class TestSharepointOnlineClient:
         assert len(returned_pages) == 1
         assert list(returned_pages[0]) == []
         assert returned_pages[0].delta_link() == next_delta_url
+
+    @pytest.mark.asyncio
+    async def test_drive_items_delta_maps_gone_to_delta_link_expired(
+        self, client, patch_scroll_delta_url
+    ):
+        delta_url = "https://sharepoint.com/stale-delta"
+        patch_scroll_delta_url.side_effect = GoneError()
+
+        with pytest.raises(DeltaLinkExpired) as exc_info:
+            async for _page in client.drive_items_delta(delta_url):
+                pass
+
+        assert delta_url in str(exc_info.value)
 
     @pytest.mark.asyncio
     async def test_drive_items_recovers_from_expired_delta_link(self, client):
