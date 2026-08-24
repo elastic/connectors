@@ -21,6 +21,12 @@ class SyncCursorEmpty(Exception):
     pass
 
 
+class DeltaLinkExpired(Exception):
+    """Raised when Microsoft Graph returns 410 Gone for a delta link."""
+
+    pass
+
+
 def _prefix_group(group):
     return prefix_identity("group", group)
 
