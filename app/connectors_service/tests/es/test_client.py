@@ -381,7 +381,6 @@ class TestTransientElasticsearchRetrier:
         with pytest.raises(elasticsearch.ConnectionError):
             await retrier.execute_with_retry(_func)
 
-        # Final attempt raises without sleeping.
         assert patch_sleep.await_count == self.max_retries - 1
 
     @pytest.mark.asyncio

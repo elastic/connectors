@@ -173,8 +173,7 @@ class Sink:
         self.chunk_mem_size = chunk_mem_size * 1024 * 1024
         self.bulk_tasks = ConcurrentTasks(max_concurrency=max_concurrency)
         self.error_monitor = error_monitor
-        # Retries are handled by TransientElasticsearchRetrier on the ES client.
-        # These kwargs stay for SyncOrchestrator / elasticsearch.bulk config compatibility.
+        # Retries live on TransientElasticsearchRetrier; kwargs kept for call-site compat.
         _, _ = max_retries, retry_interval
         self.error = None
         self._logger = logger_ or logger
@@ -211,8 +210,6 @@ class Sink:
 
     @tracer.start_as_current_span("_bulk API call", slow_log=1.0)
     async def _batch_bulk(self, operations, stats):
-        # Retries for transient transport/proxy errors are handled by
-        # TransientElasticsearchRetrier inside bulk_insert.
         task_num = len(self.bulk_tasks)
 
         if self._logger.isEnabledFor(logging.DEBUG):

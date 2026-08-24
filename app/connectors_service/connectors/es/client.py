@@ -268,9 +268,7 @@ class TransientElasticsearchRetrier:
                 if retry >= self._max_retries:
                     raise
             except SerializationError as e:
-                # Retry response deserialize failures (e.g. proxy body
-                # "Client Closed Request"). Request serialize failures will
-                # never succeed and must not burn the retry budget.
+                # Retry response deserialize failures only (not request serialize).
                 if not str(e).startswith("Unable to deserialize"):
                     raise
 

@@ -311,8 +311,7 @@ class ConcurrentTasks:
     def __init__(self, max_concurrency=5):
         self.tasks = []
         self._sem = NonBlockingBoundedSemaphore(max_concurrency)
-        # Finished tasks are removed in `_callback`; keep their exceptions so
-        # `raise_any_exception` / `join(raise_on_error=True)` still observe them.
+        # Retain failures after finished tasks are removed from self.tasks.
         self._errors = []
 
     def __len__(self):
@@ -375,7 +374,6 @@ class ConcurrentTasks:
             self.cancel()
             raise error
 
-        # Drop retained failures so long-lived pools cannot raise stale errors.
         self._errors.clear()
 
     def raise_any_exception(self):

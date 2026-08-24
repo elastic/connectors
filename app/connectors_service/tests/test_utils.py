@@ -576,8 +576,6 @@ async def test_concurrent_tasks_raise_any_exception():
 
 @pytest.mark.asyncio
 async def test_concurrent_tasks_raise_any_exception_after_callback():
-    """Failed tasks are removed in `_callback`; errors must still propagate."""
-
     async def raise_error():
         msg = "This task had an error"
         raise Exception(msg)
@@ -592,7 +590,6 @@ async def test_concurrent_tasks_raise_any_exception_after_callback():
     with pytest.raises(Exception, match="This task had an error"):
         runner.raise_any_exception()
 
-    # Error is consumed so a later check does not re-raise a stale failure.
     runner.raise_any_exception()
 
 
@@ -633,8 +630,6 @@ async def test_concurrent_tasks_join_raise_on_error():
 
 @pytest.mark.asyncio
 async def test_concurrent_tasks_join_raise_on_error_after_callback():
-    """join(raise_on_error=True) must raise even after the failed task was removed."""
-
     async def raise_error():
         msg = "This task had an error"
         raise Exception(msg)
@@ -649,7 +644,6 @@ async def test_concurrent_tasks_join_raise_on_error_after_callback():
     with pytest.raises(Exception, match="This task had an error"):
         await runner.join(raise_on_error=True)
 
-    # Sticky errors must not survive a completed join.
     runner.raise_any_exception()
 
 
