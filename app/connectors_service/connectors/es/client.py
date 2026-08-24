@@ -9,7 +9,11 @@ import time
 from enum import Enum
 
 from connectors_sdk.logger import logger, set_extra_logger
-from elastic_transport import ConnectionTimeout
+from elastic_transport import (
+    ConnectionError as TransportConnectionError,
+    ConnectionTimeout,
+    SerializationError,
+)
 from elastic_transport.client_utils import url_to_node_config
 from elasticsearch import ApiError, AsyncElasticsearch, ConflictError
 from elasticsearch import (
@@ -253,9 +257,14 @@ class TransientElasticsearchRetrier:
             try:
                 result = await func()
                 return result
-            except ConnectionTimeout:
+            except (
+                ConnectionTimeout,
+                TransportConnectionError,
+                SerializationError,
+            ) as e:
                 self._logger.warning(
-                    f"Client method '{func_name}' retry {retry}: connection timeout"
+                    f"Client method '{func_name}' retry {retry}: "
+                    f"{type(e).__name__}: {e}"
                 )
 
                 if retry >= self._max_retries:

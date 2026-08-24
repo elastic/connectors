@@ -311,6 +311,9 @@ class ConcurrentTasks:
     def __init__(self, max_concurrency=5):
         self.tasks = []
         self._sem = NonBlockingBoundedSemaphore(max_concurrency)
+        # Finished tasks are removed in `_callback`; keep their exceptions so
+        # `raise_any_exception` / `join(raise_on_error=True)` still observe them.
+        self._errors = []
 
     def __len__(self):
         return len(self.tasks)
@@ -323,6 +326,7 @@ class ConcurrentTasks:
                 f"Task {task.get_name()} was cancelled",
             )
         elif task.exception():
+            self._errors.append(task.exception())
             logger.error(
                 f"Exception found for task {task.get_name()}", exc_info=task.exception()
             )
@@ -364,7 +368,15 @@ class ConcurrentTasks:
             self.cancel()
             raise
 
+        if raise_on_error and self._errors:
+            self.cancel()
+            raise self._errors[0]
+
     def raise_any_exception(self):
+        if self._errors:
+            self.cancel()
+            raise self._errors[0]
+
         for task in self.tasks:
             if task.done() and not task.cancelled():
                 if task.exception():
