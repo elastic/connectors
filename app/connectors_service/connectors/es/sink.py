@@ -61,7 +61,6 @@ from connectors.utils import (
     MemQueue,
     aenumerate,
     get_size,
-    retryable,
     sanitize,
 )
 
@@ -174,8 +173,8 @@ class Sink:
         self.chunk_mem_size = chunk_mem_size * 1024 * 1024
         self.bulk_tasks = ConcurrentTasks(max_concurrency=max_concurrency)
         self.error_monitor = error_monitor
-        self.max_retires = max_retries
-        self.retry_interval = retry_interval
+        # Retries live on TransientElasticsearchRetrier; kwargs kept for call-site compat.
+        _, _ = max_retries, retry_interval
         self.error = None
         self._logger = logger_ or logger
         self._canceled = False
@@ -211,14 +210,6 @@ class Sink:
 
     @tracer.start_as_current_span("_bulk API call", slow_log=1.0)
     async def _batch_bulk(self, operations, stats):
-        # TODO: make this retry policy work with unified retry strategy
-        @retryable(retries=self.max_retires, interval=self.retry_interval)
-        async def _bulk_api_call():
-            return await self.client.client.bulk(
-                operations=operations, pipeline=self.pipeline["name"]
-            )
-
-        # TODO: treat result to retry errors like in async_streaming_bulk
         task_num = len(self.bulk_tasks)
 
         if self._logger.isEnabledFor(logging.DEBUG):

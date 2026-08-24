@@ -281,6 +281,9 @@ async def test_index_exist_transient_error(mock_responses):
     mock_index_exists(mock_responses, CONCRETE_CONNECTORS_INDEX, repeat=True)
     mock_index_exists(mock_responses, CONCRETE_JOBS_INDEX, exist=False)
     mock_index_exists(mock_responses, CONCRETE_JOBS_INDEX, repeat=True)
+    # Mock create so the missing-index path does not hit real ES.
+    mock_create_index(mock_responses, CONCRETE_CONNECTORS_INDEX)
+    mock_create_index(mock_responses, CONCRETE_JOBS_INDEX)
     preflight = PreflightCheck(config, connectors_version)
     result = await preflight.run()
     assert result == (True, False)
