@@ -78,6 +78,12 @@ class InternalServerError(Exception):
     pass
 
 
+class GoneError(Exception):
+    """Raised when the API returns HTTP 410 Gone."""
+
+    pass
+
+
 class ThrottledError(Exception):
     """Internal exception class to indicate that request was throttled by the API"""
 
@@ -267,7 +273,7 @@ def retryable_aiohttp_call(retries):
                     async for item in func(*args, **kwargs, retry_count=retry):
                         yield item
                     break
-                except (NotFound, BadRequestError):
+                except (NotFound, BadRequestError, GoneError):
                     raise
                 except Exception:
                     if retry >= retries:
@@ -447,6 +453,8 @@ class MicrosoftAPISession:
             raise PermissionsMissing(msg) from e
         elif e.status == 404:
             raise NotFound from e  # We wanna catch it in the code that uses this and ignore in some cases
+        elif e.status == 410:
+            raise GoneError from e
         elif e.status == 500:
             raise InternalServerError from e
         elif e.status == 400:
