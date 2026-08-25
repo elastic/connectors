@@ -177,8 +177,8 @@ class Sink:
         self.chunk_mem_size = chunk_mem_size * 1024 * 1024
         self.bulk_tasks = ConcurrentTasks(max_concurrency=max_concurrency)
         self.error_monitor = error_monitor
-        self.max_retires = max_retries
-        self.retry_interval = retry_interval
+        # Retries live on TransientElasticsearchRetrier; kwargs kept for call-site compat.
+        _, _ = max_retries, retry_interval
         self.error = None
         self._logger = logger_ or logger
         self._canceled = False

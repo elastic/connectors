@@ -25,10 +25,12 @@ from connectors.access_control import (
 )
 from connectors.es.sink import OP_DELETE, OP_INDEX
 from connectors.sources.sharepoint.sharepoint_online.client import (
+    PermissionsMissing,
     SharepointOnlineClient,
 )
 from connectors.sources.sharepoint.sharepoint_online.constants import (
     CURSOR_SITE_DRIVE_KEY,
+    EXCLUDED_SHAREPOINT_LIST_NAMES,
     MAX_DOCUMENT_SIZE,
     SPO_API_MAX_BATCH_SIZE,
     SPO_MAX_EXPAND_SIZE,
@@ -39,6 +41,7 @@ from connectors.sources.sharepoint.sharepoint_online.constants import (
     WILDCARD,
 )
 from connectors.sources.sharepoint.sharepoint_online.utils import (
+    DeltaLinkExpired,
     SyncCursorEmpty,
     _get_login_name,
     _parse_created_date_time,
@@ -323,25 +326,39 @@ class SharepointOnlineDataSource(BaseDataSource):
         access_control = set()
         site_admins_access_control = set()
 
-        async for role_assignment in self.client.site_role_assignments(site["webUrl"]):
-            member = role_assignment["Member"]
-            member_access_control = set()
-            member_access_control.update(
-                await self._get_access_control_from_role_assignment(role_assignment)
+        try:
+            async for role_assignment in self.client.site_role_assignments(
+                site["webUrl"]
+            ):
+                member = role_assignment["Member"]
+                member_access_control = set()
+                member_access_control.update(
+                    await self._get_access_control_from_role_assignment(role_assignment)
+                )
+
+                if _is_site_admin(member):
+                    # These are likely in the "Owners" group for the site
+                    site_admins_access_control |= member_access_control
+
+                access_control |= member_access_control
+
+            # This fetches the "Site Collection Administrators", which is distinct from the "Owners" group of the site
+            # however, both should have access to everything in the site, regardless of unique role assignments
+            async for member in self.client.site_admins(site["webUrl"]):
+                site_admins_access_control.update(
+                    await self._access_control_for_member(member)
+                )
+        except PermissionsMissing as e:
+            # Fail with an actionable error instead of the generic "unauthorized".
+            msg = (
+                f"Cannot read access control for site '{site['webUrl']}', required "
+                "for Document Level Security. Reading SharePoint role assignments "
+                "requires the 'Sites.FullControl.All' SharePoint application "
+                "permission. Grant it to the App Registration (required for "
+                "certificate / Entra ID app-only authentication), or disable "
+                "Document Level Security if per-document permissions are not needed."
             )
-
-            if _is_site_admin(member):
-                # These are likely in the "Owners" group for the site
-                site_admins_access_control |= member_access_control
-
-            access_control |= member_access_control
-
-        # This fetches the "Site Collection Administrators", which is distinct from the "Owners" group of the site
-        # however, both should have access to everything in the site, regardless of unique role assignments
-        async for member in self.client.site_admins(site["webUrl"]):
-            site_admins_access_control.update(
-                await self._access_control_for_member(member)
-            )
+            raise PermissionsMissing(msg) from e
 
         return list(access_control), list(site_admins_access_control)
 
@@ -603,7 +620,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                         None,
                     )
 
-                    async for page in self.client.drive_items(site_drive["id"]):
+                    async for page in self._sync_drive_items(site_drive["id"]):
                         for drive_items_batch in iterable_batches_generator(
                             page.items, SPO_API_MAX_BATCH_SIZE
                         ):
@@ -714,11 +731,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                         OP_INDEX,
                     )
 
-                    delta_link = self.get_drive_delta_link(site_drive["id"])
-
-                    async for page in self.client.drive_items(
-                        drive_id=site_drive["id"], url=delta_link
-                    ):
+                    async for page in self._sync_drive_items(site_drive["id"]):
                         for drive_items_batch in iterable_batches_generator(
                             page.items, SPO_API_MAX_BATCH_SIZE
                         ):
@@ -1055,6 +1068,14 @@ class SharepointOnlineDataSource(BaseDataSource):
 
     async def site_lists(self, site, site_access_control, check_timestamp=False):
         async for site_list in self.client.site_lists(site["id"]):
+            site_list_name = site_list.get("name")
+            if site_list_name in EXCLUDED_SHAREPOINT_LIST_NAMES:
+                self._logger.debug(
+                    f"Skipping excluded SharePoint list '{site_list_name}' "
+                    f"on site '{site.get('webUrl', site.get('id'))}'"
+                )
+                continue
+
             if not check_timestamp or (
                 check_timestamp
                 and site_list["lastModifiedDateTime"] >= self.last_sync_time()
@@ -1062,7 +1083,6 @@ class SharepointOnlineDataSource(BaseDataSource):
                 site_list["_id"] = site_list["id"]
                 site_list["object_type"] = "site_list"
                 site_url = site["webUrl"]
-                site_list_name = site_list["name"]
 
                 has_unique_role_assignments = False
 
@@ -1254,6 +1274,25 @@ class SharepointOnlineDataSource(BaseDataSource):
             return
 
         self._sync_cursor[CURSOR_SITE_DRIVE_KEY][drive_id] = link
+
+    def clear_drive_delta_link(self, drive_id):
+        site_drives = self._sync_cursor.get(CURSOR_SITE_DRIVE_KEY)
+        if site_drives and drive_id in site_drives:
+            del site_drives[drive_id]
+
+    async def _sync_drive_items(self, drive_id):
+        try:
+            async for page in self.client.drive_items(
+                drive_id, url=self.get_drive_delta_link(drive_id)
+            ):
+                yield page
+        except DeltaLinkExpired as e:
+            self.clear_drive_delta_link(drive_id)
+            msg = (
+                f"Drive delta sync failed for drive '{drive_id}' after 410 Gone "
+                "recovery attempt. Run a full sync after the issue is resolved."
+            )
+            raise DeltaLinkExpired(msg) from e
 
     def get_drive_delta_link(self, drive_id):
         return nested_get_from_dict(

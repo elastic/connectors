@@ -1082,7 +1082,7 @@ steps:
   # trailing comment -- it is used as an anchor to locate this exact line.
   - group: ":truck: Packaging and DRA"
     key: "mbp_dra_group"
-    if: "(build.branch == \"main\" || build.branch == \"9.5\" || build.branch == \"9.4\" || build.branch == \"9.3\" || build.branch == \"8.19\" || build.pull_request.labels includes \"ci:packaging\")" # Add new maintenance branches here
+    if: "(build.branch == \"main\" || build.branch == \"9.5\" || build.branch == \"9.4\" || build.branch == \"8.19\" || build.pull_request.labels includes \"ci:packaging\")" # Add new maintenance branches here
     depends_on:
       - "lint"
       - "unit_tests"
@@ -1090,6 +1090,23 @@ steps:
       - "relevant_ftests"
       - "test_packages"
     steps:
+      # ----
+      # Python packages + dependency CSV
+      # ----
+      - label: ":snake: Build Python packages and dependency CSV"
+        <<: *test-agents
+        key: "build_python_packages"
+        env:
+          PYTHON_VERSION: "${DRA_PYTHON_VERSION}"
+        command: ".buildkite/publish/build-python-packages.sh"
+        timeout_in_minutes: 15
+        artifact_paths:
+          - "app/connectors_service/dist/*.whl"
+          - "app/connectors_service/dist/*.tar.gz"
+          - "app/connectors_service/dist/dependencies.csv"
+          - "libs/connectors_sdk/dist/*.whl"
+          - "libs/connectors_sdk/dist/*.tar.gz"
+
       # ----
       # Docker builds for amd64
       # ----
@@ -1251,12 +1268,16 @@ steps:
           find .artifacts -type f -name '*.tar.gz*' -exec trivy image --quiet --input {} \;
 
       - label: ":truck: Publish DRA Items"
-        <<: *test-agents
         key: "publish-dra-artifacts"
         timeout_in_minutes: 45
         depends_on:
+          - build_python_packages
           - test_docker_image_amd64
           - test_docker_image_arm64
           - test_oss_dockerfile_image_amd64
           - test_oss_dockerfile_image_arm64
-        command: ".buildkite/publish/dra/init_dra_publishing.sh"
+        command: "bash .buildkite/publish/dra/upload-dra-pipeline.sh | buildkite-agent pipeline upload"
+        agents:
+          provider: "gcp"
+          image: family/core-ubuntu-2204
+          machineType: "n1-standard-4"

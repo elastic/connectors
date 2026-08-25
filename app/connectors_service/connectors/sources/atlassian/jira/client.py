@@ -12,6 +12,8 @@ from connectors_sdk.logger import logger
 from connectors.sources.atlassian.jira.constants import (
     ALL_FIELDS,
     ALL_ISSUES_JQL,
+    DATA_CENTER_BASIC_AUTH,
+    DATA_CENTER_PERSONAL_ACCESS_TOKEN,
     DEFAULT_RETRY_SECONDS,
     FETCH_SIZE,
     ISSUE_DATA,
@@ -100,21 +102,44 @@ class JiraClient:
             return self.session
 
         self._logger.debug(f"Creating a '{self.data_source_type}' client session")
+        headers = {
+            "accept": "application/json",
+            "content-type": "application/json",
+        }
+        basic_auth = None
+
         if self.data_source_type == JIRA_CLOUD:
-            login, password = (
-                self.configuration["account_email"],
-                self.configuration["api_token"],
+            basic_auth = aiohttp.BasicAuth(
+                login=self.configuration["account_email"],
+                password=self.configuration["api_token"],
             )
         elif self.data_source_type == JIRA_SERVER:
-            login, password = (
-                self.configuration["username"],
-                self.configuration["password"],
+            basic_auth = aiohttp.BasicAuth(
+                login=self.configuration["username"],
+                password=self.configuration["password"],
             )
         elif self.data_source_type == JIRA_DATA_CENTER:
-            login, password = (
-                self.configuration["data_center_username"],
-                self.configuration["data_center_password"],
-            )
+            if (
+                self.configuration["data_center_auth_method"]
+                == DATA_CENTER_PERSONAL_ACCESS_TOKEN
+            ):
+                headers["Authorization"] = (
+                    f"Bearer {self.configuration['data_center_personal_access_token']}"
+                )
+            elif (
+                self.configuration["data_center_auth_method"] == DATA_CENTER_BASIC_AUTH
+            ):
+                basic_auth = aiohttp.BasicAuth(
+                    login=self.configuration["data_center_username"],
+                    password=self.configuration["data_center_password"],
+                )
+            else:
+                msg = (
+                    "Unknown data center authentication method "
+                    f"'{self.configuration['data_center_auth_method']}' for Jira connector"
+                )
+                self._logger.error(msg)
+                raise InvalidJiraDataSourceTypeError(msg)
         else:
             msg = (
                 f"Unknown data source type '{self.data_source_type}' for Jira connector"
@@ -123,14 +148,10 @@ class JiraClient:
 
             raise InvalidJiraDataSourceTypeError(msg)
 
-        basic_auth = aiohttp.BasicAuth(login=login, password=password)
         timeout = aiohttp.ClientTimeout(total=None)  # pyright: ignore
         self.session = aiohttp.ClientSession(
             auth=basic_auth,
-            headers={
-                "accept": "application/json",
-                "content-type": "application/json",
-            },
+            headers=headers,
             timeout=timeout,
             raise_for_status=True,
         )
