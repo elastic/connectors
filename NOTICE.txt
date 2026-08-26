@@ -6882,7 +6882,7 @@ Apache Software License
 
 
 pyspnego
-0.12.1
+0.12.2
 MIT
 MIT License
 
