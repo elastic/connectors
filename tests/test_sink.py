@@ -223,10 +223,17 @@ async def test_prepare_content_index(mock_responses):
     es = SyncOrchestrator(config)
     es._sink = Mock()
     es._extractor = Mock()
-    with mock.patch.object(
-        es.es_management_client,
-        "ensure_content_index_mappings",
-    ) as put_mapping_mock:
+    with (
+        mock.patch.object(
+            es.es_management_client,
+            "ensure_content_index_settings",
+            new_callable=AsyncMock,
+        ),
+        mock.patch.object(
+            es.es_management_client,
+            "ensure_content_index_mappings",
+        ) as put_mapping_mock,
+    ):
         await es.prepare_content_index(index_name, language_code)
 
         await es.close()

@@ -155,6 +155,12 @@ class InternalServerError(Exception):
     pass
 
 
+class GoneError(Exception):
+    """Raised when the API returns HTTP 410 Gone."""
+
+    pass
+
+
 class ThrottledError(Exception):
     """Internal exception class to indicate that request was throttled by the API"""
 
@@ -189,6 +195,12 @@ class SyncCursorEmpty(Exception):
     """Exception class to notify that incremental sync can't run because sync_cursor is empty.
     See: https://learn.microsoft.com/en-us/graph/delta-query-overview
     """
+
+    pass
+
+
+class DeltaLinkExpired(Exception):
+    """Raised when Microsoft Graph returns 410 Gone for a delta link."""
 
     pass
 
@@ -389,7 +401,7 @@ def retryable_aiohttp_call(retries):
                     async for item in func(*args, **kwargs, retry_count=retry):
                         yield item
                     break
-                except (NotFound, BadRequestError):
+                except (NotFound, BadRequestError, GoneError):
                     raise
                 except Exception:
                     if retry >= retries:
@@ -569,6 +581,8 @@ class MicrosoftAPISession:
             raise PermissionsMissing(msg) from e
         elif e.status == 404:
             raise NotFound from e  # We wanna catch it in the code that uses this and ignore in some cases
+        elif e.status == 410:
+            raise GoneError from e
         elif e.status == 500:
             raise InternalServerError from e
         elif e.status == 400:
@@ -910,24 +924,40 @@ class SharepointOnlineClient:
                 yield site_drive
 
     async def drive_items_delta(self, url):
-        async for response in self._graph_api_client.scroll_delta_url(url):
-            delta_link = (
-                response[DELTA_LINK_KEY] if DELTA_LINK_KEY in response else None
-            )
-            if "value" in response and len(response["value"]) > 0:
-                yield DriveItemsPage(response["value"], delta_link)
+        try:
+            async for response in self._graph_api_client.scroll_delta_url(url):
+                delta_link = (
+                    response[DELTA_LINK_KEY] if DELTA_LINK_KEY in response else None
+                )
+                items = response.get("value", [])
+                if items or delta_link:
+                    yield DriveItemsPage(items, delta_link)
+        except GoneError as e:
+            msg = f"Delta link expired for {url}"
+            raise DeltaLinkExpired(msg) from e
 
-    async def drive_items(self, drive_id, url=None):
-        url = (
-            (
-                f"{GRAPH_API_URL}/drives/{drive_id}/root/delta?$select={DRIVE_ITEMS_FIELDS}"
-            )
-            if not url
-            else url
+    async def drive_items(self, drive_id, url=None, on_delta_reset=None):
+        fresh_url = (
+            f"{GRAPH_API_URL}/drives/{drive_id}/root/delta?$select={DRIVE_ITEMS_FIELDS}"
         )
+        current_url = url or fresh_url
 
-        async for page in self.drive_items_delta(url):
-            yield page
+        for attempt in (0, 1):
+            try:
+                async for page in self.drive_items_delta(current_url):
+                    yield page
+                return
+            except DeltaLinkExpired:
+                if attempt == 1:
+                    raise
+
+                self._logger.warning(
+                    f"Drive delta link expired for drive '{drive_id}'; "
+                    "restarting enumeration from root/delta"
+                )
+                if on_delta_reset is not None:
+                    on_delta_reset(drive_id)
+                current_url = fresh_url
 
     async def drive_items_permissions_batch(self, drive_id, drive_item_ids):
         requests = []
@@ -1830,7 +1860,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                         None,
                     )
 
-                    async for page in self.client.drive_items(site_drive["id"]):
+                    async for page in self._sync_drive_items(site_drive["id"]):
                         for drive_items_batch in iterable_batches_generator(
                             page.items, SPO_API_MAX_BATCH_SIZE
                         ):
@@ -1938,11 +1968,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                         OP_INDEX,
                     )
 
-                    delta_link = self.get_drive_delta_link(site_drive["id"])
-
-                    async for page in self.client.drive_items(
-                        drive_id=site_drive["id"], url=delta_link
-                    ):
+                    async for page in self._sync_drive_items(site_drive["id"]):
                         for drive_items_batch in iterable_batches_generator(
                             page.items, SPO_API_MAX_BATCH_SIZE
                         ):
@@ -2485,6 +2511,25 @@ class SharepointOnlineDataSource(BaseDataSource):
             return
 
         self._sync_cursor[CURSOR_SITE_DRIVE_KEY][drive_id] = link
+
+    def clear_drive_delta_link(self, drive_id):
+        site_drives = self._sync_cursor.get(CURSOR_SITE_DRIVE_KEY)
+        if site_drives and drive_id in site_drives:
+            del site_drives[drive_id]
+
+    async def _sync_drive_items(self, drive_id):
+        try:
+            async for page in self.client.drive_items(
+                drive_id, url=self.get_drive_delta_link(drive_id)
+            ):
+                yield page
+        except DeltaLinkExpired as e:
+            self.clear_drive_delta_link(drive_id)
+            msg = (
+                f"Drive delta sync failed for drive '{drive_id}' after 410 Gone "
+                "recovery attempt. Run a full sync after the issue is resolved."
+            )
+            raise DeltaLinkExpired(msg) from e
 
     def get_drive_delta_link(self, drive_id):
         return nested_get_from_dict(

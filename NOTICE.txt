@@ -3591,7 +3591,7 @@ Apache-2.0
 
 
 elasticsearch-connectors
-8.19.20
+8.19.21
 Apache Software License
 Elastic License 2.0
 
@@ -3689,7 +3689,7 @@ these terms.
 
 
 elasticsearch-connectors
-8.19.20
+8.19.21
 Apache Software License
 Elastic License 2.0
 
