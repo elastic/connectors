@@ -575,6 +575,25 @@ async def test_concurrent_tasks_raise_any_exception():
 
 
 @pytest.mark.asyncio
+async def test_concurrent_tasks_raise_any_exception_after_callback():
+    async def raise_error():
+        msg = "This task had an error"
+        raise Exception(msg)
+
+    runner = ConcurrentTasks()
+    await runner.put(functools.partial(raise_error))
+
+    while len(runner) > 0:
+        await asyncio.sleep(0)
+
+    assert len(runner) == 0
+    with pytest.raises(Exception, match="This task had an error"):
+        runner.raise_any_exception()
+
+    runner.raise_any_exception()
+
+
+@pytest.mark.asyncio
 async def test_concurrent_tasks_join_raise_on_error():
     results = []
 
@@ -607,6 +626,25 @@ async def test_concurrent_tasks_join_raise_on_error():
 
     assert len(results) == 1
     assert results[0] == 1
+
+
+@pytest.mark.asyncio
+async def test_concurrent_tasks_join_raise_on_error_after_callback():
+    async def raise_error():
+        msg = "This task had an error"
+        raise Exception(msg)
+
+    runner = ConcurrentTasks()
+    await runner.put(functools.partial(raise_error))
+
+    while len(runner) > 0:
+        await asyncio.sleep(0)
+
+    assert len(runner) == 0
+    with pytest.raises(Exception, match="This task had an error"):
+        await runner.join(raise_on_error=True)
+
+    runner.raise_any_exception()
 
 
 class CustomException(Exception):

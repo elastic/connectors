@@ -33,6 +33,7 @@ from connectors.sources.sharepoint.sharepoint_online.constants import (
     WILDCARD,
 )
 from connectors.sources.sharepoint.sharepoint_online.utils import (
+    DeltaLinkExpired,
     _is_excluded_sharepoint_url,
 )
 from connectors.utils import (
@@ -66,6 +67,12 @@ class BadRequestError(Exception):
 
 class InternalServerError(Exception):
     """Exception class to indicate that something went wrong on the server side."""
+
+    pass
+
+
+class GoneError(Exception):
+    """Raised when the API returns HTTP 410 Gone."""
 
     pass
 
@@ -296,7 +303,7 @@ def retryable_aiohttp_call(retries):
                     async for item in func(*args, **kwargs, retry_count=retry):
                         yield item
                     break
-                except (NotFound, BadRequestError):
+                except (NotFound, BadRequestError, GoneError):
                     raise
                 except Exception:
                     if retry >= retries:
@@ -476,6 +483,8 @@ class MicrosoftAPISession:
             raise PermissionsMissing(msg) from e
         elif e.status == 404:
             raise NotFound from e  # We wanna catch it in the code that uses this and ignore in some cases
+        elif e.status == 410:
+            raise GoneError from e
         elif e.status == 500:
             raise InternalServerError from e
         elif e.status == 400:
@@ -848,24 +857,40 @@ class SharepointOnlineClient:
                 yield site_drive
 
     async def drive_items_delta(self, url):
-        async for response in self._graph_api_client.scroll_delta_url(url):
-            delta_link = (
-                response[DELTA_LINK_KEY] if DELTA_LINK_KEY in response else None
-            )
-            if "value" in response and len(response["value"]) > 0:
-                yield DriveItemsPage(response["value"], delta_link)
+        try:
+            async for response in self._graph_api_client.scroll_delta_url(url):
+                delta_link = (
+                    response[DELTA_LINK_KEY] if DELTA_LINK_KEY in response else None
+                )
+                items = response.get("value", [])
+                if items or delta_link:
+                    yield DriveItemsPage(items, delta_link)
+        except GoneError as e:
+            msg = f"Delta link expired for {url}"
+            raise DeltaLinkExpired(msg) from e
 
-    async def drive_items(self, drive_id, url=None):
-        url = (
-            (
-                f"{GRAPH_API_URL}/drives/{drive_id}/root/delta?$select={DRIVE_ITEMS_FIELDS}"
-            )
-            if not url
-            else url
+    async def drive_items(self, drive_id, url=None, on_delta_reset=None):
+        fresh_url = (
+            f"{GRAPH_API_URL}/drives/{drive_id}/root/delta?$select={DRIVE_ITEMS_FIELDS}"
         )
+        current_url = url or fresh_url
 
-        async for page in self.drive_items_delta(url):
-            yield page
+        for attempt in (0, 1):
+            try:
+                async for page in self.drive_items_delta(current_url):
+                    yield page
+                return
+            except DeltaLinkExpired:
+                if attempt == 1:
+                    raise
+
+                self._logger.warning(
+                    f"Drive delta link expired for drive '{drive_id}'; "
+                    "restarting enumeration from root/delta"
+                )
+                if on_delta_reset is not None:
+                    on_delta_reset(drive_id)
+                current_url = fresh_url
 
     async def drive_items_permissions_batch(self, drive_id, drive_item_ids):
         requests = []
