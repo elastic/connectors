@@ -126,7 +126,10 @@ class ConnectorsAgentConfigurationWrapper:
             return {}
 
         ssl_source = source["ssl"]
-        ssl_config = {}
+        # ESClient only applies verify_certs when ssl is enabled in config.
+        # get_specific_config() does not merge defaults, so ssl must be set here
+        # for agent-reported SSL settings to take effect on the first ES call.
+        ssl_config = {"ssl": True}
 
         # Elastic Agent supports "full", "strict", "certificate" and "none".
         # Only "none" disables server certificate verification.
