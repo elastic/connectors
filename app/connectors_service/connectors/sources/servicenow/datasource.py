@@ -55,6 +55,7 @@ DEFAULT_SERVICE_NAMES = {
     "change_request": ["admin", "sn_change_read", "itil"],
 }
 ACLS_QUERY = "sys_security_acl.operation=read^sys_security_acl.name={table_name}"
+PUBLIC_ROLE_NAME = "public"
 
 
 def _prefix_email(email):
@@ -67,6 +68,10 @@ def _prefix_username(user):
 
 def _prefix_user_id(user_id):
     return prefix_identity("user_id", user_id)
+
+
+def _prefix_role_id(role_id):
+    return prefix_identity("role_id", role_id)
 
 
 class EndSignal(Enum):
@@ -176,6 +181,15 @@ class ServiceNowDataSource(BaseDataSource):
                 "type": "bool",
                 "value": False,
             },
+            "expand_role_members": {
+                "depends_on": [{"field": "use_document_level_security", "value": True}],
+                "display": "toggle",
+                "label": "Expand role members",
+                "order": 9,
+                "tooltip": "When enabled, ServiceNow role members are written individually onto each document's access control list. Disable this for large tenants to store compact role tokens on documents instead, and resolve membership during access control syncs. Changing this setting requires a full content sync and access control sync.",
+                "type": "bool",
+                "value": False,
+            },
         }
 
     def _dls_enabled(self):
@@ -192,7 +206,15 @@ class ServiceNowDataSource(BaseDataSource):
 
         return self.configuration["use_document_level_security"]
 
-    async def _user_access_control_doc(self, user):
+    def _expand_role_members(self):
+        """Whether roles are expanded into individual users on document ACLs.
+
+        Default False stores compact role_id tokens on documents and resolves
+        membership on identity docs during access control sync.
+        """
+        return self.configuration.get("expand_role_members", False)
+
+    async def _user_access_control_doc(self, user, role_ids=None):
         user_id = user.get("_id", "")
         user_name = user.get("user_name", "")
         user_email = user.get("email", "")
@@ -200,17 +222,25 @@ class ServiceNowDataSource(BaseDataSource):
         _prefixed_user_id = _prefix_user_id(user_id=user_id)
         _prefixed_user_name = _prefix_username(user=user_name)
         _prefixed_email = _prefix_email(email=user_email)
+        prefixed_role_ids = sorted(
+            _prefix_role_id(role_id) for role_id in (role_ids or []) if role_id
+        )
+        access_control = [
+            _prefixed_user_id,
+            _prefixed_user_name,
+            _prefixed_email,
+            *prefixed_role_ids,
+        ]
         return {
             "_id": user_id,
             "identity": {
                 "user_id": _prefixed_user_id,
                 "display_name": _prefixed_user_name,
                 "email": _prefixed_email,
+                "role_ids": prefixed_role_ids,
             },
             "created_at": user.get("_timestamp"),
-        } | es_access_control_query(
-            access_control=[_prefixed_user_id, _prefixed_user_name, _prefixed_email]
-        )
+        } | es_access_control_query(access_control=access_control)
 
     async def _fetch_all_users(self):
         self._logger.debug("Fetching all users.")
@@ -227,19 +257,50 @@ class ServiceNowDataSource(BaseDataSource):
         ):
             yield user
 
+    async def _fetch_user_roles_map(self):
+        """Build a map of user sys_id -> set of role sys_ids from sys_user_has_role."""
+        user_roles = {}
+        async for assignment in self._table_data_generator(
+            service_name="sys_user_has_role", params={}
+        ):
+            user_id = (assignment.get("user") or {}).get("value")
+            role_id = (assignment.get("role") or {}).get("value")
+            if not user_id or not role_id:
+                self._logger.debug(
+                    "Skipping sys_user_has_role row with missing user or role reference"
+                )
+                continue
+            user_roles.setdefault(user_id, set()).add(role_id)
+        return user_roles
+
     async def get_access_control(self):
         if not self._dls_enabled():
             self._logger.warning("DLS is not enabled. Skipping")
             return
 
+        user_roles = {}
+        if not self._expand_role_members():
+            self._logger.info(
+                "Compact DLS enabled: enriching identity docs with role memberships"
+            )
+            user_roles = await self._fetch_user_roles_map()
+
         async for user in self._fetch_all_users():
-            yield await self._user_access_control_doc(user=user)
+            user_id = user.get("_id") or user.get("sys_id")
+            yield await self._user_access_control_doc(
+                user=user, role_ids=user_roles.get(user_id, set())
+            )
 
     def _decorate_with_access_control(self, document, access_control):
-        if self._dls_enabled():
-            document[ACCESS_CONTROL] = list(
-                set(document.get(ACCESS_CONTROL, []) + access_control)
-            )
+        if not self._dls_enabled():
+            return document
+        # None means the table is world-readable (public role): omit the field so
+        # DLS's "must_not exists _allow_access_control" clause grants access.
+        if access_control is None:
+            return document
+        document[ACCESS_CONTROL] = list(
+            set(document.get(ACCESS_CONTROL, []) + access_control)
+        )
         return document
 
     async def _remote_validation(self):
@@ -411,7 +472,82 @@ class ServiceNowDataSource(BaseDataSource):
         finally:
             await self.queue.put(EndSignal.RECORD)
 
-    async def _fetch_access_controls(self, table_name):
+    async def _role_name_to_sys_id_map(self):
+        roles = {}
+        async for role in self._table_data_generator(
+            service_name="sys_user_role", params={}
+        ):
+            name = role.get("name")
+            sys_id = role.get("sys_id")
+            if name and sys_id:
+                roles[name] = sys_id
+        return roles
+
+    async def _role_sys_id_to_name_map(self):
+        roles = {}
+        async for role in self._table_data_generator(
+            service_name="sys_user_role", params={}
+        ):
+            name = role.get("name")
+            sys_id = role.get("sys_id")
+            if name and sys_id:
+                roles[sys_id] = name
+        return roles
+
+    async def _table_read_role_sys_ids(self, table_name):
+        """Return role sys_ids that grant read on a custom (non-default) table."""
+        self._logger.info(f"Fetching roles of {table_name} with read operation.")
+        acl_params = {
+            "sys_security_acl.operation": "read",
+            "sys_security_acl.name": table_name,
+            "sys_security_acl.script": "",
+            "sys_security_acl.condition": "",
+        }
+        role_sys_ids = []
+        async for acl in self._table_data_generator(
+            service_name="sys_security_acl_role", params=acl_params
+        ):
+            role_sys_id = (acl.get("sys_user_role") or {}).get("value")
+            if role_sys_id:
+                role_sys_ids.append(role_sys_id)
+        return role_sys_ids
+
+    async def _fetch_access_controls_compact(self, table_name):
+        """Return role_id tokens for a table, or None when the table is public."""
+        if table_name in DEFAULT_SERVICE_NAMES:
+            roles_by_name = await self._role_name_to_sys_id_map()
+            role_sys_ids = []
+            for role_name in DEFAULT_SERVICE_NAMES.get(table_name, []):
+                if role_name.lower() == PUBLIC_ROLE_NAME:
+                    self._logger.info(
+                        f"Compact DLS: table {table_name} has public read role — "
+                        "omitting _allow_access_control on content documents"
+                    )
+                    return None
+                role_sys_id = roles_by_name.get(role_name)
+                if role_sys_id:
+                    role_sys_ids.append(role_sys_id)
+                else:
+                    self._logger.debug(
+                        f"Role '{role_name}' not found while building compact ACL "
+                        f"for table {table_name}"
+                    )
+            return list({_prefix_role_id(role_id) for role_id in role_sys_ids})
+
+        roles_by_sys_id = await self._role_sys_id_to_name_map()
+        role_sys_ids = await self._table_read_role_sys_ids(table_name)
+        for role_sys_id in role_sys_ids:
+            role_name = (roles_by_sys_id.get(role_sys_id) or "").lower()
+            if role_name == PUBLIC_ROLE_NAME:
+                self._logger.info(
+                    f"Compact DLS: table {table_name} has public read role — "
+                    "omitting _allow_access_control on content documents"
+                )
+                return None
+        return list({_prefix_role_id(role_id) for role_id in role_sys_ids})
+
+    async def _fetch_access_controls_legacy(self, table_name):
+        """Expand role members into individual user_id tokens (legacy behavior)."""
         access_control, user_roles, roles = [], [], {}
         if table_name in DEFAULT_SERVICE_NAMES.keys():
             async for role in self._table_data_generator(
@@ -443,7 +579,7 @@ class ServiceNowDataSource(BaseDataSource):
                 user_roles.append(acl.get("sys_user_role", {}).get("value"))
 
             for role in user_roles:
-                if roles.get(role).lower() == "public":
+                if roles.get(role).lower() == PUBLIC_ROLE_NAME:
                     self._logger.info(
                         f"Found public role in {table_name}, Fetching all users."
                     )
@@ -457,6 +593,11 @@ class ServiceNowDataSource(BaseDataSource):
                         _prefix_user_id(user_id=user.get("user", {}).get("value"))
                     )
         return list(set(access_control))
+
+    async def _fetch_access_controls(self, table_name):
+        if self._expand_role_members():
+            return await self._fetch_access_controls_legacy(table_name)
+        return await self._fetch_access_controls_compact(table_name)
 
     async def _get_batched_apis(self, service_name, params):
         table_length = await self.servicenow_client.get_table_length(
