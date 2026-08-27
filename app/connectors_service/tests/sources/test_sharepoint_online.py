@@ -55,6 +55,7 @@ from connectors.sources.sharepoint.sharepoint_online.utils import (
     _get_login_name,
     _prefix_email,
     _prefix_group,
+    _prefix_site_group,
     _prefix_user,
     _prefix_user_id,
 )
@@ -254,6 +255,7 @@ async def create_spo_source(
     fetch_drive_item_permissions=True,
     fetch_unique_list_permissions=True,
     enumerate_all_sites=False,
+    expand_site_group_members=True,
 ):
     async with create_source(
         SharepointOnlineDataSource,
@@ -270,6 +272,7 @@ async def create_spo_source(
         fetch_drive_item_permissions=fetch_drive_item_permissions,
         fetch_unique_list_permissions=fetch_unique_list_permissions,
         enumerate_all_sites=enumerate_all_sites,
+        expand_site_group_members=expand_site_group_members,
     ) as source:
         source.set_features(
             Features(
@@ -1690,6 +1693,32 @@ class TestSharepointOnlineClient:
         actual_result = await client.tenant_details()
 
         assert http_call_result == actual_result
+
+    @pytest.mark.asyncio
+    async def test_site_groups(self, client, patch_scroll):
+        site_web_url = f"https://{self.tenant_name}.sharepoint.com/sites/test"
+        groups = [{"Id": 3, "Title": "Visitors"}, {"Id": 5, "Title": "Members"}]
+
+        actual_groups = await self._execute_scrolling_method(
+            client.site_groups,
+            patch_scroll,
+            groups,
+            site_web_url,
+        )
+
+        assert actual_groups == groups
+
+    @pytest.mark.asyncio
+    async def test_site_groups_not_found(self, client, patch_scroll):
+        site_web_url = f"https://{self.tenant_name}.sharepoint.com/sites/test"
+
+        patch_scroll.side_effect = NotFound()
+
+        returned_items = []
+        async for item in client.site_groups(site_web_url):
+            returned_items.append(item)
+
+        assert len(returned_items) == 0
 
     @pytest.mark.asyncio
     async def test_site_group_users(self, client, patch_scroll):
@@ -3993,6 +4022,210 @@ class TestSharepointOnlineDataSource:
         user_id = "user id"
 
         assert _prefix_user_id(user_id) == "user_id:user id"
+
+    def test_prefix_site_group(self):
+        assert _prefix_site_group("site-abc", 5) == "site_group:site-abc:5"
+
+    @pytest.mark.asyncio
+    async def test_with_drive_item_permissions_compact_site_group(
+        self, patch_sharepoint_client
+    ):
+        site_id = "graph-site-id"
+        site_group_id = "3"
+        async with create_spo_source(
+            use_document_level_security=True, expand_site_group_members=False
+        ) as source:
+            drive_item = {"id": 1}
+            source.site_group_users = AsyncMock(
+                side_effect=AssertionError("should not expand site group members")
+            )
+
+            drive_item_with_access_control = await source._with_drive_item_permissions(
+                drive_item,
+                [{"grantedToV2": {"siteGroup": {"id": site_group_id}}}],
+                "dummy_site_web_url",
+                site_id=site_id,
+            )
+
+            assert drive_item_with_access_control[ACCESS_CONTROL] == [
+                _prefix_site_group(site_id, site_group_id)
+            ]
+            source.site_group_users.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_get_access_control_from_role_assignment_compact_site_group(self):
+        site_id = "graph-site-id"
+        group_id = 42
+        role_assignment = {
+            "Member": {
+                "odata.type": "SP.Group",
+                "Id": group_id,
+                "Users": [
+                    {
+                        "odata.type": "SP.User",
+                        "UserPrincipalName": USER_ONE_EMAIL,
+                    },
+                ],
+            },
+            "RoleDefinitionBindings": READ_BINDING,
+        }
+
+        async with create_spo_source(
+            use_document_level_security=True, expand_site_group_members=False
+        ) as source:
+            access_control = await source._get_access_control_from_role_assignment(
+                role_assignment, site_id=site_id
+            )
+
+            assert access_control == [_prefix_site_group(site_id, group_id)]
+
+    @pytest.mark.asyncio
+    async def test_get_access_control_from_role_assignment_compact_uses_principal_id(
+        self,
+    ):
+        site_id = "graph-site-id"
+        principal_id = 7
+        role_assignment = {
+            "Member": {
+                "odata.type": "SP.Group",
+                "Users": [],
+            },
+            "PrincipalId": principal_id,
+            "RoleDefinitionBindings": READ_BINDING,
+        }
+
+        async with create_spo_source(
+            use_document_level_security=True, expand_site_group_members=False
+        ) as source:
+            access_control = await source._get_access_control_from_role_assignment(
+                role_assignment, site_id=site_id
+            )
+
+            assert access_control == [_prefix_site_group(site_id, principal_id)]
+
+    @pytest.mark.asyncio
+    async def test_get_access_control_compact_enriches_identity_docs(
+        self, patch_sharepoint_client
+    ):
+        site_id = "graph-site-id"
+        group_id = 5
+        site_web_url = "https://contoso.sharepoint.com/sites/hr"
+        member_email = SITEGROUP_USER_ONE_EMAIL
+        member_upn = "sitegroup.user1@spo.com"
+
+        user = {
+            "id": "entra-user-1",
+            "userPrincipalName": member_upn,
+            "mail": member_email,
+            "transitiveMemberOf": [],
+        }
+
+        async with create_spo_source(
+            use_document_level_security=True, expand_site_group_members=False
+        ) as source:
+            patch_sharepoint_client.active_users_with_groups = AsyncIterator([user])
+            patch_sharepoint_client.site_collections = AsyncIterator(
+                [
+                    {
+                        "webUrl": site_web_url,
+                        "siteCollection": {"hostname": "contoso.sharepoint.com"},
+                    }
+                ]
+            )
+            patch_sharepoint_client.sites = AsyncIterator(
+                [
+                    {
+                        "id": site_id,
+                        "webUrl": site_web_url,
+                        "lastModifiedDateTime": "2024-01-01T00:00:00Z",
+                    }
+                ]
+            )
+            patch_sharepoint_client.site_groups = AsyncIterator(
+                [{"Id": group_id, "Title": "Visitors"}]
+            )
+            patch_sharepoint_client.site_groups_users = AsyncIterator(
+                [
+                    {
+                        "Email": member_email,
+                        "UserPrincipalName": member_upn,
+                        "LoginName": f"i:0#.f|membership|{member_email}",
+                        "Title": "Site Group User",
+                    }
+                ]
+            )
+
+            docs = []
+            async for doc in source.get_access_control():
+                docs.append(doc)
+
+            assert len(docs) == 1
+            access_control = docs[0]["query"]["template"]["params"]["access_control"]
+            assert _prefix_site_group(site_id, group_id) in access_control
+            assert _prefix_email(member_email) in access_control
+
+    @pytest.mark.asyncio
+    async def test_get_access_control_compact_unmatched_member_warns(
+        self, patch_sharepoint_client
+    ):
+        site_id = "graph-site-id"
+        group_id = 5
+        site_web_url = "https://contoso.sharepoint.com/sites/hr"
+
+        user = {
+            "id": "entra-user-1",
+            "userPrincipalName": USER_ONE_EMAIL,
+            "mail": USER_ONE_EMAIL,
+            "transitiveMemberOf": [],
+        }
+
+        async with create_spo_source(
+            use_document_level_security=True, expand_site_group_members=False
+        ) as source:
+            patch_sharepoint_client.active_users_with_groups = AsyncIterator([user])
+            patch_sharepoint_client.site_collections = AsyncIterator(
+                [
+                    {
+                        "webUrl": site_web_url,
+                        "siteCollection": {"hostname": "contoso.sharepoint.com"},
+                    }
+                ]
+            )
+            patch_sharepoint_client.sites = AsyncIterator(
+                [
+                    {
+                        "id": site_id,
+                        "webUrl": site_web_url,
+                        "lastModifiedDateTime": "2024-01-01T00:00:00Z",
+                    }
+                ]
+            )
+            patch_sharepoint_client.site_groups = AsyncIterator(
+                [{"Id": group_id, "Title": "Visitors"}]
+            )
+            patch_sharepoint_client.site_groups_users = AsyncIterator(
+                [
+                    {
+                        "Email": "unknown@spo.com",
+                        "UserPrincipalName": "unknown@spo.com",
+                        "Title": "Unknown User",
+                    }
+                ]
+            )
+
+            with patch.object(source._logger, "warning") as warning_mock:
+                docs = []
+                async for doc in source.get_access_control():
+                    docs.append(doc)
+
+            assert len(docs) == 1
+            access_control = docs[0]["query"]["template"]["params"]["access_control"]
+            assert _prefix_site_group(site_id, group_id) not in access_control
+            warning_mock.assert_called()
+            warning_text = " ".join(
+                str(call.args[0]) for call in warning_mock.call_args_list if call.args
+            )
+            assert "could not be matched" in warning_text
 
     @pytest.mark.parametrize(
         "role_assignment, expected_access_control",

@@ -258,6 +258,20 @@ class SharepointOnlineClient:
             self._logger.debug(f"No site admins found for site: '${site_web_url}'")
             return
 
+    async def site_groups(self, site_web_url):
+        self._validate_sharepoint_rest_url(site_web_url)
+
+        select_ = "Id,Title"
+        url = f"{site_web_url}/_api/web/sitegroups?$select={select_}"
+
+        try:
+            async for page in self._rest_api_client.scroll(url):
+                for site_group in page:
+                    yield site_group
+        except NotFound:
+            self._logger.debug(f"No site groups found for site: '{site_web_url}'")
+            return
+
     async def site_groups_users(self, site_web_url, site_group_id):
         self._validate_sharepoint_rest_url(site_web_url)
 

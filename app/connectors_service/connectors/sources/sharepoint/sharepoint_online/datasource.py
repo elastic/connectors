@@ -47,6 +47,7 @@ from connectors.sources.sharepoint.sharepoint_online.utils import (
     _parse_created_date_time,
     _prefix_email,
     _prefix_group,
+    _prefix_site_group,
     _prefix_user,
     _prefix_user_id,
 )
@@ -234,6 +235,15 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "type": "bool",
                 "value": True,
             },
+            "expand_site_group_members": {
+                "depends_on": [{"field": "use_document_level_security", "value": True}],
+                "display": "toggle",
+                "label": "Expand site group members",
+                "order": 17,
+                "tooltip": "When enabled, SharePoint site group members are written individually onto each document's access control list. Disable this for large site groups to store a compact site group token on documents instead, and resolve membership during access control syncs. Changing this setting requires a full content sync and access control sync.",
+                "type": "bool",
+                "value": True,
+            },
         }
 
     async def validate_config(self):
@@ -333,7 +343,9 @@ class SharepointOnlineDataSource(BaseDataSource):
                 member = role_assignment["Member"]
                 member_access_control = set()
                 member_access_control.update(
-                    await self._get_access_control_from_role_assignment(role_assignment)
+                    await self._get_access_control_from_role_assignment(
+                        role_assignment, site_id=site["id"]
+                    )
                 )
 
                 if _is_site_admin(member):
@@ -370,6 +382,14 @@ class SharepointOnlineDataSource(BaseDataSource):
             return False
 
         return self.configuration["use_document_level_security"]
+
+    def _expand_site_group_members(self):
+        """Whether site groups are expanded into individual users on document ACLs.
+
+        Default True preserves legacy behavior. When False (compact mode), documents
+        receive a single site_group token and membership is resolved on identity docs.
+        """
+        return self.configuration.get("expand_site_group_members", True)
 
     def access_control_query(self, access_control):
         return es_access_control_query(access_control)
@@ -454,6 +474,10 @@ class SharepointOnlineDataSource(BaseDataSource):
         """Yields an access control document for every user of a site.
         Note: this method will cache users and emails it has already and skip the ingestion for those.
 
+        When expand_site_group_members is False, also enriches identity docs with
+        site_group tokens for SharePoint site group memberships so document ACLs
+        can stay compact.
+
         Yields:
              dict: dictionary representing a user access control document
         """
@@ -463,6 +487,8 @@ class SharepointOnlineDataSource(BaseDataSource):
             return
 
         already_seen_ids = set()
+        identity_docs_by_key = {}
+        identity_docs = []
 
         def _already_seen(*ids):
             for id_ in ids:
@@ -477,6 +503,11 @@ class SharepointOnlineDataSource(BaseDataSource):
                 # We want to make sure to not add 'None' to the already seen sets
                 if id_:
                     already_seen_ids.add(id_)
+
+        def _register_identity_keys(user_doc, email, username):
+            for key in (email, username, user_doc.get("_id")):
+                if key:
+                    identity_docs_by_key[key.lower()] = user_doc
 
         async def process_user(user):
             email = user.get("EMail", user.get("mail", None))
@@ -496,7 +527,89 @@ class SharepointOnlineDataSource(BaseDataSource):
         async for user in self.client.active_users_with_groups():
             user_doc = await process_user(user)
             if user_doc:
-                yield user_doc
+                email = user.get("EMail", user.get("mail", None))
+                username = user.get("UserName", user.get("userPrincipalName", None))
+                identity_docs.append(user_doc)
+                _register_identity_keys(user_doc, email, username)
+
+        if not self._expand_site_group_members():
+            await self._enrich_identities_with_site_groups(identity_docs_by_key)
+
+        for user_doc in identity_docs:
+            yield user_doc
+
+    def _add_site_group_token_to_identity(self, user_doc, site_group_token):
+        params = user_doc["query"]["template"]["params"]
+        params["access_control"] = list(
+            set(params.get("access_control", []) + [site_group_token])
+        )
+
+    def _identity_keys_for_site_group_member(self, member):
+        keys = set()
+        email = member.get("Email", member.get("mail"))
+        upn = member.get("UserPrincipalName", member.get("userPrincipalName"))
+        login_name = _get_login_name(member.get("LoginName", member.get("loginName")))
+        for key in (email, upn, login_name):
+            if key:
+                keys.add(key.lower())
+        return keys
+
+    async def _enrich_identities_with_site_groups(self, identity_docs_by_key):
+        """Add site_group tokens to identity docs for SharePoint site group members."""
+        unmatched_members = 0
+        matched_memberships = 0
+
+        self._logger.info(
+            "Compact site-group DLS enabled: enriching identity docs with site group memberships"
+        )
+
+        async for site_collection in self.site_collections():
+            async for site in self.sites(
+                site_collection["siteCollection"]["hostname"],
+                self.configuration["site_collections"],
+            ):
+                site_id = site["id"]
+                site_web_url = site["webUrl"]
+
+                async for site_group in self.client.site_groups(site_web_url):
+                    group_id = site_group.get("Id")
+                    if group_id is None:
+                        continue
+
+                    site_group_token = _prefix_site_group(site_id, group_id)
+                    async for member in self.client.site_groups_users(
+                        site_web_url, group_id
+                    ):
+                        matched_doc = None
+                        for key in self._identity_keys_for_site_group_member(member):
+                            matched_doc = identity_docs_by_key.get(key)
+                            if matched_doc:
+                                break
+
+                        if matched_doc is None:
+                            unmatched_members += 1
+                            self._logger.debug(
+                                "Site group member could not be matched to a Graph "
+                                f"identity doc (site={site_web_url}, group={group_id}, "
+                                f"title={member.get('Title')})"
+                            )
+                            continue
+
+                        self._add_site_group_token_to_identity(
+                            matched_doc, site_group_token
+                        )
+                        matched_memberships += 1
+
+        self._logger.info(
+            f"Site group identity enrichment complete: {matched_memberships} memberships "
+            f"matched, {unmatched_members} members unmatched"
+        )
+        if unmatched_members:
+            self._logger.warning(
+                f"{unmatched_members} SharePoint site group members could not be matched "
+                "to Graph identity documents; those users may not see documents protected "
+                "by compact site_group tokens"
+            )
 
     async def site_group_users(self, site_web_url, site_group_id):
         """
@@ -531,13 +644,15 @@ class SharepointOnlineDataSource(BaseDataSource):
         return users
 
     async def _drive_items_batch_with_permissions(
-        self, drive_id, drive_items_batch, site_web_url
+        self, drive_id, drive_items_batch, site_web_url, site_id=None
     ):
         """Decorate a batch of drive items with their permissions using one API request.
 
         Args:
             drive_id (int): id of the drive, where the drive items reside
             drive_items_batch (list): list of drive items to decorate with permissions
+            site_web_url (str): web URL of the parent site
+            site_id (str): Graph site id (needed for compact site_group tokens)
 
         Yields:
             drive_item (dict): drive item with or without permissions depending on the config value of `fetch_drive_item_permissions`
@@ -583,7 +698,7 @@ class SharepointOnlineDataSource(BaseDataSource):
 
             if drive_item:
                 yield await self._with_drive_item_permissions(
-                    drive_item, permissions, site_web_url
+                    drive_item, permissions, site_web_url, site_id=site_id
                 )
 
     async def get_docs(self, filtering=None):
@@ -627,7 +742,10 @@ class SharepointOnlineDataSource(BaseDataSource):
                             async for (
                                 drive_item
                             ) in self._drive_items_batch_with_permissions(
-                                site_drive["id"], drive_items_batch, site["webUrl"]
+                                site_drive["id"],
+                                drive_items_batch,
+                                site["webUrl"],
+                                site_id=site["id"],
                             ):
                                 drive_item["_id"] = drive_item["id"]
                                 drive_item["object_type"] = "drive_item"
@@ -735,7 +853,10 @@ class SharepointOnlineDataSource(BaseDataSource):
                             async for (
                                 drive_item
                             ) in self._drive_items_batch_with_permissions(
-                                site_drive["id"], drive_items_batch, site["webUrl"]
+                                site_drive["id"],
+                                drive_items_batch,
+                                site["webUrl"],
+                                site_id=site["id"],
                             ):
                                 drive_item["_id"] = drive_item["id"]
                                 drive_item["object_type"] = "drive_item"
@@ -834,13 +955,15 @@ class SharepointOnlineDataSource(BaseDataSource):
                 yield site_drive
 
     async def _with_drive_item_permissions(
-        self, drive_item, drive_item_permissions, site_web_url
+        self, drive_item, drive_item_permissions, site_web_url, site_id=None
     ):
         """Decorates a drive item with its permissions.
 
         Args:
             drive_item (dict): drive item to fetch the permissions for.
             drive_item_permissions (list): drive item permissions to add to the drive_item.
+            site_web_url (str): web URL of the parent site.
+            site_id (str): Graph site id (needed for compact site_group tokens).
 
         Returns:
             drive_item (dict): drive item decorated with its permissions.
@@ -932,10 +1055,18 @@ class SharepointOnlineDataSource(BaseDataSource):
                 access_control.append(_prefix_user(site_user_username))
 
             if site_group_id:
-                users = await self.site_group_users(site_web_url, site_group_id)
-                for site_group_user in users:  # note, 'users' might contain groups.
-                    access_control.extend(
-                        await self._access_control_for_member(site_group_user)
+                if self._expand_site_group_members():
+                    users = await self.site_group_users(site_web_url, site_group_id)
+                    for site_group_user in users:  # note, 'users' might contain groups.
+                        access_control.extend(
+                            await self._access_control_for_member(site_group_user)
+                        )
+                elif site_id is not None:
+                    access_control.append(_prefix_site_group(site_id, site_group_id))
+                else:
+                    self._logger.warning(
+                        f"Cannot write compact site_group token for drive item "
+                        f"(id: '{drive_item_id}'): site_id is missing"
                     )
 
         return self._decorate_with_access_control(drive_item, access_control)
@@ -1011,7 +1142,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                         ):
                             list_item_access_control.extend(
                                 await self._get_access_control_from_role_assignment(
-                                    role_assignment
+                                    role_assignment, site_id=site_id
                                 )
                             )
 
@@ -1107,7 +1238,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                         ):
                             site_list_access_control.extend(
                                 await self._get_access_control_from_role_assignment(
-                                    role_assignment
+                                    role_assignment, site_id=site["id"]
                                 )
                             )
 
@@ -1122,11 +1253,14 @@ class SharepointOnlineDataSource(BaseDataSource):
 
                 yield site_list
 
-    async def _get_access_control_from_role_assignment(self, role_assignment):
+    async def _get_access_control_from_role_assignment(
+        self, role_assignment, site_id=None
+    ):
         """Extracts access control from a role assignment.
 
         Args:
             role_assignment (dict): dictionary representing a role assignment.
+            site_id (str): Graph site id (needed for compact site_group tokens).
 
         Returns:
             access_control (list): list of usernames and dynamic group ids, which have the role assigned.
@@ -1175,10 +1309,23 @@ class SharepointOnlineDataSource(BaseDataSource):
         is_user = identity_type == "SP.User"
 
         if is_group:
-            users = nested_get_from_dict(role_assignment, ["Member", "Users"], [])
+            if self._expand_site_group_members():
+                users = nested_get_from_dict(role_assignment, ["Member", "Users"], [])
 
-            for user in users:  # pyright: ignore
-                access_control.extend(await self._access_control_for_member(user))
+                for user in users:  # pyright: ignore
+                    access_control.extend(await self._access_control_for_member(user))
+            else:
+                group_id = nested_get_from_dict(role_assignment, ["Member", "Id"])
+                if group_id is None:
+                    group_id = role_assignment.get("PrincipalId")
+                if group_id is not None and site_id is not None:
+                    access_control.append(_prefix_site_group(site_id, group_id))
+                else:
+                    self._logger.warning(
+                        "Cannot write compact site_group token for role assignment "
+                        f"'{role_assignment.get('odata.id')}': "
+                        f"group_id={group_id}, site_id={site_id}"
+                    )
         elif is_user:
             member = role_assignment.get("Member", {})
             access_control.extend(await self._access_control_for_member(member))
@@ -1233,7 +1380,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                         ):
                             page_access_control.extend(
                                 await self._get_access_control_from_role_assignment(
-                                    role_assignment
+                                    role_assignment, site_id=site_id
                                 )
                             )
 

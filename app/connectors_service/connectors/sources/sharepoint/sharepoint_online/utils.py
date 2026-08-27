@@ -43,6 +43,11 @@ def _prefix_email(email):
     return prefix_identity("email", email)
 
 
+def _prefix_site_group(site_id, group_id):
+    """Stable token for a SharePoint site group (unique within a Graph site)."""
+    return prefix_identity("site_group", f"{site_id}:{group_id}")
+
+
 def _get_login_name(raw_login_name):
     if raw_login_name and (
         raw_login_name.startswith("i:0#.f|membership|")
