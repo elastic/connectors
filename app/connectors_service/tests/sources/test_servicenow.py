@@ -947,7 +947,6 @@ async def test_get_docs_with_advanced_rules_pagination(filtering):
             ] == response_list
 
 
-
 @pytest.mark.asyncio
 async def test_get_access_control():
     expected_response = {
