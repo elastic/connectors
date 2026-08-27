@@ -166,7 +166,6 @@ def test_ssl_config_from_agent_applies_to_es_client_without_defaults():
         output_unit=unit_mock,
     )
 
-    # ConnectorRecordManager uses get_specific_config(), not get().
     es_config = config_wrapper.get_specific_config()["elasticsearch"]
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", category=SecurityWarning)
@@ -218,7 +217,6 @@ def test_try_update_without_ssl_config_keeps_default_verify_certs():
         )
         is True
     )
-    # verify_certs is not overridden, so the Connectors Service default applies
     es_config = config_wrapper.get_specific_config()["elasticsearch"]
     assert "ssl" not in es_config
     assert "verify_certs" not in es_config

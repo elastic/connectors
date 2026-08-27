@@ -95,7 +95,6 @@ class ConnectorsAgentConfigurationWrapper:
                 msg = "Invalid Elasticsearch credentials"
                 raise ValueError(msg)
 
-            # SSL-related
             es_creds.update(self._extract_ssl_config(source))
 
             assumed_configuration["elasticsearch"] = es_creds
@@ -114,25 +113,13 @@ class ConnectorsAgentConfigurationWrapper:
         return False
 
     def _extract_ssl_config(self, source):
-        """Translate Elastic Agent output `ssl` settings into Connectors Service config.
-
-        Elastic Agent reports the Elasticsearch output SSL options (e.g.
-        `ssl.verification_mode`) on the output unit. Connectors Service uses
-        `verify_certs` to decide whether to validate the server certificate, so
-        without this translation the agent-provided SSL settings are silently
-        ignored and certificate verification is always enforced.
-        """
         if not source.fields.get("ssl"):
             return {}
 
         ssl_source = source["ssl"]
-        # ESClient only applies verify_certs when ssl is enabled in config.
-        # get_specific_config() does not merge defaults, so ssl must be set here
-        # for agent-reported SSL settings to take effect on the first ES call.
+        # ESClient ignores verify_certs unless ssl is enabled.
         ssl_config = {"ssl": True}
 
-        # Elastic Agent supports "full", "strict", "certificate" and "none".
-        # Only "none" disables server certificate verification.
         verification_mode = ssl_source.get("verification_mode")
         if verification_mode is not None:
             verify_certs = verification_mode != "none"
