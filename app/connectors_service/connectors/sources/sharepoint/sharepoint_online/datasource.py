@@ -487,8 +487,6 @@ class SharepointOnlineDataSource(BaseDataSource):
             return
 
         already_seen_ids = set()
-        identity_docs_by_key = {}
-        identity_docs = []
 
         def _already_seen(*ids):
             for id_ in ids:
@@ -503,11 +501,6 @@ class SharepointOnlineDataSource(BaseDataSource):
                 # We want to make sure to not add 'None' to the already seen sets
                 if id_:
                     already_seen_ids.add(id_)
-
-        def _register_identity_keys(user_doc, email, username):
-            for key in (email, username, user_doc.get("_id")):
-                if key:
-                    identity_docs_by_key[key.lower()] = user_doc
 
         async def process_user(user):
             email = user.get("EMail", user.get("mail", None))
@@ -524,16 +517,31 @@ class SharepointOnlineDataSource(BaseDataSource):
                 return person_access_control_doc
 
         self._logger.info("Fetching all users")
+        if self._expand_site_group_members():
+            async for user in self.client.active_users_with_groups():
+                user_doc = await process_user(user)
+                if user_doc:
+                    yield user_doc
+            return
+
+        identity_docs_by_token = {}
+        identity_docs = []
+
+        def _register_identity_doc(user_doc):
+            identity_docs.append(user_doc)
+            for token in user_doc["query"]["template"]["params"].get(
+                "access_control", []
+            ):
+                identity_docs_by_token.setdefault(token, []).append(user_doc)
+
         async for user in self.client.active_users_with_groups():
             user_doc = await process_user(user)
             if user_doc:
-                email = user.get("EMail", user.get("mail", None))
-                username = user.get("UserName", user.get("userPrincipalName", None))
-                identity_docs.append(user_doc)
-                _register_identity_keys(user_doc, email, username)
+                _register_identity_doc(user_doc)
 
-        if not self._expand_site_group_members():
-            await self._enrich_identities_with_site_groups(identity_docs_by_key)
+        await self._enrich_identities_with_site_groups(
+            identity_docs, identity_docs_by_token
+        )
 
         for user_doc in identity_docs:
             yield user_doc
@@ -544,20 +552,13 @@ class SharepointOnlineDataSource(BaseDataSource):
             set(params.get("access_control", []) + [site_group_token])
         )
 
-    def _identity_keys_for_site_group_member(self, member):
-        keys = set()
-        email = member.get("Email", member.get("mail"))
-        upn = member.get("UserPrincipalName", member.get("userPrincipalName"))
-        login_name = _get_login_name(member.get("LoginName", member.get("loginName")))
-        for key in (email, upn, login_name):
-            if key:
-                keys.add(key.lower())
-        return keys
-
-    async def _enrich_identities_with_site_groups(self, identity_docs_by_key):
+    async def _enrich_identities_with_site_groups(
+        self, identity_docs, identity_docs_by_token
+    ):
         """Add site_group tokens to identity docs for SharePoint site group members."""
         unmatched_members = 0
         matched_memberships = 0
+        everyone_except_external_users = "group:EveryoneExceptExternalUsers"
 
         self._logger.info(
             "Compact site-group DLS enabled: enriching identity docs with site group memberships"
@@ -580,13 +581,20 @@ class SharepointOnlineDataSource(BaseDataSource):
                     async for member in self.client.site_groups_users(
                         site_web_url, group_id
                     ):
-                        matched_doc = None
-                        for key in self._identity_keys_for_site_group_member(member):
-                            matched_doc = identity_docs_by_key.get(key)
-                            if matched_doc:
-                                break
+                        member_tokens = await self._access_control_for_member(member)
+                        if everyone_except_external_users in member_tokens:
+                            matched_docs = list(identity_docs)
+                        else:
+                            matched_docs = []
+                            seen_doc_ids = set()
+                            for token in member_tokens:
+                                for user_doc in identity_docs_by_token.get(token, []):
+                                    doc_id = id(user_doc)
+                                    if doc_id not in seen_doc_ids:
+                                        seen_doc_ids.add(doc_id)
+                                        matched_docs.append(user_doc)
 
-                        if matched_doc is None:
+                        if not matched_docs:
                             unmatched_members += 1
                             self._logger.debug(
                                 "Site group member could not be matched to a Graph "
@@ -595,10 +603,11 @@ class SharepointOnlineDataSource(BaseDataSource):
                             )
                             continue
 
-                        self._add_site_group_token_to_identity(
-                            matched_doc, site_group_token
-                        )
-                        matched_memberships += 1
+                        for user_doc in matched_docs:
+                            self._add_site_group_token_to_identity(
+                                user_doc, site_group_token
+                            )
+                        matched_memberships += len(matched_docs)
 
         self._logger.info(
             f"Site group identity enrichment complete: {matched_memberships} memberships "

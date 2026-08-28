@@ -4165,6 +4165,66 @@ class TestSharepointOnlineDataSource:
             assert _prefix_email(member_email) in access_control
 
     @pytest.mark.asyncio
+    async def test_get_access_control_compact_enriches_identity_docs_via_nested_group(
+        self, patch_sharepoint_client
+    ):
+        site_id = "graph-site-id"
+        group_id = 5
+        site_web_url = "https://contoso.sharepoint.com/sites/hr"
+        member_email = USER_ONE_EMAIL
+
+        user = {
+            "id": "entra-user-1",
+            "userPrincipalName": member_email,
+            "mail": member_email,
+            "transitiveMemberOf": [{"id": GROUP_ONE_ID}],
+        }
+
+        async with create_spo_source(
+            use_document_level_security=True, expand_site_group_members=False
+        ) as source:
+            patch_sharepoint_client.active_users_with_groups = AsyncIterator([user])
+            patch_sharepoint_client.site_collections = AsyncIterator(
+                [
+                    {
+                        "webUrl": site_web_url,
+                        "siteCollection": {"hostname": "contoso.sharepoint.com"},
+                    }
+                ]
+            )
+            patch_sharepoint_client.sites = AsyncIterator(
+                [
+                    {
+                        "id": site_id,
+                        "webUrl": site_web_url,
+                        "lastModifiedDateTime": "2024-01-01T00:00:00Z",
+                    }
+                ]
+            )
+            patch_sharepoint_client.site_groups = AsyncIterator(
+                [{"Id": group_id, "Title": "Visitors"}]
+            )
+            patch_sharepoint_client.site_groups_users = AsyncIterator(
+                [
+                    {
+                        "LoginName": (
+                            f"c:0o.c|federateddirectoryclaimprovider|{GROUP_ONE_ID}"
+                        ),
+                        "Title": "Nested Entra Group",
+                    }
+                ]
+            )
+
+            docs = []
+            async for doc in source.get_access_control():
+                docs.append(doc)
+
+            assert len(docs) == 1
+            access_control = docs[0]["query"]["template"]["params"]["access_control"]
+            assert _prefix_site_group(site_id, group_id) in access_control
+            assert _prefix_group(GROUP_ONE_ID) in access_control
+
+    @pytest.mark.asyncio
     async def test_get_access_control_compact_unmatched_member_warns(
         self, patch_sharepoint_client
     ):
