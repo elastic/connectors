@@ -292,7 +292,7 @@ class SharepointOnlineClient:
         expand = "transitiveMemberOf($select=id)"
         top = 999  # this is accepted, but does not get taken literally. Response size seems to max out at 100
         filter_ = "accountEnabled eq true"
-        select = "UserName,userPrincipalName,Email,mail,transitiveMemberOf,id,createdDateTime"
+        select = "UserName,userPrincipalName,Email,mail,transitiveMemberOf,id,createdDateTime,userType"
         url = f"{GRAPH_API_URL}/users?$expand={expand}&$top={top}&$filter={filter_}&$select={select}"
 
         try:

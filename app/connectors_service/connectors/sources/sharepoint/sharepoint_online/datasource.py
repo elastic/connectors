@@ -44,6 +44,7 @@ from connectors.sources.sharepoint.sharepoint_online.utils import (
     DeltaLinkExpired,
     SyncCursorEmpty,
     _get_login_name,
+    _is_guest_user,
     _parse_created_date_time,
     _prefix_email,
     _prefix_group,
@@ -524,44 +525,54 @@ class SharepointOnlineDataSource(BaseDataSource):
                     yield user_doc
             return
 
-        identity_docs_by_token = {}
-        identity_docs = []
-
-        def _register_identity_doc(user_doc):
-            identity_docs.append(user_doc)
-            for token in user_doc["query"]["template"]["params"].get(
-                "access_control", []
-            ):
-                identity_docs_by_token.setdefault(token, []).append(user_doc)
+        (
+            site_group_tokens_by_acl_token,
+            eeeu_site_group_tokens,
+        ) = await self._build_site_group_token_index()
 
         async for user in self.client.active_users_with_groups():
             user_doc = await process_user(user)
             if user_doc:
-                _register_identity_doc(user_doc)
+                self._apply_site_group_tokens_to_identity(
+                    user_doc,
+                    user,
+                    site_group_tokens_by_acl_token,
+                    eeeu_site_group_tokens,
+                )
+                yield user_doc
 
-        await self._enrich_identities_with_site_groups(
-            identity_docs, identity_docs_by_token
-        )
-
-        for user_doc in identity_docs:
-            yield user_doc
-
-    def _add_site_group_token_to_identity(self, user_doc, site_group_token):
-        params = user_doc["query"]["template"]["params"]
-        params["access_control"] = list(
-            set(params.get("access_control", []) + [site_group_token])
-        )
-
-    async def _enrich_identities_with_site_groups(
-        self, identity_docs, identity_docs_by_token
+    def _apply_site_group_tokens_to_identity(
+        self,
+        user_doc,
+        user,
+        site_group_tokens_by_acl_token,
+        eeeu_site_group_tokens,
     ):
-        """Add site_group tokens to identity docs for SharePoint site group members."""
+        site_group_tokens = set()
+        if not _is_guest_user(user):
+            site_group_tokens.update(eeeu_site_group_tokens)
+
+        access_control = user_doc["query"]["template"]["params"].get(
+            "access_control", []
+        )
+        for token in access_control:
+            site_group_tokens.update(site_group_tokens_by_acl_token.get(token, set()))
+
+        if site_group_tokens:
+            user_doc["query"]["template"]["params"]["access_control"] = list(
+                set(access_control).union(site_group_tokens)
+            )
+
+    async def _build_site_group_token_index(self):
+        """Map identity ACL tokens to compact site_group tokens from site memberships."""
+        site_group_tokens_by_acl_token = {}
+        eeeu_site_group_tokens = set()
         unmatched_members = 0
-        matched_memberships = 0
+        indexed_members = 0
         everyone_except_external_users = "group:EveryoneExceptExternalUsers"
 
         self._logger.info(
-            "Compact site-group DLS enabled: enriching identity docs with site group memberships"
+            "Compact site-group DLS enabled: building site group membership index"
         )
 
         async for site_collection in self.site_collections():
@@ -582,43 +593,37 @@ class SharepointOnlineDataSource(BaseDataSource):
                         site_web_url, group_id
                     ):
                         member_tokens = await self._access_control_for_member(member)
-                        if everyone_except_external_users in member_tokens:
-                            matched_docs = list(identity_docs)
-                        else:
-                            matched_docs = []
-                            seen_doc_ids = set()
-                            for token in member_tokens:
-                                for user_doc in identity_docs_by_token.get(token, []):
-                                    doc_id = id(user_doc)
-                                    if doc_id not in seen_doc_ids:
-                                        seen_doc_ids.add(doc_id)
-                                        matched_docs.append(user_doc)
-
-                        if not matched_docs:
+                        if not member_tokens:
                             unmatched_members += 1
                             self._logger.debug(
-                                "Site group member could not be matched to a Graph "
-                                f"identity doc (site={site_web_url}, group={group_id}, "
+                                "Site group member could not be resolved to access "
+                                f"control tokens (site={site_web_url}, group={group_id}, "
                                 f"title={member.get('Title')})"
                             )
                             continue
 
-                        for user_doc in matched_docs:
-                            self._add_site_group_token_to_identity(
-                                user_doc, site_group_token
-                            )
-                        matched_memberships += len(matched_docs)
+                        if everyone_except_external_users in member_tokens:
+                            eeeu_site_group_tokens.add(site_group_token)
+                        else:
+                            for token in member_tokens:
+                                site_group_tokens_by_acl_token.setdefault(
+                                    token, set()
+                                ).add(site_group_token)
+                        indexed_members += 1
 
         self._logger.info(
-            f"Site group identity enrichment complete: {matched_memberships} memberships "
-            f"matched, {unmatched_members} members unmatched"
+            "Site group membership index complete: "
+            f"{indexed_members} members indexed, {unmatched_members} members unresolved, "
+            f"{len(eeeu_site_group_tokens)} EEEU site groups"
         )
         if unmatched_members:
             self._logger.warning(
-                f"{unmatched_members} SharePoint site group members could not be matched "
-                "to Graph identity documents; those users may not see documents protected "
-                "by compact site_group tokens"
+                f"{unmatched_members} SharePoint site group members could not be resolved "
+                "to access control tokens; users may not see documents protected by the "
+                "related compact site_group tokens"
             )
+
+        return site_group_tokens_by_acl_token, eeeu_site_group_tokens
 
     async def site_group_users(self, site_web_url, site_group_id):
         """

@@ -53,6 +53,7 @@ from connectors.sources.sharepoint.sharepoint_online.utils import (
     DeltaLinkExpired,
     SyncCursorEmpty,
     _get_login_name,
+    _is_guest_user,
     _prefix_email,
     _prefix_group,
     _prefix_site_group,
@@ -4026,6 +4027,19 @@ class TestSharepointOnlineDataSource:
     def test_prefix_site_group(self):
         assert _prefix_site_group("site-abc", 5) == "site_group:site-abc:5"
 
+    @pytest.mark.parametrize(
+        "user,expected",
+        [
+            ({"userType": "Guest"}, True),
+            ({"userType": "Member"}, False),
+            ({"userPrincipalName": "guest_user#EXT#@contoso.onmicrosoft.com"}, True),
+            ({"userPrincipalName": USER_ONE_EMAIL}, False),
+            ({}, False),
+        ],
+    )
+    def test_is_guest_user(self, user, expected):
+        assert _is_guest_user(user) is expected
+
     @pytest.mark.asyncio
     async def test_with_drive_item_permissions_compact_site_group(
         self, patch_sharepoint_client
@@ -4225,6 +4239,80 @@ class TestSharepointOnlineDataSource:
             assert _prefix_group(GROUP_ONE_ID) in access_control
 
     @pytest.mark.asyncio
+    async def test_get_access_control_compact_eeeu_skips_guests(
+        self, patch_sharepoint_client
+    ):
+        site_id = "graph-site-id"
+        group_id = 5
+        site_web_url = "https://contoso.sharepoint.com/sites/hr"
+        internal_email = USER_ONE_EMAIL
+        guest_email = "guest_user#EXT#@contoso.onmicrosoft.com"
+
+        internal_user = {
+            "id": "entra-user-internal",
+            "userPrincipalName": internal_email,
+            "mail": internal_email,
+            "userType": "Member",
+            "transitiveMemberOf": [],
+        }
+        guest_user = {
+            "id": "entra-user-guest",
+            "userPrincipalName": guest_email,
+            "mail": guest_email,
+            "userType": "Guest",
+            "transitiveMemberOf": [],
+        }
+
+        async with create_spo_source(
+            use_document_level_security=True, expand_site_group_members=False
+        ) as source:
+            patch_sharepoint_client.active_users_with_groups = AsyncIterator(
+                [internal_user, guest_user]
+            )
+            patch_sharepoint_client.site_collections = AsyncIterator(
+                [
+                    {
+                        "webUrl": site_web_url,
+                        "siteCollection": {"hostname": "contoso.sharepoint.com"},
+                    }
+                ]
+            )
+            patch_sharepoint_client.sites = AsyncIterator(
+                [
+                    {
+                        "id": site_id,
+                        "webUrl": site_web_url,
+                        "lastModifiedDateTime": "2024-01-01T00:00:00Z",
+                    }
+                ]
+            )
+            patch_sharepoint_client.site_groups = AsyncIterator(
+                [{"Id": group_id, "Title": "Visitors"}]
+            )
+            patch_sharepoint_client.site_groups_users = AsyncIterator(
+                [
+                    {
+                        "LoginName": "c:0-.f|rolemanager|spo-grid-all-users",
+                        "Title": "Everyone except external users",
+                    }
+                ]
+            )
+
+            docs_by_id = {}
+            async for doc in source.get_access_control():
+                docs_by_id[doc["_id"]] = doc
+
+            internal_access_control = docs_by_id[internal_email]["query"]["template"][
+                "params"
+            ]["access_control"]
+            guest_access_control = docs_by_id[guest_email]["query"]["template"][
+                "params"
+            ]["access_control"]
+
+            assert _prefix_site_group(site_id, group_id) in internal_access_control
+            assert _prefix_site_group(site_id, group_id) not in guest_access_control
+
+    @pytest.mark.asyncio
     async def test_get_access_control_compact_unmatched_member_warns(
         self, patch_sharepoint_client
     ):
@@ -4266,8 +4354,6 @@ class TestSharepointOnlineDataSource:
             patch_sharepoint_client.site_groups_users = AsyncIterator(
                 [
                     {
-                        "Email": "unknown@spo.com",
-                        "UserPrincipalName": "unknown@spo.com",
                         "Title": "Unknown User",
                     }
                 ]
@@ -4285,7 +4371,62 @@ class TestSharepointOnlineDataSource:
             warning_text = " ".join(
                 str(call.args[0]) for call in warning_mock.call_args_list if call.args
             )
-            assert "could not be matched" in warning_text
+            assert "could not be resolved" in warning_text
+
+    @pytest.mark.asyncio
+    async def test_get_access_control_compact_streams_users_after_site_group_index(
+        self, patch_sharepoint_client
+    ):
+        site_id = "graph-site-id"
+        group_id = 5
+        site_web_url = "https://contoso.sharepoint.com/sites/hr"
+        call_order = []
+
+        user = {
+            "id": "entra-user-1",
+            "userPrincipalName": USER_ONE_EMAIL,
+            "mail": USER_ONE_EMAIL,
+            "transitiveMemberOf": [],
+        }
+
+        async def track_site_groups(site_web_url):
+            call_order.append("site_groups")
+            yield {"Id": group_id, "Title": "Visitors"}
+
+        async def track_users():
+            call_order.append("users")
+            yield user
+
+        async with create_spo_source(
+            use_document_level_security=True, expand_site_group_members=False
+        ) as source:
+            patch_sharepoint_client.site_collections = AsyncIterator(
+                [
+                    {
+                        "webUrl": site_web_url,
+                        "siteCollection": {"hostname": "contoso.sharepoint.com"},
+                    }
+                ]
+            )
+            patch_sharepoint_client.sites = AsyncIterator(
+                [
+                    {
+                        "id": site_id,
+                        "webUrl": site_web_url,
+                        "lastModifiedDateTime": "2024-01-01T00:00:00Z",
+                    }
+                ]
+            )
+            patch_sharepoint_client.site_groups = track_site_groups
+            patch_sharepoint_client.site_groups_users = AsyncIterator([])
+            patch_sharepoint_client.active_users_with_groups = track_users
+
+            docs = []
+            async for doc in source.get_access_control():
+                docs.append(doc)
+
+            assert call_order == ["site_groups", "users"]
+            assert len(docs) == 1
 
     @pytest.mark.parametrize(
         "role_assignment, expected_access_control",
