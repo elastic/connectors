@@ -3,9 +3,13 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+import warnings
 from unittest.mock import MagicMock, Mock
 
+from elastic_transport import SecurityWarning
+
 from connectors.agent.config import ConnectorsAgentConfigurationWrapper
+from connectors.es.client import ESClient
 
 CONNECTOR_ID = "test-connector"
 SERVICE_TYPE = "test-service-type"
@@ -112,6 +116,111 @@ def test_try_update_with_basic_auth_auth_data():
     assert config_wrapper.get()["elasticsearch"]["host"] == hosts[0]
     assert config_wrapper.get()["elasticsearch"]["username"] == username
     assert config_wrapper.get()["elasticsearch"]["password"] == password
+
+
+def test_try_update_with_ssl_verification_mode_none_disables_verify_certs():
+    hosts = ["https://localhost:9200"]
+    api_key = "lemme_in"
+
+    config_wrapper = prepare_config_wrapper()
+    unit_mock = prepare_unit_mock(
+        {
+            "hosts": hosts,
+            "api_key": api_key,
+            "ssl": {"verification_mode": "none"},
+        },
+        None,
+    )
+
+    assert (
+        config_wrapper.try_update(
+            connector_id=CONNECTOR_ID,
+            service_type=SERVICE_TYPE,
+            output_unit=unit_mock,
+        )
+        is True
+    )
+    es_config = config_wrapper.get_specific_config()["elasticsearch"]
+    assert es_config["ssl"] is True
+    assert es_config["verify_certs"] is False
+    assert config_wrapper.get()["elasticsearch"]["verify_certs"] is False
+
+
+def test_ssl_config_from_agent_applies_to_es_client_without_defaults():
+    hosts = ["https://localhost:9200"]
+    api_key = "lemme_in"
+
+    config_wrapper = prepare_config_wrapper()
+    unit_mock = prepare_unit_mock(
+        {
+            "hosts": hosts,
+            "api_key": api_key,
+            "ssl": {"verification_mode": "none"},
+        },
+        None,
+    )
+
+    config_wrapper.try_update(
+        connector_id=CONNECTOR_ID,
+        service_type=SERVICE_TYPE,
+        output_unit=unit_mock,
+    )
+
+    es_config = config_wrapper.get_specific_config()["elasticsearch"]
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=SecurityWarning)
+        client = ESClient(es_config)
+    node = list(client.client.transport.node_pool.all())[0]
+    assert node.config.verify_certs is False
+
+
+def test_try_update_with_ssl_verification_mode_full_enables_verify_certs():
+    hosts = ["https://localhost:9200"]
+    api_key = "lemme_in"
+
+    config_wrapper = prepare_config_wrapper()
+    unit_mock = prepare_unit_mock(
+        {
+            "hosts": hosts,
+            "api_key": api_key,
+            "ssl": {"verification_mode": "full"},
+        },
+        None,
+    )
+
+    assert (
+        config_wrapper.try_update(
+            connector_id=CONNECTOR_ID,
+            service_type=SERVICE_TYPE,
+            output_unit=unit_mock,
+        )
+        is True
+    )
+    es_config = config_wrapper.get_specific_config()["elasticsearch"]
+    assert es_config["ssl"] is True
+    assert es_config["verify_certs"] is True
+    assert config_wrapper.get()["elasticsearch"]["verify_certs"] is True
+
+
+def test_try_update_without_ssl_config_keeps_default_verify_certs():
+    hosts = ["https://localhost:9200"]
+    api_key = "lemme_in"
+
+    config_wrapper = prepare_config_wrapper()
+    unit_mock = prepare_unit_mock({"hosts": hosts, "api_key": api_key}, None)
+
+    assert (
+        config_wrapper.try_update(
+            connector_id=CONNECTOR_ID,
+            service_type=SERVICE_TYPE,
+            output_unit=unit_mock,
+        )
+        is True
+    )
+    es_config = config_wrapper.get_specific_config()["elasticsearch"]
+    assert "ssl" not in es_config
+    assert "verify_certs" not in es_config
+    assert config_wrapper.get()["elasticsearch"]["verify_certs"] is True
 
 
 def test_try_update_multiple_times_does_not_reset_config_values():
