@@ -209,10 +209,13 @@ class ServiceNowDataSource(BaseDataSource):
     def _expand_role_members(self):
         """Whether roles are expanded into individual users on document ACLs.
 
-        Default False stores compact role_id tokens on documents and resolves
-        membership on identity docs during access control sync.
+        When the setting is absent from stored connector configuration, keep legacy
+        expansion so upgrades do not flip existing deployments to compact mode.
+        New connectors store expand_role_members from the RCF (default false).
         """
-        return self.configuration.get("expand_role_members", False)
+        if not self.configuration.has_field("expand_role_members"):
+            return True
+        return self.configuration["expand_role_members"]
 
     async def _user_access_control_doc(self, user, role_ids=None):
         user_id = user.get("_id", "")
@@ -278,12 +281,8 @@ class ServiceNowDataSource(BaseDataSource):
             self._logger.warning("DLS is not enabled. Skipping")
             return
 
-        user_roles = {}
-        if not self._expand_role_members():
-            self._logger.info(
-                "Compact DLS enabled: enriching identity docs with role memberships"
-            )
-            user_roles = await self._fetch_user_roles_map()
+        self._logger.info("Enriching identity docs with role memberships from sys_user_has_role")
+        user_roles = await self._fetch_user_roles_map()
 
         async for user in self._fetch_all_users():
             user_id = user.get("_id") or user.get("sys_id")
@@ -294,9 +293,10 @@ class ServiceNowDataSource(BaseDataSource):
     def _decorate_with_access_control(self, document, access_control):
         if not self._dls_enabled():
             return document
-        # None means the table is world-readable (public role): omit the field so
-        # DLS's "must_not exists _allow_access_control" clause grants access.
-        if access_control is None:
+        # None or [] means omit the field so DLS's "must_not exists" clause grants
+        # access. An empty stored array denies everyone because the field exists but
+        # no terms match.
+        if not access_control:
             return document
         document[ACCESS_CONTROL] = list(
             set(document.get(ACCESS_CONTROL, []) + access_control)
@@ -532,7 +532,7 @@ class ServiceNowDataSource(BaseDataSource):
                         f"Role '{role_name}' not found while building compact ACL "
                         f"for table {table_name}"
                     )
-            return list({_prefix_role_id(role_id) for role_id in role_sys_ids})
+            return self._finalize_compact_access_control(table_name, role_sys_ids)
 
         roles_by_sys_id = await self._role_sys_id_to_name_map()
         role_sys_ids = await self._table_read_role_sys_ids(table_name)
@@ -544,7 +544,18 @@ class ServiceNowDataSource(BaseDataSource):
                     "omitting _allow_access_control on content documents"
                 )
                 return None
-        return list({_prefix_role_id(role_id) for role_id in role_sys_ids})
+        return self._finalize_compact_access_control(table_name, role_sys_ids)
+
+    def _finalize_compact_access_control(self, table_name, role_sys_ids):
+        compact_acl = list({_prefix_role_id(role_id) for role_id in role_sys_ids})
+        if not compact_acl:
+            self._logger.warning(
+                f"Compact DLS: no read roles resolved for table {table_name}. "
+                "Omitting _allow_access_control so documents remain searchable. "
+                "Verify sys_user_role and sys_security_acl_role data in ServiceNow."
+            )
+            return None
+        return compact_acl
 
     async def _fetch_access_controls_legacy(self, table_name):
         """Expand role members into individual user_id tokens (legacy behavior)."""
@@ -687,14 +698,29 @@ class ServiceNowDataSource(BaseDataSource):
                         advanced_rules_index + TABLE_BATCH_SIZE
                     )  # noqa
                 ]
-                filter_apis = await self.servicenow_client.get_filter_apis(
-                    rules=batched_advanced_rules, mapping=servicenow_mapping
-                )
+                rules_by_service = {}
+                for rule in batched_advanced_rules:
+                    rules_by_service.setdefault(rule["service"], []).append(rule)
 
-                await self.fetchers.put(
-                    partial(self._fetch_table_data, filter_apis, [])
-                )
-                self.task_count += 1
+                for service_label, service_rules in rules_by_service.items():
+                    table_name = servicenow_mapping[service_label]
+                    table_access_control = None
+                    if self._dls_enabled():
+                        table_access_control = await self._fetch_access_controls(
+                            table_name=table_name
+                        )
+                    filter_apis = await self.servicenow_client.get_filter_apis(
+                        rules=service_rules, mapping=servicenow_mapping
+                    )
+
+                    await self.fetchers.put(
+                        partial(
+                            self._fetch_table_data,
+                            filter_apis,
+                            table_access_control,
+                        )
+                    )
+                    self.task_count += 1
 
         else:
             if (
@@ -710,7 +736,7 @@ class ServiceNowDataSource(BaseDataSource):
             for service_name in (
                 self.servicenow_mapping.values() or DEFAULT_SERVICE_NAMES.keys()
             ):
-                table_access_control = []
+                table_access_control = None
                 if self._dls_enabled():
                     table_access_control = await self._fetch_access_controls(
                         table_name=service_name

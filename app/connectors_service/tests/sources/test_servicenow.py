@@ -12,7 +12,7 @@ from unittest.mock import Mock, patch
 import pytest
 from aiohttp.client_exceptions import ServerDisconnectedError
 from connectors_sdk.filtering.validation import Filter, SyncRuleValidationResult
-from connectors_sdk.source import ConfigurableFieldValueError
+from connectors_sdk.source import ConfigurableFieldValueError, DataSourceConfiguration
 
 from connectors.access_control import ACCESS_CONTROL, DLS_QUERY
 from connectors.sources.servicenow.client import InvalidResponse, ServiceNowClient
@@ -934,7 +934,7 @@ async def test_get_docs_with_advanced_rules_pagination(filtering):
                         async for response in source.get_docs(filtering):
                             response_list.append(response[0])
 
-            mock_fetch_table_data.assert_called_once_with(expected_filter_apis, [])
+                mock_fetch_table_data.assert_called_once_with(expected_filter_apis, None)
             assert [
                 {
                     "sys_updated_on": "2023-10-10 05:21:45",
@@ -974,6 +974,7 @@ async def test_get_access_control():
     async with create_service_now_source(expand_role_members=True) as source:
         source.servicenow_client.get_table_length = mock.AsyncMock(return_value=2)
         source._dls_enabled = Mock(return_value=True)
+        source._fetch_user_roles_map = mock.AsyncMock(return_value={})
         with mock.patch.object(
             ServiceNowClient,
             "get_data",
@@ -1231,6 +1232,179 @@ async def test_decorate_with_role_tokens():
             document, [_prefix_role_id("role_id_1")]
         )
         assert result[ACCESS_CONTROL] == ["role_id:role_id_1"]
+
+
+@pytest.mark.asyncio
+async def test_decorate_skips_empty_acl():
+    async with create_service_now_source() as source:
+        source._dls_enabled = Mock(return_value=True)
+        document = {"_id": "id_1"}
+        result = source._decorate_with_access_control(document, [])
+        assert ACCESS_CONTROL not in result
+
+
+@pytest.mark.asyncio
+async def test_fetch_access_controls_compact_empty_roles_returns_none():
+    async with create_service_now_source(expand_role_members=False) as source:
+        with mock.patch.object(
+            ServiceNowDataSource,
+            "_table_data_generator",
+            side_effect=[
+                AsyncIterator(
+                    [
+                        {
+                            "sys_id": "role_id_1",
+                            "name": "role_1",
+                        },
+                    ]
+                ),
+                AsyncIterator([]),
+            ],
+        ):
+            access_control = await source._fetch_access_controls("service_name")
+            assert access_control is None
+
+
+@pytest.mark.asyncio
+async def test_fetch_user_roles_map_skips_rows_without_role():
+    async with create_service_now_source() as source:
+        with mock.patch.object(
+            ServiceNowDataSource,
+            "_table_data_generator",
+            return_value=AsyncIterator(
+                [
+                    {"user": {"value": "user_id_1"}},
+                    {
+                        "user": {"value": "user_id_2"},
+                        "role": {"value": "role_id_1"},
+                    },
+                ]
+            ),
+        ):
+            user_roles = await source._fetch_user_roles_map()
+            assert user_roles == {"user_id_2": {"role_id_1"}}
+
+
+@pytest.mark.asyncio
+async def test_expand_role_members_defaults_true_when_missing():
+    config = ServiceNowDataSource.get_default_configuration()
+    config.pop("expand_role_members")
+    async with create_source(
+        ServiceNowDataSource,
+        url="http://127.0.0.1:1234",
+        username="admin",
+        password="changeme",
+        services="*",
+    ) as source:
+        source.configuration = DataSourceConfiguration(config)
+        source.configuration.set_defaults(ServiceNowDataSource.get_default_configuration())
+        assert source._expand_role_members() is True
+
+
+@pytest.mark.asyncio
+async def test_get_access_control_legacy_includes_role_ids():
+    async with create_service_now_source(expand_role_members=True) as source:
+        source._dls_enabled = Mock(return_value=True)
+        with mock.patch.object(
+            ServiceNowDataSource,
+            "_table_data_generator",
+            side_effect=[
+                AsyncIterator(
+                    [
+                        {
+                            "user": {"value": "id_1"},
+                            "role": {"value": "role_id_1"},
+                        }
+                    ]
+                ),
+                AsyncIterator(
+                    [
+                        {
+                            "sys_updated_on": "2023-10-10 05:21:45",
+                            "sys_id": "id_1",
+                            "email": "admin@email.com",
+                            "user_name": "demo.user",
+                            "_id": "id_1",
+                            "_timestamp": "2023-10-10T05:21:45",
+                        }
+                    ]
+                ),
+            ],
+        ):
+            users = [user async for user in source.get_access_control()]
+
+        assert users[0]["identity"]["role_ids"] == ["role_id:role_id_1"]
+
+
+@pytest.mark.asyncio
+async def test_get_docs_advanced_rules_with_dls():
+    filtering = Filter(
+        {
+            ADVANCED_SNIPPET: {
+                "value": [
+                    {"service": "Incident", "query": "user_nameSTARTSWITHa"},
+                ]
+            }
+        }
+    )
+    async with create_service_now_source(expand_role_members=False) as source:
+        source.servicenow_client.services = ["custom"]
+        source._dls_enabled = Mock(return_value=True)
+        source._fetch_access_controls = mock.AsyncMock(
+            return_value=["role_id:role_id_1"]
+        )
+        source.servicenow_client._api_call = mock.AsyncMock(
+            return_value=MockResponse(
+                res=SAMPLE_RESPONSE,
+                headers={"Content-Type": "application/json", "x-total-count": 2},
+            )
+        )
+
+        response_list = []
+        with mock.patch.object(
+            ServiceNowClient,
+            "filter_services",
+            return_value=({"Incident": "incident"}, []),
+        ):
+            with mock.patch.object(
+                ServiceNowClient,
+                "get_data",
+                side_effect=[
+                    AsyncIterator(
+                        [
+                            [
+                                {
+                                    "sys_id": "id_1",
+                                    "sys_updated_on": "1212-12-12 12:12:12",
+                                    "sys_class_name": "incident",
+                                    "sys_user": "abc",
+                                    "type": "table_record",
+                                },
+                            ]
+                        ]
+                    ),
+                    AsyncIterator(
+                        [
+                            [
+                                {
+                                    "sys_id": "id_2",
+                                    "table_sys_id": "id_1",
+                                    "sys_updated_on": "1212-12-12 12:12:12",
+                                    "sys_class_name": "incident",
+                                    "sys_user": "abc",
+                                    "type": "attachment_metadata",
+                                },
+                            ]
+                        ]
+                    ),
+                ],
+            ):
+                async for response in source.get_docs(filtering):
+                    response_list.append(response[0])
+
+        source._fetch_access_controls.assert_awaited_once_with(table_name="incident")
+        assert response_list[0][ACCESS_CONTROL] == ["role_id:role_id_1"]
+        assert response_list[1][ACCESS_CONTROL] == ["role_id:role_id_1"]
 
 
 @pytest.mark.asyncio
