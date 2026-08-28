@@ -107,6 +107,8 @@ class ConnectorsAgentConfigurationWrapper:
                 msg = "Invalid Elasticsearch credentials"
                 raise ValueError(msg)
 
+            es_creds.update(self._extract_ssl_config(source))
+
             assumed_configuration["elasticsearch"] = es_creds
 
         if self.config_changed(assumed_configuration):
@@ -121,6 +123,25 @@ class ConnectorsAgentConfigurationWrapper:
 
         logger.debug("No changes detected for connectors-relevant configurations")
         return False
+
+    def _extract_ssl_config(self, source):
+        if not source.fields.get("ssl"):
+            return {}
+
+        ssl_source = source["ssl"]
+        # ESClient ignores verify_certs unless ssl is enabled.
+        ssl_config = {"ssl": True}
+
+        verification_mode = ssl_source.get("verification_mode")
+        if verification_mode is not None:
+            verify_certs = verification_mode != "none"
+            logger.debug(
+                f"Found ssl.verification_mode '{verification_mode}', "
+                f"setting verify_certs to {verify_certs}"
+            )
+            ssl_config["verify_certs"] = verify_certs
+
+        return ssl_config
 
     def config_changed(self, new_config):
         """See if configuration passed in new_config will update currently stored configuration
