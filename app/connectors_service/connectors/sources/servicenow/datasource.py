@@ -281,7 +281,9 @@ class ServiceNowDataSource(BaseDataSource):
             self._logger.warning("DLS is not enabled. Skipping")
             return
 
-        self._logger.info("Enriching identity docs with role memberships from sys_user_has_role")
+        self._logger.info(
+            "Enriching identity docs with role memberships from sys_user_has_role"
+        )
         user_roles = await self._fetch_user_roles_map()
 
         async for user in self._fetch_all_users():

@@ -934,7 +934,9 @@ async def test_get_docs_with_advanced_rules_pagination(filtering):
                         async for response in source.get_docs(filtering):
                             response_list.append(response[0])
 
-                mock_fetch_table_data.assert_called_once_with(expected_filter_apis, None)
+                mock_fetch_table_data.assert_called_once_with(
+                    expected_filter_apis, None
+                )
             assert [
                 {
                     "sys_updated_on": "2023-10-10 05:21:45",
@@ -1297,7 +1299,9 @@ async def test_expand_role_members_defaults_true_when_missing():
         services="*",
     ) as source:
         source.configuration = DataSourceConfiguration(config)
-        source.configuration.set_defaults(ServiceNowDataSource.get_default_configuration())
+        source.configuration.set_defaults(
+            ServiceNowDataSource.get_default_configuration()
+        )
         assert source._expand_role_members() is True
 
 
