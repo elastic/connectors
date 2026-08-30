@@ -61,6 +61,12 @@ class LazyConfig:
                 )
                 self.ctx.exit(1)
 
+            if self.value is None:
+                click.echo(
+                    "The config file is empty or invalid. Run `connectors login` first."
+                )
+                self.ctx.exit(1)
+
         return self.value[key]
 
 

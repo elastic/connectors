@@ -695,6 +695,23 @@ def test_command_without_config_file_suggests_login(tmp_path, use_real_cli_confi
     assert "connectors login" in result.output
 
 
+@pytest.mark.parametrize("config_content", ["", "null\n"])
+def test_command_with_empty_config_suggests_login(
+    tmp_path, use_real_cli_config, config_content
+):
+    runner = CliRunner()
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        os.makedirs(os.path.dirname(CONFIG_FILE_PATH))
+        with open(CONFIG_FILE_PATH, "w") as config_file:
+            config_file.write(config_content)
+
+        result = runner.invoke(cli, ["job", "list", "test-connector-id"])
+
+    assert result.exit_code == 1
+    assert "config file is empty or invalid" in result.output
+    assert "connectors login" in result.output
+
+
 @patch("click.confirm", MagicMock(return_value=True))
 def test_job_cancel():
     runner = CliRunner()
