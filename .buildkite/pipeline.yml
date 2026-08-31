@@ -21,6 +21,7 @@ definitions:
 
 env:
   DOCKERFILE_FTEST_PATH: "Dockerfile.ftest.wolfi"
+  DRA_PYTHON_VERSION: "3.11"
 
 steps:
   - label: ":face_with_peeking_eye: Lint"
