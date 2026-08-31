@@ -188,7 +188,7 @@ class ServiceNowDataSource(BaseDataSource):
                 "order": 9,
                 "tooltip": "When enabled, ServiceNow role members are written individually onto each document's access control list. Disable this for large tenants to store compact role tokens on documents instead, and resolve membership during access control syncs. Changing this setting requires a full content sync and access control sync.",
                 "type": "bool",
-                "value": False,
+                "value": True,
             },
         }
 
@@ -209,13 +209,10 @@ class ServiceNowDataSource(BaseDataSource):
     def _expand_role_members(self):
         """Whether roles are expanded into individual users on document ACLs.
 
-        When the setting is absent from stored connector configuration, keep legacy
-        expansion so upgrades do not flip existing deployments to compact mode.
-        New connectors store expand_role_members from the RCF (default false).
+        Default True preserves legacy behavior. When False (compact mode), documents
+        receive role_id tokens and membership is resolved on identity docs.
         """
-        if not self.configuration.has_field("expand_role_members"):
-            return True
-        return self.configuration["expand_role_members"]
+        return self.configuration.get("expand_role_members", True)
 
     async def _user_access_control_doc(self, user, role_ids=None):
         user_id = user.get("_id", "")
@@ -225,8 +222,11 @@ class ServiceNowDataSource(BaseDataSource):
         _prefixed_user_id = _prefix_user_id(user_id=user_id)
         _prefixed_user_name = _prefix_username(user=user_name)
         _prefixed_email = _prefix_email(email=user_email)
+        role_ids_list = [role_id for role_id in (role_ids or []) if role_id]
         prefixed_role_ids = sorted(
-            _prefix_role_id(role_id) for role_id in (role_ids or []) if role_id
+            prefixed
+            for role_id in role_ids_list
+            if (prefixed := _prefix_role_id(role_id)) is not None
         )
         access_control = [
             _prefixed_user_id,

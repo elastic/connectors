@@ -125,7 +125,7 @@
             "value": false
         },
         "expand_role_members": {
-            "default_value": false,
+            "default_value": true,
             "depends_on": [
                 {
                     "field": "use_document_level_security",
@@ -142,7 +142,7 @@
             "type": "bool",
             "ui_restrictions": [],
             "validations": [],
-            "value": false
+            "value": true
         }
     }
 }

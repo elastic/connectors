@@ -30,7 +30,7 @@ ADVANCED_SNIPPET = "advanced_snippet"
 
 @asynccontextmanager
 async def create_service_now_source(
-    use_text_extraction_service=False, expand_role_members=False
+    use_text_extraction_service=False, expand_role_members=True
 ):
     async with create_source(
         ServiceNowDataSource,
