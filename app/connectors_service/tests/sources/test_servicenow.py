@@ -1237,16 +1237,16 @@ async def test_decorate_with_role_tokens():
 
 
 @pytest.mark.asyncio
-async def test_decorate_skips_empty_acl():
+async def test_decorate_denies_all_for_empty_acl():
     async with create_service_now_source() as source:
         source._dls_enabled = Mock(return_value=True)
         document = {"_id": "id_1"}
         result = source._decorate_with_access_control(document, [])
-        assert ACCESS_CONTROL not in result
+        assert result[ACCESS_CONTROL] == []
 
 
 @pytest.mark.asyncio
-async def test_fetch_access_controls_compact_empty_roles_returns_none():
+async def test_fetch_access_controls_compact_empty_roles_returns_deny_all():
     async with create_service_now_source(expand_role_members=False) as source:
         with mock.patch.object(
             ServiceNowDataSource,
@@ -1264,7 +1264,7 @@ async def test_fetch_access_controls_compact_empty_roles_returns_none():
             ],
         ):
             access_control = await source._fetch_access_controls("service_name")
-            assert access_control is None
+            assert access_control == []
 
 
 @pytest.mark.asyncio

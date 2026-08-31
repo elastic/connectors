@@ -295,10 +295,8 @@ class ServiceNowDataSource(BaseDataSource):
     def _decorate_with_access_control(self, document, access_control):
         if not self._dls_enabled():
             return document
-        # None or [] means omit the field so DLS's "must_not exists" clause grants
-        # access. An empty stored array denies everyone because the field exists but
-        # no terms match.
-        if not access_control:
+        if access_control is None:
+            # Public table: omit field so DLS must_not exists grants access.
             return document
         document[ACCESS_CONTROL] = list(
             set(document.get(ACCESS_CONTROL, []) + access_control)
@@ -553,10 +551,10 @@ class ServiceNowDataSource(BaseDataSource):
         if not compact_acl:
             self._logger.warning(
                 f"Compact DLS: no read roles resolved for table {table_name}. "
-                "Omitting _allow_access_control so documents remain searchable. "
+                "Denying all access until roles can be resolved. "
                 "Verify sys_user_role and sys_security_acl_role data in ServiceNow."
             )
-            return None
+            return []
         return compact_acl
 
     async def _fetch_access_controls_legacy(self, table_name):
