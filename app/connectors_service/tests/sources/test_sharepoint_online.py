@@ -4067,6 +4067,38 @@ class TestSharepointOnlineDataSource:
             source.site_group_users.assert_not_called()
 
     @pytest.mark.asyncio
+    async def test_with_drive_item_permissions_compact_falls_back_without_site_id(
+        self, patch_sharepoint_client
+    ):
+        site_group_id = "3"
+        async with create_spo_source(
+            use_document_level_security=True, expand_site_group_members=False
+        ) as source:
+            drive_item = {"id": 1}
+            source.site_group_users = AsyncMock(
+                return_value=[
+                    {
+                        "Title": "demo.user",
+                        "Email": USER_ONE_EMAIL,
+                        "LoginName": f"i:0#.f|membership|{USER_ONE_EMAIL}",
+                    }
+                ]
+            )
+
+            drive_item_with_access_control = await source._with_drive_item_permissions(
+                drive_item,
+                [{"grantedToV2": {"siteGroup": {"id": site_group_id}}}],
+                "dummy_site_web_url",
+                site_id=None,
+            )
+
+            assert (
+                _prefix_user(USER_ONE_EMAIL)
+                in drive_item_with_access_control[ACCESS_CONTROL]
+            )
+            source.site_group_users.assert_called_once()
+
+    @pytest.mark.asyncio
     async def test_get_access_control_from_role_assignment_compact_site_group(self):
         site_id = "graph-site-id"
         group_id = 42

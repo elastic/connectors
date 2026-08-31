@@ -392,6 +392,44 @@ class SharepointOnlineDataSource(BaseDataSource):
         """
         return self.configuration.get("expand_site_group_members", True)
 
+    async def _expand_site_group_members_access_control(
+        self, site_web_url, site_group_id, role_assignment=None
+    ):
+        access_control = []
+        if role_assignment is not None:
+            users = nested_get_from_dict(role_assignment, ["Member", "Users"], [])
+            for user in users:  # pyright: ignore
+                access_control.extend(await self._access_control_for_member(user))
+            return access_control
+
+        users = await self.site_group_users(site_web_url, site_group_id)
+        for site_group_user in users:
+            access_control.extend(
+                await self._access_control_for_member(site_group_user)
+            )
+        return access_control
+
+    async def _site_group_access_control(
+        self, site_web_url, site_group_id, site_id, role_assignment=None
+    ):
+        """Resolve site-group permissions, falling back to member expansion if compact
+        tokens cannot be written safely."""
+        if self._expand_site_group_members():
+            return await self._expand_site_group_members_access_control(
+                site_web_url, site_group_id, role_assignment=role_assignment
+            )
+
+        if site_id is not None:
+            return [_prefix_site_group(site_id, site_group_id)]
+
+        self._logger.warning(
+            "Cannot write compact site_group token because site_id is missing "
+            f"(group_id={site_group_id}); falling back to expanding site group members"
+        )
+        return await self._expand_site_group_members_access_control(
+            site_web_url, site_group_id, role_assignment=role_assignment
+        )
+
     def access_control_query(self, access_control):
         return es_access_control_query(access_control)
 
@@ -1069,19 +1107,13 @@ class SharepointOnlineDataSource(BaseDataSource):
                 access_control.append(_prefix_user(site_user_username))
 
             if site_group_id:
-                if self._expand_site_group_members():
-                    users = await self.site_group_users(site_web_url, site_group_id)
-                    for site_group_user in users:  # note, 'users' might contain groups.
-                        access_control.extend(
-                            await self._access_control_for_member(site_group_user)
-                        )
-                elif site_id is not None:
-                    access_control.append(_prefix_site_group(site_id, site_group_id))
-                else:
-                    self._logger.warning(
-                        f"Cannot write compact site_group token for drive item "
-                        f"(id: '{drive_item_id}'): site_id is missing"
+                access_control.extend(
+                    await self._site_group_access_control(
+                        site_web_url,
+                        site_group_id,
+                        site_id,
                     )
+                )
 
         return self._decorate_with_access_control(drive_item, access_control)
 
@@ -1323,23 +1355,31 @@ class SharepointOnlineDataSource(BaseDataSource):
         is_user = identity_type == "SP.User"
 
         if is_group:
-            if self._expand_site_group_members():
-                users = nested_get_from_dict(role_assignment, ["Member", "Users"], [])
-
-                for user in users:  # pyright: ignore
-                    access_control.extend(await self._access_control_for_member(user))
-            else:
-                group_id = nested_get_from_dict(role_assignment, ["Member", "Id"])
-                if group_id is None:
-                    group_id = role_assignment.get("PrincipalId")
-                if group_id is not None and site_id is not None:
-                    access_control.append(_prefix_site_group(site_id, group_id))
-                else:
-                    self._logger.warning(
-                        "Cannot write compact site_group token for role assignment "
-                        f"'{role_assignment.get('odata.id')}': "
-                        f"group_id={group_id}, site_id={site_id}"
+            group_id = nested_get_from_dict(role_assignment, ["Member", "Id"])
+            if group_id is None:
+                group_id = role_assignment.get("PrincipalId")
+            if group_id is not None:
+                access_control.extend(
+                    await self._site_group_access_control(
+                        site_web_url=None,
+                        site_group_id=group_id,
+                        site_id=site_id,
+                        role_assignment=role_assignment,
                     )
+                )
+            elif nested_get_from_dict(role_assignment, ["Member", "Users"], []):
+                access_control.extend(
+                    await self._expand_site_group_members_access_control(
+                        site_web_url=None,
+                        site_group_id=None,
+                        role_assignment=role_assignment,
+                    )
+                )
+            else:
+                self._logger.warning(
+                    "Cannot resolve site group for role assignment "
+                    f"'{role_assignment.get('odata.id')}': group_id is missing"
+                )
         elif is_user:
             member = role_assignment.get("Member", {})
             access_control.extend(await self._access_control_for_member(member))
