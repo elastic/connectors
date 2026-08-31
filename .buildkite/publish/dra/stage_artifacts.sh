@@ -15,6 +15,11 @@ elif [[ "${WORKFLOW}" != "staging" ]]; then
   exit 1
 fi
 
+# core-ubuntu-2204 has Python 3.10 without python3-venv; use pyenv from the
+# connectors agent image so make sdist can create the .venv prerequisite
+source ~/.bash_profile
+pyenv global "${DRA_PYTHON_VERSION:?DRA_PYTHON_VERSION is required}"
+
 echo "--- :package: Building sdist artifact"
 # Run before downloading Python artifacts — make clean deletes dist/
 make clean sdist
