@@ -59,7 +59,7 @@ def hash_id(_id):
     # Collision probability: 1.47*10^-29
     # S105 rule considers this code unsafe, but we're not using it for security-related
     # things, only to generate pseudo-ids for documents
-    return hashlib.md5(_id.encode("utf8")).hexdigest()  # noqa S105
+    return hashlib.md5(_id.encode("utf8"), usedforsecurity=False).hexdigest()  # noqa S105
 
 
 def convert_to_b64(source, target=None, overwrite=False):

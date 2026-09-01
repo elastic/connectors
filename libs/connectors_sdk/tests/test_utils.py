@@ -34,6 +34,29 @@ def test_hash_id():
     assert len(hash_id(random_id_too_long).encode("UTF-8")) < limit
 
 
+def test_hash_id_fips_compatible(monkeypatch):
+    """hash_id must pass usedforsecurity=False to work on FIPS-enabled systems.
+
+    On a FIPS-enabled host, OpenSSL raises ValueError for hashlib.md5() unless
+    usedforsecurity=False is set. This test simulates that enforcement.
+    """
+    import hashlib as _hashlib
+
+    original_md5 = _hashlib.md5
+
+    def fips_strict_md5(data, usedforsecurity=True):
+        if usedforsecurity:
+            raise ValueError(
+                "[digital envelope routines] unsupported (simulated FIPS mode)"
+            )
+        return original_md5(data, usedforsecurity=False)
+
+    monkeypatch.setattr(_hashlib, "md5", fips_strict_md5)
+
+    result = hash_id("some-document-id")
+    assert len(result) == 32
+
+
 @pytest.fixture
 def patch_file_ops():
     with patch("connectors_sdk.utils.open"):
