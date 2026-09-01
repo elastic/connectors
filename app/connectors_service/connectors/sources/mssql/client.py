@@ -71,7 +71,24 @@ class MSSQLClient:
                     f"Something went wrong while removing temporary certificate file. Exception: {exception}"
                 )
         if self.connection is not None:
-            self.connection.close()
+            try:
+                self.connection.close()
+            except Exception as exception:
+                # Closing a pytds connection that still has an interrupted result
+                # set triggers a rollback/cancel that reads a corrupted TDS stream
+                # ("Invalid TDS marker"). Fall back to invalidating the underlying
+                # connection so cleanup never crashes.
+                self._logger.warning(
+                    f"Something went wrong while closing the MSSQL connection. Exception: {exception}"
+                )
+                try:
+                    self.connection.invalidate()
+                except Exception as invalidate_exception:
+                    self._logger.debug(
+                        f"Something went wrong while invalidating the MSSQL connection. Exception: {invalidate_exception}"
+                    )
+            finally:
+                self.connection = None
 
     @cached_property
     def engine(self):
@@ -125,7 +142,31 @@ class MSSQLClient:
             self._logger.warning(
                 f"Something went wrong while executing query. Exception: {exception}"
             )
+            # The shared connection may be left with an interrupted result set
+            # (e.g. when a large streaming query is retried). Reusing it makes
+            # pytds cancel the pending request and read a corrupted stream,
+            # surfacing as "Invalid TDS marker". Drop it so the retry reconnects.
+            await self._reset_connection()
             raise
+
+    async def _reset_connection(self):
+        """Discard the current connection so the next query reconnects cleanly.
+
+        Uses ``invalidate`` rather than ``close`` because a poisoned pytds
+        connection cannot be gracefully closed: the implicit rollback/cancel
+        reads a corrupted TDS stream and raises again.
+        """
+        if self.connection is None:
+            return
+        connection = self.connection
+        self.connection = None
+        try:
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(executor=None, func=connection.invalidate)
+        except Exception as exception:
+            self._logger.debug(
+                f"Something went wrong while resetting the MSSQL connection. Exception: {exception}"
+            )
 
     async def ping(self):
         return await anext(
