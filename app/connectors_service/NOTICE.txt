@@ -2737,7 +2737,7 @@ SOFTWARE.
 
 
 build
-1.5.0
+1.6.0
 MIT
 Copyright © 2019 Filipe Laíns <filipe.lains@gmail.com>
 
@@ -6926,7 +6926,7 @@ THE SOFTWARE.
 
 
 pyspnego
-0.12.1
+0.12.2
 MIT
 MIT License
 
