@@ -18,6 +18,7 @@ import os
 import click
 import yaml
 from colorama import Fore, Style
+from elastic_transport.client_utils import url_to_node_config
 from simple_term_menu import TerminalMenu
 from tabulate import tabulate
 
@@ -59,10 +60,32 @@ class LazyConfig:
                 message = f"{error} Run `connectors login` first, or make sure that the config is either present at the default location ({CONFIG_FILE_PATH}) or it's passed via the '-c' or '--config' option."
                 raise click.ClickException(message) from error
 
+            elasticsearch_config = (
+                self.value.get("elasticsearch")
+                if isinstance(self.value, dict)
+                else None
+            )
+            elasticsearch_host = (
+                elasticsearch_config.get("host")
+                if isinstance(elasticsearch_config, dict)
+                else None
+            )
+            valid_elasticsearch_host = False
+            if isinstance(elasticsearch_host, str) and elasticsearch_host.strip():
+                try:
+                    url_to_node_config(
+                        elasticsearch_host,
+                        use_default_ports_for_scheme=True,
+                    )
+                except ValueError:
+                    pass
+                else:
+                    valid_elasticsearch_host = True
             if (
-                not isinstance(self.value, dict)
-                or not isinstance(self.value.get("elasticsearch"), dict)
-                or not self.value["elasticsearch"]
+                not isinstance(elasticsearch_config, dict)
+                or not isinstance(elasticsearch_host, str)
+                or not elasticsearch_host.strip()
+                or not valid_elasticsearch_host
             ):
                 message = (
                     "The config file is empty or invalid. Run `connectors login` first."
