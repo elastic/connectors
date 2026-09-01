@@ -1140,17 +1140,14 @@ async def test_group_allow_ace_member1_allow_member2_deny_ace_then_member1_has_a
     NASDataSource,
     "list_file_permission",
     return_value=[
-        # User with only write permission (no read access) allowed.
         mock_permission(
             sid="S-2-21-211-411", ace=0, mask=ACCESS_MASK_ALLOWED_WRITE_PERMISSION
-        ),
+        ),  # Write-only allow ACE
     ],
 )
 async def test_write_only_allow_ace_does_not_grant_read_access(
     mock_list_file_permission,
 ):
-    """A user whose only allow ACE grants write (not read) must not see the
-    document, matching Windows where write access does not imply read access."""
     async with create_source(NASDataSource) as source:
         source._dls_enabled = MagicMock(return_value=True)
         document_permissions = await source._decorate_with_access_control(
@@ -1167,19 +1164,15 @@ async def test_write_only_allow_ace_does_not_grant_read_access(
     NASDataSource,
     "list_file_permission",
     return_value=[
-        # Group granted read access.
-        mock_permission(sid="S-1-11-11", ace=0),
-        # Member of that group additionally granted write-only access.
+        mock_permission(sid="S-1-11-11", ace=0),  # Group allow
         mock_permission(
             sid="S-2-21-211-411", ace=0, mask=ACCESS_MASK_ALLOWED_WRITE_PERMISSION
-        ),
+        ),  # User write-only allow ACE
     ],
 )
 async def test_group_read_access_is_kept_when_member_has_extra_write_only_ace(
     mock_list_file_permission,
 ):
-    """A write-only allow ACE must not revoke read access the user already has
-    through a group's read grant."""
     mock_groups_info = {
         "S-1-11-11": {"user-1": "S-2-21-211-411", "user-2": "S-3-23-222-221"}
     }
@@ -1202,20 +1195,15 @@ async def test_group_read_access_is_kept_when_member_has_extra_write_only_ace(
     NASDataSource,
     "list_file_permission",
     return_value=[
-        # User 1 has a regular allow (read) permission
-        mock_permission(sid="S-2-21-211-411", ace=0),
-        # User 2 is only granted write access, so must not be able to read
+        mock_permission(sid="S-2-21-211-411", ace=0),  # User with allow permission
         mock_permission(
-            sid="S-3-23-222-221",
-            ace=0,
-            mask=ACCESS_MASK_ALLOWED_WRITE_PERMISSION,
-        ),
+            sid="S-3-23-222-221", ace=0, mask=ACCESS_MASK_ALLOWED_WRITE_PERMISSION
+        ),  # User with write-only allow permission
     ],
 )
 async def test_write_only_allow_ace_excluded_while_read_allow_ace_kept(
     mock_list_file_permission,
 ):
-    """Among multiple users, only those with read-capable allow ACEs keep access."""
     async with create_source(NASDataSource) as source:
         source._dls_enabled = MagicMock(return_value=True)
         document_permissions = await source._decorate_with_access_control(
@@ -1232,18 +1220,14 @@ async def test_write_only_allow_ace_excluded_while_read_allow_ace_kept(
     NASDataSource,
     "list_file_permission",
     return_value=[
-        # Deny ACE that only denies write must still leave read access intact
         mock_permission(
-            sid="S-2-21-211-411",
-            ace=1,
-            mask=ACCESS_MASK_DENIED_WRITE_PERMISSION,
-        ),
+            sid="S-2-21-211-411", ace=1, mask=ACCESS_MASK_DENIED_WRITE_PERMISSION
+        ),  # Deny-write ACE
     ],
 )
 async def test_deny_write_only_ace_still_grants_read_access(
     mock_list_file_permission,
 ):
-    """A deny-write ACE removes write access but must not remove read access."""
     async with create_source(NASDataSource) as source:
         source._dls_enabled = MagicMock(return_value=True)
         document_permissions = await source._decorate_with_access_control(
