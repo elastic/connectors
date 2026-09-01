@@ -15,7 +15,11 @@ from connectors_sdk.utils import (
 )
 from exchangelib import UTC
 from exchangelib.attachments import FileAttachment
-from exchangelib.errors import ErrorAccessDenied, ErrorNonExistentMailbox
+from exchangelib.errors import (
+    ErrorAccessDenied,
+    ErrorNonExistentMailbox,
+    ErrorNonPrimarySmtpAddress,
+)
 from exchangelib.items import (
     CalendarItem,
     Contact,
@@ -756,7 +760,11 @@ class OutlookDataSource(BaseDataSource):
                     account=account, timezone=timezone
                 ):
                     yield child_calendar
-            except (ErrorNonExistentMailbox, ErrorAccessDenied) as error:
+            except (
+                ErrorNonExistentMailbox,
+                ErrorNonPrimarySmtpAddress,
+                ErrorAccessDenied,
+            ) as error:
                 # Account-specific failure: skip this account. Connection-wide errors
                 # propagate so an empty "successful" sync can't wipe the index.
                 self._logger.warning(
