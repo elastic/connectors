@@ -127,7 +127,9 @@ class JobSchedulingService(BaseService):
         finally:
             await data_source.close()
 
-        if connector.features.document_level_security_enabled():
+        if connector.features.document_level_security_enabled() and (
+            connector.access_control_sync_scheduling.get("enabled", False)
+        ):
             (
                 is_platinum_license_enabled,
                 license_enabled,
