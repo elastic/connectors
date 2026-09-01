@@ -1221,6 +1221,74 @@ async def test_get_docs_with_advanced_rules(filtering):
         assert documents == expected_responses
 
 
+@pytest.mark.parametrize(
+    "filtering",
+    [
+        Filter(
+            {
+                ADVANCED_SNIPPET: {
+                    "value": [
+                        {
+                            "owners": ["AdeleV@w076v.onmicrosoft.com"],
+                            "skipFilesWithExtensions": [".py"],
+                        },
+                        {
+                            "owners": ["AlexW@w076v.onmicrosoft.com"],
+                            "parentPathPattern": "/drive/root:/hello/*",
+                        },
+                    ],
+                }
+            }
+        ),
+    ],
+)
+@patch.object(
+    OneDriveClient,
+    "list_file_permission",
+    side_effect=[
+        (AsyncIterator([RESPONSE_PERMISSION1])),
+        (AsyncIterator([RESPONSE_PERMISSION2])),
+    ],
+)
+@pytest.mark.asyncio
+async def test_get_docs_with_advanced_rules_and_dls_enabled(
+    permissions_patch, filtering
+):
+    async with create_onedrive_source() as source:
+        source._dls_enabled = MagicMock(return_value=True)
+
+        with patch.object(AccessToken, "get", return_value="abc"):
+            with patch.object(
+                OneDriveClient,
+                "list_users",
+                return_value=AsyncIterator(EXPECTED_USERS),
+            ):
+                async_response_user1 = AsyncMock()
+                async_response_user1.__aenter__ = AsyncMock(
+                    return_value=JSONAsyncMock({"value": RESPONSE_USER1_FILES})
+                )
+
+                async_response_user2 = AsyncMock()
+                async_response_user2.__aenter__ = AsyncMock(
+                    return_value=JSONAsyncMock({"value": RESPONSE_USER2_FILES})
+                )
+
+                with patch(
+                    "aiohttp.ClientSession.get",
+                    side_effect=[async_response_user1, async_response_user2],
+                ):
+                    documents = []
+                    expected_responses = [
+                        EXPECTED_USER1_FILES_PERMISSION[0],
+                        EXPECTED_USER2_FILES_PERMISSION[1],
+                    ]
+                    async for item, _ in source.get_docs(filtering):
+                        item.get("_allow_access_control", []).sort()
+                        documents.append(item)
+
+        assert documents == expected_responses
+
+
 @pytest.mark.asyncio
 async def test_get_access_control_dls_disabled():
     async with create_onedrive_source() as source:
