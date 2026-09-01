@@ -69,6 +69,16 @@ def _prefix_user_id(user_id):
     return prefix_identity("user_id", user_id)
 
 
+def _prefix_user(email):
+    """Return a 'user:<email>' identity token.
+
+    Uses the 'user' prefix (rather than 'email') to match the identity format
+    emitted by other connectors such as SharePoint and OneDrive, enabling
+    consistent cross-connector document-level security (DLS) evaluation.
+    """
+    return prefix_identity("user", email)
+
+
 class EndSignal(Enum):
     SERVICE = "SERVICE_TASK_FINISHED"
     RECORD = "RECORD_TASK_FINISHED"
@@ -116,27 +126,305 @@ class ServiceNowDataSource(BaseDataSource):
 
     @classmethod
     def get_default_configuration(cls):
+        """Return the default connector configuration schema.
+
+        Each key maps to a UI field definition understood by the Kibana connector
+        framework.  Fields use ``depends_on`` lists to declare which other field
+        value(s) must be active before the field is shown in the UI, so only the
+        fields relevant to the chosen Authentication Method and OAuth Grant Type
+        are ever visible to the user at one time.
+
+        Authentication modes
+        --------------------
+        ``auth_method = "basic"``
+            Shows: url, username, basic_auth_password, services (+ advanced fields)
+
+        ``auth_method = "oauth"``
+            Always shows: url, oauth_grant_type, client_id, client_secret,
+            services (+ advanced)
+
+            Then per grant type:
+
+            ``oauth_grant_type = "password"``
+                + oauth_username, oauth_password
+
+            ``oauth_grant_type = "client_credentials"``
+                (no extra fields)
+
+            ``oauth_grant_type = "refresh_token"``
+                + oauth_username_refresh, refresh_token
+
+            ``oauth_grant_type = "authorization_code"``
+                + client_secret, oauth_authorization_code, oauth_redirect_uri,
+                  pkce_code_verifier (optional)
+
+            ``oauth_grant_type = "jwt_bearer"``
+                + jwt_private_key, jwt_subject (optional), jwt_key_id (optional),
+                  jwt_algorithm
+                  (client_secret is optional and not shown by default)
+
+        Returns:
+            dict: Connector configuration schema.
+        """
         return {
             "url": {
                 "label": "Service URL",
                 "order": 1,
                 "type": "str",
             },
-            "username": {
-                "label": "Username",
+            "auth_method": {
+                "display": "dropdown",
+                "label": "Authentication Method",
+                "options": [
+                    {"label": "OAuth 2.0", "value": "oauth"},
+                    {"label": "Basic Auth (username / password)", "value": "basic"},
+                ],
                 "order": 2,
+                "tooltip": "Use 'OAuth 2.0' for token-based authentication (recommended). Use 'Basic Auth' for simple username and password authentication.",
                 "type": "str",
+                "value": "oauth",
             },
-            "password": {
-                "label": "Password",
+            "oauth_grant_type": {
+                "depends_on": [{"field": "auth_method", "value": "oauth"}],
+                "display": "dropdown",
+                "label": "OAuth Grant Type",
+                "options": [
+                    {"label": "Password", "value": "password"},
+                    {"label": "Client Credentials (requires non-PDI instance)", "value": "client_credentials"},
+                    {"label": "Refresh Token", "value": "refresh_token"},
+                    {"label": "Authorization Code", "value": "authorization_code"},
+                    {"label": "JWT Bearer", "value": "jwt_bearer"},
+                ],
                 "order": 3,
-                "sensitive": True,
+                "tooltip": (
+                    "Select the OAuth 2.0 grant type that matches your ServiceNow configuration. "
+                    "'Password' works on all instances including PDIs. "
+                    "'Client Credentials' is machine-to-machine (non-PDI only). "
+                    "'Refresh Token' exchanges a long-lived refresh token. "
+                    "'Authorization Code' completes the browser-based flow (supports PKCE). "
+                    "'JWT Bearer' uses a signed JWT assertion (requires a private key)."
+                ),
                 "type": "str",
+                "value": "password",
+                "required": False,
+            },
+            "client_id": {
+                "depends_on": [{"field": "auth_method", "value": "oauth"}],
+                "label": "OAuth Client ID",
+                "order": 4,
+                "tooltip": "Required when Authentication Method is 'OAuth 2.0'.",
+                "type": "str",
+                "value": "",
+                "required": False,
+            },
+            # client_secret is shown for all OAuth grant types.  Gated on
+            # auth_method=oauth only (single entry) so Kibana's OR evaluation
+            # doesn't cause it to bleed through to other states.
+            "client_secret": {
+                "depends_on": [{"field": "auth_method", "value": "oauth"}],
+                "label": "OAuth Client Secret",
+                "order": 5,
+                "sensitive": True,
+                "tooltip": (
+                    "Required for Password, Client Credentials, Refresh Token, and "
+                    "Authorization Code grant types. Optional for JWT Bearer — only "
+                    "include if your ServiceNow OAuth application requires it."
+                ),
+                "type": "str",
+                "value": "",
+                "required": False,
+            },
+            # ── Username (Basic Auth) ─────────────────────────────────────────
+            # depends_on uses AND semantics in the SDK: a field is shown only
+            # when ALL listed conditions are simultaneously true.  Because
+            # "basic" and "oauth" are mutually exclusive auth_method values,
+            # username for Basic Auth and username for OAuth must be separate
+            # field keys.
+            "username": {
+                "depends_on": [{"field": "auth_method", "value": "basic"}],
+                "label": "Username",
+                "order": 6,
+                "tooltip": "Required when Authentication Method is 'Basic Auth'.",
+                "type": "str",
+                "value": "",
+                "required": False,
+            },
+            # ── Basic Auth password ──────────────────────────────────────────
+            "basic_auth_password": {
+                "depends_on": [{"field": "auth_method", "value": "basic"}],
+                "label": "Password",
+                "order": 7,
+                "sensitive": True,
+                "tooltip": "Required when Authentication Method is 'Basic Auth'.",
+                "type": "str",
+                "value": "",
+                "required": False,
+            },
+            # ── OAuth Username (Password grant) ──────────────────────────────
+            # depends_on AND semantics: both conditions must be true simultaneously.
+            # A single field cannot satisfy two different values for the same key,
+            # so covering both Password and Refresh Token grant types requires two
+            # separate field entries — one per grant type.
+            "oauth_username": {
+                "depends_on": [
+                    {"field": "auth_method", "value": "oauth"},
+                    {"field": "oauth_grant_type", "value": "password"},
+                ],
+                "label": "Username",
+                "order": 8,
+                "tooltip": "Required when OAuth Grant Type is 'Password'.",
+                "type": "str",
+                "value": "",
+                "required": False,
+            },
+            # ── OAuth Username (Refresh Token grant) ─────────────────────────
+            "oauth_username_refresh": {
+                "depends_on": [
+                    {"field": "auth_method", "value": "oauth"},
+                    {"field": "oauth_grant_type", "value": "refresh_token"},
+                ],
+                "label": "Username",
+                "order": 8,
+                "tooltip": "Required when OAuth Grant Type is 'Refresh Token'.",
+                "type": "str",
+                "value": "",
+                "required": False,
+            },
+            # ── OAuth Password grant ─────────────────────────────────────────
+            # AND semantics: both conditions must hold simultaneously.
+            # oauth_grant_type alone is not sufficient because its default value
+            # is "password", which causes this field to bleed through to Basic
+            # Auth mode where oauth_grant_type is hidden but its stored value
+            # is still "password".
+            "oauth_password": {
+                "depends_on": [
+                    {"field": "auth_method", "value": "oauth"},
+                    {"field": "oauth_grant_type", "value": "password"},
+                ],
+                "label": "Password",
+                "order": 9,
+                "sensitive": True,
+                "tooltip": "Required when OAuth Grant Type is 'Password'.",
+                "type": "str",
+                "value": "",
+                "required": False,
+            },
+            # ── Refresh Token grant ──────────────────────────────────────────
+            # Gating on oauth_grant_type alone is safe here: "refresh_token" is
+            # never the default value of oauth_grant_type, so it cannot bleed
+            # through to Basic Auth mode.
+            "refresh_token": {
+                "depends_on": [{"field": "oauth_grant_type", "value": "refresh_token"}],
+                "label": "Refresh Token",
+                "order": 10,
+                "sensitive": True,
+                "tooltip": "Required when OAuth Grant Type is 'Refresh Token'.",
+                "type": "str",
+                "value": "",
+                "required": False,
+            },
+            # ── Authorization Code grant ─────────────────────────────────────
+            "oauth_authorization_code": {
+                "depends_on": [{"field": "oauth_grant_type", "value": "authorization_code"}],
+                "label": "Authorization Code",
+                "order": 10,
+                "sensitive": True,
+                "tooltip": (
+                    "The one-time authorization code returned by ServiceNow after the "
+                    "user completes the browser-based consent flow. Required when "
+                    "OAuth Grant Type is 'Authorization Code'."
+                ),
+                "type": "str",
+                "value": "",
+                "required": False,
+            },
+            "oauth_redirect_uri": {
+                "depends_on": [{"field": "oauth_grant_type", "value": "authorization_code"}],
+                "label": "Redirect URI",
+                "order": 11,
+                "tooltip": (
+                    "The redirect URI registered in ServiceNow for this OAuth application. "
+                    "Must exactly match the URI used during the authorization flow."
+                ),
+                "type": "str",
+                "value": "",
+                "required": False,
+            },
+            "pkce_code_verifier": {
+                "depends_on": [{"field": "oauth_grant_type", "value": "authorization_code"}],
+                "label": "PKCE Code Verifier",
+                "order": 12,
+                "sensitive": True,
+                "tooltip": (
+                    "Optional. The PKCE code verifier used when generating the "
+                    "authorization request. Leave blank if PKCE was not used."
+                ),
+                "type": "str",
+                "value": "",
+                "required": False,
+            },
+            # ── JWT Bearer grant ─────────────────────────────────────────────
+            "jwt_private_key": {
+                "depends_on": [{"field": "oauth_grant_type", "value": "jwt_bearer"}],
+                "display": "textarea",
+                "label": "JWT Private Key (PEM)",
+                "order": 13,
+                "sensitive": True,
+                "tooltip": (
+                    "PEM-encoded RSA or EC private key used to sign the JWT assertion. "
+                    "Required when OAuth Grant Type is 'JWT Bearer'. "
+                    "Paste the full key including the -----BEGIN ... KEY----- header and footer."
+                ),
+                "type": "str",
+                "value": "",
+                "required": False,
+            },
+            "jwt_subject": {
+                "depends_on": [{"field": "oauth_grant_type", "value": "jwt_bearer"}],
+                "label": "JWT Subject (sub)",
+                "order": 14,
+                "tooltip": (
+                    "Optional. The 'sub' claim in the JWT assertion. "
+                    "Defaults to the OAuth Client ID when left blank."
+                ),
+                "type": "str",
+                "value": "",
+                "required": False,
+            },
+            "jwt_key_id": {
+                "depends_on": [{"field": "oauth_grant_type", "value": "jwt_bearer"}],
+                "label": "JWT Key ID (kid)",
+                "order": 15,
+                "tooltip": (
+                    "Optional. The 'kid' header in the JWT, used to identify the "
+                    "signing key on the ServiceNow side. Leave blank if not required."
+                ),
+                "type": "str",
+                "value": "",
+                "required": False,
+            },
+            "jwt_algorithm": {
+                "depends_on": [{"field": "oauth_grant_type", "value": "jwt_bearer"}],
+                "display": "dropdown",
+                "label": "JWT Signing Algorithm",
+                "options": [
+                    {"label": "RS256 (RSA, recommended)", "value": "RS256"},
+                    {"label": "RS384", "value": "RS384"},
+                    {"label": "RS512", "value": "RS512"},
+                    {"label": "ES256 (ECDSA)", "value": "ES256"},
+                    {"label": "ES384", "value": "ES384"},
+                    {"label": "ES512", "value": "ES512"},
+                ],
+                "order": 16,
+                "tooltip": "Algorithm used to sign the JWT assertion. RS256 is recommended.",
+                "type": "str",
+                "value": "RS256",
+                "required": False,
             },
             "services": {
                 "display": "textarea",
                 "label": "Comma-separated list of services",
-                "order": 4,
+                "order": 17,
                 "tooltip": "List of services is ignored when Advanced Sync Rules are used.",
                 "type": "list",
                 "value": "*",
@@ -145,7 +433,7 @@ class ServiceNowDataSource(BaseDataSource):
                 "default_value": RETRIES,
                 "display": "numeric",
                 "label": "Retries per request",
-                "order": 5,
+                "order": 18,
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
@@ -154,7 +442,7 @@ class ServiceNowDataSource(BaseDataSource):
                 "default_value": MAX_CONCURRENT_CLIENT_SUPPORT,
                 "display": "numeric",
                 "label": "Maximum concurrent downloads",
-                "order": 6,
+                "order": 19,
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
@@ -162,7 +450,7 @@ class ServiceNowDataSource(BaseDataSource):
             "use_text_extraction_service": {
                 "display": "toggle",
                 "label": "Use text extraction service",
-                "order": 7,
+                "order": 20,
                 "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
                 "type": "bool",
                 "ui_restrictions": ["advanced"],
@@ -171,7 +459,7 @@ class ServiceNowDataSource(BaseDataSource):
             "use_document_level_security": {
                 "display": "toggle",
                 "label": "Enable document level security",
-                "order": 8,
+                "order": 21,
                 "tooltip": "Document level security ensures identities and permissions set in ServiceNow are maintained in Elasticsearch. This enables you to restrict and personalize read-access users and groups have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
                 "type": "bool",
                 "value": False,
@@ -193,6 +481,21 @@ class ServiceNowDataSource(BaseDataSource):
         return self.configuration["use_document_level_security"]
 
     async def _user_access_control_doc(self, user):
+        """Build an Elasticsearch access-control document for a ServiceNow user.
+
+        Emits four identity tokens so that DLS queries can match the user
+        regardless of which token format was indexed by a peer connector:
+          - user_id:<sys_id>      (ServiceNow internal ID)
+          - username:<user_name>  (login name)
+          - email:<email>         (RFC 5321 address)
+          - user:<email>          (cross-connector format; matches SharePoint / OneDrive)
+
+        Args:
+            user (dict): A user record as returned by _fetch_all_users().
+
+        Returns:
+            dict: Access-control document ready for bulk indexing.
+        """
         user_id = user.get("_id", "")
         user_name = user.get("user_name", "")
         user_email = user.get("email", "")
@@ -200,6 +503,7 @@ class ServiceNowDataSource(BaseDataSource):
         _prefixed_user_id = _prefix_user_id(user_id=user_id)
         _prefixed_user_name = _prefix_username(user=user_name)
         _prefixed_email = _prefix_email(email=user_email)
+        _prefixed_user = _prefix_user(user_email)  # cross-connector format
         return {
             "_id": user_id,
             "identity": {
@@ -209,7 +513,7 @@ class ServiceNowDataSource(BaseDataSource):
             },
             "created_at": user.get("_timestamp"),
         } | es_access_control_query(
-            access_control=[_prefixed_user_id, _prefixed_user_name, _prefixed_email]
+            access_control=[_prefixed_user_id, _prefixed_user_name, _prefixed_email, _prefixed_user]
         )
 
     async def _fetch_all_users(self):
@@ -413,6 +717,14 @@ class ServiceNowDataSource(BaseDataSource):
 
     async def _fetch_access_controls(self, table_name):
         access_control, user_roles, roles = [], [], {}
+
+        # Build a sys_id -> email map from the full user list so role-based
+        # lookups (which only return a sys_id reference) can emit user:<email>
+        # tokens that match the format used by other connectors (SharePoint, OneDrive).
+        user_email_map = {}
+        async for u in self._fetch_all_users():
+            user_email_map[u.get("sys_id")] = u.get("email", "")
+
         if table_name in DEFAULT_SERVICE_NAMES.keys():
             async for role in self._table_data_generator(
                 service_name="sys_user_role", params={}
@@ -420,10 +732,23 @@ class ServiceNowDataSource(BaseDataSource):
                 roles[role.get("name")] = role.get("sys_id")
 
             for role in DEFAULT_SERVICE_NAMES.get(table_name, []):
-                async for user in self._fetch_users_by_roles(roles[role]):
-                    access_control.append(
-                        _prefix_user_id(user_id=user.get("user", {}).get("value"))
+                role_sys_id = roles.get(role)
+                if role_sys_id is None:
+                    # Role defined in DEFAULT_SERVICE_NAMES but absent from the
+                    # instance's sys_user_role table — skip rather than KeyError.
+                    self._logger.warning(
+                        f"Role '{role}' not found in sys_user_role for table '{table_name}'. Skipping."
                     )
+                    continue
+                async for user in self._fetch_users_by_roles(role_sys_id):
+                    uid = user.get("user", {}).get("value")
+                    # Prefer user:<email> for cross-connector DLS consistency;
+                    # fall back to user_id:<sys_id> when email is unavailable.
+                    email = user_email_map.get(uid, "")
+                    if email:
+                        access_control.append(_prefix_user(email))
+                    else:
+                        access_control.append(_prefix_user_id(uid))
         else:
             async for role in self._table_data_generator(
                 service_name="sys_user_role", params={}
@@ -448,14 +773,22 @@ class ServiceNowDataSource(BaseDataSource):
                         f"Found public role in {table_name}, Fetching all users."
                     )
                     async for user in self._fetch_all_users():
-                        access_control.append(
-                            _prefix_user_id(user_id=user.get("sys_id"))
-                        )
+                        uid = user.get("sys_id")
+                        # Prefer user:<email>; fall back to user_id:<sys_id>.
+                        email = user_email_map.get(uid, "")
+                        if email:
+                            access_control.append(_prefix_user(email))
+                        else:
+                            access_control.append(_prefix_user_id(uid))
 
                 async for user in self._fetch_users_by_roles(role):
-                    access_control.append(
-                        _prefix_user_id(user_id=user.get("user", {}).get("value"))
-                    )
+                    uid = user.get("user", {}).get("value")
+                    # Prefer user:<email>; fall back to user_id:<sys_id>.
+                    email = user_email_map.get(uid, "")
+                    if email:
+                        access_control.append(_prefix_user(email))
+                    else:
+                        access_control.append(_prefix_user_id(uid))
         return list(set(access_control))
 
     async def _get_batched_apis(self, service_name, params):
