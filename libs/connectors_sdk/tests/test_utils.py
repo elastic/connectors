@@ -46,9 +46,8 @@ def test_hash_id_fips_compatible(monkeypatch):
 
     def fips_strict_md5(data, usedforsecurity=True):
         if usedforsecurity:
-            raise ValueError(
-                "[digital envelope routines] unsupported (simulated FIPS mode)"
-            )
+            msg = "[digital envelope routines] unsupported (simulated FIPS mode)"
+            raise ValueError(msg)
         return original_md5(data, usedforsecurity=False)
 
     monkeypatch.setattr(_hashlib, "md5", fips_strict_md5)
