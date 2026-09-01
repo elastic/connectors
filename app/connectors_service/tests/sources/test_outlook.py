@@ -22,6 +22,7 @@ from exchangelib.errors import (
     ErrorFolderNotFound,
     ErrorManagedFolderNotFound,
     ErrorNonExistentMailbox,
+    ErrorNonPrimarySmtpAddress,
     TransportError,
 )
 from exchangelib.folders import BaseFolder, Calendar, Messages, Tasks
@@ -1186,6 +1187,29 @@ async def test_get_docs_skips_account_without_mailbox_and_continues():
         warning_message = source._logger.warning.call_args.args[0]
         assert "no.mailbox@example.com" in warning_message
         assert "ErrorNonExistentMailbox" in warning_message
+
+
+@pytest.mark.asyncio
+async def test_get_docs_skips_account_with_non_primary_smtp_address_and_continues():
+    async with create_outlook_source() as source:
+        bad_account = _account_raising_on_inbox(
+            ErrorNonPrimarySmtpAddress("non-primary smtp"),
+            smtp="alias@example.com",
+        )
+        source.client._get_user_instance.get_user_accounts = AsyncIterator(
+            [bad_account, MockAccount()]
+        )
+        source._logger = MagicMock()
+
+        documents = [document async for document, _ in source.get_docs()]
+
+        assert all(document in EXPECTED_RESPONSE for document in documents)
+        assert any(document["_id"] == "contact_1" for document in documents)
+
+        source._logger.warning.assert_called_once()
+        warning_message = source._logger.warning.call_args.args[0]
+        assert "alias@example.com" in warning_message
+        assert "ErrorNonPrimarySmtpAddress" in warning_message
 
 
 @pytest.mark.asyncio
