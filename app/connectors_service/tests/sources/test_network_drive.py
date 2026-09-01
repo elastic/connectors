@@ -36,6 +36,7 @@ from connectors.sources.network_drive import (
 )
 from connectors.sources.network_drive.datasource import (
     ACCESS_MASK_ALLOWED_WRITE_PERMISSION,
+    ACCESS_MASK_DENIED_WRITE_PERMISSION,
 )
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
@@ -1194,6 +1195,64 @@ async def test_group_read_access_is_kept_when_member_has_extra_write_only_ace(
             "sid:S-2-21-211-411",
             "sid:S-3-23-222-221",
         ]
+
+
+@pytest.mark.asyncio
+@mock.patch.object(
+    NASDataSource,
+    "list_file_permission",
+    return_value=[
+        # User 1 has a regular allow (read) permission
+        mock_permission(sid="S-2-21-211-411", ace=0),
+        # User 2 is only granted write access, so must not be able to read
+        mock_permission(
+            sid="S-3-23-222-221",
+            ace=0,
+            mask=ACCESS_MASK_ALLOWED_WRITE_PERMISSION,
+        ),
+    ],
+)
+async def test_write_only_allow_ace_excluded_while_read_allow_ace_kept(
+    mock_list_file_permission,
+):
+    """Among multiple users, only those with read-capable allow ACEs keep access."""
+    async with create_source(NASDataSource) as source:
+        source._dls_enabled = MagicMock(return_value=True)
+        document_permissions = await source._decorate_with_access_control(
+            document={"id": "123", "title": "sample.py"},
+            file_path="dummy_url/file1",
+            file_type="file",
+            groups_info={},
+        )
+        assert document_permissions[ACCESS_CONTROL] == ["sid:S-2-21-211-411"]
+
+
+@pytest.mark.asyncio
+@mock.patch.object(
+    NASDataSource,
+    "list_file_permission",
+    return_value=[
+        # Deny ACE that only denies write must still leave read access intact
+        mock_permission(
+            sid="S-2-21-211-411",
+            ace=1,
+            mask=ACCESS_MASK_DENIED_WRITE_PERMISSION,
+        ),
+    ],
+)
+async def test_deny_write_only_ace_still_grants_read_access(
+    mock_list_file_permission,
+):
+    """A deny-write ACE removes write access but must not remove read access."""
+    async with create_source(NASDataSource) as source:
+        source._dls_enabled = MagicMock(return_value=True)
+        document_permissions = await source._decorate_with_access_control(
+            document={"id": "123", "title": "sample.py"},
+            file_path="dummy_url/file1",
+            file_type="file",
+            groups_info={},
+        )
+        assert document_permissions[ACCESS_CONTROL] == ["sid:S-2-21-211-411"]
 
 
 async def test_validate_drive_path():
