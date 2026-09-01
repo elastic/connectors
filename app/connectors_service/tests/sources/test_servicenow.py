@@ -75,9 +75,13 @@ class StreamerReader:
         yield self._res
 
 
-@pytest.mark.parametrize("field", ["username", "password", "services"])
+@pytest.mark.parametrize("field", ["services"])
 @pytest.mark.asyncio
 async def test_validate_config_missing_fields_then_raise(field):
+    # username is conditional (depends_on auth_method/grant_type) so omitting
+    # it does not raise for the default oauth+password config used in this test.
+    # basic_auth_password / oauth_password are tested via their own grant-type
+    # paths. Only 'services' is unconditionally required.
     async with create_service_now_source() as source:
         source.configuration.get_field(field).value = ""
 
@@ -960,6 +964,7 @@ async def test_get_access_control():
                         "user_id:id_1",
                         "username:demo.user",
                         "email:admin@email.com",
+                        "user:admin@email.com",
                     ]
                 },
                 "source": DLS_QUERY,
@@ -1008,6 +1013,9 @@ async def test_fetch_access_control():
             ServiceNowDataSource,
             "_table_data_generator",
             side_effect=[
+                # 1st call: _fetch_all_users() → user_email_map (no email → empty map)
+                AsyncIterator([]),
+                # 2nd call: sys_user_role → roles dict
                 AsyncIterator(
                     [
                         {
@@ -1016,6 +1024,7 @@ async def test_fetch_access_control():
                         },
                     ]
                 ),
+                # 3rd call: sys_security_acl_role → user_roles list
                 AsyncIterator(
                     [
                         {
@@ -1023,6 +1032,7 @@ async def test_fetch_access_control():
                         },
                     ]
                 ),
+                # 4th call: _fetch_users_by_roles(role_id_1) → users
                 AsyncIterator([{"user": {"value": "user_id_1"}}]),
             ],
         ):
@@ -1037,21 +1047,7 @@ async def test_fetch_access_control_for_public():
             ServiceNowDataSource,
             "_table_data_generator",
             side_effect=[
-                AsyncIterator(
-                    [
-                        {
-                            "sys_id": "role_id_1",
-                            "name": "public",
-                        },
-                    ]
-                ),
-                AsyncIterator(
-                    [
-                        {
-                            "sys_user_role": {"value": "role_id_1"},
-                        },
-                    ]
-                ),
+                # 1st call: _fetch_all_users() → user_email_map
                 AsyncIterator(
                     [
                         {
@@ -1063,17 +1059,52 @@ async def test_fetch_access_control_for_public():
                         {
                             "sys_updated_on": "2023-10-10 05:21:45",
                             "sys_id": "user_id_2",
-                            "email": "admin@email.com",
+                            "email": "sample@email.com",
                             "user_name": "sample.user",
                         },
                     ]
                 ),
+                # 2nd call: sys_user_role → roles dict
+                AsyncIterator(
+                    [
+                        {
+                            "sys_id": "role_id_1",
+                            "name": "public",
+                        },
+                    ]
+                ),
+                # 3rd call: sys_security_acl_role → user_roles list
+                AsyncIterator(
+                    [
+                        {
+                            "sys_user_role": {"value": "role_id_1"},
+                        },
+                    ]
+                ),
+                # 4th call: _fetch_all_users() for the public role → all users
+                AsyncIterator(
+                    [
+                        {
+                            "sys_updated_on": "2023-10-10 05:21:45",
+                            "sys_id": "user_id_1",
+                            "email": "admin@email.com",
+                            "user_name": "demo.user",
+                        },
+                        {
+                            "sys_updated_on": "2023-10-10 05:21:45",
+                            "sys_id": "user_id_2",
+                            "email": "sample@email.com",
+                            "user_name": "sample.user",
+                        },
+                    ]
+                ),
+                # 5th call: _fetch_users_by_roles(role_id_1) → users
                 AsyncIterator([{"user": {"value": "user_id_1"}}]),
             ],
         ):
             access_control = await source._fetch_access_controls("service_name")
             assert sorted(access_control) == sorted(
-                ["user_id:user_id_1", "user_id:user_id_2"]
+                ["user:admin@email.com", "user:sample@email.com"]
             )
 
 
@@ -1091,3 +1122,303 @@ async def test_end_signal_is_added_to_queue_in_case_of_exception():
                     records_ids=["record_1", "record_2"], access_control=[]
                 )
                 assert source.queue.get_nowait() == END_SIGNAL
+
+
+# ── OAuth grant type tests ────────────────────────────────────────────────────
+
+def _make_token_response(access_token="tok_abc", expires_in=1800, refresh_token=None):
+    """Return a minimal mock JSON payload matching ServiceNow's token endpoint."""
+    payload = {"access_token": access_token, "expires_in": expires_in}
+    if refresh_token:
+        payload["refresh_token"] = refresh_token
+    return payload
+
+
+def _mock_token_post(token_payload, status=200):
+    """Construct a nested mock that makes aiohttp.ClientSession().post() work."""
+    response = mock.AsyncMock()
+    response.status = status
+    response.json = mock.AsyncMock(return_value=token_payload)
+    response.raise_for_status = mock.MagicMock()
+    ctx = mock.AsyncMock()
+    ctx.__aenter__ = mock.AsyncMock(return_value=response)
+    ctx.__aexit__ = mock.AsyncMock(return_value=False)
+    session = mock.AsyncMock()
+    session.post = mock.MagicMock(return_value=ctx)
+    session_ctx = mock.AsyncMock()
+    session_ctx.__aenter__ = mock.AsyncMock(return_value=session)
+    session_ctx.__aexit__ = mock.AsyncMock(return_value=False)
+    return session_ctx, session
+
+
+def _make_client(extra_config=None):
+    """Return a ServiceNowClient with a minimal valid configuration."""
+    from connectors_sdk.source import DataSourceConfiguration
+
+    config_dict = ServiceNowDataSource.get_default_configuration()
+    defaults = {
+        "url": "https://dev12345.service-now.com",
+        "username": "basic_admin",       # Basic Auth username field
+        "oauth_username": "admin",           # OAuth username field (password grant)
+        "oauth_username_refresh": "admin",   # OAuth username field (refresh_token grant)
+        "services": "*",
+        "client_id": "test_client_id",
+        "client_secret": "test_client_secret",
+        "oauth_password": "test_password",
+        "basic_auth_password": "test_basic_pw",
+    }
+    for k, v in defaults.items():
+        if k in config_dict:
+            config_dict[k]["value"] = v
+    if extra_config:
+        for k, v in extra_config.items():
+            if k in config_dict:
+                config_dict[k]["value"] = v
+            else:
+                from connectors_sdk.source import DEFAULT_CONFIGURATION
+                config_dict[k] = DEFAULT_CONFIGURATION.copy() | {"value": v}
+    return ServiceNowClient(configuration=DataSourceConfiguration(config_dict))
+
+
+@pytest.mark.asyncio
+async def test_fetch_access_token_password_grant():
+    """Password grant: username + password are sent to the token endpoint."""
+    client = _make_client({"oauth_grant_type": "password"})
+    token_payload = _make_token_response()
+    session_ctx, session = _mock_token_post(token_payload)
+
+    with mock.patch("aiohttp.ClientSession", return_value=session_ctx):
+        token = await client._fetch_access_token()
+
+    assert token == "tok_abc"
+    call_kwargs = session.post.call_args
+    sent_data = call_kwargs[1]["data"]
+    assert sent_data["grant_type"] == "password"
+    assert sent_data["username"] == "admin"
+    assert sent_data["password"] == "test_password"
+    assert sent_data["client_id"] == "test_client_id"
+    assert sent_data["client_secret"] == "test_client_secret"
+
+
+@pytest.mark.asyncio
+async def test_fetch_access_token_client_credentials_grant():
+    """Client Credentials grant: no username or password in the request."""
+    client = _make_client({"oauth_grant_type": "client_credentials"})
+    token_payload = _make_token_response()
+    session_ctx, session = _mock_token_post(token_payload)
+
+    with mock.patch("aiohttp.ClientSession", return_value=session_ctx):
+        token = await client._fetch_access_token()
+
+    assert token == "tok_abc"
+    sent_data = session.post.call_args[1]["data"]
+    assert sent_data["grant_type"] == "client_credentials"
+    assert "username" not in sent_data
+    assert "password" not in sent_data
+
+
+@pytest.mark.asyncio
+async def test_fetch_access_token_refresh_token_grant():
+    """Refresh Token grant: refresh_token value sent, no password."""
+    client = _make_client({
+        "oauth_grant_type": "refresh_token",
+        "refresh_token": "my_refresh_tok",
+    })
+    token_payload = _make_token_response()
+    session_ctx, session = _mock_token_post(token_payload)
+
+    with mock.patch("aiohttp.ClientSession", return_value=session_ctx):
+        token = await client._fetch_access_token()
+
+    assert token == "tok_abc"
+    sent_data = session.post.call_args[1]["data"]
+    assert sent_data["grant_type"] == "refresh_token"
+    assert sent_data["username"] == "admin"
+    assert sent_data["refresh_token"] == "my_refresh_tok"
+    assert "password" not in sent_data
+
+
+@pytest.mark.asyncio
+async def test_fetch_access_token_authorization_code_grant_first_call():
+    """Authorization Code grant: first call exchanges the authorization code."""
+    client = _make_client({
+        "oauth_grant_type": "authorization_code",
+        "oauth_authorization_code": "one_time_code_xyz",
+        "oauth_redirect_uri": "https://myapp.example.com/callback",
+    })
+    token_payload = _make_token_response(refresh_token="returned_refresh")
+    session_ctx, session = _mock_token_post(token_payload)
+
+    with mock.patch("aiohttp.ClientSession", return_value=session_ctx):
+        token = await client._fetch_access_token()
+
+    assert token == "tok_abc"
+    sent_data = session.post.call_args[1]["data"]
+    assert sent_data["grant_type"] == "authorization_code"
+    assert sent_data["code"] == "one_time_code_xyz"
+    assert sent_data["redirect_uri"] == "https://myapp.example.com/callback"
+    # The returned refresh token should be cached for subsequent calls
+    assert client._cached_refresh_token == "returned_refresh"
+
+
+@pytest.mark.asyncio
+async def test_fetch_access_token_authorization_code_grant_subsequent_call():
+    """Authorization Code grant: subsequent calls use the cached refresh token."""
+    client = _make_client({
+        "oauth_grant_type": "authorization_code",
+        "oauth_authorization_code": "one_time_code_xyz",
+        "oauth_redirect_uri": "https://myapp.example.com/callback",
+    })
+    # Pre-seed the cached refresh token as if a first call already happened
+    client._cached_refresh_token = "cached_refresh_tok"
+    token_payload = _make_token_response()
+    session_ctx, session = _mock_token_post(token_payload)
+
+    with mock.patch("aiohttp.ClientSession", return_value=session_ctx):
+        token = await client._fetch_access_token()
+
+    assert token == "tok_abc"
+    sent_data = session.post.call_args[1]["data"]
+    # Should use refresh_token grant internally, not authorization_code
+    assert sent_data["grant_type"] == "refresh_token"
+    assert sent_data["refresh_token"] == "cached_refresh_tok"
+    assert "code" not in sent_data
+
+
+@pytest.mark.asyncio
+async def test_fetch_access_token_authorization_code_grant_with_pkce():
+    """Authorization Code + PKCE: code_verifier is included in the request."""
+    client = _make_client({
+        "oauth_grant_type": "authorization_code",
+        "oauth_authorization_code": "pkce_code_abc",
+        "oauth_redirect_uri": "https://myapp.example.com/callback",
+        "pkce_code_verifier": "my_code_verifier_string",
+    })
+    token_payload = _make_token_response()
+    session_ctx, session = _mock_token_post(token_payload)
+
+    with mock.patch("aiohttp.ClientSession", return_value=session_ctx):
+        await client._fetch_access_token()
+
+    sent_data = session.post.call_args[1]["data"]
+    assert sent_data["code_verifier"] == "my_code_verifier_string"
+
+
+@pytest.mark.asyncio
+async def test_fetch_access_token_jwt_bearer_grant():
+    """JWT Bearer grant: assertion field is built and sent."""
+    import connectors.sources.servicenow.client as sn_client
+
+    client = _make_client({
+        "oauth_grant_type": "jwt_bearer",
+        "jwt_private_key": "dummy_pem_key",
+        "jwt_subject": "svc_account",
+        "jwt_key_id": "key-1",
+        "jwt_algorithm": "RS256",
+    })
+    token_payload = _make_token_response()
+    session_ctx, session = _mock_token_post(token_payload)
+
+    # Mock PyJWT availability and signing
+    with mock.patch.object(sn_client, "_PYJWT_AVAILABLE", True):
+        with mock.patch.object(sn_client, "pyjwt") as mock_jwt:
+            mock_jwt.encode = mock.MagicMock(return_value="signed_jwt_assertion")
+            with mock.patch("aiohttp.ClientSession", return_value=session_ctx):
+                token = await client._fetch_access_token()
+
+    assert token == "tok_abc"
+    sent_data = session.post.call_args[1]["data"]
+    assert sent_data["grant_type"] == "urn:ietf:params:oauth:grant-type:jwt-bearer"
+    assert sent_data["assertion"] == "signed_jwt_assertion"
+    assert sent_data["client_id"] == "test_client_id"
+
+
+@pytest.mark.asyncio
+async def test_fetch_access_token_jwt_bearer_no_pyjwt_raises():
+    """JWT Bearer grant raises RuntimeError when PyJWT is not installed."""
+    import connectors.sources.servicenow.client as sn_client
+    from connectors.sources.servicenow.client import InvalidResponse
+
+    client = _make_client({
+        "oauth_grant_type": "jwt_bearer",
+        "jwt_private_key": "dummy_pem_key",
+    })
+
+    with mock.patch.object(sn_client, "_PYJWT_AVAILABLE", False):
+        with pytest.raises(RuntimeError, match="PyJWT is required"):
+            await client._fetch_access_token()
+
+
+@pytest.mark.asyncio
+async def test_fetch_access_token_jwt_bearer_no_private_key_raises():
+    """JWT Bearer grant raises InvalidResponse when private key is missing."""
+    import connectors.sources.servicenow.client as sn_client
+    from connectors.sources.servicenow.client import InvalidResponse
+
+    client = _make_client({
+        "oauth_grant_type": "jwt_bearer",
+        "jwt_private_key": "",
+    })
+
+    with mock.patch.object(sn_client, "_PYJWT_AVAILABLE", True):
+        with pytest.raises(InvalidResponse, match="jwt_private_key must be set"):
+            await client._fetch_access_token()
+
+
+@pytest.mark.asyncio
+async def test_fetch_access_token_missing_access_token_raises():
+    """Any grant type raises InvalidResponse when access_token is absent."""
+    client = _make_client({"oauth_grant_type": "client_credentials"})
+    # Token endpoint returns a response without access_token
+    session_ctx, _ = _mock_token_post({"expires_in": 1800})
+
+    with mock.patch("aiohttp.ClientSession", return_value=session_ctx):
+        with pytest.raises(Exception, match="access_token"):
+            await client._fetch_access_token()
+
+def test_ui_field_dependencies():
+    """Verify field dependency and visibility rules for UI rendering:
+    - Basic Auth shows only 'username' and 'basic_auth_password' (under auth_method)
+    - OAuth Password grant shows 'client_id', 'client_secret', 'oauth_username', 'oauth_password'
+    - OAuth Refresh Token grant shows 'client_id', 'client_secret', 'oauth_username_refresh', 'refresh_token'
+
+    depends_on uses AND semantics in the SDK: all conditions must be true
+    simultaneously.  Because a single field value cannot satisfy two different
+    values at once, the username field is split into two entries — one per
+    grant type — and oauth_password is also gated on auth_method=oauth to
+    prevent it bleeding through when Basic Auth is selected (the default
+    oauth_grant_type value of "password" would otherwise match).
+    """
+    config = ServiceNowDataSource.get_default_configuration()
+
+    # Basic Auth fields
+    assert config["username"]["depends_on"] == [{"field": "auth_method", "value": "basic"}]
+    assert config["basic_auth_password"]["depends_on"] == [{"field": "auth_method", "value": "basic"}]
+
+    # OAuth core fields
+    assert config["oauth_grant_type"]["depends_on"] == [{"field": "auth_method", "value": "oauth"}]
+    assert config["client_id"]["depends_on"] == [{"field": "auth_method", "value": "oauth"}]
+    assert config["client_secret"]["depends_on"] == [{"field": "auth_method", "value": "oauth"}]
+
+    # OAuth username — separate field per grant type (AND semantics prevents a
+    # single entry covering two different grant-type values simultaneously)
+    assert config["oauth_username"]["depends_on"] == [
+        {"field": "auth_method", "value": "oauth"},
+        {"field": "oauth_grant_type", "value": "password"},
+    ]
+    assert config["oauth_username_refresh"]["depends_on"] == [
+        {"field": "auth_method", "value": "oauth"},
+        {"field": "oauth_grant_type", "value": "refresh_token"},
+    ]
+
+    # OAuth password — AND-gated on both auth_method and grant type to prevent
+    # bleeding through to Basic Auth (where oauth_grant_type defaults to "password")
+    assert config["oauth_password"]["depends_on"] == [
+        {"field": "auth_method", "value": "oauth"},
+        {"field": "oauth_grant_type", "value": "password"},
+    ]
+
+    # Refresh token (shown for refresh_token grant type)
+    assert config["refresh_token"]["depends_on"] == [
+        {"field": "oauth_grant_type", "value": "refresh_token"}
+    ]
