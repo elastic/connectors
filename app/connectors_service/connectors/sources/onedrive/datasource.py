@@ -426,6 +426,10 @@ class OneDriveDataSource(BaseDataSource):
                     async for entity, download_url in self.client.get_owned_files(
                         user_id, skipped_extensions, pattern
                     ):
+                        if self._dls_enabled():
+                            entity = await self._decorate_with_access_control(
+                                entity, user_id
+                            )
                         yield self.send_document_to_es(entity, download_url)
         else:
             requests = []
