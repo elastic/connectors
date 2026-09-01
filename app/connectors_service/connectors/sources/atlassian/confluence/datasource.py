@@ -9,6 +9,7 @@ import asyncio
 import os
 from copy import copy
 from functools import partial
+from typing import NamedTuple
 
 from connectors_sdk.source import BaseDataSource, ConfigurableFieldValueError
 from connectors_sdk.utils import (
@@ -17,7 +18,10 @@ from connectors_sdk.utils import (
 )
 
 from connectors.access_control import ACCESS_CONTROL
-from connectors.sources.atlassian.confluence.client import ConfluenceClient
+from connectors.sources.atlassian.confluence.client import (
+    ConfluenceClient,
+    ContentRestrictionFetchError,
+)
 from connectors.sources.atlassian.confluence.constants import (
     BLOGPOST,
     CONFLUENCE_CLOUD,
@@ -26,6 +30,8 @@ from connectors.sources.atlassian.confluence.constants import (
     CONTENT,
     CONTENT_QUERY_CLOUD,
     CONTENT_QUERY_DATA_CENTER,
+    DATA_CENTER_BASIC_AUTH,
+    DATA_CENTER_PERSONAL_ACCESS_TOKEN,
     END_SIGNAL,
     MAX_CONCURRENCY,
     MAX_CONCURRENT_DOWNLOADS,
@@ -58,6 +64,17 @@ from connectors.utils import (
     MemQueue,
     html_to_text,
 )
+
+
+class EffectiveReadAccess(NamedTuple):
+    """Resolved view ACL for a page.
+
+    When use_space is True, fall back to space permissions.
+    When use_space is False, identities is the ACL to index (may be empty).
+    """
+
+    identities: set
+    use_space: bool
 
 
 class ConfluenceDataSource(BaseDataSource):
@@ -131,52 +148,93 @@ class ConfluenceDataSource(BaseDataSource):
                 "order": 3,
                 "type": "str",
             },
-            "data_center_username": {
+            "data_center_auth_method": {
                 "depends_on": [
                     {"field": "data_source", "value": CONFLUENCE_DATA_CENTER}
                 ],
-                "label": "Confluence Data Center username",
+                "display": "dropdown",
+                "label": "Confluence Data Center authentication method",
+                "options": [
+                    {
+                        "label": "Basic authentication",
+                        "value": DATA_CENTER_BASIC_AUTH,
+                    },
+                    {
+                        "label": "Personal access token",
+                        "value": DATA_CENTER_PERSONAL_ACCESS_TOKEN,
+                    },
+                ],
                 "order": 4,
+                "type": "str",
+                "value": DATA_CENTER_BASIC_AUTH,
+            },
+            "data_center_username": {
+                "depends_on": [
+                    {"field": "data_source", "value": CONFLUENCE_DATA_CENTER},
+                    {
+                        "field": "data_center_auth_method",
+                        "value": DATA_CENTER_BASIC_AUTH,
+                    },
+                ],
+                "label": "Confluence Data Center username",
+                "order": 5,
                 "type": "str",
             },
             "data_center_password": {
                 "depends_on": [
-                    {"field": "data_source", "value": CONFLUENCE_DATA_CENTER}
+                    {"field": "data_source", "value": CONFLUENCE_DATA_CENTER},
+                    {
+                        "field": "data_center_auth_method",
+                        "value": DATA_CENTER_BASIC_AUTH,
+                    },
                 ],
                 "label": "Confluence Data Center password",
                 "sensitive": True,
-                "order": 5,
+                "order": 6,
+                "type": "str",
+            },
+            "data_center_personal_access_token": {
+                "depends_on": [
+                    {"field": "data_source", "value": CONFLUENCE_DATA_CENTER},
+                    {
+                        "field": "data_center_auth_method",
+                        "value": DATA_CENTER_PERSONAL_ACCESS_TOKEN,
+                    },
+                ],
+                "label": "Confluence Data Center personal access token",
+                "sensitive": True,
+                "order": 7,
                 "type": "str",
             },
             "account_email": {
                 "depends_on": [{"field": "data_source", "value": CONFLUENCE_CLOUD}],
                 "label": "Confluence Cloud account email",
-                "order": 6,
+                "order": 8,
                 "type": "str",
             },
             "api_token": {
                 "depends_on": [{"field": "data_source", "value": CONFLUENCE_CLOUD}],
                 "label": "Confluence Cloud API token",
                 "sensitive": True,
-                "order": 7,
+                "order": 9,
                 "type": "str",
             },
             "confluence_url": {
                 "label": "Confluence URL",
-                "order": 8,
+                "order": 10,
                 "type": "str",
             },
             "spaces": {
                 "display": "textarea",
                 "label": "Confluence space keys",
-                "order": 9,
+                "order": 11,
                 "tooltip": "This configurable field is ignored when Advanced Sync Rules are used.",
                 "type": "list",
             },
             "index_labels": {
                 "display": "toggle",
                 "label": "Enable indexing labels",
-                "order": 10,
+                "order": 12,
                 "tooltip": "Enabling this will increase the amount of network calls to the source, and may decrease performance",
                 "type": "bool",
                 "value": False,
@@ -184,21 +242,21 @@ class ConfluenceDataSource(BaseDataSource):
             "ssl_enabled": {
                 "display": "toggle",
                 "label": "Enable SSL",
-                "order": 11,
+                "order": 13,
                 "type": "bool",
                 "value": False,
             },
             "ssl_ca": {
                 "depends_on": [{"field": "ssl_enabled", "value": True}],
                 "label": "SSL certificate",
-                "order": 12,
+                "order": 14,
                 "type": "str",
             },
             "retry_count": {
                 "default_value": 3,
                 "display": "numeric",
                 "label": "Retries per request",
-                "order": 13,
+                "order": 15,
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
@@ -207,7 +265,7 @@ class ConfluenceDataSource(BaseDataSource):
                 "default_value": MAX_CONCURRENT_DOWNLOADS,
                 "display": "numeric",
                 "label": "Maximum concurrent downloads",
-                "order": 14,
+                "order": 16,
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
@@ -218,7 +276,7 @@ class ConfluenceDataSource(BaseDataSource):
             "use_document_level_security": {
                 "display": "toggle",
                 "label": "Enable document level security",
-                "order": 15,
+                "order": 17,
                 "tooltip": "Document level security ensures identities and permissions set in confluence are maintained in Elasticsearch. This enables you to restrict and personalize read-access users have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
                 "type": "bool",
                 "value": False,
@@ -226,7 +284,7 @@ class ConfluenceDataSource(BaseDataSource):
             "use_text_extraction_service": {
                 "display": "toggle",
                 "label": "Use text extraction service",
-                "order": 16,
+                "order": 18,
                 "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
                 "type": "bool",
                 "ui_restrictions": ["advanced"],
@@ -464,6 +522,52 @@ class ConfluenceDataSource(BaseDataSource):
 
         return identities
 
+    async def _resolve_effective_read_access(
+        self, child_restrictions, ancestors, extract_identities
+    ):
+        """Resolve effective view ACL from child + ancestor explicit restrictions.
+
+        Returns EffectiveReadAccess. use_space is True only when every layer was
+        successfully evaluated and none had explicit view restrictions.
+        On ambiguous ancestor fetch failure, returns empty identities and
+        use_space=False (fail closed for DLS).
+        """
+        if not self._dls_enabled():
+            return EffectiveReadAccess(identities=set(), use_space=False)
+
+        layers = []
+        child_identities = extract_identities(response=child_restrictions)
+        if child_identities:
+            layers.append(child_identities)
+
+        for ancestor in ancestors or []:
+            ancestor_id = ancestor.get("id")
+            if not ancestor_id:
+                continue
+
+            try:
+                restrictions = await self.confluence_client.fetch_content_restrictions(
+                    content_id=ancestor_id
+                )
+            except ContentRestrictionFetchError:
+                return EffectiveReadAccess(identities=set(), use_space=False)
+
+            if restrictions is None:
+                continue
+
+            identities = extract_identities(
+                response=restrictions.get("restrictions", {})
+            )
+            if identities:
+                layers.append(identities)
+
+        if not layers:
+            return EffectiveReadAccess(identities=set(), use_space=True)
+
+        return EffectiveReadAccess(
+            identities=set.intersection(*layers), use_space=False
+        )
+
     async def close(self):
         """Closes unclosed client session"""
         await self.confluence_client.close_session()
@@ -547,6 +651,7 @@ class ConfluenceDataSource(BaseDataSource):
             Integer: Number of attachments in a page/blogpost
             List: List of permissions attached to document
             Dictionary: Dictionary of restrictions attached to document
+            List: List of ancestors (with their ids) of the document
         """
         async for (
             document,
@@ -592,6 +697,7 @@ class ConfluenceDataSource(BaseDataSource):
                 document.get("restrictions", {})
                 .get("read", {})
                 .get("restrictions", {}),
+                document.get("ancestors", []),
             )
 
     async def fetch_attachments(
@@ -842,14 +948,22 @@ class ConfluenceDataSource(BaseDataSource):
                 space_key,
                 permissions,
                 restrictions,
+                ancestors,
             ) in self.fetch_documents(api_query):
                 # Pages and blog posts are open to viewing or editing by default,
                 # but you can restrict either viewing or editing to certain users or groups.
                 if self.confluence_client.data_source_type == CONFLUENCE_CLOUD:
-                    access_control = list(
-                        self._extract_identities(response=restrictions)
-                    )
-                    if len(access_control) == 0:
+                    extract_identities = self._extract_identities
+                else:
+                    extract_identities = self._extract_identities_for_datacenter
+
+                effective_access = await self._resolve_effective_read_access(
+                    child_restrictions=restrictions,
+                    ancestors=ancestors,
+                    extract_identities=extract_identities,
+                )
+                if effective_access.use_space:
+                    if self.confluence_client.data_source_type == CONFLUENCE_CLOUD:
                         # Every space has its own independent set of permissions, managed by the space admin(s),
                         # which determine the access settings for different users and groups.
                         access_control = list(
@@ -857,11 +971,7 @@ class ConfluenceDataSource(BaseDataSource):
                                 permissions=permissions, target_type=target_type
                             )
                         )
-                else:
-                    access_control = list(
-                        self._extract_identities_for_datacenter(response=restrictions)
-                    )
-                    if len(access_control) == 0:
+                    else:
                         permission = await self.fetch_server_space_permission(
                             space_key=space_key
                         )
@@ -872,6 +982,8 @@ class ConfluenceDataSource(BaseDataSource):
                                 )
                             )
                         )
+                else:
+                    access_control = list(effective_access.identities)
                 document = self._decorate_with_access_control(
                     document=document, access_control=access_control
                 )

@@ -26,13 +26,18 @@ API_VERSION = "v1"
 
 @asynccontextmanager
 async def create_gcs_source(use_text_extraction_service=False):
-    async with create_source(
-        GoogleCloudStorageDataSource,
-        service_account_credentials=SERVICE_ACCOUNT_CREDENTIALS,
-        retry_count=0,
-        use_text_extraction_service=use_text_extraction_service,
-    ) as source:
-        yield source
+    # Avoid real HTTP to Google's Discovery Service (Aiogoogle.discover).
+    with mock.patch.object(
+        Aiogoogle, "discover", new_callable=mock.AsyncMock
+    ) as mock_discover:
+        mock_discover.return_value = mock.MagicMock()
+        async with create_source(
+            GoogleCloudStorageDataSource,
+            service_account_credentials=SERVICE_ACCOUNT_CREDENTIALS,
+            retry_count=0,
+            use_text_extraction_service=use_text_extraction_service,
+        ) as source:
+            yield source
 
 
 @pytest.mark.asyncio

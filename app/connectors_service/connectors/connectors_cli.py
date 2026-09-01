@@ -55,17 +55,19 @@ class LazyConfig:
         if self.value is None:
             try:
                 self.value = load_config(self.ctx, self.config)
-            except FileNotFoundError as e:
-                click.echo(
-                    f"{e} Run `connectors login` first, or make sure that the config is either present at the default location ({CONFIG_FILE_PATH}) or it's passed via the '-c' or '--config' option."
-                )
-                self.ctx.exit(1)
+            except (FileNotFoundError, yaml.YAMLError) as error:
+                message = f"{error} Run `connectors login` first, or make sure that the config is either present at the default location ({CONFIG_FILE_PATH}) or it's passed via the '-c' or '--config' option."
+                raise click.ClickException(message) from error
 
-            if self.value is None:
-                click.echo(
+            if (
+                not isinstance(self.value, dict)
+                or not isinstance(self.value.get("elasticsearch"), dict)
+                or not self.value["elasticsearch"]
+            ):
+                message = (
                     "The config file is empty or invalid. Run `connectors login` first."
                 )
-                self.ctx.exit(1)
+                raise click.ClickException(message)
 
         return self.value[key]
 
@@ -130,10 +132,13 @@ cli.add_command(login)
 
 
 # Connector group
-@click.group(invoke_without_command=False, help="Connectors management")
+# invoke_without_command + manual help keeps exit code 0 on bare `connector`
+# (Click 8.2+ no_args_is_help would exit 2).
+@click.group(invoke_without_command=True, help="Connectors management")
 @click.pass_context
 def connector(ctx):
-    pass
+    if ctx.invoked_subcommand is None:
+        click.echo(ctx.get_help())
 
 
 @click.command(name="list", help="List all existing connectors")
@@ -403,10 +408,11 @@ cli.add_command(connector)
 
 
 # Index group
-@click.group(invoke_without_command=False, help="Search indices management")
-@click.pass_obj
-def index(obj):
-    pass
+@click.group(invoke_without_command=True, help="Search indices management")
+@click.pass_context
+def index(ctx):
+    if ctx.invoked_subcommand is None:
+        click.echo(ctx.get_help())
 
 
 @click.command(name="list", help="Show all indices")
@@ -489,10 +495,11 @@ cli.add_command(index)
 
 
 # Job group
-@click.group(invoke_without_command=False, help="Sync jobs management")
-@click.pass_obj
-def job(obj):
-    pass
+@click.group(invoke_without_command=True, help="Sync jobs management")
+@click.pass_context
+def job(ctx):
+    if ctx.invoked_subcommand is None:
+        click.echo(ctx.get_help())
 
 
 @click.command(help="Start a sync job.")

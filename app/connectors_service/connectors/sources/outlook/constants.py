@@ -16,8 +16,6 @@ API_SCOPE = "https://graph.microsoft.com/.default"
 EWS_ENDPOINT = "https://outlook.office365.com/EWS/Exchange.asmx"
 TOP = 999
 
-DEFAULT_TIMEZONE = "UTC"
-
 INBOX_MAIL_OBJECT = "Inbox Mails"
 SENT_MAIL_OBJECT = "Sent Mails"
 JUNK_MAIL_OBJECT = "Junk Mails"
@@ -71,6 +69,13 @@ CONTACT_FIELDS = [
     "company_name",
     "birthday",
 ]
+DISTRIBUTION_LIST_FIELDS = [
+    "last_modified_time",
+    "display_name",
+    "members",
+]
+# Contacts folder holds both item types, so query the union of their fields.
+CONTACT_FOLDER_FIELDS = list(dict.fromkeys(CONTACT_FIELDS + DISTRIBUTION_LIST_FIELDS))
 TASK_FIELDS = [
     "last_modified_time",
     "due_date",

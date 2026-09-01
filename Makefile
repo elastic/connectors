@@ -26,6 +26,10 @@ test: install
 	cd $(connectors_sdk_dir); make test
 	cd $(app_dir); make test
 
+freeze:
+	cd $(connectors_sdk_dir); make freeze
+	cd $(app_dir); make freeze
+
 ftest: install build-connectors-base-image
 	cd $(app_dir); make ftest NAME=$(NAME)
 
