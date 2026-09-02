@@ -1345,7 +1345,9 @@ async def test_roles_maps_cached_per_sync():
         assert second == ["role_id:role_id_2"]
         # One sys_user_role fetch + one ACL fetch per table
         assert mock_generator.call_count == 3
-        assert mock_generator.call_args_list[0].kwargs["service_name"] == "sys_user_role"
+        assert (
+            mock_generator.call_args_list[0].kwargs["service_name"] == "sys_user_role"
+        )
 
 
 @pytest.mark.asyncio
