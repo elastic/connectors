@@ -31,6 +31,7 @@ from exchangelib.errors import (
     ErrorFolderNotFound,
     ErrorManagedFolderNotFound,
     ErrorNonExistentMailbox,
+    ErrorNonPrimarySmtpAddress,
 )
 from exchangelib.folders import BaseFolder, Calendar, Messages
 from exchangelib.items import (
@@ -1409,7 +1410,11 @@ class OutlookDataSource(BaseDataSource):
                     account=account, timezone=timezone
                 ):
                     yield child_calendar
-            except (ErrorNonExistentMailbox, ErrorAccessDenied) as error:
+            except (
+                ErrorNonExistentMailbox,
+                ErrorNonPrimarySmtpAddress,
+                ErrorAccessDenied,
+            ) as error:
                 # Account-specific failure: skip this account. Connection-wide errors
                 # propagate so an empty "successful" sync can't wipe the index.
                 self._logger.warning(
