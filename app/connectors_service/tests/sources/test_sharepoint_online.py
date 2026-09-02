@@ -3974,6 +3974,54 @@ class TestSharepointOnlineDataSource:
 
             assert len(user_access_control_docs) == 2
 
+    @pytest.mark.asyncio
+    async def test_get_access_control_deduplicates_users(self, patch_sharepoint_client):
+        """Duplicate users (same email or username seen twice) must only produce one ACL doc."""
+        async with create_spo_source(use_document_level_security=True) as source:
+            email = "duplicate@acme.co"
+            user = {
+                "userPrincipalName": "dup_user",
+                "EMail": email,
+                "transitiveMemberOf": [],
+            }
+            # Same user returned twice by the API
+            patch_sharepoint_client.active_users_with_groups = AsyncIterator(
+                [user, user]
+            )
+            source._user_access_control_doc = AsyncMock(return_value={"_id": email})
+
+            docs = []
+            async for doc in source.get_access_control():
+                docs.append(doc)
+
+            assert len(docs) == 1
+            assert docs[0]["_id"] == email
+
+    @pytest.mark.asyncio
+    async def test_get_access_control_concurrent_yields_all_docs(
+        self, patch_sharepoint_client
+    ):
+        """All unique users must produce an ACL doc even when processed concurrently."""
+        async with create_spo_source(use_document_level_security=True) as source:
+            users = [
+                {
+                    "userPrincipalName": f"user{i}",
+                    "mail": f"user{i}@acme.co",
+                    "transitiveMemberOf": [],
+                }
+                for i in range(20)
+            ]
+            patch_sharepoint_client.active_users_with_groups = AsyncIterator(users)
+            source._user_access_control_doc = AsyncMock(
+                side_effect=[{"_id": f"user{i}@acme.co"} for i in range(20)]
+            )
+
+            docs = []
+            async for doc in source.get_access_control():
+                docs.append(doc)
+
+            assert len(docs) == 20
+
     def test_prefix_group(self):
         group = "group"
 
