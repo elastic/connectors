@@ -957,7 +957,6 @@ async def test_get_access_control():
             "user_id": "user_id:id_1",
             "display_name": "username:demo.user",
             "email": "email:admin@email.com",
-            "role_ids": [],
         },
         "created_at": "2023-10-10T05:21:45",
         "query": {
@@ -976,7 +975,6 @@ async def test_get_access_control():
     async with create_service_now_source(expand_role_members=True) as source:
         source.servicenow_client.get_table_length = mock.AsyncMock(return_value=2)
         source._dls_enabled = Mock(return_value=True)
-        source._fetch_user_roles_map = mock.AsyncMock(return_value={})
         with mock.patch.object(
             ServiceNowClient,
             "get_data",
@@ -1050,6 +1048,36 @@ async def test_get_access_control_includes_role_ids():
 
 
 @pytest.mark.asyncio
+async def test_get_access_control_legacy_does_not_fetch_roles():
+    async with create_service_now_source(expand_role_members=True) as source:
+        source._dls_enabled = Mock(return_value=True)
+        source._fetch_user_roles_map = mock.AsyncMock(
+            side_effect=AssertionError("legacy mode must not fetch roles")
+        )
+        with mock.patch.object(
+            ServiceNowDataSource,
+            "_table_data_generator",
+            return_value=AsyncIterator(
+                [
+                    {
+                        "sys_updated_on": "2023-10-10 05:21:45",
+                        "sys_id": "id_1",
+                        "email": "admin@email.com",
+                        "user_name": "demo.user",
+                        "_id": "id_1",
+                        "_timestamp": "2023-10-10T05:21:45",
+                    }
+                ]
+            ),
+        ):
+            users = [user async for user in source.get_access_control()]
+
+        assert len(users) == 1
+        assert "role_ids" not in users[0]["identity"]
+        source._fetch_user_roles_map.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_fetch_access_controls_legacy_expands_users():
     async with create_service_now_source(expand_role_members=True) as source:
         with mock.patch.object(
@@ -1069,6 +1097,34 @@ async def test_fetch_access_controls_legacy_expands_users():
                         {
                             "sys_user_role": {"value": "role_id_1"},
                         },
+                    ]
+                ),
+                AsyncIterator([{"user": {"value": "user_id_1"}}]),
+            ],
+        ):
+            access_control = await source._fetch_access_controls("service_name")
+            assert access_control == ["user_id:user_id_1"]
+
+
+@pytest.mark.asyncio
+async def test_fetch_access_controls_legacy_skips_deleted_role():
+    async with create_service_now_source(expand_role_members=True) as source:
+        with mock.patch.object(
+            ServiceNowDataSource,
+            "_table_data_generator",
+            side_effect=[
+                AsyncIterator(
+                    [
+                        {
+                            "sys_id": "role_id_1",
+                            "name": "role_1",
+                        },
+                    ]
+                ),
+                AsyncIterator(
+                    [
+                        {"sys_user_role": {"value": "deleted_role_id"}},
+                        {"sys_user_role": {"value": "role_id_1"}},
                     ]
                 ),
                 AsyncIterator([{"user": {"value": "user_id_1"}}]),
@@ -1205,7 +1261,7 @@ async def test_fetch_access_controls_compact_default_table_returns_role_tokens()
             ],
         ):
             access_control = await source._fetch_access_controls("incident")
-            assert sorted(access_control) == sorted(
+            assert access_control == sorted(
                 [
                     "role_id:admin_id",
                     "role_id:itil_id",
@@ -1217,36 +1273,34 @@ async def test_fetch_access_controls_compact_default_table_returns_role_tokens()
 
 
 @pytest.mark.asyncio
-async def test_decorate_skips_field_for_public():
-    async with create_service_now_source() as source:
-        source._dls_enabled = Mock(return_value=True)
-        document = {"_id": "id_1"}
-        result = source._decorate_with_access_control(document, None)
-        assert ACCESS_CONTROL not in result
+async def test_fetch_access_controls_compact_filters_deleted_roles():
+    async with create_service_now_source(expand_role_members=False) as source:
+        with mock.patch.object(
+            ServiceNowDataSource,
+            "_table_data_generator",
+            side_effect=[
+                AsyncIterator(
+                    [
+                        {
+                            "sys_id": "role_id_1",
+                            "name": "role_1",
+                        },
+                    ]
+                ),
+                AsyncIterator(
+                    [
+                        {"sys_user_role": {"value": "deleted_role_id"}},
+                        {"sys_user_role": {"value": "role_id_1"}},
+                    ]
+                ),
+            ],
+        ):
+            access_control = await source._fetch_access_controls("service_name")
+            assert access_control == ["role_id:role_id_1"]
 
 
 @pytest.mark.asyncio
-async def test_decorate_with_role_tokens():
-    async with create_service_now_source() as source:
-        source._dls_enabled = Mock(return_value=True)
-        document = {"_id": "id_1"}
-        result = source._decorate_with_access_control(
-            document, [_prefix_role_id("role_id_1")]
-        )
-        assert result[ACCESS_CONTROL] == ["role_id:role_id_1"]
-
-
-@pytest.mark.asyncio
-async def test_decorate_denies_all_for_empty_acl():
-    async with create_service_now_source() as source:
-        source._dls_enabled = Mock(return_value=True)
-        document = {"_id": "id_1"}
-        result = source._decorate_with_access_control(document, [])
-        assert result[ACCESS_CONTROL] == []
-
-
-@pytest.mark.asyncio
-async def test_fetch_access_controls_compact_empty_roles_returns_deny_all():
+async def test_fetch_access_controls_compact_no_acl_entries_returns_none():
     async with create_service_now_source(expand_role_members=False) as source:
         with mock.patch.object(
             ServiceNowDataSource,
@@ -1264,7 +1318,77 @@ async def test_fetch_access_controls_compact_empty_roles_returns_deny_all():
             ],
         ):
             access_control = await source._fetch_access_controls("service_name")
-            assert access_control == []
+            assert access_control is None
+
+
+@pytest.mark.asyncio
+async def test_roles_maps_cached_per_sync():
+    async with create_service_now_source(expand_role_members=False) as source:
+        with mock.patch.object(
+            ServiceNowDataSource,
+            "_table_data_generator",
+            side_effect=[
+                AsyncIterator(
+                    [
+                        {"sys_id": "role_id_1", "name": "role_1"},
+                        {"sys_id": "role_id_2", "name": "role_2"},
+                    ]
+                ),
+                AsyncIterator([{"sys_user_role": {"value": "role_id_1"}}]),
+                AsyncIterator([{"sys_user_role": {"value": "role_id_2"}}]),
+            ],
+        ) as mock_generator:
+            first = await source._fetch_access_controls("table_a")
+            second = await source._fetch_access_controls("table_b")
+
+        assert first == ["role_id:role_id_1"]
+        assert second == ["role_id:role_id_2"]
+        # One sys_user_role fetch + one ACL fetch per table
+        assert mock_generator.call_count == 3
+        assert mock_generator.call_args_list[0].kwargs["service_name"] == "sys_user_role"
+
+
+@pytest.mark.asyncio
+async def test_decorate_skips_field_for_public():
+    async with create_service_now_source() as source:
+        source._dls_enabled = Mock(return_value=True)
+        document = {"_id": "id_1"}
+        result = source._decorate_with_access_control(document, None)
+        assert ACCESS_CONTROL not in result
+
+
+@pytest.mark.asyncio
+async def test_decorate_with_role_tokens():
+    async with create_service_now_source() as source:
+        source._dls_enabled = Mock(return_value=True)
+        document = {"_id": "id_1"}
+        result = source._decorate_with_access_control(
+            document, [_prefix_role_id("role_id_b"), _prefix_role_id("role_id_a")]
+        )
+        assert result[ACCESS_CONTROL] == ["role_id:role_id_a", "role_id:role_id_b"]
+
+
+@pytest.mark.asyncio
+async def test_decorate_denies_all_for_empty_acl():
+    async with create_service_now_source() as source:
+        source._dls_enabled = Mock(return_value=True)
+        document = {"_id": "id_1"}
+        result = source._decorate_with_access_control(document, [])
+        assert result[ACCESS_CONTROL] == []
+
+
+@pytest.mark.asyncio
+async def test_fetch_access_controls_compact_empty_roles_returns_none():
+    async with create_service_now_source(expand_role_members=False) as source:
+        with mock.patch.object(
+            ServiceNowDataSource,
+            "_table_data_generator",
+            side_effect=[
+                AsyncIterator([]),
+            ],
+        ):
+            access_control = await source._fetch_access_controls("incident")
+            assert access_control is None
 
 
 @pytest.mark.asyncio
@@ -1303,41 +1427,6 @@ async def test_expand_role_members_defaults_true_when_missing():
             ServiceNowDataSource.get_default_configuration()
         )
         assert source._expand_role_members() is True
-
-
-@pytest.mark.asyncio
-async def test_get_access_control_legacy_includes_role_ids():
-    async with create_service_now_source(expand_role_members=True) as source:
-        source._dls_enabled = Mock(return_value=True)
-        with mock.patch.object(
-            ServiceNowDataSource,
-            "_table_data_generator",
-            side_effect=[
-                AsyncIterator(
-                    [
-                        {
-                            "user": {"value": "id_1"},
-                            "role": {"value": "role_id_1"},
-                        }
-                    ]
-                ),
-                AsyncIterator(
-                    [
-                        {
-                            "sys_updated_on": "2023-10-10 05:21:45",
-                            "sys_id": "id_1",
-                            "email": "admin@email.com",
-                            "user_name": "demo.user",
-                            "_id": "id_1",
-                            "_timestamp": "2023-10-10T05:21:45",
-                        }
-                    ]
-                ),
-            ],
-        ):
-            users = [user async for user in source.get_access_control()]
-
-        assert users[0]["identity"]["role_ids"] == ["role_id:role_id_1"]
 
 
 @pytest.mark.asyncio
