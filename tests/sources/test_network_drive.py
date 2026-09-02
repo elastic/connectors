@@ -25,6 +25,8 @@ from connectors.filtering.validation import SyncRuleValidationResult
 from connectors.protocol import Filter
 from connectors.source import ConfigurableFieldValueError
 from connectors.sources.network_drive import (
+    ACCESS_MASK_ALLOWED_WRITE_PERMISSION,
+    ACCESS_MASK_DENIED_WRITE_PERMISSION,
     ClientPermissionException,
     InvalidLogonHoursException,
     NASDataSource,
@@ -34,10 +36,6 @@ from connectors.sources.network_drive import (
     SecurityInfo,
     SMBSession,
     UserAccountDisabledException,
-)
-from connectors.sources.network_drive.datasource import (
-    ACCESS_MASK_ALLOWED_WRITE_PERMISSION,
-    ACCESS_MASK_DENIED_WRITE_PERMISSION,
 )
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
