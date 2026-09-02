@@ -1750,7 +1750,7 @@ SOFTWARE.
 
 
 anyio
-4.14.2
+4.15.0
 MIT
 The MIT License (MIT)
 
@@ -3642,7 +3642,7 @@ Apache-2.0
 
 
 elasticsearch-connectors
-9.4.6
+9.4.7
 Elastic-2.0
 Elastic License 2.0
 
@@ -3740,7 +3740,7 @@ these terms.
 
 
 elasticsearch-connectors-sdk
-9.4.6
+9.4.7
 Elastic-2.0
 UNKNOWN
 
