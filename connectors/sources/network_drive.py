@@ -872,10 +872,11 @@ class NASDataSource(BaseDataSource):
             else:
                 # Else the SID corresponds to a user, hence we use it directly.
                 permissions = [_prefix_sid(sid)]
+            # Write-only allow ACEs don't grant read; deny-write ACEs still do.
             if (
                 ace_type == ACCESS_ALLOWED_TYPE
-                or mask == ACCESS_MASK_DENIED_WRITE_PERMISSION
-            ):
+                and mask != ACCESS_MASK_ALLOWED_WRITE_PERMISSION
+            ) or mask == ACCESS_MASK_DENIED_WRITE_PERMISSION:
                 allow_permissions.extend(permissions)
 
             if (
