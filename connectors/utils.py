@@ -754,8 +754,9 @@ def get_pem_format(key, postfix="-----END CERTIFICATE-----"):
 def hash_id(_id):
     # Collision probability: 1.47*10^-29
     # S105 rule considers this code unsafe, but we're not using it for security-related
-    # things, only to generate pseudo-ids for documents
-    return hashlib.md5(_id.encode("utf8")).hexdigest()  # noqa S105
+    # things, only to generate pseudo-ids for documents. useforsecurity=False tells the md5 method that
+    # we are NOT using this for security, otherwise FIPS would block this
+    return hashlib.md5(_id.encode("utf8"), usedforsecurity=False).hexdigest()  # noqa S105
 
 
 def truncate_id(_id):
