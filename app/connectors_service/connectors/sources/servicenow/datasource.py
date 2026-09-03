@@ -525,8 +525,8 @@ class ServiceNowDataSource(BaseDataSource):
 
     async def _fetch_access_controls_compact(self, table_name):
         """Return role_id tokens for a table, or None when the table is public."""
-        roles_by_name, roles_by_sys_id = await self._get_roles_maps()
         if table_name in DEFAULT_SERVICE_NAMES:
+            roles_by_name, _ = await self._get_roles_maps()
             role_sys_ids = []
             for role_name in DEFAULT_SERVICE_NAMES.get(table_name, []):
                 if role_name.lower() == PUBLIC_ROLE_NAME:
@@ -545,6 +545,7 @@ class ServiceNowDataSource(BaseDataSource):
                     )
             return self._finalize_compact_access_control(table_name, role_sys_ids)
 
+        # Resolve table ACL roles first so we skip loading sys_user_role when empty.
         role_sys_ids = await self._table_read_role_sys_ids(table_name)
         if not role_sys_ids:
             self._logger.info(
@@ -553,6 +554,7 @@ class ServiceNowDataSource(BaseDataSource):
             )
             return None
 
+        _, roles_by_sys_id = await self._get_roles_maps()
         resolved = []
         for role_sys_id in role_sys_ids:
             role_name = roles_by_sys_id.get(role_sys_id)

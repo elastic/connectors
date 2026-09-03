@@ -1191,15 +1191,15 @@ async def test_fetch_access_controls_compact_returns_role_tokens():
                 AsyncIterator(
                     [
                         {
-                            "sys_id": "role_id_1",
-                            "name": "role_1",
+                            "sys_user_role": {"value": "role_id_1"},
                         },
                     ]
                 ),
                 AsyncIterator(
                     [
                         {
-                            "sys_user_role": {"value": "role_id_1"},
+                            "sys_id": "role_id_1",
+                            "name": "role_1",
                         },
                     ]
                 ),
@@ -1207,7 +1207,7 @@ async def test_fetch_access_controls_compact_returns_role_tokens():
         ) as mock_generator:
             access_control = await source._fetch_access_controls("service_name")
             assert access_control == ["role_id:role_id_1"]
-            # Roles + ACL roles only — no user expansion pass
+            # Table ACL roles + sys_user_role only — no user expansion pass
             assert mock_generator.call_count == 2
 
 
@@ -1221,15 +1221,15 @@ async def test_fetch_access_controls_compact_public_returns_none():
                 AsyncIterator(
                     [
                         {
-                            "sys_id": "role_id_1",
-                            "name": "public",
+                            "sys_user_role": {"value": "role_id_1"},
                         },
                     ]
                 ),
                 AsyncIterator(
                     [
                         {
-                            "sys_user_role": {"value": "role_id_1"},
+                            "sys_id": "role_id_1",
+                            "name": "public",
                         },
                     ]
                 ),
@@ -1281,16 +1281,16 @@ async def test_fetch_access_controls_compact_filters_deleted_roles():
             side_effect=[
                 AsyncIterator(
                     [
-                        {
-                            "sys_id": "role_id_1",
-                            "name": "role_1",
-                        },
+                        {"sys_user_role": {"value": "deleted_role_id"}},
+                        {"sys_user_role": {"value": "role_id_1"}},
                     ]
                 ),
                 AsyncIterator(
                     [
-                        {"sys_user_role": {"value": "deleted_role_id"}},
-                        {"sys_user_role": {"value": "role_id_1"}},
+                        {
+                            "sys_id": "role_id_1",
+                            "name": "role_1",
+                        },
                     ]
                 ),
             ],
@@ -1305,20 +1305,16 @@ async def test_fetch_access_controls_compact_no_acl_entries_returns_none():
         with mock.patch.object(
             ServiceNowDataSource,
             "_table_data_generator",
-            side_effect=[
-                AsyncIterator(
-                    [
-                        {
-                            "sys_id": "role_id_1",
-                            "name": "role_1",
-                        },
-                    ]
-                ),
-                AsyncIterator([]),
-            ],
-        ):
+            side_effect=[AsyncIterator([])],
+        ) as mock_generator:
             access_control = await source._fetch_access_controls("service_name")
             assert access_control is None
+            # Empty ACL short-circuits before loading sys_user_role
+            assert mock_generator.call_count == 1
+            assert (
+                mock_generator.call_args.kwargs["service_name"]
+                == "sys_security_acl_role"
+            )
 
 
 @pytest.mark.asyncio
@@ -1328,13 +1324,13 @@ async def test_roles_maps_cached_per_sync():
             ServiceNowDataSource,
             "_table_data_generator",
             side_effect=[
+                AsyncIterator([{"sys_user_role": {"value": "role_id_1"}}]),
                 AsyncIterator(
                     [
                         {"sys_id": "role_id_1", "name": "role_1"},
                         {"sys_id": "role_id_2", "name": "role_2"},
                     ]
                 ),
-                AsyncIterator([{"sys_user_role": {"value": "role_id_1"}}]),
                 AsyncIterator([{"sys_user_role": {"value": "role_id_2"}}]),
             ],
         ) as mock_generator:
@@ -1343,10 +1339,14 @@ async def test_roles_maps_cached_per_sync():
 
         assert first == ["role_id:role_id_1"]
         assert second == ["role_id:role_id_2"]
-        # One sys_user_role fetch + one ACL fetch per table
+        # One ACL fetch per table + one cached sys_user_role fetch
         assert mock_generator.call_count == 3
         assert (
-            mock_generator.call_args_list[0].kwargs["service_name"] == "sys_user_role"
+            mock_generator.call_args_list[0].kwargs["service_name"]
+            == "sys_security_acl_role"
+        )
+        assert (
+            mock_generator.call_args_list[1].kwargs["service_name"] == "sys_user_role"
         )
 
 
