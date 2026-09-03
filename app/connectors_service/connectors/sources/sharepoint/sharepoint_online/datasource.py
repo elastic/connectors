@@ -59,14 +59,7 @@ from connectors.utils import html_to_text, iterable_batches_generator
 
 
 def _is_page_published(version_string):
-    """Determine whether a site page is published based on its version string.
-
-    SharePoint uses major.minor versioning for site pages. Publishing a page
-    creates a major version (the minor component is ``0``, e.g. ``"3.0"``),
-    while a draft/unpublished page carries a minor version (e.g. ``"3.1"`` or
-    ``"0.1"``). When the version cannot be determined we assume the page is
-    published to avoid over-restricting access.
-    """
+    """True when the page version is a major release (e.g. "3.0")."""
     if not version_string:
         return True
 
@@ -339,9 +332,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                 [
                   "user":spo-admin"
                 ]
-            - list: subset of the first list, applying only to members granted
-                edit (or higher) access to the site, plus all site-admins. Used
-                to restrict access to unpublished pages to owners/editors.
+            - list: site members with edit-or-higher access, plus site-admins
                 [
                     "user:spo-admin",
                     "user:spo-editor"
@@ -399,7 +390,6 @@ class SharepointOnlineDataSource(BaseDataSource):
             )
             raise PermissionsMissing(msg) from e
 
-        # Owners/admins always retain access, so they are considered editors too.
         editors_access_control |= site_admins_access_control
 
         return (
@@ -1182,9 +1172,7 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         Args:
             role_assignment (dict): dictionary representing a role assignment.
-            require_edit_access (bool): when True, only members granted edit (or
-                higher) access are returned; view-only members are excluded.
-                Used to restrict access to unpublished pages to owners/editors.
+            require_edit_access (bool): when True, return only members with edit access.
 
         Returns:
             access_control (list): list of usernames and dynamic group ids, which have the role assigned.
@@ -1203,7 +1191,6 @@ class SharepointOnlineDataSource(BaseDataSource):
                 )
                 return False
 
-            # if any binding grants the required access, this role assignment's member has access
             for binding in bindings:
                 # full explanation of the bit-math: https://stackoverflow.com/questions/51897160/how-to-parse-getusereffectivepermissions-sharepoint-response-in-java
                 # this approach was confirmed as valid by a Microsoft Sr. Support Escalation Engineer
@@ -1223,7 +1210,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                 ):
                     return True
 
-            return False  # no evidence of the required access was found
+            return False
 
         if not _grants_access(role_assignment):
             return []
@@ -1273,10 +1260,6 @@ class SharepointOnlineDataSource(BaseDataSource):
                 site_page["_id"] = f"{site_id}-site_page-{site_page['Id']}"
                 site_page["object_type"] = "site_page"
 
-                # Unpublished (draft) pages must not be visible to view-only
-                # users, only to owners/editors. SharePoint does not update a
-                # page's ACLs when it is unpublished, so we restrict access here.
-                # See https://github.com/elastic/connectors/issues/3645
                 published = _is_page_published(site_page.get("OData__UIVersionString"))
                 site_page["published"] = published
                 if not published:
@@ -1320,8 +1303,6 @@ class SharepointOnlineDataSource(BaseDataSource):
                             site_page, page_access_control
                         )
 
-                # set parent site access control. For unpublished pages only
-                # inherited owners/editors retain access, never view-only members.
                 if not has_unique_role_assignments:
                     inherited_access_control = (
                         site_access_control

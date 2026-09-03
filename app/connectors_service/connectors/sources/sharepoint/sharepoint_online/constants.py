@@ -70,8 +70,7 @@ VIEW_ROLE_TYPES = [
     REVIEWER,
     SYSTEM,
 ]
-# Role types that grant edit (or higher) access. READER and REVIEWER are
-# view-only and therefore excluded.
+# Excludes READER and REVIEWER (view-only).
 EDIT_ROLE_TYPES = [
     CONTRIBUTOR,
     WEB_DESIGNER,
