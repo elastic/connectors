@@ -1279,6 +1279,10 @@ class SharepointOnlineDataSource(BaseDataSource):
                 # See https://github.com/elastic/connectors/issues/3645
                 published = _is_page_published(site_page.get("OData__UIVersionString"))
                 site_page["published"] = published
+                if not published:
+                    self._logger.debug(
+                        f"Unpublished site page '{site_page['_id']}'; restricting ACL to owners/editors."
+                    )
 
                 has_unique_role_assignments = False
 
