@@ -501,14 +501,21 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         self._logger.info("Fetching all users")
         task_pool = ConcurrentTasks(max_concurrency=DEFAULT_PARALLEL_CONNECTION_COUNT)
-        async for user in self.client.active_users_with_groups():
-            await task_pool.put(lambda u=user: process_user(u))
-            # Drain any completed results without blocking
-            while not results.empty():
-                yield results.get_nowait()
+        try:
+            async for user in self.client.active_users_with_groups():
+                await task_pool.put(lambda u=user: process_user(u))
+                # Drain any completed results without blocking
+                while not results.empty():
+                    yield results.get_nowait()
 
-        # Wait for all in-flight tasks to finish then drain remaining results
-        await task_pool.join()
+            # Wait for all in-flight tasks to finish, propagating any worker errors
+            await task_pool.join(raise_on_error=True)
+        finally:
+            # Cancel any tasks still in flight if the generator is closed early
+            # or an exception is raised during enumeration
+            task_pool.cancel()
+
+        # Drain remaining results after all tasks have completed
         while not results.empty():
             yield results.get_nowait()
 

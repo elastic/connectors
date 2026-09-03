@@ -37,3 +37,4 @@ libs/connectors_sdk/requirements.txt
 *credentials*
 *secret*
 kubeconfig
+Dockerfile.codeengine
