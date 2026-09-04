@@ -1750,7 +1750,7 @@ SOFTWARE.
 
 
 anyio
-4.14.2
+4.15.0
 MIT
 The MIT License (MIT)
 
@@ -3642,7 +3642,7 @@ Apache-2.0
 
 
 elasticsearch-connectors
-9.5.3
+9.5.4
 Elastic-2.0
 Elastic License 2.0
 
@@ -3740,7 +3740,7 @@ these terms.
 
 
 elasticsearch-connectors-sdk
-9.5.3
+9.5.4
 Elastic-2.0
 UNKNOWN
 
@@ -4241,7 +4241,7 @@ Apache Software License
 
 
 google-auth
-2.57.0
+2.57.1
 Apache Software License
                                  Apache License
                            Version 2.0, January 2004
