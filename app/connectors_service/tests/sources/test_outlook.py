@@ -732,6 +732,66 @@ async def test_fetch_admin_users(mock_connection):
         assert users == ["test.user@gmail.com", "dummy.user@gmail.com"]
 
 
+@patch("connectors.utils.time_to_sleep_between_retries", return_value=0)
+@patch("connectors.sources.outlook.client.Connection")
+def test_ldap_search_retries_on_transient_error(mock_connection, _mock_sleep):
+    mock_connection_instance = mock_connection.return_value
+    mock_connection_instance.search.side_effect = [
+        OSError("Connection reset by peer"),
+        (True, None, ["user@example.com"], None),
+    ]
+
+    exchange_users = ExchangeUsers(
+        ad_server="ad.example.com",
+        domain="example.com",
+        exchange_server="exchange.example.com",
+        user="user",
+        password="password",
+        ssl_enabled=False,
+        ssl_ca=None,
+    )
+    response = exchange_users._ldap_search("search_query", "filter")
+    assert list(response) == ["user@example.com"]
+    assert mock_connection.call_count == 2
+    assert mock_connection_instance.search.call_count == 2
+    assert mock_connection_instance.unbind.call_count == 2
+
+
+@patch("connectors.sources.outlook.client.Connection")
+def test_exchange_ldap_search_uses_fresh_connection_per_search(mock_connection):
+    normal_user = {"mail": "normal@example.com"}
+    admin_user = {"mail": "admin@example.com"}
+
+    first_connection = MagicMock()
+    first_connection.search.return_value = (True, None, [normal_user], None)
+    second_connection = MagicMock()
+    second_connection.search.return_value = (True, None, [admin_user], None)
+    mock_connection.side_effect = [first_connection, second_connection]
+
+    exchange_users = ExchangeUsers(
+        ad_server="ad.example.com",
+        domain="example.com",
+        exchange_server="exchange.example.com",
+        user="user",
+        password="password",
+        ssl_enabled=False,
+        ssl_ca=None,
+    )
+
+    users = asyncio.run(_collect_exchange_users(exchange_users))
+    assert users == [normal_user, admin_user]
+    assert mock_connection.call_count == 2
+    first_connection.search.assert_called_once()
+    second_connection.search.assert_called_once()
+
+
+async def _collect_exchange_users(exchange_users):
+    users = []
+    async for user in exchange_users.get_users():
+        users.append(user)
+    return users
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "attachment, expected_content",
