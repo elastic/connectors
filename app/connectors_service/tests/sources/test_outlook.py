@@ -754,6 +754,7 @@ def test_ldap_search_retries_on_transient_error(mock_connection, _mock_sleep):
     assert list(response) == ["user@example.com"]
     assert mock_connection.call_count == 2
     assert mock_connection_instance.search.call_count == 2
+    assert mock_connection_instance.unbind.call_count == 2
 
 
 @patch("connectors.sources.outlook.client.Connection")

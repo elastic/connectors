@@ -175,7 +175,10 @@ class ExchangeUsers:
 
             return response
         finally:
-            connection.unbind()
+            try:
+                connection.unbind()
+            except Exception as exc:
+                logger.debug("Failed to unbind LDAP connection: %s", exc)
 
     async def close(self):
         pass
