@@ -30,6 +30,7 @@ from connectors.sources.sharepoint.sharepoint_online.client import (
 )
 from connectors.sources.sharepoint.sharepoint_online.constants import (
     CURSOR_SITE_DRIVE_KEY,
+    DEFAULT_PARALLEL_CONNECTION_COUNT,
     EXCLUDED_SHAREPOINT_LIST_NAMES,
     MAX_DOCUMENT_SIZE,
     SPO_API_MAX_BATCH_SIZE,
@@ -53,7 +54,7 @@ from connectors.sources.sharepoint.sharepoint_online.utils import (
 from connectors.sources.sharepoint.sharepoint_online.validator import (
     SharepointOnlineAdvancedRulesValidator,
 )
-from connectors.utils import html_to_text, iterable_batches_generator
+from connectors.utils import ConcurrentTasks, html_to_text, iterable_batches_generator
 
 
 class SharepointOnlineDataSource(BaseDataSource):
@@ -454,6 +455,10 @@ class SharepointOnlineDataSource(BaseDataSource):
         """Yields an access control document for every user of a site.
         Note: this method will cache users and emails it has already and skip the ingestion for those.
 
+        Users are processed concurrently (up to DEFAULT_PARALLEL_CONNECTION_COUNT at a time)
+        to parallelise the Graph API calls required for group membership expansion.
+        See: https://github.com/elastic/connectors/issues/4435
+
         Yields:
              dict: dictionary representing a user access control document
         """
@@ -478,25 +483,41 @@ class SharepointOnlineDataSource(BaseDataSource):
                 if id_:
                     already_seen_ids.add(id_)
 
+        results: asyncio.Queue = asyncio.Queue()
+
         async def process_user(user):
             email = user.get("EMail", user.get("mail", None))
             username = user.get("UserName", user.get("userPrincipalName", None))
             self._logger.debug(f"Detected a person: {username}: {email}")
 
             if _already_seen(email, username):
-                return None
+                return
 
             update_already_seen(email, username)
 
             person_access_control_doc = await self._user_access_control_doc(user)
             if person_access_control_doc:
-                return person_access_control_doc
+                await results.put(person_access_control_doc)
 
         self._logger.info("Fetching all users")
-        async for user in self.client.active_users_with_groups():
-            user_doc = await process_user(user)
-            if user_doc:
-                yield user_doc
+        task_pool = ConcurrentTasks(max_concurrency=DEFAULT_PARALLEL_CONNECTION_COUNT)
+        try:
+            async for user in self.client.active_users_with_groups():
+                await task_pool.put(lambda u=user: process_user(u))
+                # Drain any completed results without blocking
+                while not results.empty():
+                    yield results.get_nowait()
+
+            # Wait for all in-flight tasks to finish, propagating any worker errors
+            await task_pool.join(raise_on_error=True)
+        finally:
+            # Cancel any tasks still in flight if the generator is closed early
+            # or an exception is raised during enumeration
+            task_pool.cancel()
+
+        # Drain remaining results after all tasks have completed
+        while not results.empty():
+            yield results.get_nowait()
 
     async def site_group_users(self, site_web_url, site_group_id):
         """
