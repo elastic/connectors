@@ -495,14 +495,16 @@ async def test_get_content_with_clienterror():
 @pytest.mark.asyncio
 async def test_close_with_client_session():
     """Test close method of S3DataSource with client session"""
-
     async with create_s3_source() as source:
-        source.session = aioboto3.Session()
-        await source.s3_client.client()
-
-        await source.close()
-        with pytest.raises(ClientError):
-            await source.ping()
+        with (
+            mock.patch("aiobotocore.client.AioBaseClient", S3Object),
+            mock.patch(
+                "contextlib.AsyncExitStack.aclose", new_callable=mock.AsyncMock
+            ) as aclose_mock,
+        ):
+            await source.s3_client.client()
+            await source.close()
+            aclose_mock.assert_awaited_once()
 
 
 @pytest.mark.parametrize(
