@@ -345,7 +345,9 @@ class SharepointOnlineDataSource(BaseDataSource):
                 member_access_control = set()
                 member_access_control.update(
                     await self._get_access_control_from_role_assignment(
-                        role_assignment, site_id=site["id"]
+                        role_assignment,
+                        site_id=site["id"],
+                        site_web_url=site["webUrl"],
                     )
                 )
 
@@ -627,9 +629,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                         continue
 
                     site_group_token = _prefix_site_group(site_id, group_id)
-                    async for member in self.client.site_groups_users(
-                        site_web_url, group_id
-                    ):
+                    for member in await self.site_group_users(site_web_url, group_id):
                         member_tokens = await self._access_control_for_member(member)
                         if not member_tokens:
                             unmatched_members += 1
@@ -1188,7 +1188,9 @@ class SharepointOnlineDataSource(BaseDataSource):
                         ):
                             list_item_access_control.extend(
                                 await self._get_access_control_from_role_assignment(
-                                    role_assignment, site_id=site_id
+                                    role_assignment,
+                                    site_id=site_id,
+                                    site_web_url=site_web_url,
                                 )
                             )
 
@@ -1284,7 +1286,9 @@ class SharepointOnlineDataSource(BaseDataSource):
                         ):
                             site_list_access_control.extend(
                                 await self._get_access_control_from_role_assignment(
-                                    role_assignment, site_id=site["id"]
+                                    role_assignment,
+                                    site_id=site["id"],
+                                    site_web_url=site_url,
                                 )
                             )
 
@@ -1300,13 +1304,14 @@ class SharepointOnlineDataSource(BaseDataSource):
                 yield site_list
 
     async def _get_access_control_from_role_assignment(
-        self, role_assignment, site_id=None
+        self, role_assignment, site_id=None, site_web_url=None
     ):
         """Extracts access control from a role assignment.
 
         Args:
             role_assignment (dict): dictionary representing a role assignment.
             site_id (str): Graph site id (needed for compact site_group tokens).
+            site_web_url (str): SharePoint site URL (needed for site group fallback).
 
         Returns:
             access_control (list): list of usernames and dynamic group ids, which have the role assigned.
@@ -1361,7 +1366,7 @@ class SharepointOnlineDataSource(BaseDataSource):
             if group_id is not None:
                 access_control.extend(
                     await self._site_group_access_control(
-                        site_web_url=None,
+                        site_web_url=site_web_url,
                         site_group_id=group_id,
                         site_id=site_id,
                         role_assignment=role_assignment,
@@ -1370,8 +1375,8 @@ class SharepointOnlineDataSource(BaseDataSource):
             elif nested_get_from_dict(role_assignment, ["Member", "Users"], []):
                 access_control.extend(
                     await self._expand_site_group_members_access_control(
-                        site_web_url=None,
-                        site_group_id=None,
+                        site_web_url=site_web_url,
+                        site_group_id=group_id,
                         role_assignment=role_assignment,
                     )
                 )
@@ -1434,7 +1439,9 @@ class SharepointOnlineDataSource(BaseDataSource):
                         ):
                             page_access_control.extend(
                                 await self._get_access_control_from_role_assignment(
-                                    role_assignment, site_id=site_id
+                                    role_assignment,
+                                    site_id=site_id,
+                                    site_web_url=url,
                                 )
                             )
 
