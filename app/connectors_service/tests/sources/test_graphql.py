@@ -320,6 +320,15 @@ async def test_fetch_data_without_pageinfo():
 
 
 @pytest.mark.asyncio
+async def test_close_without_open_session_does_not_create_client():
+    with patch("aiohttp.ClientSession") as mock_client_session:
+        async with create_graphql_source():
+            pass
+
+        mock_client_session.assert_not_called()
+
+
+@pytest.mark.asyncio
 @freeze_time("2024-01-24T04:07:19")
 async def test_get_docs():
     expected_response = [
