@@ -1724,7 +1724,7 @@ Apache License
 
 
 anyio
-4.15.0
+4.15.1
 MIT
 The MIT License (MIT)
 
