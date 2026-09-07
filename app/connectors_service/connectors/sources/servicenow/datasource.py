@@ -229,11 +229,6 @@ class ServiceNowDataSource(BaseDataSource):
             _prefixed_user_name,
             _prefixed_email,
         ]
-        identity = {
-            "user_id": _prefixed_user_id,
-            "display_name": _prefixed_user_name,
-            "email": _prefixed_email,
-        }
         # role_ids is only set in compact mode; omit the field in legacy mode.
         if role_ids is not None:
             role_ids_list = [role_id for role_id in role_ids if role_id]
@@ -242,8 +237,19 @@ class ServiceNowDataSource(BaseDataSource):
                 for role_id in role_ids_list
                 if (prefixed := _prefix_role_id(role_id)) is not None
             )
-            identity["role_ids"] = prefixed_role_ids
+            identity = {
+                "user_id": _prefixed_user_id,
+                "display_name": _prefixed_user_name,
+                "email": _prefixed_email,
+                "role_ids": prefixed_role_ids,
+            }
             access_control.extend(prefixed_role_ids)
+        else:
+            identity = {
+                "user_id": _prefixed_user_id,
+                "display_name": _prefixed_user_name,
+                "email": _prefixed_email,
+            }
         return {
             "_id": user_id,
             "identity": identity,
@@ -574,7 +580,9 @@ class ServiceNowDataSource(BaseDataSource):
 
     def _finalize_compact_access_control(self, table_name, role_sys_ids):
         compact_acl = sorted(
-            {_prefix_role_id(role_id) for role_id in role_sys_ids if role_id}
+            prefixed
+            for role_id in role_sys_ids
+            if role_id and (prefixed := _prefix_role_id(role_id)) is not None
         )
         if not compact_acl:
             self._logger.info(
