@@ -132,8 +132,9 @@ class ConnectorsAgentConfigurationWrapper:
         # ESClient ignores verify_certs unless ssl is enabled.
         ssl_config = {"ssl": True}
 
-        verification_mode = ssl_source.get("verification_mode")
-        if verification_mode is not None:
+        verification_mode_field = ssl_source.fields.get("verification_mode")
+        if verification_mode_field is not None:
+            verification_mode = ssl_source["verification_mode"]
             verify_certs = verification_mode != "none"
             logger.debug(
                 f"Found ssl.verification_mode '{verification_mode}', "
