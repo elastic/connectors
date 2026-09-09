@@ -257,10 +257,8 @@ class GraphQLClient:
 
     async def close(self):
         self._sleeps.cancel()
-        session = self.__dict__.get("session")
-        if session is not None:
-            await session.close()
-            del self.session
+        await self.session.close()
+        del self.session
 
     async def ping(self):
         await self.make_request(graphql_query=PING_QUERY)

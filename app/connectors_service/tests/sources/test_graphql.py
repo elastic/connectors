@@ -46,16 +46,22 @@ async def create_graphql_source(
     graphql_query="{users {name {firstName } } }",
     graphql_object_to_id_map='{"users": "id"}',
 ):
-    async with create_source(
-        GraphQLDataSource,
-        http_endpoint="http://127.0.0.1:1234",
-        authentication_method="none",
-        graphql_query=graphql_query,
-        graphql_object_to_id_map=graphql_object_to_id_map,
-        headers=headers,
-        graphql_variables=graphql_variables,
-    ) as source:
-        yield source
+    mock_session = AsyncMock()
+    mock_session.close = AsyncMock()
+    with patch(
+        "connectors.sources.graphql.client.aiohttp.ClientSession",
+        return_value=mock_session,
+    ):
+        async with create_source(
+            GraphQLDataSource,
+            http_endpoint="http://127.0.0.1:1234",
+            authentication_method="none",
+            graphql_query=graphql_query,
+            graphql_object_to_id_map=graphql_object_to_id_map,
+            headers=headers,
+            graphql_variables=graphql_variables,
+        ) as source:
+            yield source
 
 
 @pytest.mark.asyncio
@@ -320,12 +326,13 @@ async def test_fetch_data_without_pageinfo():
 
 
 @pytest.mark.asyncio
-async def test_close_without_open_session_does_not_create_client():
-    with patch("aiohttp.ClientSession") as mock_client_session:
+async def test_teardown_does_not_use_real_client_session():
+    """Regression: source teardown must not instantiate a real aiohttp.ClientSession."""
+    with patch("aiohttp.ClientSession") as real_client_session:
         async with create_graphql_source():
             pass
 
-        mock_client_session.assert_not_called()
+        real_client_session.assert_not_called()
 
 
 @pytest.mark.asyncio
