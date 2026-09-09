@@ -45,6 +45,7 @@ from connectors.sources.sharepoint.sharepoint_online.client import (
 )
 from connectors.sources.sharepoint.sharepoint_online.constants import (
     DEFAULT_BACKOFF_MULTIPLIER,
+    DEFAULT_PARALLEL_CONNECTION_COUNT,
     DEFAULT_RETRY_SECONDS,
     EXCLUDED_SHAREPOINT_LIST_NAMES,
     WILDCARD,
@@ -3973,6 +3974,90 @@ class TestSharepointOnlineDataSource:
                 user_access_control_docs.append(doc)
 
             assert len(user_access_control_docs) == 2
+
+    @pytest.mark.asyncio
+    async def test_get_access_control_deduplicates_users(self, patch_sharepoint_client):
+        """Duplicate users (same email or username seen twice) must only produce one ACL doc."""
+        async with create_spo_source(use_document_level_security=True) as source:
+            email = "duplicate@acme.co"
+            user = {
+                "userPrincipalName": "dup_user",
+                "EMail": email,
+                "transitiveMemberOf": [],
+            }
+            # Same user returned twice by the API
+            patch_sharepoint_client.active_users_with_groups = AsyncIterator(
+                [user, user]
+            )
+            source._user_access_control_doc = AsyncMock(return_value={"_id": email})
+
+            docs = []
+            async for doc in source.get_access_control():
+                docs.append(doc)
+
+            assert len(docs) == 1
+            assert docs[0]["_id"] == email
+
+    @pytest.mark.asyncio
+    async def test_get_access_control_concurrent_yields_all_docs(
+        self, patch_sharepoint_client
+    ):
+        """Users must be processed concurrently and all ACL docs must be yielded.
+
+        The side effect suspends at an asyncio.Event so that multiple calls are
+        in-flight simultaneously. The test asserts that the peak concurrency
+        observed across the await point is greater than 1, proving that the
+        serial implementation would not satisfy the same assertion.
+        """
+        async with create_spo_source(use_document_level_security=True) as source:
+            users = [
+                {
+                    "userPrincipalName": f"user{i}",
+                    "mail": f"user{i}@acme.co",
+                    "transitiveMemberOf": [],
+                }
+                for i in range(20)
+            ]
+            patch_sharepoint_client.active_users_with_groups = AsyncIterator(users)
+
+            # Track how many calls are concurrently inside _user_access_control_doc
+            peak_concurrency = 0
+            in_flight = 0
+            release = asyncio.Event()
+
+            async def _suspending_user_doc(user):
+                nonlocal peak_concurrency, in_flight
+                in_flight += 1
+                peak_concurrency = max(peak_concurrency, in_flight)
+                # Suspend here so other tasks can enter before this one returns
+                await release.wait()
+                in_flight -= 1
+                return {"_id": user.get("mail")}
+
+            source._user_access_control_doc = _suspending_user_doc
+
+            async def _collect():
+                docs = []
+                async for doc in source.get_access_control():
+                    docs.append(doc)
+                return docs
+
+            # Start collection as a background task then release the gate once
+            # enough tasks have had a chance to pile up.
+            # Multiple yields are needed: each await task_pool.put() in the
+            # producer loop requires one yield, and each task needs one yield to
+            # reach the await release.wait() suspension point.
+            collect_task = asyncio.create_task(_collect())
+            for _ in range(DEFAULT_PARALLEL_CONNECTION_COUNT * 2):
+                await asyncio.sleep(0)
+            release.set()
+
+            docs = await collect_task
+
+            assert len(docs) == 20
+            assert (
+                peak_concurrency > 1
+            ), f"Expected concurrent processing but peak concurrency was {peak_concurrency}"
 
     def test_prefix_group(self):
         group = "group"
