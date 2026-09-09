@@ -145,8 +145,7 @@ class ExchangeUsers:
         self.ssl_enabled = ssl_enabled
         self.ssl_ca = ssl_ca
 
-    @cached_property
-    def _create_connection(self):
+    def _create_ldap_connection(self):
         return Connection(
             server=self.ad_server,
             user=self.user,
@@ -155,47 +154,51 @@ class ExchangeUsers:
             auto_bind=True,  # pyright: ignore
         )
 
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+        skipped_exceptions=[UsersFetchFailed],
+    )
+    def _ldap_search(self, search_query, search_filter):
+        connection = self._create_ldap_connection()
+        try:
+            has_value, _, response, _ = connection.search(
+                search_query,
+                search_filter,
+                attributes=["mail"],
+            )
+
+            if not has_value:
+                msg = "Error while fetching users from Exchange Active Directory."
+                raise UsersFetchFailed(msg)
+
+            return response
+        finally:
+            try:
+                connection.unbind()
+            except Exception as exc:
+                logger.debug("Failed to unbind LDAP connection: %s", exc)
+
     async def close(self):
         pass
 
     def _fetch_normal_users(self, search_query):
         try:
-            has_value_for_normal_users, _, response, _ = self._create_connection.search(
-                search_query,
-                SEARCH_FILTER_FOR_NORMAL_USERS,
-                attributes=["mail"],
-            )
-
-            if not has_value_for_normal_users:
-                msg = "Error while fetching users from Exchange Active Directory."
-                raise UsersFetchFailed(msg)
-
-            for user in response:
+            for user in self._ldap_search(search_query, SEARCH_FILTER_FOR_NORMAL_USERS):
                 yield user
-
+        except UsersFetchFailed:
+            raise
         except Exception as e:
             msg = f"Something went wrong while fetching users. Error: {e}"
             raise UsersFetchFailed(msg) from e
 
     def _fetch_admin_users(self, search_query):
         try:
-            (
-                has_value_for_admin_users,
-                _,
-                response_for_admin,
-                _,
-            ) = self._create_connection.search(
-                search_query,
-                SEARCH_FILTER_FOR_ADMIN,
-                attributes=["mail"],
-            )
-
-            if not has_value_for_admin_users:
-                msg = "Error while fetching users from Exchange Active Directory."
-                raise UsersFetchFailed(msg)
-
-            for user in response_for_admin:
+            for user in self._ldap_search(search_query, SEARCH_FILTER_FOR_ADMIN):
                 yield user
+        except UsersFetchFailed:
+            raise
         except Exception as e:
             msg = f"Something went wrong while fetching users. Error: {e}"
             raise UsersFetchFailed(msg) from e
