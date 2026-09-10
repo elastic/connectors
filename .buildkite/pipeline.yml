@@ -404,6 +404,23 @@ steps:
                 - CONNECTOR=github
 
           - path:
+            - "app/connectors_service/connectors/sources/google_bigquery/**"
+            - "app/connectors_service/tests/sources/fixtures/google_bigquery/**"
+            - "app/connectors_service/tests/sources/fixtures/fixture.py"
+            - "${DOCKERFILE_PATH}"
+            - "app/connectors_service/tests/Dockerfile.ftest"
+            - "app/connectors_service/pyproject.toml"
+            config:
+              label: "🔨 Google BigQuery"
+              <<: *test-agents
+              <<: *retries
+              <<: *ftest_defaults
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=google_bigquery
+
+          - path:
             - "app/connectors_service/connectors/sources/google_drive/**"
             - "app/connectors_service/tests/sources/fixtures/google_drive/**"
             - "app/connectors_service/tests/sources/fixtures/fixture.py"
