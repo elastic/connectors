@@ -27,10 +27,8 @@ from connectors import __version__
 from connectors.build_info import __build_info__
 from connectors.config import load_config
 from connectors.fips import (
-    FIPSConfig,
     FIPSModeError,
-    filter_fips_compliant_sources,
-    validate_fips_mode,
+    apply_fips_mode,
 )
 from connectors.preflight_check import PreflightCheck
 from connectors.services import get_services
@@ -133,16 +131,10 @@ def run(action, config_file, log_level, filebeat, service_type, uvloop):
         logger.exception(f"{msg}.\n{e}")
         raise ClickException(msg) from e
 
-    # Initialize FIPS mode from config
-    fips_enabled = config.get("service", {}).get("fips_mode", False)
-    FIPSConfig.set_fips_mode(fips_enabled)
-
-    # Enable FIPS mode if configured (validates OpenSSL)
+    # Enable FIPS mode if configured: validates OpenSSL and drops the connectors
+    # that cannot run under FIPS
     try:
-        validate_fips_mode()
-        if fips_enabled:
-            # Filter out non-FIPS-compliant connectors
-            config["sources"] = filter_fips_compliant_sources(config.get("sources", {}))
+        config = apply_fips_mode(config)
     except FIPSModeError as e:
         set_logger(logging.ERROR, filebeat=filebeat)
         msg = f"FIPS validation failed: {e}"

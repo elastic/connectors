@@ -8,7 +8,8 @@ import os
 import signal
 from unittest.mock import AsyncMock, patch
 
-from connectors.agent.cli import main
+from connectors.agent.cli import FAILURE_EXIT_CODE, main
+from connectors.fips import FIPSModeError
 
 
 @patch("connectors.agent.cli.ConnectorsAgentComponent", return_value=AsyncMock())
@@ -26,3 +27,29 @@ def test_main_responds_to_sigterm(patch_component):
     main()
 
     loop.close()
+
+
+@patch("connectors.agent.cli.ConnectorsAgentComponent")
+def test_main_exits_with_failure_when_component_stops_with_an_error(patch_component):
+    component = AsyncMock()
+    component.run.side_effect = FIPSModeError("OpenSSL is not in FIPS mode")
+    patch_component.return_value = component
+
+    assert main() == FAILURE_EXIT_CODE
+
+
+@patch(
+    "connectors.agent.cli.ConnectorsAgentComponent",
+    side_effect=FIPSModeError("ELASTICSEARCH_CONNECTORS_FIPS_MODE is set to 'ture'"),
+)
+def test_main_exits_with_failure_when_fips_mode_cannot_be_read(patch_component):
+    assert main() == FAILURE_EXIT_CODE
+
+
+@patch("connectors.agent.cli.ConnectorsAgentComponent")
+def test_main_exits_with_failure_on_any_unexpected_error(patch_component):
+    component = AsyncMock()
+    component.run.side_effect = RuntimeError("something went wrong")
+    patch_component.return_value = component
+
+    assert main() == FAILURE_EXIT_CODE
