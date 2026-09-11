@@ -30,6 +30,8 @@ from connectors.sources.sharepoint.sharepoint_online.client import (
 )
 from connectors.sources.sharepoint.sharepoint_online.constants import (
     CURSOR_SITE_DRIVE_KEY,
+    EDIT_ITEM_MASK,
+    EDIT_ROLE_TYPES,
     EXCLUDED_SHAREPOINT_LIST_NAMES,
     MAX_DOCUMENT_SIZE,
     SPO_API_MAX_BATCH_SIZE,
@@ -54,6 +56,22 @@ from connectors.sources.sharepoint.sharepoint_online.validator import (
     SharepointOnlineAdvancedRulesValidator,
 )
 from connectors.utils import html_to_text, iterable_batches_generator
+
+
+def _is_page_published(version_string):
+    """True when the page version is a major release (e.g. "3.0")."""
+    if not version_string:
+        return True
+
+    _, _, minor = str(version_string).partition(".")
+
+    if not minor:
+        return True
+
+    try:
+        return int(minor) == 0
+    except ValueError:
+        return True
 
 
 class SharepointOnlineDataSource(BaseDataSource):
@@ -314,17 +332,23 @@ class SharepointOnlineDataSource(BaseDataSource):
                 [
                   "user":spo-admin"
                 ]
+            - list: site members with edit-or-higher access, plus site-admins
+                [
+                    "user:spo-admin",
+                    "user:spo-editor"
+                ]
         """
 
         self._logger.debug(f"Looking at site: {site['id']} with url {site['webUrl']}")
         if not self._dls_enabled():
-            return [], []
+            return [], [], []
 
         def _is_site_admin(user):
             return user.get("IsSiteAdmin", False)
 
         access_control = set()
         site_admins_access_control = set()
+        editors_access_control = set()
 
         try:
             async for role_assignment in self.client.site_role_assignments(
@@ -334,6 +358,12 @@ class SharepointOnlineDataSource(BaseDataSource):
                 member_access_control = set()
                 member_access_control.update(
                     await self._get_access_control_from_role_assignment(role_assignment)
+                )
+
+                editors_access_control.update(
+                    await self._get_access_control_from_role_assignment(
+                        role_assignment, require_edit_access=True
+                    )
                 )
 
                 if _is_site_admin(member):
@@ -360,7 +390,13 @@ class SharepointOnlineDataSource(BaseDataSource):
             )
             raise PermissionsMissing(msg) from e
 
-        return list(access_control), list(site_admins_access_control)
+        editors_access_control |= site_admins_access_control
+
+        return (
+            list(access_control),
+            list(site_admins_access_control),
+            list(editors_access_control),
+        )
 
     def _dls_enabled(self):
         if self._features is None:
@@ -605,6 +641,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                 (
                     site_access_control,
                     site_admin_access_control,
+                    site_editors_access_control,
                 ) = await self._site_access_control(site)
 
                 yield (
@@ -676,7 +713,9 @@ class SharepointOnlineDataSource(BaseDataSource):
                         yield list_item, download_func
 
                 # Sync site pages
-                async for site_page in self.site_pages(site, site_access_control):
+                async for site_page in self.site_pages(
+                    site, site_access_control, site_editors_access_control
+                ):
                     # Always include site admins in site page access controls
                     site_page = self._decorate_with_access_control(
                         site_page, site_admin_access_control
@@ -708,6 +747,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                 (
                     site_access_control,
                     site_admin_access_control,
+                    site_editors_access_control,
                 ) = await self._site_access_control(site)
 
                 yield (
@@ -789,7 +829,10 @@ class SharepointOnlineDataSource(BaseDataSource):
 
                 # Sync site pages
                 async for site_page in self.site_pages(
-                    site, site_access_control, check_timestamp=True
+                    site,
+                    site_access_control,
+                    site_editors_access_control,
+                    check_timestamp=True,
                 ):
                     # Always include site admins in site page access controls
                     site_page = self._decorate_with_access_control(
@@ -1122,11 +1165,14 @@ class SharepointOnlineDataSource(BaseDataSource):
 
                 yield site_list
 
-    async def _get_access_control_from_role_assignment(self, role_assignment):
+    async def _get_access_control_from_role_assignment(
+        self, role_assignment, require_edit_access=False
+    ):
         """Extracts access control from a role assignment.
 
         Args:
             role_assignment (dict): dictionary representing a role assignment.
+            require_edit_access (bool): when True, return only members with edit access.
 
         Returns:
             access_control (list): list of usernames and dynamic group ids, which have the role assigned.
@@ -1135,7 +1181,7 @@ class SharepointOnlineDataSource(BaseDataSource):
         If any role is assigned to a user this means at least "read" access.
         """
 
-        def _has_limited_access(role_assignment):
+        def _grants_access(role_assignment):
             bindings = role_assignment.get("RoleDefinitionBindings", [])
 
             # If there is no permission information, default to restrict access
@@ -1143,9 +1189,8 @@ class SharepointOnlineDataSource(BaseDataSource):
                 self._logger.debug(
                     f"No RoleDefinitionBindings found for '{role_assignment.get('odata.id')}'"
                 )
-                return True
+                return False
 
-            # if any binding grants view access, this role assignment's member has view access
             for binding in bindings:
                 # full explanation of the bit-math: https://stackoverflow.com/questions/51897160/how-to-parse-getusereffectivepermissions-sharepoint-response-in-java
                 # this approach was confirmed as valid by a Microsoft Sr. Support Escalation Engineer
@@ -1153,18 +1198,21 @@ class SharepointOnlineDataSource(BaseDataSource):
                     nested_get_from_dict(binding, ["BasePermissions", "Low"], "0")  # pyright: ignore
                 )
                 role_type_kind = binding.get("RoleTypeKind", 0)
-                if (
+                if require_edit_access:
+                    if (base_permission_low & EDIT_ITEM_MASK) or (
+                        role_type_kind in EDIT_ROLE_TYPES
+                    ):
+                        return True
+                elif (
                     (base_permission_low & VIEW_ITEM_MASK)
                     or (base_permission_low & VIEW_PAGE_MASK)
                     or (role_type_kind in VIEW_ROLE_TYPES)
                 ):
-                    return False
+                    return True
 
-            return (
-                True  # no evidence of view access was found, so assuming limited access
-            )
+            return False
 
-        if _has_limited_access(role_assignment):
+        if not _grants_access(role_assignment):
             return []
 
         access_control = []
@@ -1189,7 +1237,13 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         return access_control
 
-    async def site_pages(self, site, site_access_control, check_timestamp=False):
+    async def site_pages(
+        self,
+        site,
+        site_access_control,
+        site_editors_access_control,
+        check_timestamp=False,
+    ):
         site_id = site["id"]
         url = site["webUrl"]
         async for site_page in self.client.site_pages(url):
@@ -1205,6 +1259,13 @@ class SharepointOnlineDataSource(BaseDataSource):
                 # {site_id}-{some_name_or_string_id}-{autoincremented_id}
                 site_page["_id"] = f"{site_id}-site_page-{site_page['Id']}"
                 site_page["object_type"] = "site_page"
+
+                published = _is_page_published(site_page.get("OData__UIVersionString"))
+                site_page["published"] = published
+                if not published:
+                    self._logger.debug(
+                        f"Unpublished site page '{site_page['_id']}'; restricting ACL to owners/editors."
+                    )
 
                 has_unique_role_assignments = False
 
@@ -1233,7 +1294,8 @@ class SharepointOnlineDataSource(BaseDataSource):
                         ):
                             page_access_control.extend(
                                 await self._get_access_control_from_role_assignment(
-                                    role_assignment
+                                    role_assignment,
+                                    require_edit_access=not published,
                                 )
                             )
 
@@ -1241,10 +1303,14 @@ class SharepointOnlineDataSource(BaseDataSource):
                             site_page, page_access_control
                         )
 
-                # set parent site access control
                 if not has_unique_role_assignments:
+                    inherited_access_control = (
+                        site_access_control
+                        if published
+                        else site_editors_access_control
+                    )
                     site_page = self._decorate_with_access_control(
-                        site_page, site_access_control
+                        site_page, inherited_access_control
                     )
 
                 for html_field in [
