@@ -7,9 +7,11 @@ import json
 import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import click
 import pytest
 import yaml
 from click.testing import CliRunner
+from elastic_transport.client_utils import url_to_node_config
 from elasticsearch import ApiError
 
 from connectors import __version__  # NOQA
@@ -94,10 +96,19 @@ def _assert_mongodb_create_doc(doc, *, index_name, connector_name, language="en"
 
 
 @pytest.fixture(autouse=True)
-def mock_cli_config():
+def mock_cli_config(request):
+    if "use_real_cli_config" in request.fixturenames:
+        yield
+        return
+
     with patch("connectors.connectors_cli.load_config") as mock:
         mock.return_value = {"elasticsearch": {"host": "http://localhost:9211/"}}
         yield mock
+
+
+@pytest.fixture
+def use_real_cli_config():
+    pass
 
 
 @pytest.fixture(autouse=True)
@@ -673,6 +684,220 @@ def test_job_help_page():
     assert "Usage:" in result.output
     assert "Options:" in result.output
     assert "Commands:" in result.output
+
+
+def test_job_help_page_without_subcommands():
+    runner = CliRunner()
+    result = runner.invoke(cli, ["job"])
+    assert result.exit_code == 0
+    assert "Usage:" in result.output
+    assert "Options:" in result.output
+    assert "Commands:" in result.output
+
+
+def test_job_help_page_without_config_file(tmp_path, use_real_cli_config):
+    runner = CliRunner()
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        result = runner.invoke(cli, ["job", "--help"])
+
+    assert result.exit_code == 0
+    assert "Usage:" in result.output
+    assert "Commands:" in result.output
+    assert f"{CONFIG_FILE_PATH} was not found" not in result.output
+
+
+def test_job_subcommand_help_page_without_config_file(tmp_path, use_real_cli_config):
+    runner = CliRunner()
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        result = runner.invoke(cli, ["job", "list", "--help"])
+
+    assert result.exit_code == 0
+    assert "Usage:" in result.output
+    assert f"{CONFIG_FILE_PATH} was not found" not in result.output
+
+
+def test_command_without_config_file_suggests_login(tmp_path, use_real_cli_config):
+    runner = CliRunner()
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        result = runner.invoke(cli, ["job", "list", "test-connector-id"])
+
+    assert result.exit_code == 1
+    assert f"{CONFIG_FILE_PATH} was not found" in result.output
+    assert "connectors login" in result.output
+
+
+@pytest.mark.parametrize(
+    "config_content",
+    [
+        "",
+        "null\n",
+        "{}\n",
+        "foo: bar\n",
+        "elasticsearch: {}\n",
+        "elasticsearch: null\n",
+        "elasticsearch: []\n",
+    ],
+)
+def test_command_with_empty_config_suggests_login(
+    tmp_path, use_real_cli_config, config_content
+):
+    runner = CliRunner()
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        os.makedirs(os.path.dirname(CONFIG_FILE_PATH))
+        with open(CONFIG_FILE_PATH, "w") as config_file:
+            config_file.write(config_content)
+
+        result = runner.invoke(cli, ["job", "list", "test-connector-id"])
+
+    assert result.exit_code == 1
+    assert "config file is empty or invalid" in result.output
+    assert "connectors login" in result.output
+
+
+@pytest.mark.parametrize(
+    "config_content",
+    [
+        "elasticsearch:\n  foo: bar\n",
+        "elasticsearch:\n  host:\n",
+        "elasticsearch:\n  host: 123\n",
+        "elasticsearch:\n  host: ''\n",
+        "elasticsearch:\n  host: '   '\n",
+        "elasticsearch:\n  host: foo\n",
+        "elasticsearch:\n  host: '://'\n",
+        "elasticsearch:\n  host: '  not a URL  '\n",
+    ],
+)
+def test_command_with_invalid_elasticsearch_config_suggests_login(
+    tmp_path, use_real_cli_config, config_content
+):
+    runner = CliRunner()
+    with runner.isolated_filesystem(temp_dir=tmp_path) as temp_dir:
+        os.makedirs(os.path.dirname(CONFIG_FILE_PATH))
+        with open(os.path.join(temp_dir, CONFIG_FILE_PATH), "w") as config_file:
+            config_file.write(config_content)
+
+        result = runner.invoke(cli, ["job", "list", "test-connector-id"])
+
+    assert result.exit_code == 1
+    assert "config file is empty or invalid" in result.output
+    assert "connectors login" in result.output
+
+
+@patch("connectors.connectors_cli.Job.list_jobs", return_value=[])
+def test_command_with_valid_config_uses_config_file(
+    mocked_list_jobs, tmp_path, use_real_cli_config
+):
+    runner = CliRunner()
+    with runner.isolated_filesystem(temp_dir=tmp_path) as temp_dir:
+        os.makedirs(os.path.dirname(CONFIG_FILE_PATH))
+        with open(os.path.join(temp_dir, CONFIG_FILE_PATH), "w") as config_file:
+            config_file.write("elasticsearch:\n  host: http://localhost:9200/\n")
+
+        result = runner.invoke(cli, ["job", "list", "test-connector-id"])
+
+    assert result.exit_code == 0
+    assert "No jobs found" in result.output
+    mocked_list_jobs.assert_called_once_with(connector_id="test-connector-id")
+
+
+@patch("connectors.connectors_cli.Job.list_jobs", return_value=[])
+def test_command_with_whitespace_padded_valid_host_uses_config_file(
+    mocked_list_jobs, tmp_path, use_real_cli_config
+):
+    runner = CliRunner()
+    host = "  http://localhost:9200/  "
+    url_to_node_config(host, use_default_ports_for_scheme=True)
+    with runner.isolated_filesystem(temp_dir=tmp_path) as temp_dir:
+        os.makedirs(os.path.dirname(CONFIG_FILE_PATH))
+        with open(os.path.join(temp_dir, CONFIG_FILE_PATH), "w") as config_file:
+            config_file.write(f"elasticsearch:\n  host: '{host}'\n")
+
+        result = runner.invoke(cli, ["job", "list", "test-connector-id"])
+
+    assert result.exit_code == 0
+    assert "No jobs found" in result.output
+    mocked_list_jobs.assert_called_once_with(connector_id="test-connector-id")
+
+
+def test_command_with_unicode_whitespace_padded_host_suggests_login(
+    tmp_path, use_real_cli_config
+):
+    runner = CliRunner()
+    host = "\u2003http://localhost:9200/\u2003"
+    with runner.isolated_filesystem(temp_dir=tmp_path) as temp_dir:
+        os.makedirs(os.path.dirname(CONFIG_FILE_PATH))
+        with open(os.path.join(temp_dir, CONFIG_FILE_PATH), "w") as config_file:
+            config_file.write(f"elasticsearch:\n  host: '{host}'\n")
+
+        result = runner.invoke(cli, ["job", "list", "test-connector-id"])
+
+    assert result.exit_code == 1
+    assert "config file is empty or invalid" in result.output
+    assert "connectors login" in result.output
+
+
+def test_command_with_malformed_config_reports_yaml_error(
+    tmp_path, use_real_cli_config
+):
+    runner = CliRunner()
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        os.makedirs(os.path.dirname(CONFIG_FILE_PATH))
+        with open(CONFIG_FILE_PATH, "w") as config_file:
+            config_file.write("elasticsearch: [\n")
+
+        result = runner.invoke(cli, ["job", "list", "test-connector-id"])
+
+    assert result.exit_code == 1
+    assert "while parsing a flow sequence" in result.output
+    assert "config file is empty or invalid" not in result.output
+    assert "connectors login" in result.output
+
+
+@pytest.mark.parametrize(
+    "config_content",
+    [
+        "",
+        "null\n",
+        "{}\n",
+        "foo: bar\n",
+        "elasticsearch: {}\n",
+        "elasticsearch: null\n",
+        "elasticsearch: []\n",
+        "elasticsearch: [\n",
+    ],
+)
+def test_command_with_invalid_config_raises_click_exception(
+    tmp_path, use_real_cli_config, config_content
+):
+    runner = CliRunner()
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        os.makedirs(os.path.dirname(CONFIG_FILE_PATH))
+        with open(CONFIG_FILE_PATH, "w") as config_file:
+            config_file.write(config_content)
+
+        result = runner.invoke(
+            cli,
+            ["job", "list", "test-connector-id"],
+            standalone_mode=False,
+        )
+
+    assert result.exit_code == 1
+    assert isinstance(result.exception, click.ClickException)
+
+
+def test_command_without_config_file_raises_click_exception(
+    tmp_path, use_real_cli_config
+):
+    runner = CliRunner()
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        result = runner.invoke(
+            cli,
+            ["job", "list", "test-connector-id"],
+            standalone_mode=False,
+        )
+
+    assert result.exit_code == 1
+    assert isinstance(result.exception, click.ClickException)
 
 
 @patch("click.confirm", MagicMock(return_value=True))
