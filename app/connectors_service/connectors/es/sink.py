@@ -84,6 +84,7 @@ UPDATES_QUEUED = "doc_updates_queued"
 DELETES_QUEUED = "doc_deletes_queued"
 DOCS_EXTRACTED = "docs_extracted"
 DOCS_FILTERED = "docs_filtered"
+DOCS_SKIPPED = "docs_skipped"
 DOCS_DROPPED = "docs_dropped"
 DOCS_DROPPED_TOO_LARGE = "docs_dropped_too_large"
 ID_MISSING = "_ids_missing"
@@ -660,6 +661,7 @@ class Extractor:
                         self._logger.debug(
                             f"Skipping document with id '{doc_id}' because field '{TIMESTAMP_FIELD}' has not changed since last sync"
                         )
+                        self.counters.increment(DOCS_SKIPPED)
                         continue
 
                     self.counters.increment(UPDATES_QUEUED)
@@ -745,6 +747,7 @@ class Extractor:
         num_downloads = 0
         try:
             async for count, doc in aenumerate(generator):
+                self.counters.increment(DOCS_EXTRACTED)
                 doc, lazy_download, operation = doc
                 if count % self.display_every == 0:
                     self._log_progress()
@@ -755,6 +758,7 @@ class Extractor:
                 if self.basic_rule_engine and not self.basic_rule_engine.should_ingest(
                     doc
                 ):
+                    self.counters.increment(DOCS_FILTERED)
                     continue
 
                 if operation == OP_INDEX:
@@ -814,11 +818,10 @@ class Extractor:
                 f"Size of {len(existing_ids)} access control document ids  in memory is {get_mib_size(existing_ids)}MiB"
             )
 
-        count = 0
         async for doc in generator:
+            self.counters.increment(DOCS_EXTRACTED)
             doc, _, _ = doc
-            count += 1
-            if count % self.display_every == 0:
+            if self.counters.get(DOCS_EXTRACTED) % self.display_every == 0:
                 self._log_progress()
 
             doc_id = doc.pop("_id")
@@ -833,6 +836,7 @@ class Extractor:
                 )
 
                 if doc_not_updated:
+                    self.counters.increment(DOCS_SKIPPED)
                     continue
 
                 self.counters.increment(UPDATES_QUEUED)
@@ -876,6 +880,9 @@ class Extractor:
     ):
         self._logger.info(
             "Sync progress -- "
+            f"extracted: {self.counters.get(DOCS_EXTRACTED)} | "
+            f"filtered: {self.counters.get(DOCS_FILTERED)} | "
+            f"skipped: {self.counters.get(DOCS_SKIPPED)} | "
             f"created: {self.counters.get(CREATES_QUEUED)} | "
             f"updated: {self.counters.get(UPDATES_QUEUED)} | "
             f"deleted: {self.counters.get(DELETES_QUEUED)}"
