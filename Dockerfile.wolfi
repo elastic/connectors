@@ -1,4 +1,4 @@
-FROM docker.elastic.co/wolfi/python:3.11-dev@sha256:def5ce3144e3364fceb7adf118c603a2d0d90e75474ac503843d1776f9af3f92
+FROM docker.elastic.co/wolfi/python:3.11-dev@sha256:9e6781632f5601900e2f9db36db9d28b36035943a75ff6858c85641c55969cd8
 USER root
 COPY . /app
 WORKDIR /app
