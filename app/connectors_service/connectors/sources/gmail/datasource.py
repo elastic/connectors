@@ -3,12 +3,7 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-import base64
-from email import policy
-from email.message import EmailMessage
-from email.parser import BytesParser
 from functools import cached_property
-from typing import cast
 
 from aiogoogle import AuthError
 from connectors_sdk.source import BaseDataSource, ConfigurableFieldValueError
@@ -16,6 +11,7 @@ from connectors_sdk.utils import iso_utc
 
 from connectors.access_control import ACCESS_CONTROL, es_access_control_query
 from connectors.sources.gmail.validator import GMailAdvancedRulesValidator
+from connectors.sources.shared.email_trim import extract_body_eml
 from connectors.sources.shared.google import (
     GMailClient,
     GoogleDirectoryClient,
@@ -34,65 +30,8 @@ SERVICE_ACCOUNT_CREDENTIALS_LABEL = "GMail service account JSON"
 SUBJECT_LABEL = "Google Workspace admin email"
 CUSTOMER_ID_LABEL = "Google customer id"
 
-# Headers kept when trimming; everything else is dropped.
-_KEPT_HEADERS = (
-    "Subject",
-    "From",
-    "Reply-To",
-    "To",
-    "Cc",
-    "Bcc",
-    "Date",
-    "Message-ID",
-)
-
-_DEFAULT_POLICY = policy.default
-
-
-def _extract_body_eml(raw_base64url):
-    """Trim a Gmail base64url RFC 822 message to a small .eml with only the kept
-    headers and one body part (``text/plain`` preferred, ``text/html`` fallback).
-    Returns standard base64 ready for ``_attachment``, ``None`` on parse failure
-    (caller falls back to the legacy payload), or the input unchanged when empty.
-    """
-    if not raw_base64url:
-        return raw_base64url
-
-    try:
-        # Gmail omits padding; appending 3 '=' covers every valid input length.
-        raw_bytes = base64.urlsafe_b64decode(raw_base64url + "===")
-        # typeshed declares `parsebytes` / `get_body` as `Message`, but with
-        # `policy.default` they return `EmailMessage`. The casts below are
-        # runtime no-ops that align pyright with reality.
-        original = cast(
-            EmailMessage,
-            BytesParser(_class=EmailMessage, policy=_DEFAULT_POLICY).parsebytes(
-                raw_bytes
-            ),
-        )
-
-        rebuilt = EmailMessage(policy=_DEFAULT_POLICY)
-        for header in _KEPT_HEADERS:
-            if original[header] is not None:
-                rebuilt[header] = original[header]
-
-        body = cast(
-            "EmailMessage | None",
-            original.get_body(preferencelist=("plain", "html")),
-        )
-        if body is not None:
-            rebuilt.set_content(
-                body.get_content(),
-                subtype=body.get_content_subtype(),
-                charset=body.get_content_charset() or "utf-8",
-            )
-        else:
-            # DSN / calendar invite / encrypted: headers-only output, no crash.
-            rebuilt.set_content("", subtype="plain", charset="utf-8")
-
-        return base64.b64encode(rebuilt.as_bytes()).decode("ascii")
-    except Exception:
-        return None
+# Backwards-compatible alias for tests and external imports.
+_extract_body_eml = extract_body_eml
 
 
 class GMailDataSource(BaseDataSource):
