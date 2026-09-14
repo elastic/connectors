@@ -606,9 +606,7 @@ class OutlookDataSource(BaseDataSource):
             )
             document["_attachment"] = mail_attachment_base64(
                 mail=mail,
-                include_full_raw_message=self.configuration[
-                    "include_full_raw_message"
-                ],
+                include_full_raw_message=self.configuration["include_full_raw_message"],
                 logger=self._logger,
             )
             yield (
