@@ -4,7 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import base64
-from datetime import date, datetime
+from datetime import datetime
 from email import policy
 from email.message import EmailMessage
 from email.utils import format_datetime
@@ -13,6 +13,12 @@ from connectors.sources.shared.email_trim import trim_rfc822_bytes_to_base64
 from connectors.utils import html_to_text
 
 _DEFAULT_POLICY = policy.default
+
+
+def _empty_minimal_eml_bytes():
+    message = EmailMessage(policy=_DEFAULT_POLICY)
+    message.set_content("", subtype="plain", charset="utf-8")
+    return message.as_bytes()
 
 
 def _recipient_addresses(recipients):
@@ -67,7 +73,7 @@ def build_minimal_eml_from_mail(mail):
         message["Bcc"] = bcc_addresses
 
     datetime_received = getattr(mail, "datetime_received", None)
-    if isinstance(datetime_received, (datetime, date)):
+    if isinstance(datetime_received, datetime):
         message["Date"] = format_datetime(datetime_received)
 
     message_id = getattr(mail, "message_id", None)
@@ -79,7 +85,7 @@ def build_minimal_eml_from_mail(mail):
         message.set_content(text_body, subtype="plain", charset="utf-8")
     else:
         body = getattr(mail, "body", None)
-        if isinstance(body, str) and body:
+        if body:
             message.set_content(
                 html_to_text(html=body) or "",
                 subtype="plain",
@@ -89,6 +95,18 @@ def build_minimal_eml_from_mail(mail):
             message.set_content("", subtype="plain", charset="utf-8")
 
     return message.as_bytes()
+
+
+def _minimal_eml_bytes_from_mail(mail, logger, mail_id):
+    try:
+        return build_minimal_eml_from_mail(mail)
+    except Exception:
+        logger.warning(
+            "Failed to build minimal EML for %s; using empty body fallback.",
+            mail_id,
+            exc_info=True,
+        )
+        return _empty_minimal_eml_bytes()
 
 
 def mail_attachment_base64(mail, include_full_raw_message, logger):
@@ -101,7 +119,9 @@ def mail_attachment_base64(mail, include_full_raw_message, logger):
     if include_full_raw_message:
         if mime_content:
             return base64.b64encode(mime_content).decode("ascii")
-        return base64.b64encode(build_minimal_eml_from_mail(mail)).decode("ascii")
+        return base64.b64encode(
+            _minimal_eml_bytes_from_mail(mail, logger, mail_id)
+        ).decode("ascii")
 
     if mime_content:
         attachment = trim_rfc822_bytes_to_base64(mime_content)
@@ -114,4 +134,6 @@ def mail_attachment_base64(mail, include_full_raw_message, logger):
         )
         return base64.b64encode(mime_content).decode("ascii")
 
-    return base64.b64encode(build_minimal_eml_from_mail(mail)).decode("ascii")
+    return base64.b64encode(_minimal_eml_bytes_from_mail(mail, logger, mail_id)).decode(
+        "ascii"
+    )

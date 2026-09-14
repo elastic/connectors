@@ -2300,6 +2300,46 @@ class TestOutlookMailAttachment:
         body = rebuilt.get_body(preferencelist=("plain", "html"))
         assert body.get_content().strip() == "Plain from EWS"
 
+    def test_uses_synthesized_eml_when_mime_content_empty(self):
+        mail = build_mail_document()
+        mail.mime_content = b""
+
+        attachment = mail_attachment_base64(
+            mail, include_full_raw_message=False, logger=MagicMock()
+        )
+        rebuilt = self._decode_attachment(attachment)
+        body = rebuilt.get_body(preferencelist=("plain", "html"))
+        assert "dummy mail" in body.get_content().lower()
+
+    def test_prefers_plain_part_in_multipart_mime(self):
+        mime = (
+            b"Subject: Both parts\r\n"
+            b"From: sender@example.com\r\n"
+            b"To: recipient@example.com\r\n"
+            b"Date: Wed, 13 May 2026 10:00:00 +0000\r\n"
+            b"MIME-Version: 1.0\r\n"
+            b'Content-Type: multipart/alternative; boundary="alt"\r\n'
+            b"\r\n"
+            b"--alt\r\n"
+            b"Content-Type: text/plain; charset=utf-8\r\n"
+            b"\r\n"
+            b"Plain wins.\r\n"
+            b"--alt\r\n"
+            b"Content-Type: text/html; charset=utf-8\r\n"
+            b"\r\n"
+            b"<html><body>HTML loses.</body></html>\r\n"
+            b"--alt--\r\n"
+        )
+        attachment = mail_attachment_base64(
+            self._mail_with_mime(mime),
+            include_full_raw_message=False,
+            logger=MagicMock(),
+        )
+        rebuilt = self._decode_attachment(attachment)
+        body = rebuilt.get_body(preferencelist=("plain", "html"))
+        assert "Plain wins" in body.get_content()
+        assert "HTML loses" not in body.get_content()
+
     def test_falls_back_when_trim_fails(self, monkeypatch):
         monkeypatch.setattr(
             "connectors.sources.outlook.mail_attachment.trim_rfc822_bytes_to_base64",
