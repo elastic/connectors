@@ -4366,6 +4366,9 @@ class TestSharepointOnlineDataSource:
             ("", True),
             ("5", True),
             ("not-a-version", True),
+            # An unparsable minor version is not evidence of a published page
+            ("3.foo", False),
+            ("1.x", False),
         ],
     )
     def test_is_page_published(self, version_string, expected_published):

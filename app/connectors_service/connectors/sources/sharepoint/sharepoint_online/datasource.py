@@ -71,7 +71,9 @@ def _is_page_published(version_string):
     try:
         return int(minor) == 0
     except ValueError:
-        return True
+        # A minor version we cannot parse is no evidence of a published page,
+        # so restrict access rather than assume the page is live.
+        return False
 
 
 class SharepointOnlineDataSource(BaseDataSource):
