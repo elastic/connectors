@@ -3,15 +3,18 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+import os
 import warnings
-from unittest.mock import MagicMock, Mock
+from unittest.mock import MagicMock, Mock, patch
 
+import pytest
 from elastic_transport import SecurityWarning
 from google.protobuf import json_format
 from google.protobuf.struct_pb2 import Struct
 
 from connectors.agent.config import ConnectorsAgentConfigurationWrapper
 from connectors.es.client import ESClient
+from connectors.fips import FIPS_MODE_ENV_VAR, FIPSModeError
 
 CONNECTOR_ID = "test-connector"
 SERVICE_TYPE = "test-service-type"
@@ -430,3 +433,34 @@ def test_config_changed_when_connectors_did_not_change():
     }
 
     assert config_wrapper.config_changed(new_config) is False
+
+
+def test_fips_mode_is_off_when_env_var_is_not_set():
+    with patch.dict(os.environ, {}, clear=True):
+        config_wrapper = ConnectorsAgentConfigurationWrapper()
+
+    assert config_wrapper.get()["service"]["fips_mode"] is False
+
+
+@pytest.mark.parametrize("value", ["true", "TRUE", " true "])
+def test_fips_mode_is_on_when_env_var_is_true(value):
+    with patch.dict(os.environ, {FIPS_MODE_ENV_VAR: value}, clear=True):
+        config_wrapper = ConnectorsAgentConfigurationWrapper()
+
+    assert config_wrapper.get()["service"]["fips_mode"] is True
+
+
+@pytest.mark.parametrize("value", ["false", "FALSE", ""])
+def test_fips_mode_is_off_when_env_var_is_false(value):
+    with patch.dict(os.environ, {FIPS_MODE_ENV_VAR: value}, clear=True):
+        config_wrapper = ConnectorsAgentConfigurationWrapper()
+
+    assert config_wrapper.get()["service"]["fips_mode"] is False
+
+
+@pytest.mark.parametrize("value", ["ture", "enabled", "yes", "1"])
+def test_startup_fails_when_env_var_value_is_not_recognised(value):
+    """A typo must not silently turn FIPS mode off."""
+    with patch.dict(os.environ, {FIPS_MODE_ENV_VAR: value}, clear=True):
+        with pytest.raises(FIPSModeError):
+            ConnectorsAgentConfigurationWrapper()

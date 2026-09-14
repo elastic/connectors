@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from connectors.agent.component import ConnectorsAgentComponent
+from connectors.fips import FIPSModeError
 
 
 class StubMultiService:
@@ -43,3 +44,22 @@ async def test_try_update_without_auth_data(
 
     assert stub_multi_service.has_ran
     assert stub_multi_service.has_shutdown
+
+
+@pytest.mark.asyncio
+@patch("connectors.agent.component.MultiService", return_value=StubMultiService())
+@patch("connectors.agent.component.new_v2_from_reader", return_value=MagicMock())
+async def test_run_reraises_the_error_that_killed_the_connectors_service(
+    stub_multi_service, patch_new_v2_from_reader
+):
+    """MultiService swallows the first exception, the component must not."""
+    component = ConnectorsAgentComponent()
+    fatal_error = FIPSModeError("OpenSSL is not in FIPS mode")
+
+    async def fail_after_timeout():
+        await asyncio.sleep(0.1)
+        component.connector_service_manager.fatal_error = fatal_error
+        component.stop("SIGINT")
+
+    with pytest.raises(FIPSModeError):
+        await asyncio.gather(component.run(), fail_after_timeout())

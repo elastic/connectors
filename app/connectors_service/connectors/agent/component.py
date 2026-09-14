@@ -53,6 +53,10 @@ class ConnectorsAgentComponent:
         instance of Connectors Service with this configuration.
 
         Additionally services for handling Check-in and Actions will be started to implement the protocol correctly.
+
+        Raises:
+            Exception: Whatever killed the Connectors Service, so that the process
+                exits with a failure instead of looking like a clean shutdown.
         """
         logger.info("Starting connectors agent component")
         client = new_v2_from_reader(self.buffer, self.ver, self.opts)
@@ -71,6 +75,11 @@ class ConnectorsAgentComponent:
         )
 
         await self.multi_service.run()
+
+        # MultiService returns without re-raising when one of its services dies,
+        # so ask the Connectors Service whether it stopped because of an error
+        if self.connector_service_manager.fatal_error is not None:
+            raise self.connector_service_manager.fatal_error
 
     def stop(self, sig):
         """Shutdown everything running in the component.

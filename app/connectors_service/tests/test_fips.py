@@ -11,10 +11,13 @@ from unittest.mock import patch
 import pytest
 
 from connectors.fips import (
+    FIPS_MODE_ENV_VAR,
     NON_FIPS_COMPLIANT_CONNECTORS,
     FIPSConfig,
     FIPSModeError,
+    apply_fips_mode,
     filter_fips_compliant_sources,
+    fips_mode_from_env,
     is_connector_fips_compliant,
     is_openssl_fips_mode,
     validate_fips_mode,
@@ -272,3 +275,81 @@ class TestFIPSIntegration:
         FIPSConfig.set_fips_mode(False)
         # Should not raise any exception regardless of environment
         validate_fips_mode()
+
+
+class TestFIPSModeFromEnv:
+    """Tests for reading FIPS mode from the environment."""
+
+    @pytest.mark.parametrize("value", ["true", "TRUE", "True", "tRuE", " true "])
+    def test_true_turns_fips_mode_on(self, value):
+        with patch.dict(os.environ, {FIPS_MODE_ENV_VAR: value}):
+            assert fips_mode_from_env() is True
+
+    @pytest.mark.parametrize("value", ["false", "FALSE", "", "  "])
+    def test_false_and_empty_turn_fips_mode_off(self, value):
+        with patch.dict(os.environ, {FIPS_MODE_ENV_VAR: value}):
+            assert fips_mode_from_env() is False
+
+    def test_unset_variable_means_off(self):
+        with patch.dict(os.environ, {}, clear=True):
+            assert fips_mode_from_env() is False
+
+    @pytest.mark.parametrize("value", ["ture", "enabled", "yes", "1", "0"])
+    def test_unrecognised_value_raises(self, value):
+        """A typo must fail loudly instead of silently turning FIPS mode off."""
+        with patch.dict(os.environ, {FIPS_MODE_ENV_VAR: value}):
+            with pytest.raises(FIPSModeError) as exc_info:
+                fips_mode_from_env()
+            assert FIPS_MODE_ENV_VAR in str(exc_info.value)
+
+
+class TestApplyFIPSMode:
+    """Tests for apply_fips_mode, the shared entry point into FIPS mode."""
+
+    SOURCES = {
+        "github": "connectors.sources.github:GitHubDataSource",
+        "network_drive": "connectors.sources.network_drive:NASDataSource",
+        "sharepoint_server": "connectors.sources.sharepoint.sharepoint_server:SharepointServerDataSource",
+    }
+
+    def _config(self, fips_mode=None):
+        service = {} if fips_mode is None else {"fips_mode": fips_mode}
+        return {"service": service, "sources": dict(self.SOURCES)}
+
+    def test_fips_mode_off_keeps_all_sources(self):
+        config = apply_fips_mode(self._config(False))
+
+        assert FIPSConfig.is_fips_mode_enabled() is False
+        assert config["sources"] == self.SOURCES
+
+    def test_fips_mode_defaults_to_off_when_not_configured(self):
+        config = apply_fips_mode(self._config())
+
+        assert FIPSConfig.is_fips_mode_enabled() is False
+        assert config["sources"] == self.SOURCES
+
+    @patch("connectors.fips.is_openssl_fips_mode", return_value=True)
+    def test_fips_mode_on_drops_non_fips_sources(self, patch_openssl):
+        config = apply_fips_mode(self._config(True))
+
+        assert FIPSConfig.is_fips_mode_enabled() is True
+        assert set(config["sources"]) == {"github"}
+
+    @patch("connectors.fips.is_openssl_fips_mode", return_value=False)
+    def test_fips_mode_on_raises_when_openssl_is_not_fips(self, patch_openssl):
+        with pytest.raises(FIPSModeError):
+            apply_fips_mode(self._config(True))
+
+    @patch("connectors.fips.is_openssl_fips_mode", return_value=True)
+    def test_input_config_is_not_mutated(self, patch_openssl):
+        original = self._config(True)
+
+        apply_fips_mode(original)
+
+        assert original["sources"] == self.SOURCES
+
+    @patch("connectors.fips.is_openssl_fips_mode", return_value=True)
+    def test_missing_sources_key_is_tolerated(self, patch_openssl):
+        config = apply_fips_mode({"service": {"fips_mode": True}})
+
+        assert config["sources"] == {}

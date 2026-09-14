@@ -9,6 +9,7 @@ from connectors_sdk.utils import nested_get_from_dict
 
 from connectors.agent.logger import get_logger
 from connectors.config import add_defaults
+from connectors.fips import fips_mode_from_env
 
 logger = get_logger("config")
 
@@ -28,10 +29,13 @@ class ConnectorsAgentConfigurationWrapper:
         There's default config that allows us to run connectors service. When final
         configuration is reported these defaults will be merged with defaults from
         Connectors Service config and specific config coming from Agent.
+
+        Agent does not report FIPS mode, so it is read from the environment.
         """
         self._default_config = {
             "service": {
                 "log_level": "INFO",
+                "fips_mode": fips_mode_from_env(),
             },
             "connectors": [],
         }
