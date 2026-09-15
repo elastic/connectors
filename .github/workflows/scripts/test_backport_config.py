@@ -29,6 +29,19 @@ class TestBackportConfig(unittest.TestCase):
                 f"missing Renovate label for maintenance branch {branch}",
             )
 
+    def test_maintenance_branches_in_target_branch_choices(self):
+        backportrc = json.loads((REPO_ROOT / ".backportrc.json").read_text())
+        choices = {
+            entry["name"] if isinstance(entry, dict) else entry
+            for entry in backportrc["targetBranchChoices"]
+        }
+        for branch in backportrc["maintenanceBranches"]:
+            self.assertIn(
+                branch,
+                choices,
+                f"maintenanceBranches contains {branch} missing from targetBranchChoices",
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
