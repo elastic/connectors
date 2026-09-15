@@ -3,11 +3,10 @@
     { "name": "main", "checked": true },
     "9.5",
     "9.4",
-    "9.3",
-    "9.2",
-    "9.1",
     "8.19"
   ],
+  "maintenanceBranches": ["9.5", "9.4", "8.19"],
+  "renovateVersionLabels": ["v8.19.0", "v9.4.0", "v9.5.0", "v9.6.0"],
   "fork": false,
   "targetPRLabels": ["backport"],
   "branchLabelMapping": {
