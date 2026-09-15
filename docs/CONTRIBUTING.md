@@ -124,6 +124,12 @@ Be sure to read about our [unit tests](./DEVELOPING.md#unit-tests) and [integrat
 
 Make sure to include the appropriate backport labels, if your PR needs to be backported to a past version.
 
+New pull requests to `main` automatically receive `auto-backport`, `v<main VERSION>`, and `v<VERSION>` for each branch listed in `maintenanceBranches` in [`.backportrc.json`](../.backportrc.json) (VERSION read from that branch when the PR opens). On release rotation, update `maintenanceBranches`, `targetBranchChoices`, and `renovateVersionLabels` in [`.backportrc.json`](../.backportrc.json), then copy `renovateVersionLabels` into the `labels` array in `renovate.json` (must stay in sync; `test_backport_config.py` enforces this). Remove labels on a PR if a fix should not be backported to a given branch.
+
+For manual `8.19` backports, open a PR from a branch on this repository (not a fork) with title `[8.19] …`, label `backport`, and a body line `Backported from #<main-pr>` (main PR must be merged and include a `v8.19.x` label). Automatic approval requires an Elastic org owner or member (`OWNER` or `MEMBER` on GitHub); everyone else needs a human review.
+
+This workflow file must exist on the `8.19` branch before it runs: merge the automation to `main`, then include the same `.github` changes in the first backport PR to `8.19` (that first PR will still need a human approval).
+
 
 ## Pull Request Etiquette
 
