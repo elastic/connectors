@@ -92,7 +92,8 @@ class GMailDataSource(BaseDataSource):
                 "label": "Index full raw email (including headers)",
                 "order": 5,
                 "tooltip": (
-                    "When disabled (default), only the email body is indexed. "
+                    "When disabled (default), the email body and a small set of headers "
+                    "(such as Subject, From, and To) are indexed. "
                     "Enable to keep the full raw message including routing and "
                     "authentication headers - useful for edge cases where body "
                     "extraction misses content."
