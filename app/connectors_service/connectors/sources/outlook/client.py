@@ -21,9 +21,21 @@ from exchangelib import (
     Identity,
     OAuth2Credentials,
 )
-from exchangelib.errors import ErrorFolderNotFound, ErrorManagedFolderNotFound
-from exchangelib.folders import BaseFolder, Calendar, Messages
-from exchangelib.items import Item
+from exchangelib.errors import (
+    ErrorAccessDenied,
+    ErrorFolderNotFound,
+    ErrorManagedFolderNotFound,
+    TransportError,
+)
+from exchangelib.folders import (
+    BaseFolder,
+    Calendar,
+    Contacts,
+    Messages,
+    MsgFolderRoot,
+    Tasks,
+)
+from exchangelib.items import Item, Message
 from exchangelib.protocol import BaseProtocol, NoVerifyHTTPAdapter
 from ldap3 import SAFE_SYNC, Connection, Server
 
@@ -53,6 +65,10 @@ from connectors.utils import (
 
 # Folder-absent faults: skip the folder, keep syncing.
 FOLDER_SKIP_ERRORS = (ErrorFolderNotFound, ErrorManagedFolderNotFound)
+EXTRA_MAIL_FOLDER_ERRORS = FOLDER_SKIP_ERRORS + (
+    ErrorAccessDenied,
+    TransportError,
+)
 
 
 def _folder_sync_id(folder):
@@ -65,10 +81,19 @@ def _folder_sync_id(folder):
     return getattr(folder_id_obj, "id", folder_id_obj)
 
 
+def _is_mail_folder(folder):
+    if isinstance(folder, (Calendar, Contacts, Tasks, MsgFolderRoot)):
+        return False
+    supported = getattr(folder, "supported_item_models", None)
+    if not supported:
+        return False
+    return Message in supported
+
+
 def _discover_additional_mail_folders(msg_folder_root, synced_folder_ids):
     additional = []
     for folder in msg_folder_root.walk():
-        if not isinstance(folder, Messages):
+        if not _is_mail_folder(folder):
             continue
         sync_id = _folder_sync_id(folder)
         if sync_id is not None and sync_id in synced_folder_ids:
@@ -469,7 +494,7 @@ class OutlookClient:
 
         return await asyncio.to_thread(getattr, account, mail_type["folder"])
 
-    async def _yield_mails_from_folder(self, account, folder_object, mail_type):
+    async def _yield_mails_from_folder(self, folder_object, mail_type):
         mails = await asyncio.to_thread(
             lambda folder=folder_object: list(folder.all().only(*MAIL_FIELDS))
         )
@@ -501,7 +526,7 @@ class OutlookClient:
                 synced_folder_ids.add(sync_id)
 
             async for mail, resolved_mail_type in self._yield_mails_from_folder(
-                account, folder_object, mail_type
+                folder_object, mail_type
             ):
                 yield mail, resolved_mail_type
 
@@ -514,7 +539,7 @@ class OutlookClient:
                 account.msg_folder_root,
                 synced_folder_ids,
             )
-        except FOLDER_SKIP_ERRORS:
+        except EXTRA_MAIL_FOLDER_ERRORS:
             self._logger.warning(
                 f"Could not walk mail folders for {account.primary_smtp_address}, "
                 "skipping additional folders."
@@ -530,13 +555,14 @@ class OutlookClient:
             )
             try:
                 async for mail, resolved_mail_type in self._yield_mails_from_folder(
-                    account, folder_object, mail_type
+                    folder_object, mail_type
                 ):
                     yield mail, resolved_mail_type
-            except FOLDER_SKIP_ERRORS:
+            except EXTRA_MAIL_FOLDER_ERRORS as error:
                 self._logger.warning(
                     f"Could not fetch mail from folder {folder_name!r} for "
-                    f"{account.primary_smtp_address}, skipping."
+                    f"{account.primary_smtp_address}, skipping: "
+                    f"{error.__class__.__name__}."
                 )
 
     async def get_calendars(self, account):

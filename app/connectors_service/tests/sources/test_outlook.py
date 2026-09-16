@@ -25,7 +25,7 @@ from exchangelib.errors import (
     ErrorNonPrimarySmtpAddress,
     TransportError,
 )
-from exchangelib.folders import BaseFolder, Calendar, Messages, Tasks
+from exchangelib.folders import BaseFolder, Calendar, Folder, Inbox, Messages, Tasks
 from exchangelib.items import (
     CalendarItem,
     Contact,
@@ -52,6 +52,7 @@ from connectors.sources.outlook.client import (
     UnauthorizedException,
     UsersFetchFailed,
     _discover_additional_mail_folders,
+    _is_mail_folder,
 )
 from connectors.sources.outlook.constants import (
     INBOX_MAIL_OBJECT,
@@ -358,6 +359,13 @@ def typed_folder(folder_cls, object_type, folder_id=None):
     folder.object_type = object_type
     folder.id = folder_id or f"{object_type}-folder"
     folder.all.return_value = AllObjects(object_type=object_type)
+    return folder
+
+
+def typed_user_mail_folder(folder_cls, object_type, folder_id=None):
+    """Mail folder as Exchange types it (Inbox/Folder), not Messages."""
+    folder = typed_folder(folder_cls, object_type, folder_id=folder_id)
+    folder.supported_item_models = (Message,)
     return folder
 
 
@@ -1621,10 +1629,19 @@ def test_mails_doc_formatter_adds_folder_name_for_additional_mail():
     assert document["folder_name"] == "PRTG Done"
 
 
+def test_is_mail_folder_accepts_user_folder_rejects_calendar():
+    custom = typed_user_mail_folder(Folder, MAIL, folder_id="custom-id")
+    calendar = typed_folder(Calendar, CALENDAR, folder_id="calendar-id")
+    calendar.supported_item_models = ()
+
+    assert _is_mail_folder(custom) is True
+    assert _is_mail_folder(calendar) is False
+
+
 def test_discover_additional_mail_folders_skips_default_and_non_mail():
-    inbox = typed_folder(Messages, MAIL, folder_id="inbox-id")
+    inbox = typed_user_mail_folder(Inbox, MAIL, folder_id="inbox-id")
     inbox.name = "Inbox"
-    custom = typed_folder(Messages, MAIL, folder_id="custom-id")
+    custom = typed_user_mail_folder(Folder, MAIL, folder_id="custom-id")
     custom.name = "PRTG Done"
     calendar = typed_folder(Calendar, CALENDAR, folder_id="calendar-id")
     calendar.name = "Calendar"
@@ -1641,7 +1658,7 @@ def test_discover_additional_mail_folders_skips_default_and_non_mail():
 async def test_get_mails_sync_all_mail_folders_includes_custom_folder():
     async with create_outlook_source(sync_all_mail_folders=True) as source:
         account = MockAccount()
-        custom_folder = typed_folder(Messages, MAIL, folder_id="custom-id")
+        custom_folder = typed_user_mail_folder(Folder, MAIL, folder_id="custom-id")
         custom_folder.name = "PRTG Done"
         account.msg_folder_root.walk = MagicMock(
             return_value=[account.inbox, custom_folder]
