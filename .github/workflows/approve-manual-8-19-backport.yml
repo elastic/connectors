@@ -1,0 +1,62 @@
+name: Approve manual 8.19 backport
+
+# Uses pull_request_target so approvals can use REPO_SCOPED_TOKEN; only runs
+# checked-in validation logic (not code from the PR branch).
+on:
+  pull_request_target:
+    branches:
+      - 8.19
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - labeled
+
+permissions:
+  pull-requests: write
+  contents: read
+
+concurrency:
+  group: approve-manual-8-19-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  approve:
+    if: |
+      contains(github.event.pull_request.labels.*.name, 'backport')
+      && github.event.pull_request.user.login != 'github-actions[bot]'
+      && github.event.pull_request.head.repo.fork == false
+      && github.event.pull_request.head.repo.full_name == github.repository
+      && contains(fromJSON('["MEMBER", "OWNER"]'), github.event.pull_request.author_association)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.ref }}
+          sparse-checkout: .github/workflows/scripts
+
+      - name: Validate backport PR
+        id: validate
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: python3 .github/workflows/scripts/validate_manual_8_19_backport.py
+
+      - name: Approve
+        if: steps.validate.outputs.approved == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.REPO_SCOPED_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          APPROVED=$(gh pr view "${PR_NUMBER}" --repo "${{ github.repository }}" \
+            --json reviews --jq '[.reviews[] | select(.author.login == "entsearchmachine" and .state == "APPROVED")] | length')
+          if [ "${APPROVED}" != "0" ]; then
+            echo "Already approved by entsearchmachine; skipping."
+            exit 0
+          fi
+          gh api \
+            --method POST \
+            "repos/${{ github.repository }}/pulls/${PR_NUMBER}/reviews" \
+            -f event=APPROVE
