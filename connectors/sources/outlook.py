@@ -53,6 +53,7 @@ from connectors.access_control import (
     es_access_control_query,
     prefix_identity,
 )
+from connectors.sources.outlook_mail_attachment import mail_attachment_base64
 from connectors.logger import logger
 from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.utils import (
@@ -114,11 +115,16 @@ MAIL_FIELDS = [
     "to_recipients",
     "cc_recipients",
     "bcc_recipients",
+    "reply_to",
     "last_modified_time",
     "subject",
     "importance",
     "categories",
     "body",
+    "text_body",
+    "mime_content",
+    "message_id",
+    "datetime_received",
     "has_attachments",
     "attachments",
 ]
@@ -1009,10 +1015,24 @@ class OutlookDataSource(BaseDataSource):
                 "ui_restrictions": ["advanced"],
                 "value": False,
             },
+            "include_full_raw_message": {
+                "display": "toggle",
+                "label": "Index full raw email (including headers)",
+                "order": 13,
+                "tooltip": (
+                    "When disabled (default), the email body and a small set of headers "
+                    "(such as Subject, From, and To) are indexed. "
+                    "Enable to keep the full raw message including routing and "
+                    "authentication headers - useful for edge cases where body "
+                    "extraction misses content."
+                ),
+                "type": "bool",
+                "value": False,
+            },
             "use_document_level_security": {
                 "display": "toggle",
                 "label": "Enable document level security",
-                "order": 13,
+                "order": 14,
                 "tooltip": "Document level security ensures identities and permissions set in Outlook are maintained in Elasticsearch. This enables you to restrict and personalize read-access users and groups have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
                 "type": "bool",
                 "value": False,
@@ -1242,6 +1262,11 @@ class OutlookDataSource(BaseDataSource):
                 mail=mail,
                 mail_type=mail_type,
                 timezone=timezone,
+            )
+            document["_attachment"] = mail_attachment_base64(
+                mail=mail,
+                include_full_raw_message=self.configuration["include_full_raw_message"],
+                logger=self._logger,
             )
             yield (
                 self._decorate_with_access_control(
