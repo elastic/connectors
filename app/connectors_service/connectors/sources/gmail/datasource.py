@@ -11,6 +11,7 @@ from connectors_sdk.utils import iso_utc
 
 from connectors.access_control import ACCESS_CONTROL, es_access_control_query
 from connectors.sources.gmail.validator import GMailAdvancedRulesValidator
+from connectors.sources.shared.email_trim import extract_body_eml
 from connectors.sources.shared.google import (
     GMailClient,
     GoogleDirectoryClient,
@@ -28,6 +29,9 @@ from connectors.utils import (
 SERVICE_ACCOUNT_CREDENTIALS_LABEL = "GMail service account JSON"
 SUBJECT_LABEL = "Google Workspace admin email"
 CUSTOMER_ID_LABEL = "Google customer id"
+
+# Backwards-compatible alias for tests and external imports.
+_extract_body_eml = extract_body_eml
 
 
 class GMailDataSource(BaseDataSource):
@@ -83,10 +87,24 @@ class GMailDataSource(BaseDataSource):
                 "type": "bool",
                 "value": False,
             },
+            "include_full_raw_message": {
+                "display": "toggle",
+                "label": "Index full raw email (including headers)",
+                "order": 5,
+                "tooltip": (
+                    "When disabled (default), the email body and a small set of headers "
+                    "(such as Subject, From, and To) are indexed. "
+                    "Enable to keep the full raw message including routing and "
+                    "authentication headers - useful for edge cases where body "
+                    "extraction misses content."
+                ),
+                "type": "bool",
+                "value": False,
+            },
             "use_document_level_security": {
                 "display": "toggle",
                 "label": "Enable document level security",
-                "order": 5,
+                "order": 6,
                 "tooltip": "Document level security ensures identities and permissions set in GMail are maintained in Elasticsearch. This enables you to restrict and personalize read-access users have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
                 "type": "bool",
                 "value": True,
@@ -243,29 +261,30 @@ class GMailDataSource(BaseDataSource):
 
                 yield self._user_access_control_doc(user, access_control)
 
-    @staticmethod
-    def _message_doc(message):
-        timestamp_field = "_timestamp"
+    def _message_doc(self, message):
+        message_id = message.get(MessageFields.ID.value)
+        raw = message.get(MessageFields.FULL_MESSAGE.value)
+        timestamp = message.get(MessageFields.CREATION_DATE.value)
 
-        # We're using the `_attachment` field here so the attachment processor on the ES side decodes the base64 value
-        message_fields_to_es_doc_mappings = {
-            MessageFields.ID: "_id",
-            MessageFields.FULL_MESSAGE: "_attachment",
-            MessageFields.CREATION_DATE: timestamp_field,
+        if self.configuration["include_full_raw_message"]:
+            # Legacy path: forward the raw email; ES attachment processor needs standard base64.
+            attachment = base64url_to_base64(raw)
+        else:
+            # Default: trim to a header-light .eml so Tika extracts body, not headers.
+            attachment = _extract_body_eml(raw)
+            if attachment is None:
+                if raw is not None:
+                    self._logger.warning(
+                        "Body extraction failed for %s; falling back to raw payload.",
+                        message_id,
+                    )
+                attachment = base64url_to_base64(raw)
+
+        return {
+            "_id": message_id,
+            "_attachment": attachment,
+            "_timestamp": timestamp if timestamp is not None else iso_utc(),
         }
-
-        es_doc = {
-            es_doc_field: message.get(message_field.value)
-            for message_field, es_doc_field in message_fields_to_es_doc_mappings.items()
-        }
-
-        # The attachment processor cannot handle base64url encoded values (only ordinary base64)
-        es_doc["_attachment"] = base64url_to_base64(es_doc["_attachment"])
-
-        if es_doc.get(timestamp_field) is None:
-            es_doc[timestamp_field] = iso_utc()
-
-        return es_doc
 
     async def _message_doc_with_access_control(
         self, access_control, gmail_client, message
