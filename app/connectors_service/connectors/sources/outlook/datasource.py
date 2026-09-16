@@ -77,7 +77,7 @@ class OutlookDocFormatter:
         return calendar.type
 
     def mails_doc_formatter(self, mail, mail_type, timezone):
-        return {
+        document = {
             "_id": mail.id,
             "_timestamp": ews_format_to_datetime(
                 source_datetime=mail.last_modified_time, timezone=timezone
@@ -104,6 +104,10 @@ class OutlookDocFormatter:
             "categories": list((mail.categories or [])),
             "message": html_to_text(html=mail.body),
         }
+        folder_name = mail_type.get("folder_name")
+        if folder_name is not None:
+            document["folder_name"] = folder_name
+        return document
 
     def calendar_doc_formatter(self, calendar, child_calendar, timezone):
         document = {
@@ -347,10 +351,19 @@ class OutlookDataSource(BaseDataSource):
                 "order": 11,
                 "type": "str",
             },
+            "sync_all_mail_folders": {
+                "display": "toggle",
+                "label": "Sync all mail folders",
+                "order": 12,
+                "tooltip": "When enabled, indexes every mail folder in each mailbox, not only Inbox, Sent, Junk, and Archive. Expect longer syncs, more Exchange load, and a larger index.",
+                "type": "bool",
+                "ui_restrictions": ["advanced"],
+                "value": False,
+            },
             "use_text_extraction_service": {
                 "display": "toggle",
                 "label": "Use text extraction service",
-                "order": 12,
+                "order": 13,
                 "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
                 "type": "bool",
                 "ui_restrictions": ["advanced"],
@@ -359,7 +372,7 @@ class OutlookDataSource(BaseDataSource):
             "use_document_level_security": {
                 "display": "toggle",
                 "label": "Enable document level security",
-                "order": 13,
+                "order": 14,
                 "tooltip": "Document level security ensures identities and permissions set in Outlook are maintained in Elasticsearch. This enables you to restrict and personalize read-access users and groups have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
                 "type": "bool",
                 "value": False,
@@ -579,10 +592,11 @@ class OutlookDataSource(BaseDataSource):
         async for mail, mail_type in self.client.get_mails(account=account):
             # Skip strays lacking mail fields (e.g. `sender`).
             if not isinstance(mail, MAIL_ITEM_TYPES):
+                mail_location = mail_type.get("folder_name") or mail_type["constant"]
                 self._logger.warning(
                     f"Skipping non-mail item {type(mail).__name__} "
                     f"({getattr(mail, 'id', 'unknown')}) in "
-                    f"{mail_type['constant']} for {account.primary_smtp_address}"
+                    f"{mail_location} for {account.primary_smtp_address}"
                 )
                 continue
             document = self.doc_formatter.mails_doc_formatter(

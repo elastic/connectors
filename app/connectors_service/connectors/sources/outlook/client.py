@@ -33,6 +33,7 @@ from connectors.sources.outlook.constants import (
     CONTACT_FOLDER_FIELDS,
     EWS_ENDPOINT,
     MAIL_FIELDS,
+    MAIL_OBJECT,
     MAIL_TYPES,
     OUTLOOK_CLOUD,
     RETRIES,
@@ -52,6 +53,29 @@ from connectors.utils import (
 
 # Folder-absent faults: skip the folder, keep syncing.
 FOLDER_SKIP_ERRORS = (ErrorFolderNotFound, ErrorManagedFolderNotFound)
+
+
+def _folder_sync_id(folder):
+    folder_id = getattr(folder, "id", None)
+    if folder_id is not None:
+        return folder_id
+    folder_id_obj = getattr(folder, "folder_id", None)
+    if folder_id_obj is None:
+        return None
+    return getattr(folder_id_obj, "id", folder_id_obj)
+
+
+def _discover_additional_mail_folders(msg_folder_root, synced_folder_ids):
+    additional = []
+    for folder in msg_folder_root.walk():
+        if not isinstance(folder, Messages):
+            continue
+        sync_id = _folder_sync_id(folder)
+        if sync_id is not None and sync_id in synced_folder_ids:
+            continue
+        additional.append(folder)
+    return additional
+
 
 # exchangelib raises ValueError on unrecognised item tags (e.g. a stray
 # EndTimeZone). Degrade to Item so the sync continues; folder allowlists skip it.
@@ -388,6 +412,9 @@ class OutlookClient:
         self.configuration = configuration
         self._logger = logger
         self.is_cloud = self.configuration["data_source"] == OUTLOOK_CLOUD
+        self.sync_all_mail_folders = self.configuration.get(
+            "sync_all_mail_folders", False
+        )
         self.ssl_enabled = self.configuration.get("ssl_enabled", False)
         self.certificate = self.configuration.get("ssl_ca", None)
 
@@ -426,29 +453,39 @@ class OutlookClient:
     async def ping(self):
         await anext(self._get_user_instance.get_users())
 
+    async def _resolve_default_mail_folder(self, account, mail_type):
+        if mail_type["folder"] == "archive":
+            # "Archive" has no distinguished ID; resolve by name, skip if absent.
+            folder_object = await asyncio.to_thread(
+                lambda: account.msg_folder_root / "Archive"
+            )
+            if not isinstance(folder_object, Messages):
+                self._logger.debug(
+                    f"Skipping 'Archive' folder for {account.primary_smtp_address}: "
+                    f"not a mail folder ({type(folder_object).__name__})"
+                )
+                return None
+            return folder_object
+
+        return await asyncio.to_thread(getattr, account, mail_type["folder"])
+
+    async def _yield_mails_from_folder(self, account, folder_object, mail_type):
+        mails = await asyncio.to_thread(
+            lambda folder=folder_object: list(folder.all().only(*MAIL_FIELDS))
+        )
+        for mail in mails:
+            yield mail, mail_type
+
     async def get_mails(self, account):
+        synced_folder_ids = set()
         for mail_type in MAIL_TYPES:
             self._logger.debug(
                 f"Fetching {mail_type['folder']} mails for {account.primary_smtp_address}"
             )
             try:
-                # Resolve folders off the event loop (blocking exchangelib call).
-                if mail_type["folder"] == "archive":
-                    # "Archive" has no distinguished ID; resolve by name, skip if absent.
-                    folder_object = await asyncio.to_thread(
-                        lambda: account.msg_folder_root / "Archive"
-                    )
-                    # A non-mail "Archive" folder can't take MAIL_FIELDS.
-                    if not isinstance(folder_object, Messages):
-                        self._logger.debug(
-                            f"Skipping 'Archive' folder for {account.primary_smtp_address}: "
-                            f"not a mail folder ({type(folder_object).__name__})"
-                        )
-                        continue
-                else:
-                    folder_object = await asyncio.to_thread(
-                        getattr, account, mail_type["folder"]
-                    )
+                folder_object = await self._resolve_default_mail_folder(
+                    account, mail_type
+                )
             except FOLDER_SKIP_ERRORS:
                 self._logger.warning(
                     f"Could not resolve {mail_type['folder']} folder for "
@@ -456,13 +493,51 @@ class OutlookClient:
                 )
                 continue
 
-            # Materialize the queryset in the thread; iterating it lazily would
-            # run the blocking EWS fetch back on the event loop.
-            mails = await asyncio.to_thread(
-                lambda folder=folder_object: list(folder.all().only(*MAIL_FIELDS))
+            if folder_object is None:
+                continue
+
+            sync_id = _folder_sync_id(folder_object)
+            if sync_id is not None:
+                synced_folder_ids.add(sync_id)
+
+            async for mail, resolved_mail_type in self._yield_mails_from_folder(
+                account, folder_object, mail_type
+            ):
+                yield mail, resolved_mail_type
+
+        if not self.sync_all_mail_folders:
+            return
+
+        try:
+            extra_folders = await asyncio.to_thread(
+                _discover_additional_mail_folders,
+                account.msg_folder_root,
+                synced_folder_ids,
             )
-            for mail in mails:
-                yield mail, mail_type
+        except FOLDER_SKIP_ERRORS:
+            self._logger.warning(
+                f"Could not walk mail folders for {account.primary_smtp_address}, "
+                "skipping additional folders."
+            )
+            return
+
+        for folder_object in extra_folders:
+            folder_name = getattr(folder_object, "name", None) or "unknown"
+            mail_type = {"constant": MAIL_OBJECT, "folder_name": folder_name}
+            self._logger.debug(
+                f"Fetching additional mail folder {folder_name!r} for "
+                f"{account.primary_smtp_address}"
+            )
+            try:
+                async for mail, resolved_mail_type in self._yield_mails_from_folder(
+                    account, folder_object, mail_type
+                ):
+                    yield mail, resolved_mail_type
+            except FOLDER_SKIP_ERRORS:
+                self._logger.warning(
+                    f"Could not fetch mail from folder {folder_name!r} for "
+                    f"{account.primary_smtp_address}, skipping."
+                )
 
     async def get_calendars(self, account):
         # Resolve the folder off the event loop (blocking call); skip if absent.
