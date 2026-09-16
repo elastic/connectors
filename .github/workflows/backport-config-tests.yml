@@ -1,0 +1,24 @@
+name: Backport config tests
+
+on:
+  pull_request:
+    paths:
+      - .backportrc.json
+      - renovate.json
+      - .github/workflows/**
+  push:
+    branches:
+      - main
+    paths:
+      - .backportrc.json
+      - renovate.json
+      - .github/workflows/**
+
+jobs:
+  unittest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run backport workflow script tests
+        run: python3 -m unittest discover -s .github/workflows/scripts -p 'test_*.py' -v
