@@ -355,7 +355,7 @@ class OutlookDataSource(BaseDataSource):
                 "display": "toggle",
                 "label": "Sync all mail folders",
                 "order": 12,
-                "tooltip": "When enabled, indexes every mail folder in each mailbox, not only Inbox, Sent, Junk, and Archive. Expect longer syncs, more Exchange load, and a larger index.",
+                "tooltip": "When enabled, indexes the user mail folders in each mailbox, not only Inbox, Sent, Junk, and Archive. System folders such as Deleted Items, Drafts, Outbox, and search folders are never indexed. Expect longer syncs, more Exchange load, and a larger index.",
                 "type": "bool",
                 "ui_restrictions": ["advanced"],
                 "value": False,

@@ -24,16 +24,59 @@ from exchangelib import (
 from exchangelib.errors import (
     ErrorAccessDenied,
     ErrorFolderNotFound,
+    ErrorInvalidFolderId,
+    ErrorItemNotFound,
     ErrorManagedFolderNotFound,
+    ErrorServerBusy,
+    ErrorTimeoutExpired,
     TransportError,
 )
 from exchangelib.folders import (
+    AllCategorizedItems,
+    AllContacts,
+    AllItems,
+    AllPersonMetadata,
     BaseFolder,
     Calendar,
+    CommonViews,
+    Conflicts,
     Contacts,
+    ConversationHistory,
+    ConversationSettings,
+    DeletedItems,
+    Directory,
+    Drafts,
+    Favorites,
+    Files,
+    FromFavoriteSenders,
+    IMContactList,
+    Journal,
+    LocalFailures,
     Messages,
     MsgFolderRoot,
+    MyContacts,
+    Notes,
+    Outbox,
+    QuarantinedEmail,
+    QuickContacts,
+    RecipientCache,
+    RecoverableItemsDeletions,
+    RecoverableItemsPurges,
+    RecoverableItemsRoot,
+    RecoverableItemsVersions,
+    RSSFeeds,
+    SearchFolders,
+    ServerFailures,
+    Sharing,
+    Shortcuts,
+    Signal,
+    SmsAndChatsSync,
+    SpoolerQueue,
+    SyncIssues,
+    System,
     Tasks,
+    Views,
+    WorkingSet,
 )
 from exchangelib.items import Item, Message
 from exchangelib.protocol import BaseProtocol, NoVerifyHTTPAdapter
@@ -65,9 +108,62 @@ from connectors.utils import (
 
 # Folder-absent faults: skip the folder, keep syncing.
 FOLDER_SKIP_ERRORS = (ErrorFolderNotFound, ErrorManagedFolderNotFound)
+# One unreachable folder in one mailbox must not abort the whole sync, so
+# tolerate the transient and per-folder faults Exchange raises in practice.
 EXTRA_MAIL_FOLDER_ERRORS = FOLDER_SKIP_ERRORS + (
     ErrorAccessDenied,
+    ErrorInvalidFolderId,
+    ErrorItemNotFound,
+    ErrorServerBusy,
+    ErrorTimeoutExpired,
     TransportError,
+)
+
+# Folders that hold mail-capable items but are not user mail, so walking them
+# would index deleted or unsent mail, duplicate copies of real messages, or
+# hidden configuration items. Search folders matter most: their items already
+# live in a real folder, and re-indexing them under the same document `_id`
+# would overwrite those documents with the generic `Mail` type.
+NON_USER_MAIL_FOLDERS = (
+    AllCategorizedItems,
+    AllContacts,
+    AllItems,
+    AllPersonMetadata,
+    CommonViews,
+    Conflicts,
+    ConversationHistory,
+    ConversationSettings,
+    DeletedItems,
+    Directory,
+    Drafts,
+    Favorites,
+    Files,
+    FromFavoriteSenders,
+    IMContactList,
+    Journal,
+    LocalFailures,
+    MyContacts,
+    Notes,
+    Outbox,
+    QuarantinedEmail,
+    QuickContacts,
+    RecipientCache,
+    RecoverableItemsDeletions,
+    RecoverableItemsPurges,
+    RecoverableItemsRoot,
+    RecoverableItemsVersions,
+    RSSFeeds,
+    SearchFolders,
+    ServerFailures,
+    Sharing,
+    Shortcuts,
+    Signal,
+    SmsAndChatsSync,
+    SpoolerQueue,
+    SyncIssues,
+    System,
+    Views,
+    WorkingSet,
 )
 
 
@@ -81,8 +177,21 @@ def _folder_sync_id(folder):
     return getattr(folder_id_obj, "id", folder_id_obj)
 
 
+def _parent_folder_sync_id(folder):
+    parent = getattr(folder, "parent_folder_id", None)
+    if parent is None:
+        return None
+    return getattr(parent, "id", parent)
+
+
+def _is_non_user_mail_folder(folder):
+    return isinstance(folder, NON_USER_MAIL_FOLDERS)
+
+
 def _is_mail_folder(folder):
     if isinstance(folder, (Calendar, Contacts, Tasks, MsgFolderRoot)):
+        return False
+    if _is_non_user_mail_folder(folder):
         return False
     supported = getattr(folder, "supported_item_models", None)
     if not supported:
@@ -92,10 +201,22 @@ def _is_mail_folder(folder):
 
 def _discover_additional_mail_folders(msg_folder_root, synced_folder_ids):
     additional = []
+    # walk() is depth-first pre-order, so a parent is always seen before its
+    # children: collecting pruned ids as we go drops whole subtrees (a user
+    # folder under Deleted Items is still deleted mail). Default folders are
+    # skipped without pruning, since their subfolders are user mail.
+    pruned_folder_ids = set()
     for folder in msg_folder_root.walk():
+        sync_id = _folder_sync_id(folder)
+        parent_id = _parent_folder_sync_id(folder)
+        if _is_non_user_mail_folder(folder) or (
+            parent_id is not None and parent_id in pruned_folder_ids
+        ):
+            if sync_id is not None:
+                pruned_folder_ids.add(sync_id)
+            continue
         if not _is_mail_folder(folder):
             continue
-        sync_id = _folder_sync_id(folder)
         if sync_id is not None and sync_id in synced_folder_ids:
             continue
         additional.append(folder)
@@ -494,11 +615,15 @@ class OutlookClient:
 
         return await asyncio.to_thread(getattr, account, mail_type["folder"])
 
-    async def _yield_mails_from_folder(self, folder_object, mail_type):
-        mails = await asyncio.to_thread(
+    async def _fetch_folder_mails(self, folder_object):
+        # Materialize the queryset in the thread; iterating it lazily would
+        # run the blocking EWS fetch back on the event loop.
+        return await asyncio.to_thread(
             lambda folder=folder_object: list(folder.all().only(*MAIL_FIELDS))
         )
-        for mail in mails:
+
+    async def _yield_mails_from_folder(self, folder_object, mail_type):
+        for mail in await self._fetch_folder_mails(folder_object):
             yield mail, mail_type
 
     async def get_mails(self, account):
@@ -553,17 +678,20 @@ class OutlookClient:
                 f"Fetching additional mail folder {folder_name!r} for "
                 f"{account.primary_smtp_address}"
             )
+            # Guard only the fetch: wrapping the yields would also swallow
+            # errors the consumer raises back into this generator.
             try:
-                async for mail, resolved_mail_type in self._yield_mails_from_folder(
-                    folder_object, mail_type
-                ):
-                    yield mail, resolved_mail_type
+                mails = await self._fetch_folder_mails(folder_object)
             except EXTRA_MAIL_FOLDER_ERRORS as error:
                 self._logger.warning(
                     f"Could not fetch mail from folder {folder_name!r} for "
                     f"{account.primary_smtp_address}, skipping: "
                     f"{error.__class__.__name__}."
                 )
+                continue
+
+            for mail in mails:
+                yield mail, mail_type
 
     async def get_calendars(self, account):
         # Resolve the folder off the event loop (blocking call); skip if absent.
