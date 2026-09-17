@@ -25,7 +25,7 @@ SOFTWARE.
 
 
 PyMySQL
-1.2.0
+1.2.3
 MIT
 Copyright (c) 2010, 2013 PyMySQL contributors
 
