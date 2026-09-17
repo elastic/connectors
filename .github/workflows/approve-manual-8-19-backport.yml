@@ -25,8 +25,13 @@ jobs:
     if: |
       contains(github.event.pull_request.labels.*.name, 'backport')
       && github.event.pull_request.user.login != 'github-actions[bot]'
-      && github.event.pull_request.head.repo.fork == false
-      && github.event.pull_request.head.repo.full_name == github.repository
+      && (
+        github.event.pull_request.head.repo == null
+        || (
+          github.event.pull_request.head.repo.fork != true
+          && github.event.pull_request.head.repo.full_name == github.repository
+        )
+      )
       && contains(fromJSON('["MEMBER", "OWNER"]'), github.event.pull_request.author_association)
     runs-on: ubuntu-latest
     steps:
