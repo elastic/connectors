@@ -40,6 +40,7 @@ from connectors.sources.outlook.constants import (
     OUTLOOK_SERVER,
     TASK_ATTACHMENT,
 )
+from connectors.sources.outlook.mail_attachment import mail_attachment_base64
 from connectors.sources.outlook.utils import (
     _prefix_display_name,
     _prefix_email,
@@ -369,6 +370,20 @@ class OutlookDataSource(BaseDataSource):
                 "ui_restrictions": ["advanced"],
                 "value": False,
             },
+            "include_full_raw_message": {
+                "display": "toggle",
+                "label": "Index full raw email (including headers)",
+                "order": 13,
+                "tooltip": (
+                    "When disabled (default), the email body and a small set of headers "
+                    "(such as Subject, From, and To) are indexed. "
+                    "Enable to keep the full raw message including routing and "
+                    "authentication headers - useful for edge cases where body "
+                    "extraction misses content."
+                ),
+                "type": "bool",
+                "value": False,
+            },
             "use_document_level_security": {
                 "display": "toggle",
                 "label": "Enable document level security",
@@ -603,6 +618,11 @@ class OutlookDataSource(BaseDataSource):
                 mail=mail,
                 mail_type=mail_type,
                 timezone=timezone,
+            )
+            document["_attachment"] = mail_attachment_base64(
+                mail=mail,
+                include_full_raw_message=self.configuration["include_full_raw_message"],
+                logger=self._logger,
             )
             yield (
                 self._decorate_with_access_control(
