@@ -7088,7 +7088,7 @@ Apache Software License
 
 
 pyproject_hooks
-1.3.0
+1.3.3
 MIT
 The MIT License (MIT)
 
