@@ -1,6 +1,6 @@
 aiohttp==3.14.3
 aiofiles==23.2.1
-aiomysql==0.3.0
+aiomysql==0.3.2
 httpx==0.27.0
 httpx-ntlm==1.4.0
 elasticsearch[async]==8.17.1
@@ -11,6 +11,7 @@ envyaml==1.10.211231
 ecs-logging==2.0.0
 pympler==1.0.1
 PyJWT==2.13.0
+PyMySQL==1.1.1
 cron-schedule-triggers==0.0.11
 tzcron==1.0.0
 pytz==2019.3
