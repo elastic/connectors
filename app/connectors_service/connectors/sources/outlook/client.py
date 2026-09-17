@@ -108,8 +108,7 @@ from connectors.utils import (
 
 # Folder-absent faults: skip the folder, keep syncing.
 FOLDER_SKIP_ERRORS = (ErrorFolderNotFound, ErrorManagedFolderNotFound)
-# One unreachable folder in one mailbox must not abort the whole sync, so
-# tolerate the transient and per-folder faults Exchange raises in practice.
+# One unreachable folder must not abort the sync.
 EXTRA_MAIL_FOLDER_ERRORS = FOLDER_SKIP_ERRORS + (
     ErrorAccessDenied,
     ErrorInvalidFolderId,
@@ -119,11 +118,8 @@ EXTRA_MAIL_FOLDER_ERRORS = FOLDER_SKIP_ERRORS + (
     TransportError,
 )
 
-# Folders that hold mail-capable items but are not user mail, so walking them
-# would index deleted or unsent mail, duplicate copies of real messages, or
-# hidden configuration items. Search folders matter most: their items already
-# live in a real folder, and re-indexing them under the same document `_id`
-# would overwrite those documents with the generic `Mail` type.
+# Mail-capable but not user mail. Search folders alias items already indexed
+# under their real folder, so they would overwrite those documents.
 NON_USER_MAIL_FOLDERS = (
     AllCategorizedItems,
     AllContacts,
@@ -201,10 +197,8 @@ def _is_mail_folder(folder):
 
 def _discover_additional_mail_folders(msg_folder_root, synced_folder_ids):
     additional = []
-    # walk() is depth-first pre-order, so a parent is always seen before its
-    # children: collecting pruned ids as we go drops whole subtrees (a user
-    # folder under Deleted Items is still deleted mail). Default folders are
-    # skipped without pruning, since their subfolders are user mail.
+    # walk() is pre-order, so pruning by parent id drops whole subtrees.
+    # Default folders are skipped unpruned: their subfolders are user mail.
     pruned_folder_ids = set()
     for folder in msg_folder_root.walk():
         sync_id = _folder_sync_id(folder)
@@ -616,8 +610,7 @@ class OutlookClient:
         return await asyncio.to_thread(getattr, account, mail_type["folder"])
 
     async def _fetch_folder_mails(self, folder_object):
-        # Materialize the queryset in the thread; iterating it lazily would
-        # run the blocking EWS fetch back on the event loop.
+        # Materialize in the thread; lazy iteration would block the event loop.
         return await asyncio.to_thread(
             lambda folder=folder_object: list(folder.all().only(*MAIL_FIELDS))
         )
@@ -678,8 +671,8 @@ class OutlookClient:
                 f"Fetching additional mail folder {folder_name!r} for "
                 f"{account.primary_smtp_address}"
             )
-            # Guard only the fetch: wrapping the yields would also swallow
-            # errors the consumer raises back into this generator.
+            # Guard the fetch only; wrapping the yields would swallow
+            # consumer errors.
             try:
                 mails = await self._fetch_folder_mails(folder_object)
             except EXTRA_MAIL_FOLDER_ERRORS as error:

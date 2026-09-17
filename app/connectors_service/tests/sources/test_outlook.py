@@ -382,7 +382,7 @@ def typed_folder(folder_cls, object_type, folder_id=None, parent_folder_id=None)
     folder.__class__ = folder_cls
     folder.object_type = object_type
     folder.id = folder_id or f"{object_type}-folder"
-    # Left unset, MagicMock would hand the client an opaque parent id.
+    # Unset, MagicMock would supply an opaque parent id.
     folder.parent_folder_id = parent_folder_id
     folder.all.return_value = AllObjects(object_type=object_type)
     return folder
@@ -403,8 +403,7 @@ class MockAccount:
     def __init__(self):
         self.default_timezone = "UTC"
 
-        # Distinct ids, as Exchange returns: the client dedupes the default
-        # folders against the walked tree by folder id.
+        # Distinct ids: the client dedupes default folders by id.
         self.inbox = MockOutlookObject(object_type=MAIL, folder_id="inbox-id")
         self.sent = MockOutlookObject(object_type=MAIL, folder_id="sent-id")
         self.junk = MockOutlookObject(object_type=MAIL, folder_id="junk-id")
@@ -1674,9 +1673,7 @@ def test_is_mail_folder_accepts_user_folder_rejects_calendar():
     "folder_cls", [DeletedItems, Drafts, Outbox, SyncIssues, SearchFolders, AllItems]
 )
 def test_is_mail_folder_rejects_non_user_mail_folders(folder_cls):
-    """These hold mail items but are not user mail: indexing them would surface
-    deleted or unsent mail, and search folders would overwrite documents already
-    indexed under their real folder."""
+    """Mail-capable, but deleted, unsent, or already indexed elsewhere."""
     folder = typed_user_mail_folder(folder_cls, MAIL, folder_id="system-id")
 
     assert _is_mail_folder(folder) is False
@@ -1699,8 +1696,7 @@ def test_discover_additional_mail_folders_skips_default_and_non_mail():
 
 
 def test_discover_additional_mail_folders_prunes_non_user_subtrees():
-    """A user folder filed under Deleted Items is still deleted mail, while one
-    filed under Inbox is exactly what the toggle is for."""
+    """A user folder under Deleted Items is still deleted mail."""
     trash = typed_user_mail_folder(DeletedItems, MAIL, folder_id="trash-id")
     trash.name = "Deleted Items"
     under_trash = typed_user_mail_folder(
@@ -1724,8 +1720,7 @@ def test_discover_additional_mail_folders_prunes_non_user_subtrees():
 async def test_get_mails_sync_all_mail_folders_includes_custom_folder():
     async with create_outlook_source(sync_all_mail_folders=True) as source:
         account = MockAccount()
-        # The walked tree reports Inbox with the same id as account.inbox, so
-        # this also covers the dedupe that keeps Inbox mail typed as Inbox.
+        # Same id as account.inbox, so this also covers the dedupe.
         walked_inbox = typed_user_mail_folder(Inbox, MAIL, folder_id="inbox-id")
         walked_inbox.name = "Inbox"
         custom_folder = typed_user_mail_folder(Folder, MAIL, folder_id="custom-id")
