@@ -162,13 +162,8 @@ NON_USER_MAIL_FOLDERS = (
 
 
 def _folder_sync_id(folder):
-    folder_id = getattr(folder, "id", None)
-    if folder_id is not None:
-        return folder_id
-    folder_id_obj = getattr(folder, "folder_id", None)
-    if folder_id_obj is None:
-        return None
-    return getattr(folder_id_obj, "id", folder_id_obj)
+    # None for a folder the mailbox denies GetFolder on.
+    return getattr(folder, "id", None)
 
 
 def _parent_folder_sync_id(folder):
