@@ -64,6 +64,7 @@ from connectors.sources.outlook.datasource import (
     TASK_ITEM_TYPES,
     OutlookDocFormatter,
 )
+from connectors.sources.outlook.mail_attachment import mail_attachment_base64
 from connectors.sources.outlook.utils import _prefix_email
 from connectors.utils import get_pem_format
 from tests.commons import AsyncIterator
@@ -82,6 +83,7 @@ EXPECTED_CONTENT_EXTRACTED = {
 }
 
 TIMEZONE = "Asia/Kolkata"
+EXPECTED_MAIL_ATTACHMENT = "U3ViamVjdDogRHVtbXkgU3ViamVjdApGcm9tOiBkdW1teS51c2VyQGdtYWlsLmNvbQpUbzogZHVtbXkudXNlckBnbWFpbC5jb20KQ2M6IGR1bW15LnVzZXJAZ21haWwuY29tCkJjYzogZHVtbXkudXNlckBnbWFpbC5jb20KQ29udGVudC1UeXBlOiB0ZXh0L3BsYWluOyBjaGFyc2V0PSJ1dGYtOCIKQ29udGVudC1UcmFuc2Zlci1FbmNvZGluZzogN2JpdApNSU1FLVZlcnNpb246IDEuMAoKVGhpcyBpcyBhIGR1bW15IG1haWwK"
 MAIL = "mail"
 TASK = "task"
 CALENDAR = "calendar"
@@ -100,6 +102,7 @@ EXPECTED_RESPONSE = [
         "importance": "High",
         "categories": ["Outlook"],
         "message": "This is a dummy mail",
+        "_attachment": EXPECTED_MAIL_ATTACHMENT,
     },
     {
         "_id": "mail_1",
@@ -113,6 +116,7 @@ EXPECTED_RESPONSE = [
         "importance": "High",
         "categories": ["Outlook"],
         "message": "This is a dummy mail",
+        "_attachment": EXPECTED_MAIL_ATTACHMENT,
     },
     {
         "_id": "mail_1",
@@ -126,6 +130,7 @@ EXPECTED_RESPONSE = [
         "importance": "High",
         "categories": ["Outlook"],
         "message": "This is a dummy mail",
+        "_attachment": EXPECTED_MAIL_ATTACHMENT,
     },
     {
         "_id": "mail_1",
@@ -139,6 +144,7 @@ EXPECTED_RESPONSE = [
         "importance": "High",
         "categories": ["Outlook"],
         "message": "This is a dummy mail",
+        "_attachment": EXPECTED_MAIL_ATTACHMENT,
     },
     {
         "_id": "task_1",
@@ -240,6 +246,11 @@ def build_mail_document():
     mail.importance = "High"
     mail.categories = ["Outlook"]
     mail.body = "This is a dummy mail"
+    mail.text_body = None
+    mail.mime_content = None
+    mail.reply_to = None
+    mail.message_id = None
+    mail.datetime_received = None
     mail.has_attachments = True
     mail.attachments = [MOCK_ATTACHMENT]
     return mail
@@ -2222,3 +2233,126 @@ async def test_decorate_with_access_control_drops_unknown_identities():
 )
 def test_prefix_email_normalises_casing(email, expected):
     assert _prefix_email(email) == expected
+
+
+_PLAIN_ONLY_MIME = (
+    b"Received: by mail.example.com; Wed, 13 May 2026 03:00:00 -0700\r\n"
+    b"Subject: Plain only test\r\n"
+    b"From: sender@example.com\r\n"
+    b"To: recipient@example.com\r\n"
+    b"Date: Wed, 13 May 2026 10:00:00 +0000\r\n"
+    b"MIME-Version: 1.0\r\n"
+    b"Content-Type: text/plain; charset=utf-8\r\n"
+    b"\r\n"
+    b"This is the plain text body of the message.\r\n"
+)
+
+
+class TestOutlookMailAttachment:
+    @staticmethod
+    def _mail_with_mime(mime_bytes):
+        mail = build_mail_document()
+        mail.mime_content = mime_bytes
+        return mail
+
+    @staticmethod
+    def _decode_attachment(attachment_b64):
+        import base64
+        from email import policy
+        from email.parser import BytesParser
+
+        return BytesParser(policy=policy.default).parsebytes(
+            base64.b64decode(attachment_b64)
+        )
+
+    def test_trims_mime_content_to_minimal_eml(self):
+        attachment = mail_attachment_base64(
+            self._mail_with_mime(_PLAIN_ONLY_MIME),
+            include_full_raw_message=False,
+            logger=MagicMock(),
+        )
+
+        rebuilt = self._decode_attachment(attachment)
+        assert rebuilt["Subject"] == "Plain only test"
+        assert rebuilt["Received"] is None
+        body = rebuilt.get_body(preferencelist=("plain", "html"))
+        assert "plain text body" in body.get_content()
+
+    def test_full_raw_toggle_keeps_noisy_headers(self):
+        attachment = mail_attachment_base64(
+            self._mail_with_mime(_PLAIN_ONLY_MIME),
+            include_full_raw_message=True,
+            logger=MagicMock(),
+        )
+
+        rebuilt = self._decode_attachment(attachment)
+        assert rebuilt["Received"] is not None
+
+    def test_prefers_text_body_when_mime_missing(self):
+        mail = build_mail_document()
+        mail.text_body = "Plain from EWS"
+        mail.body = "<p>HTML from EWS</p>"
+
+        attachment = mail_attachment_base64(
+            mail, include_full_raw_message=False, logger=MagicMock()
+        )
+        rebuilt = self._decode_attachment(attachment)
+        body = rebuilt.get_body(preferencelist=("plain", "html"))
+        assert body.get_content().strip() == "Plain from EWS"
+
+    def test_uses_synthesized_eml_when_mime_content_empty(self):
+        mail = build_mail_document()
+        mail.mime_content = b""
+
+        attachment = mail_attachment_base64(
+            mail, include_full_raw_message=False, logger=MagicMock()
+        )
+        rebuilt = self._decode_attachment(attachment)
+        body = rebuilt.get_body(preferencelist=("plain", "html"))
+        assert "dummy mail" in body.get_content().lower()
+
+    def test_prefers_plain_part_in_multipart_mime(self):
+        mime = (
+            b"Subject: Both parts\r\n"
+            b"From: sender@example.com\r\n"
+            b"To: recipient@example.com\r\n"
+            b"Date: Wed, 13 May 2026 10:00:00 +0000\r\n"
+            b"MIME-Version: 1.0\r\n"
+            b'Content-Type: multipart/alternative; boundary="alt"\r\n'
+            b"\r\n"
+            b"--alt\r\n"
+            b"Content-Type: text/plain; charset=utf-8\r\n"
+            b"\r\n"
+            b"Plain wins.\r\n"
+            b"--alt\r\n"
+            b"Content-Type: text/html; charset=utf-8\r\n"
+            b"\r\n"
+            b"<html><body>HTML loses.</body></html>\r\n"
+            b"--alt--\r\n"
+        )
+        attachment = mail_attachment_base64(
+            self._mail_with_mime(mime),
+            include_full_raw_message=False,
+            logger=MagicMock(),
+        )
+        rebuilt = self._decode_attachment(attachment)
+        body = rebuilt.get_body(preferencelist=("plain", "html"))
+        assert "Plain wins" in body.get_content()
+        assert "HTML loses" not in body.get_content()
+
+    def test_falls_back_when_trim_fails(self, monkeypatch):
+        monkeypatch.setattr(
+            "connectors.sources.outlook.mail_attachment.trim_rfc822_bytes_to_base64",
+            lambda _raw: None,
+        )
+        mail = self._mail_with_mime(_PLAIN_ONLY_MIME)
+        logger = MagicMock()
+
+        attachment = mail_attachment_base64(
+            mail, include_full_raw_message=False, logger=logger
+        )
+
+        import base64
+
+        assert attachment == base64.b64encode(_PLAIN_ONLY_MIME).decode("ascii")
+        logger.warning.assert_called_once()

@@ -26,6 +26,8 @@ from connectors.es.sink import (
     DELETES_QUEUED,
     DOCS_DROPPED_TOO_LARGE,
     DOCS_EXTRACTED,
+    DOCS_FILTERED,
+    DOCS_SKIPPED,
     END_DOCS,
     OP_DELETE,
     OP_INDEX,
@@ -762,6 +764,92 @@ async def test_get_docs(
         assert extractor.counters.get(BIN_DOCS_DOWNLOADED) == expected_total_downloads
 
         assert queue_called_with_operations(queue, expected_queue_operations)
+
+
+def test_log_progress_includes_extraction_counters():
+    logger_mock = Mock()
+    extractor = Extractor(None, Mock(), INDEX, logger_=logger_mock)
+    extractor.counters.increment(DOCS_EXTRACTED, 500)
+    extractor.counters.increment(DOCS_FILTERED, 10)
+    extractor.counters.increment(DOCS_SKIPPED, 50)
+    extractor.counters.increment(CREATES_QUEUED, 20)
+    extractor.counters.increment(UPDATES_QUEUED, 12348)
+    extractor.counters.increment(DELETES_QUEUED, 0)
+
+    extractor._log_progress()
+
+    logger_mock.info.assert_called_once()
+    message = logger_mock.info.call_args[0][0]
+    assert "extracted: 500" in message
+    assert "filtered: 10" in message
+    assert "skipped: 50" in message
+    assert "created: 20" in message
+    assert "updated: 12348" in message
+    assert "deleted: 0" in message
+
+
+@mock.patch(
+    "connectors.es.management_client.ESManagementClient.yield_existing_documents_metadata"
+)
+@pytest.mark.asyncio
+async def test_sync_progress_logs_are_distinct_when_docs_skipped(
+    yield_existing_documents_metadata, patch_logger
+):
+    num_docs = 250
+    existing_docs = [{"_id": str(i), "_timestamp": TIMESTAMP} for i in range(num_docs)]
+    docs_from_source = [
+        ({"_id": str(i), "_timestamp": TIMESTAMP}, None, "index")
+        for i in range(num_docs)
+    ]
+
+    yield_existing_documents_metadata.return_value = AsyncIterator(
+        [(str(doc["_id"]), doc["_timestamp"]) for doc in existing_docs]
+    )
+
+    lazy_downloads = await lazy_downloads_mock()
+    with mock.patch("connectors.utils.ConcurrentTasks", return_value=lazy_downloads):
+        queue = await queue_mock()
+        config = {
+            "username": "elastic",
+            "password": "changeme",
+            "host": "http://nowhere.com:9200",
+        }
+        extractor = Extractor(
+            ESManagementClient(config),
+            queue,
+            INDEX,
+            content_extraction_enabled=False,
+            display_every=100,
+            skip_unchanged_documents=True,
+        )
+
+        doc_generator = AsyncIterator([deepcopy(doc) for doc in docs_from_source])
+        await extractor.get_docs(doc_generator, skip_unchanged_documents=True)
+
+    assert extractor.counters.get(DOCS_SKIPPED) == num_docs
+
+    progress_logs = [log for log in patch_logger.logs if "Sync progress" in log]
+    assert len(progress_logs) >= 3
+
+    progress_fields = [
+        dict(
+            field.split(": ", 1)
+            for field in log.replace("Sync progress -- ", "").split(" | ")
+        )
+        for log in progress_logs
+    ]
+
+    extracted_values = [int(fields["extracted"]) for fields in progress_fields]
+    assert len(set(extracted_values)) == len(extracted_values)
+
+    for fields in progress_fields:
+        assert fields["created"] == "0"
+        assert fields["updated"] == "0"
+        assert fields["deleted"] == "0"
+
+    skipped_values = [int(fields["skipped"]) for fields in progress_fields]
+    assert skipped_values == sorted(skipped_values)
+    assert skipped_values[-1] > skipped_values[0]
 
 
 @pytest.mark.parametrize(
