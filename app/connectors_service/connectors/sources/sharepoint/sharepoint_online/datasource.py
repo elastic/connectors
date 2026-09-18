@@ -4,6 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import asyncio
+import contextlib
 import os
 from datetime import datetime, timedelta
 from functools import partial
@@ -30,6 +31,7 @@ from connectors.sources.sharepoint.sharepoint_online.client import (
 )
 from connectors.sources.sharepoint.sharepoint_online.constants import (
     CURSOR_SITE_DRIVE_KEY,
+    DEFAULT_PARALLEL_CONNECTION_COUNT,
     EDIT_ITEM_MASK,
     EDIT_ROLE_TYPES,
     EXCLUDED_SHAREPOINT_LIST_NAMES,
@@ -57,7 +59,7 @@ from connectors.sources.sharepoint.sharepoint_online.utils import (
 from connectors.sources.sharepoint.sharepoint_online.validator import (
     SharepointOnlineAdvancedRulesValidator,
 )
-from connectors.utils import html_to_text, iterable_batches_generator
+from connectors.utils import ConcurrentTasks, html_to_text, iterable_batches_generator
 
 
 def _is_page_published(version_string):
@@ -552,6 +554,10 @@ class SharepointOnlineDataSource(BaseDataSource):
         """Yields an access control document for every user of a site.
         Note: this method will cache users and emails it has already and skip the ingestion for those.
 
+        Users are processed concurrently (up to DEFAULT_PARALLEL_CONNECTION_COUNT at a time)
+        to parallelise the Graph API calls required for group membership expansion.
+        See: https://github.com/elastic/connectors/issues/4435
+
         When expand_site_group_members is False, also enriches identity docs with
         site_group tokens for SharePoint site group memberships so document ACLs
         can stay compact.
@@ -565,58 +571,72 @@ class SharepointOnlineDataSource(BaseDataSource):
             return
 
         already_seen_ids = set()
+        seen_lock = asyncio.Lock()
 
-        def _already_seen(*ids):
-            for id_ in ids:
-                if id_ in already_seen_ids:
-                    self._logger.debug(f"We've already seen {id_}")
-                    return True
+        async def _check_and_mark_seen(*ids) -> bool:
+            async with seen_lock:
+                for id_ in ids:
+                    if id_ and id_ in already_seen_ids:
+                        self._logger.debug(f"We've already seen {id_}")
+                        return True
+                for id_ in ids:
+                    if id_:
+                        already_seen_ids.add(id_)
+                return False
 
-            return False
+        results: asyncio.Queue = asyncio.Queue()
 
-        def update_already_seen(*ids):
-            for id_ in ids:
-                # We want to make sure to not add 'None' to the already seen sets
-                if id_:
-                    already_seen_ids.add(id_)
+        site_group_tokens_by_acl_token = {}
+        eeeu_site_group_tokens = set()
+
+        if not self._expand_site_group_members():
+            (
+                site_group_tokens_by_acl_token,
+                eeeu_site_group_tokens,
+            ) = await self._build_site_group_token_index()
 
         async def process_user(user):
             email = user.get("EMail", user.get("mail", None))
             username = user.get("UserName", user.get("userPrincipalName", None))
             self._logger.debug(f"Detected a person: {username}: {email}")
 
-            if _already_seen(email, username):
-                return None
-
-            update_already_seen(email, username)
+            if await _check_and_mark_seen(email, username):
+                return
 
             person_access_control_doc = await self._user_access_control_doc(user)
             if person_access_control_doc:
-                return person_access_control_doc
+                if not self._expand_site_group_members():
+                    self._apply_site_group_tokens_to_identity(
+                        person_access_control_doc,
+                        user,
+                        site_group_tokens_by_acl_token,
+                        eeeu_site_group_tokens,
+                    )
+                await results.put(person_access_control_doc)
 
         self._logger.info("Fetching all users")
-        if self._expand_site_group_members():
+        task_pool = ConcurrentTasks(max_concurrency=DEFAULT_PARALLEL_CONNECTION_COUNT)
+        try:
             async for user in self.client.active_users_with_groups():
-                user_doc = await process_user(user)
-                if user_doc:
-                    yield user_doc
-            return
+                await task_pool.put(lambda u=user: process_user(u))
+                # Drain any completed results without blocking
+                while not results.empty():
+                    yield results.get_nowait()
 
-        (
-            site_group_tokens_by_acl_token,
-            eeeu_site_group_tokens,
-        ) = await self._build_site_group_token_index()
+            # Wait for all in-flight tasks to finish, propagating any worker errors
+            await task_pool.join(raise_on_error=True)
+        finally:
+            # Cancel any tasks still in flight if the generator is closed early
+            # or an exception is raised during enumeration
+            task_pool.cancel()
+            with contextlib.suppress(Exception):
+                await task_pool.join(raise_on_error=False)
 
-        async for user in self.client.active_users_with_groups():
-            user_doc = await process_user(user)
-            if user_doc:
-                self._apply_site_group_tokens_to_identity(
-                    user_doc,
-                    user,
-                    site_group_tokens_by_acl_token,
-                    eeeu_site_group_tokens,
-                )
-                yield user_doc
+        # Drain remaining results after all tasks have completed.
+        # Note: if task_pool.join(raise_on_error=True) raised above, remaining buffered
+        # results are dropped and the ACL index may remain partially populated.
+        while not results.empty():
+            yield results.get_nowait()
 
     def _apply_site_group_tokens_to_identity(
         self,
