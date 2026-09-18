@@ -20,6 +20,7 @@ INBOX_MAIL_OBJECT = "Inbox Mails"
 SENT_MAIL_OBJECT = "Sent Mails"
 JUNK_MAIL_OBJECT = "Junk Mails"
 ARCHIVE_MAIL_OBJECT = "Archive Mails"
+MAIL_OBJECT = "Mail"
 MAIL_ATTACHMENT = "Mail Attachment"
 TASK_ATTACHMENT = "Task Attachment"
 CALENDAR_ATTACHMENT = "Calendar Attachment"
@@ -53,11 +54,16 @@ MAIL_FIELDS = [
     "to_recipients",
     "cc_recipients",
     "bcc_recipients",
+    "reply_to",
     "last_modified_time",
     "subject",
     "importance",
     "categories",
     "body",
+    "text_body",
+    "mime_content",
+    "message_id",
+    "datetime_received",
     "has_attachments",
     "attachments",
 ]

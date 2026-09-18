@@ -5,7 +5,9 @@
 #
 """Tests the Generic Database source class methods"""
 
+from contextlib import contextmanager
 from functools import partial
+from unittest.mock import patch
 
 import pytest
 
@@ -118,6 +120,15 @@ class CursorSync:
                     ),
                 ]
         return []
+
+
+@contextmanager
+def mock_sync_db_engine(create_engine_target, query_object):
+    """Mock SQLAlchemy engine creation for sync database connector tests."""
+    with patch(create_engine_target) as mock_create_engine:
+        mock_engine = mock_create_engine.return_value
+        mock_engine.connect.return_value = ConnectionSync(query_object)
+        yield mock_engine
 
 
 @pytest.mark.parametrize(

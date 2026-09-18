@@ -1642,6 +1642,7 @@ class TestGitLabDataSourceIntegration:
 
         source.gitlab_client.get_projects = mock_get_projects
         source.gitlab_client.get_work_items_project = mock_get_work_items
+        source.gitlab_client.get_work_items_group = lambda *a, **k: async_gen_empty()
         source.gitlab_client.get_merge_requests = mock_get_merge_requests
         source.gitlab_client.get_releases = mock_get_releases
         source.gitlab_client.fetch_remaining_work_item_assignees = (
@@ -1729,6 +1730,7 @@ class TestGitLabDataSourceIntegration:
 
         source.gitlab_client.get_projects = mock_get_projects
         source.gitlab_client.get_work_items_project = mock_get_work_items
+        source.gitlab_client.get_work_items_group = lambda *a, **k: async_gen_empty()
         source.gitlab_client.get_merge_requests = lambda *a, **k: async_gen_empty()
         source.gitlab_client.get_releases = lambda *a, **k: async_gen_empty()
         source.gitlab_client.fetch_remaining_work_item_assignees = (
@@ -2150,6 +2152,7 @@ class TestGitLabDataSourceIntegration:
 
         source.gitlab_client.get_projects = mock_get_projects
         source.gitlab_client.get_work_items_project = lambda *a, **k: async_gen_empty()
+        source.gitlab_client.get_work_items_group = lambda *a, **k: async_gen_empty()
         source.gitlab_client.get_merge_requests = mock_get_mrs
         source.gitlab_client.get_releases = lambda *a, **k: async_gen_empty()
         source.gitlab_client.fetch_remaining_field = mock_remaining_field
@@ -2206,6 +2209,7 @@ class TestGitLabDataSourceIntegration:
 
         source.gitlab_client.get_projects = mock_get_projects
         source.gitlab_client.get_work_items_project = lambda *a, **k: async_gen_empty()
+        source.gitlab_client.get_work_items_group = lambda *a, **k: async_gen_empty()
         source.gitlab_client.get_merge_requests = lambda *a, **k: async_gen_empty()
         source.gitlab_client.get_releases = mock_get_releases
         source.gitlab_client._get_rest = AsyncMock(return_value=[])

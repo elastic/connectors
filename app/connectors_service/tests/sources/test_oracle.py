@@ -9,16 +9,16 @@ from contextlib import contextmanager
 from unittest.mock import patch
 
 import pytest
-from sqlalchemy.engine import Engine
 
 from connectors.sources.oracle import OracleClient, OracleDataSource, OracleQueries
 from tests.sources.support import create_source
-from tests.sources.test_generic_database import ConnectionSync
+from tests.sources.test_generic_database import mock_sync_db_engine
 
 DSN_SID = "oracle+oracledb://admin:Password_123@(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=127.0.0.1)(PORT=9090))(CONNECT_DATA=(SID=xe)))"
 DSN_SERVICE_NAME = "oracle+oracledb://admin:Password_123@(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=127.0.0.1)(PORT=9090))(CONNECT_DATA=(service_name=xe)))"
 SID = "sid"
 SERVICE_NAME = "service_name"
+ORACLE_CREATE_ENGINE = "connectors.sources.oracle.client.create_engine"
 
 
 @contextmanager
@@ -45,7 +45,7 @@ def oracle_client(**extras):
         client.close()
 
 
-@patch("connectors.sources.oracle.client.create_engine")
+@patch(ORACLE_CREATE_ENGINE)
 @pytest.mark.parametrize(
     "connection_source, DSN",
     [
@@ -65,7 +65,7 @@ def test_engine_in_thin_mode(mock_fun, connection_source, DSN):
         mock_fun.assert_called_with(DSN)
 
 
-@patch("connectors.sources.oracle.client.create_engine")
+@patch(ORACLE_CREATE_ENGINE)
 @pytest.mark.parametrize(
     "connection_source, DSN",
     [
@@ -93,9 +93,7 @@ def test_engine_in_thick_mode(mock_fun, connection_source, DSN):
 @pytest.mark.asyncio
 async def test_ping():
     async with create_source(OracleDataSource) as source:
-        with patch.object(
-            Engine, "connect", return_value=ConnectionSync(OracleQueries())
-        ):
+        with mock_sync_db_engine(ORACLE_CREATE_ENGINE, OracleQueries()):
             await source.ping()
 
 
@@ -110,9 +108,7 @@ async def test_get_docs():
         sid="xe",
         tables="*",
     ) as source:
-        with patch.object(
-            Engine, "connect", return_value=ConnectionSync(OracleQueries())
-        ):
+        with mock_sync_db_engine(ORACLE_CREATE_ENGINE, OracleQueries()):
             actual_response = []
             expected_response = [
                 {

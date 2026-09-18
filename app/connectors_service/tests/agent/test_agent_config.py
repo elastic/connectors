@@ -7,6 +7,8 @@ import warnings
 from unittest.mock import MagicMock, Mock
 
 from elastic_transport import SecurityWarning
+from google.protobuf import json_format
+from google.protobuf.struct_pb2 import Struct
 
 from connectors.agent.config import ConnectorsAgentConfigurationWrapper
 from connectors.es.client import ESClient
@@ -24,6 +26,18 @@ def prepare_unit_mock(fields, log_level):
     unit_mock.config.source.fields = fields
     unit_mock.config.source.__getitem__.side_effect = fields.__getitem__
 
+    unit_mock.log_level = log_level
+
+    return unit_mock
+
+
+def prepare_agent_proto_unit_mock(config_dict, log_level):
+    source = Struct()
+    json_format.ParseDict(config_dict, source)
+
+    unit_mock = Mock()
+    unit_mock.config = Mock()
+    unit_mock.config.source = source
     unit_mock.log_level = log_level
 
     return unit_mock
@@ -123,7 +137,7 @@ def test_try_update_with_ssl_verification_mode_none_disables_verify_certs():
     api_key = "lemme_in"
 
     config_wrapper = prepare_config_wrapper()
-    unit_mock = prepare_unit_mock(
+    unit_mock = prepare_agent_proto_unit_mock(
         {
             "hosts": hosts,
             "api_key": api_key,
@@ -151,7 +165,7 @@ def test_ssl_config_from_agent_applies_to_es_client_without_defaults():
     api_key = "lemme_in"
 
     config_wrapper = prepare_config_wrapper()
-    unit_mock = prepare_unit_mock(
+    unit_mock = prepare_agent_proto_unit_mock(
         {
             "hosts": hosts,
             "api_key": api_key,
@@ -179,7 +193,7 @@ def test_try_update_with_ssl_verification_mode_full_enables_verify_certs():
     api_key = "lemme_in"
 
     config_wrapper = prepare_config_wrapper()
-    unit_mock = prepare_unit_mock(
+    unit_mock = prepare_agent_proto_unit_mock(
         {
             "hosts": hosts,
             "api_key": api_key,

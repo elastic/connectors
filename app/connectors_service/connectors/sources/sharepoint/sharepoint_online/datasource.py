@@ -4,6 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import asyncio
+import contextlib
 import os
 from datetime import datetime, timedelta
 from functools import partial
@@ -31,6 +32,8 @@ from connectors.sources.sharepoint.sharepoint_online.client import (
 from connectors.sources.sharepoint.sharepoint_online.constants import (
     CURSOR_SITE_DRIVE_KEY,
     DEFAULT_PARALLEL_CONNECTION_COUNT,
+    EDIT_ITEM_MASK,
+    EDIT_ROLE_TYPES,
     EXCLUDED_SHAREPOINT_LIST_NAMES,
     MAX_DOCUMENT_SIZE,
     SPO_API_MAX_BATCH_SIZE,
@@ -45,9 +48,11 @@ from connectors.sources.sharepoint.sharepoint_online.utils import (
     DeltaLinkExpired,
     SyncCursorEmpty,
     _get_login_name,
+    _is_guest_user,
     _parse_created_date_time,
     _prefix_email,
     _prefix_group,
+    _prefix_site_group,
     _prefix_user,
     _prefix_user_id,
 )
@@ -55,6 +60,23 @@ from connectors.sources.sharepoint.sharepoint_online.validator import (
     SharepointOnlineAdvancedRulesValidator,
 )
 from connectors.utils import ConcurrentTasks, html_to_text, iterable_batches_generator
+
+
+def _is_page_published(version_string):
+    """True when the page version is a major release (e.g. "3.0")."""
+    if not version_string:
+        return True
+
+    _, _, minor = str(version_string).partition(".")
+
+    if not minor:
+        return True
+
+    try:
+        return int(minor) == 0
+    except ValueError:
+        # An unparsable minor version is no evidence of a published page
+        return False
 
 
 class SharepointOnlineDataSource(BaseDataSource):
@@ -235,6 +257,15 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "type": "bool",
                 "value": True,
             },
+            "expand_site_group_members": {
+                "depends_on": [{"field": "use_document_level_security", "value": True}],
+                "display": "toggle",
+                "label": "Expand site group members",
+                "order": 17,
+                "tooltip": "When enabled, SharePoint site group members are written individually onto each document's access control list. Disable this for large site groups to store a compact site group token on documents instead, and resolve membership during access control syncs. Changing this setting requires a full content sync and access control sync.",
+                "type": "bool",
+                "value": True,
+            },
         }
 
     async def validate_config(self):
@@ -315,17 +346,23 @@ class SharepointOnlineDataSource(BaseDataSource):
                 [
                   "user":spo-admin"
                 ]
+            - list: site members with edit-or-higher access, plus site-admins
+                [
+                    "user:spo-admin",
+                    "user:spo-editor"
+                ]
         """
 
         self._logger.debug(f"Looking at site: {site['id']} with url {site['webUrl']}")
         if not self._dls_enabled():
-            return [], []
+            return [], [], []
 
         def _is_site_admin(user):
             return user.get("IsSiteAdmin", False)
 
         access_control = set()
         site_admins_access_control = set()
+        editors_access_control = set()
 
         try:
             async for role_assignment in self.client.site_role_assignments(
@@ -334,7 +371,17 @@ class SharepointOnlineDataSource(BaseDataSource):
                 member = role_assignment["Member"]
                 member_access_control = set()
                 member_access_control.update(
-                    await self._get_access_control_from_role_assignment(role_assignment)
+                    await self._get_access_control_from_role_assignment(
+                        role_assignment,
+                        site_id=site["id"],
+                        site_web_url=site["webUrl"],
+                    )
+                )
+
+                editors_access_control.update(
+                    await self._get_access_control_from_role_assignment(
+                        role_assignment, require_edit_access=True
+                    )
                 )
 
                 if _is_site_admin(member):
@@ -361,7 +408,13 @@ class SharepointOnlineDataSource(BaseDataSource):
             )
             raise PermissionsMissing(msg) from e
 
-        return list(access_control), list(site_admins_access_control)
+        editors_access_control |= site_admins_access_control
+
+        return (
+            list(access_control),
+            list(site_admins_access_control),
+            list(editors_access_control),
+        )
 
     def _dls_enabled(self):
         if self._features is None:
@@ -371,6 +424,52 @@ class SharepointOnlineDataSource(BaseDataSource):
             return False
 
         return self.configuration["use_document_level_security"]
+
+    def _expand_site_group_members(self):
+        """Whether site groups are expanded into individual users on document ACLs.
+
+        Default True preserves legacy behavior. When False (compact mode), documents
+        receive a single site_group token and membership is resolved on identity docs.
+        """
+        return self.configuration.get("expand_site_group_members", True)
+
+    async def _expand_site_group_members_access_control(
+        self, site_web_url, site_group_id, role_assignment=None
+    ):
+        access_control = []
+        if role_assignment is not None:
+            users = nested_get_from_dict(role_assignment, ["Member", "Users"], [])
+            for user in users:  # pyright: ignore
+                access_control.extend(await self._access_control_for_member(user))
+            return access_control
+
+        users = await self.site_group_users(site_web_url, site_group_id)
+        for site_group_user in users:
+            access_control.extend(
+                await self._access_control_for_member(site_group_user)
+            )
+        return access_control
+
+    async def _site_group_access_control(
+        self, site_web_url, site_group_id, site_id, role_assignment=None
+    ):
+        """Resolve site-group permissions, falling back to member expansion if compact
+        tokens cannot be written safely."""
+        if self._expand_site_group_members():
+            return await self._expand_site_group_members_access_control(
+                site_web_url, site_group_id, role_assignment=role_assignment
+            )
+
+        if site_id is not None:
+            return [_prefix_site_group(site_id, site_group_id)]
+
+        self._logger.warning(
+            "Cannot write compact site_group token because site_id is missing "
+            f"(group_id={site_group_id}); falling back to expanding site group members"
+        )
+        return await self._expand_site_group_members_access_control(
+            site_web_url, site_group_id, role_assignment=role_assignment
+        )
 
     def access_control_query(self, access_control):
         return es_access_control_query(access_control)
@@ -459,6 +558,10 @@ class SharepointOnlineDataSource(BaseDataSource):
         to parallelise the Graph API calls required for group membership expansion.
         See: https://github.com/elastic/connectors/issues/4435
 
+        When expand_site_group_members is False, also enriches identity docs with
+        site_group tokens for SharePoint site group memberships so document ACLs
+        can stay compact.
+
         Yields:
              dict: dictionary representing a user access control document
         """
@@ -468,35 +571,47 @@ class SharepointOnlineDataSource(BaseDataSource):
             return
 
         already_seen_ids = set()
+        seen_lock = asyncio.Lock()
 
-        def _already_seen(*ids):
-            for id_ in ids:
-                if id_ in already_seen_ids:
-                    self._logger.debug(f"We've already seen {id_}")
-                    return True
-
-            return False
-
-        def update_already_seen(*ids):
-            for id_ in ids:
-                # We want to make sure to not add 'None' to the already seen sets
-                if id_:
-                    already_seen_ids.add(id_)
+        async def _check_and_mark_seen(*ids) -> bool:
+            async with seen_lock:
+                for id_ in ids:
+                    if id_ and id_ in already_seen_ids:
+                        self._logger.debug(f"We've already seen {id_}")
+                        return True
+                for id_ in ids:
+                    if id_:
+                        already_seen_ids.add(id_)
+                return False
 
         results: asyncio.Queue = asyncio.Queue()
+
+        site_group_tokens_by_acl_token = {}
+        eeeu_site_group_tokens = set()
+
+        if not self._expand_site_group_members():
+            (
+                site_group_tokens_by_acl_token,
+                eeeu_site_group_tokens,
+            ) = await self._build_site_group_token_index()
 
         async def process_user(user):
             email = user.get("EMail", user.get("mail", None))
             username = user.get("UserName", user.get("userPrincipalName", None))
             self._logger.debug(f"Detected a person: {username}: {email}")
 
-            if _already_seen(email, username):
+            if await _check_and_mark_seen(email, username):
                 return
-
-            update_already_seen(email, username)
 
             person_access_control_doc = await self._user_access_control_doc(user)
             if person_access_control_doc:
+                if not self._expand_site_group_members():
+                    self._apply_site_group_tokens_to_identity(
+                        person_access_control_doc,
+                        user,
+                        site_group_tokens_by_acl_token,
+                        eeeu_site_group_tokens,
+                    )
                 await results.put(person_access_control_doc)
 
         self._logger.info("Fetching all users")
@@ -514,10 +629,96 @@ class SharepointOnlineDataSource(BaseDataSource):
             # Cancel any tasks still in flight if the generator is closed early
             # or an exception is raised during enumeration
             task_pool.cancel()
+            with contextlib.suppress(Exception):
+                await task_pool.join(raise_on_error=False)
 
-        # Drain remaining results after all tasks have completed
+        # Drain remaining results after all tasks have completed.
+        # Note: if task_pool.join(raise_on_error=True) raised above, remaining buffered
+        # results are dropped and the ACL index may remain partially populated.
         while not results.empty():
             yield results.get_nowait()
+
+    def _apply_site_group_tokens_to_identity(
+        self,
+        user_doc,
+        user,
+        site_group_tokens_by_acl_token,
+        eeeu_site_group_tokens,
+    ):
+        site_group_tokens = set()
+        if not _is_guest_user(user):
+            site_group_tokens.update(eeeu_site_group_tokens)
+
+        access_control = user_doc["query"]["template"]["params"].get(
+            "access_control", []
+        )
+        for token in access_control:
+            site_group_tokens.update(site_group_tokens_by_acl_token.get(token, set()))
+
+        if site_group_tokens:
+            user_doc["query"]["template"]["params"]["access_control"] = list(
+                set(access_control).union(site_group_tokens)
+            )
+
+    async def _build_site_group_token_index(self):
+        """Map identity ACL tokens to compact site_group tokens from site memberships."""
+        site_group_tokens_by_acl_token = {}
+        eeeu_site_group_tokens = set()
+        unmatched_members = 0
+        indexed_members = 0
+        everyone_except_external_users = "group:EveryoneExceptExternalUsers"
+
+        self._logger.info(
+            "Compact site-group DLS enabled: building site group membership index"
+        )
+
+        async for site_collection in self.site_collections():
+            async for site in self.sites(
+                site_collection["siteCollection"]["hostname"],
+                self.configuration["site_collections"],
+            ):
+                site_id = site["id"]
+                site_web_url = site["webUrl"]
+
+                async for site_group in self.client.site_groups(site_web_url):
+                    group_id = site_group.get("Id")
+                    if group_id is None:
+                        continue
+
+                    site_group_token = _prefix_site_group(site_id, group_id)
+                    for member in await self.site_group_users(site_web_url, group_id):
+                        member_tokens = await self._access_control_for_member(member)
+                        if not member_tokens:
+                            unmatched_members += 1
+                            self._logger.debug(
+                                "Site group member could not be resolved to access "
+                                f"control tokens (site={site_web_url}, group={group_id}, "
+                                f"title={member.get('Title')})"
+                            )
+                            continue
+
+                        if everyone_except_external_users in member_tokens:
+                            eeeu_site_group_tokens.add(site_group_token)
+                        else:
+                            for token in member_tokens:
+                                site_group_tokens_by_acl_token.setdefault(
+                                    token, set()
+                                ).add(site_group_token)
+                        indexed_members += 1
+
+        self._logger.info(
+            "Site group membership index complete: "
+            f"{indexed_members} members indexed, {unmatched_members} members unresolved, "
+            f"{len(eeeu_site_group_tokens)} EEEU site groups"
+        )
+        if unmatched_members:
+            self._logger.warning(
+                f"{unmatched_members} SharePoint site group members could not be resolved "
+                "to access control tokens; users may not see documents protected by the "
+                "related compact site_group tokens"
+            )
+
+        return site_group_tokens_by_acl_token, eeeu_site_group_tokens
 
     async def site_group_users(self, site_web_url, site_group_id):
         """
@@ -552,13 +753,15 @@ class SharepointOnlineDataSource(BaseDataSource):
         return users
 
     async def _drive_items_batch_with_permissions(
-        self, drive_id, drive_items_batch, site_web_url
+        self, drive_id, drive_items_batch, site_web_url, site_id=None
     ):
         """Decorate a batch of drive items with their permissions using one API request.
 
         Args:
             drive_id (int): id of the drive, where the drive items reside
             drive_items_batch (list): list of drive items to decorate with permissions
+            site_web_url (str): web URL of the parent site
+            site_id (str): Graph site id (needed for compact site_group tokens)
 
         Yields:
             drive_item (dict): drive item with or without permissions depending on the config value of `fetch_drive_item_permissions`
@@ -604,7 +807,7 @@ class SharepointOnlineDataSource(BaseDataSource):
 
             if drive_item:
                 yield await self._with_drive_item_permissions(
-                    drive_item, permissions, site_web_url
+                    drive_item, permissions, site_web_url, site_id=site_id
                 )
 
     async def get_docs(self, filtering=None):
@@ -626,6 +829,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                 (
                     site_access_control,
                     site_admin_access_control,
+                    site_editors_access_control,
                 ) = await self._site_access_control(site)
 
                 yield (
@@ -648,7 +852,10 @@ class SharepointOnlineDataSource(BaseDataSource):
                             async for (
                                 drive_item
                             ) in self._drive_items_batch_with_permissions(
-                                site_drive["id"], drive_items_batch, site["webUrl"]
+                                site_drive["id"],
+                                drive_items_batch,
+                                site["webUrl"],
+                                site_id=site["id"],
                             ):
                                 drive_item["_id"] = drive_item["id"]
                                 drive_item["object_type"] = "drive_item"
@@ -697,7 +904,9 @@ class SharepointOnlineDataSource(BaseDataSource):
                         yield list_item, download_func
 
                 # Sync site pages
-                async for site_page in self.site_pages(site, site_access_control):
+                async for site_page in self.site_pages(
+                    site, site_access_control, site_editors_access_control
+                ):
                     # Always include site admins in site page access controls
                     site_page = self._decorate_with_access_control(
                         site_page, site_admin_access_control
@@ -729,6 +938,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                 (
                     site_access_control,
                     site_admin_access_control,
+                    site_editors_access_control,
                 ) = await self._site_access_control(site)
 
                 yield (
@@ -756,7 +966,10 @@ class SharepointOnlineDataSource(BaseDataSource):
                             async for (
                                 drive_item
                             ) in self._drive_items_batch_with_permissions(
-                                site_drive["id"], drive_items_batch, site["webUrl"]
+                                site_drive["id"],
+                                drive_items_batch,
+                                site["webUrl"],
+                                site_id=site["id"],
                             ):
                                 drive_item["_id"] = drive_item["id"]
                                 drive_item["object_type"] = "drive_item"
@@ -810,7 +1023,10 @@ class SharepointOnlineDataSource(BaseDataSource):
 
                 # Sync site pages
                 async for site_page in self.site_pages(
-                    site, site_access_control, check_timestamp=True
+                    site,
+                    site_access_control,
+                    site_editors_access_control,
+                    check_timestamp=True,
                 ):
                     # Always include site admins in site page access controls
                     site_page = self._decorate_with_access_control(
@@ -855,13 +1071,15 @@ class SharepointOnlineDataSource(BaseDataSource):
                 yield site_drive
 
     async def _with_drive_item_permissions(
-        self, drive_item, drive_item_permissions, site_web_url
+        self, drive_item, drive_item_permissions, site_web_url, site_id=None
     ):
         """Decorates a drive item with its permissions.
 
         Args:
             drive_item (dict): drive item to fetch the permissions for.
             drive_item_permissions (list): drive item permissions to add to the drive_item.
+            site_web_url (str): web URL of the parent site.
+            site_id (str): Graph site id (needed for compact site_group tokens).
 
         Returns:
             drive_item (dict): drive item decorated with its permissions.
@@ -953,11 +1171,13 @@ class SharepointOnlineDataSource(BaseDataSource):
                 access_control.append(_prefix_user(site_user_username))
 
             if site_group_id:
-                users = await self.site_group_users(site_web_url, site_group_id)
-                for site_group_user in users:  # note, 'users' might contain groups.
-                    access_control.extend(
-                        await self._access_control_for_member(site_group_user)
+                access_control.extend(
+                    await self._site_group_access_control(
+                        site_web_url,
+                        site_group_id,
+                        site_id,
                     )
+                )
 
         return self._decorate_with_access_control(drive_item, access_control)
 
@@ -1032,7 +1252,9 @@ class SharepointOnlineDataSource(BaseDataSource):
                         ):
                             list_item_access_control.extend(
                                 await self._get_access_control_from_role_assignment(
-                                    role_assignment
+                                    role_assignment,
+                                    site_id=site_id,
+                                    site_web_url=site_web_url,
                                 )
                             )
 
@@ -1128,7 +1350,9 @@ class SharepointOnlineDataSource(BaseDataSource):
                         ):
                             site_list_access_control.extend(
                                 await self._get_access_control_from_role_assignment(
-                                    role_assignment
+                                    role_assignment,
+                                    site_id=site["id"],
+                                    site_web_url=site_url,
                                 )
                             )
 
@@ -1143,11 +1367,20 @@ class SharepointOnlineDataSource(BaseDataSource):
 
                 yield site_list
 
-    async def _get_access_control_from_role_assignment(self, role_assignment):
+    async def _get_access_control_from_role_assignment(
+        self,
+        role_assignment,
+        site_id=None,
+        site_web_url=None,
+        require_edit_access=False,
+    ):
         """Extracts access control from a role assignment.
 
         Args:
             role_assignment (dict): dictionary representing a role assignment.
+            site_id (str): Graph site id (needed for compact site_group tokens).
+            site_web_url (str): SharePoint site URL (needed for site group fallback).
+            require_edit_access (bool): when True, return only members with edit access.
 
         Returns:
             access_control (list): list of usernames and dynamic group ids, which have the role assigned.
@@ -1156,7 +1389,7 @@ class SharepointOnlineDataSource(BaseDataSource):
         If any role is assigned to a user this means at least "read" access.
         """
 
-        def _has_limited_access(role_assignment):
+        def _grants_access(role_assignment):
             bindings = role_assignment.get("RoleDefinitionBindings", [])
 
             # If there is no permission information, default to restrict access
@@ -1164,9 +1397,8 @@ class SharepointOnlineDataSource(BaseDataSource):
                 self._logger.debug(
                     f"No RoleDefinitionBindings found for '{role_assignment.get('odata.id')}'"
                 )
-                return True
+                return False
 
-            # if any binding grants view access, this role assignment's member has view access
             for binding in bindings:
                 # full explanation of the bit-math: https://stackoverflow.com/questions/51897160/how-to-parse-getusereffectivepermissions-sharepoint-response-in-java
                 # this approach was confirmed as valid by a Microsoft Sr. Support Escalation Engineer
@@ -1174,18 +1406,21 @@ class SharepointOnlineDataSource(BaseDataSource):
                     nested_get_from_dict(binding, ["BasePermissions", "Low"], "0")  # pyright: ignore
                 )
                 role_type_kind = binding.get("RoleTypeKind", 0)
-                if (
+                if require_edit_access:
+                    if (base_permission_low & EDIT_ITEM_MASK) or (
+                        role_type_kind in EDIT_ROLE_TYPES
+                    ):
+                        return True
+                elif (
                     (base_permission_low & VIEW_ITEM_MASK)
                     or (base_permission_low & VIEW_PAGE_MASK)
                     or (role_type_kind in VIEW_ROLE_TYPES)
                 ):
-                    return False
+                    return True
 
-            return (
-                True  # no evidence of view access was found, so assuming limited access
-            )
+            return False
 
-        if _has_limited_access(role_assignment):
+        if not _grants_access(role_assignment):
             return []
 
         access_control = []
@@ -1196,10 +1431,31 @@ class SharepointOnlineDataSource(BaseDataSource):
         is_user = identity_type == "SP.User"
 
         if is_group:
-            users = nested_get_from_dict(role_assignment, ["Member", "Users"], [])
-
-            for user in users:  # pyright: ignore
-                access_control.extend(await self._access_control_for_member(user))
+            group_id = nested_get_from_dict(role_assignment, ["Member", "Id"])
+            if group_id is None:
+                group_id = role_assignment.get("PrincipalId")
+            if group_id is not None:
+                access_control.extend(
+                    await self._site_group_access_control(
+                        site_web_url=site_web_url,
+                        site_group_id=group_id,
+                        site_id=site_id,
+                        role_assignment=role_assignment,
+                    )
+                )
+            elif nested_get_from_dict(role_assignment, ["Member", "Users"], []):
+                access_control.extend(
+                    await self._expand_site_group_members_access_control(
+                        site_web_url=site_web_url,
+                        site_group_id=group_id,
+                        role_assignment=role_assignment,
+                    )
+                )
+            else:
+                self._logger.warning(
+                    "Cannot resolve site group for role assignment "
+                    f"'{role_assignment.get('odata.id')}': group_id is missing"
+                )
         elif is_user:
             member = role_assignment.get("Member", {})
             access_control.extend(await self._access_control_for_member(member))
@@ -1210,7 +1466,13 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         return access_control
 
-    async def site_pages(self, site, site_access_control, check_timestamp=False):
+    async def site_pages(
+        self,
+        site,
+        site_access_control,
+        site_editors_access_control,
+        check_timestamp=False,
+    ):
         site_id = site["id"]
         url = site["webUrl"]
         async for site_page in self.client.site_pages(url):
@@ -1226,6 +1488,13 @@ class SharepointOnlineDataSource(BaseDataSource):
                 # {site_id}-{some_name_or_string_id}-{autoincremented_id}
                 site_page["_id"] = f"{site_id}-site_page-{site_page['Id']}"
                 site_page["object_type"] = "site_page"
+
+                published = _is_page_published(site_page.get("OData__UIVersionString"))
+                site_page["published"] = published
+                if not published:
+                    self._logger.debug(
+                        f"Unpublished site page '{site_page['_id']}'; restricting ACL to owners/editors."
+                    )
 
                 has_unique_role_assignments = False
 
@@ -1254,7 +1523,10 @@ class SharepointOnlineDataSource(BaseDataSource):
                         ):
                             page_access_control.extend(
                                 await self._get_access_control_from_role_assignment(
-                                    role_assignment
+                                    role_assignment,
+                                    site_id=site_id,
+                                    site_web_url=url,
+                                    require_edit_access=not published,
                                 )
                             )
 
@@ -1262,10 +1534,14 @@ class SharepointOnlineDataSource(BaseDataSource):
                             site_page, page_access_control
                         )
 
-                # set parent site access control
                 if not has_unique_role_assignments:
+                    inherited_access_control = (
+                        site_access_control
+                        if published
+                        else site_editors_access_control
+                    )
                     site_page = self._decorate_with_access_control(
-                        site_page, site_access_control
+                        site_page, inherited_access_control
                     )
 
                 for html_field in [
