@@ -22,13 +22,8 @@ from exchangelib import (
     OAuth2Credentials,
 )
 from exchangelib.errors import (
-    ErrorAccessDenied,
     ErrorFolderNotFound,
-    ErrorInvalidFolderId,
-    ErrorItemNotFound,
     ErrorManagedFolderNotFound,
-    ErrorServerBusy,
-    ErrorTimeoutExpired,
     TransportError,
 )
 from exchangelib.folders import (
@@ -50,7 +45,9 @@ from exchangelib.folders import (
     Files,
     FromFavoriteSenders,
     IMContactList,
+    Inbox,
     Journal,
+    JunkEmail,
     LocalFailures,
     Messages,
     MsgFolderRoot,
@@ -66,6 +63,7 @@ from exchangelib.folders import (
     RecoverableItemsVersions,
     RSSFeeds,
     SearchFolders,
+    SentItems,
     ServerFailures,
     Sharing,
     Shortcuts,
@@ -106,17 +104,17 @@ from connectors.utils import (
     url_encode,
 )
 
-# Folder-absent faults: skip the folder, keep syncing.
+# Folder-absent faults: skip the folder, keep syncing. Access denied is left to
+# propagate, so get_docs skips the whole mailbox instead of indexing it partly.
 FOLDER_SKIP_ERRORS = (ErrorFolderNotFound, ErrorManagedFolderNotFound)
-# One unreachable folder must not abort the sync.
-EXTRA_MAIL_FOLDER_ERRORS = FOLDER_SKIP_ERRORS + (
-    ErrorAccessDenied,
-    ErrorInvalidFolderId,
-    ErrorItemNotFound,
-    ErrorServerBusy,
-    ErrorTimeoutExpired,
-    TransportError,
-)
+# Extra folders are opt-in and best effort, so any per-folder EWS fault skips
+# them. TransportError is the base class of those faults.
+EXTRA_MAIL_FOLDER_ERRORS = (TransportError,)
+
+# Already synced with their own document type. Matched by class, not id: a
+# folder the mailbox denies GetFolder on resolves with id=None, and re-indexing
+# it here would overwrite those documents with the generic `Mail` type.
+DEFAULT_MAIL_FOLDERS = (Inbox, JunkEmail, SentItems)
 
 # Mail-capable but not user mail. Search folders alias items already indexed
 # under their real folder, so they would overwrite those documents.
@@ -208,6 +206,9 @@ def _discover_additional_mail_folders(msg_folder_root, synced_folder_ids):
         ):
             if sync_id is not None:
                 pruned_folder_ids.add(sync_id)
+            continue
+        # Skipped, not pruned: subfolders of a default folder are user mail.
+        if isinstance(folder, DEFAULT_MAIL_FOLDERS):
             continue
         if not _is_mail_folder(folder):
             continue
@@ -615,10 +616,6 @@ class OutlookClient:
             lambda folder=folder_object: list(folder.all().only(*MAIL_FIELDS))
         )
 
-    async def _yield_mails_from_folder(self, folder_object, mail_type):
-        for mail in await self._fetch_folder_mails(folder_object):
-            yield mail, mail_type
-
     async def get_mails(self, account):
         synced_folder_ids = set()
         for mail_type in MAIL_TYPES:
@@ -643,10 +640,8 @@ class OutlookClient:
             if sync_id is not None:
                 synced_folder_ids.add(sync_id)
 
-            async for mail, resolved_mail_type in self._yield_mails_from_folder(
-                folder_object, mail_type
-            ):
-                yield mail, resolved_mail_type
+            for mail in await self._fetch_folder_mails(folder_object):
+                yield mail, mail_type
 
         if not self.sync_all_mail_folders:
             return
@@ -671,8 +666,8 @@ class OutlookClient:
                 f"Fetching additional mail folder {folder_name!r} for "
                 f"{account.primary_smtp_address}"
             )
-            # Guard the fetch only; wrapping the yields would swallow
-            # consumer errors.
+            # Guard the fetch, not the yields, which would also swallow errors
+            # raised by the consumer.
             try:
                 mails = await self._fetch_folder_mails(folder_object)
             except EXTRA_MAIL_FOLDER_ERRORS as error:

@@ -33,9 +33,11 @@ from exchangelib.folders import (
     Drafts,
     Folder,
     Inbox,
+    JunkEmail,
     Messages,
     Outbox,
     SearchFolders,
+    SentItems,
     SyncIssues,
     Tasks,
 )
@@ -68,6 +70,7 @@ from connectors.sources.outlook.client import (
     _is_mail_folder,
 )
 from connectors.sources.outlook.constants import (
+    ARCHIVE_MAIL_OBJECT,
     INBOX_MAIL_OBJECT,
     MAIL_ATTACHMENT,
     MAIL_OBJECT,
@@ -1680,17 +1683,18 @@ def test_is_mail_folder_rejects_non_user_mail_folders(folder_cls):
 
 
 def test_discover_additional_mail_folders_skips_default_and_non_mail():
-    inbox = typed_user_mail_folder(Inbox, MAIL, folder_id="inbox-id")
-    inbox.name = "Inbox"
+    """Archive has no distinguished class, so it is matched by id."""
+    archive = typed_user_mail_folder(Messages, MAIL, folder_id="archive-id")
+    archive.name = "Archive"
     custom = typed_user_mail_folder(Folder, MAIL, folder_id="custom-id")
     custom.name = "PRTG Done"
     calendar = typed_folder(Calendar, CALENDAR, folder_id="calendar-id")
     calendar.name = "Calendar"
 
     root = MagicMock()
-    root.walk.return_value = [inbox, custom, calendar]
+    root.walk.return_value = [archive, custom, calendar]
 
-    additional = _discover_additional_mail_folders(root, {"inbox-id"})
+    additional = _discover_additional_mail_folders(root, {"archive-id"})
 
     assert additional == [custom]
 
@@ -1720,21 +1724,23 @@ def test_discover_additional_mail_folders_prunes_non_user_subtrees():
 async def test_get_mails_sync_all_mail_folders_includes_custom_folder():
     async with create_outlook_source(sync_all_mail_folders=True) as source:
         account = MockAccount()
-        # Same id as account.inbox, so this also covers the dedupe.
+        # Inbox is deduped by class, Archive by id: cover both.
         walked_inbox = typed_user_mail_folder(Inbox, MAIL, folder_id="inbox-id")
         walked_inbox.name = "Inbox"
+        walked_archive = typed_user_mail_folder(Messages, MAIL, folder_id="archive-id")
+        walked_archive.name = "Archive"
         custom_folder = typed_user_mail_folder(Folder, MAIL, folder_id="custom-id")
         custom_folder.name = "PRTG Done"
         account.msg_folder_root.walk = MagicMock(
-            return_value=[walked_inbox, custom_folder]
+            return_value=[walked_inbox, walked_archive, custom_folder]
         )
 
         results = [mail_type async for _, mail_type in source.client.get_mails(account)]
 
         assert {"constant": MAIL_OBJECT, "folder_name": "PRTG Done"} in results
         assert sum(1 for mail_type in results if mail_type.get("folder_name")) == 1
-        assert {"constant": MAIL_OBJECT, "folder_name": "Inbox"} not in results
         assert {"folder": "inbox", "constant": INBOX_MAIL_OBJECT} in results
+        assert {"folder": "archive", "constant": ARCHIVE_MAIL_OBJECT} in results
 
 
 @pytest.mark.asyncio
@@ -1746,6 +1752,27 @@ async def test_get_mails_sync_all_disabled_does_not_walk_folders():
         )
 
         _ = [item async for item in source.client.get_mails(account)]
+
+
+@pytest.mark.parametrize("folder_cls", [Inbox, SentItems, JunkEmail])
+def test_discover_additional_mail_folders_skips_default_folders_without_id(
+    folder_cls,
+):
+    """A denied GetFolder resolves the default folder with id=None, so it never
+    reaches synced_folder_ids and only its class identifies it."""
+    default = typed_user_mail_folder(folder_cls, MAIL, folder_id="unmatched-id")
+    default.name = folder_cls.__name__
+    under_default = typed_user_mail_folder(
+        Folder, MAIL, folder_id="under-default-id", parent_folder_id="unmatched-id"
+    )
+    under_default.name = "PRTG Done"
+
+    root = MagicMock()
+    root.walk.return_value = [default, under_default]
+
+    additional = _discover_additional_mail_folders(root, set())
+
+    assert additional == [under_default]
 
 
 @pytest.mark.asyncio
