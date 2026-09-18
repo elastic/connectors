@@ -25,7 +25,22 @@ from exchangelib.errors import (
     ErrorNonPrimarySmtpAddress,
     TransportError,
 )
-from exchangelib.folders import BaseFolder, Calendar, Messages, Tasks
+from exchangelib.folders import (
+    AllItems,
+    BaseFolder,
+    Calendar,
+    DeletedItems,
+    Drafts,
+    Folder,
+    Inbox,
+    JunkEmail,
+    Messages,
+    Outbox,
+    SearchFolders,
+    SentItems,
+    SyncIssues,
+    Tasks,
+)
 from exchangelib.items import (
     CalendarItem,
     Contact,
@@ -51,10 +66,14 @@ from connectors.sources.outlook.client import (
     SSLCertificateError,
     UnauthorizedException,
     UsersFetchFailed,
+    _discover_additional_mail_folders,
+    _is_mail_folder,
 )
 from connectors.sources.outlook.constants import (
+    ARCHIVE_MAIL_OBJECT,
     INBOX_MAIL_OBJECT,
     MAIL_ATTACHMENT,
+    MAIL_OBJECT,
     OUTLOOK_CLOUD,
     OUTLOOK_SERVER,
 )
@@ -219,7 +238,7 @@ class MockMsgFolderRoot:
     def __truediv__(self, path):
         if path == "Archive":
             # A real mail Archive is a Messages folder (the client now verifies this).
-            return typed_folder(Messages, MAIL)
+            return typed_folder(Messages, MAIL, folder_id="archive-id")
         msg = "Unsupported path element"
         raise ValueError(msg)
 
@@ -350,21 +369,36 @@ class AllObjects:
 
 
 class MockOutlookObject:
-    def __init__(self, object_type):
+    def __init__(self, object_type, folder_id=None):
         self.object_type = object_type
+        self.id = folder_id or f"{object_type}-folder"
         self.children = [self]
 
     def all(self):  # noqa
         return AllObjects(object_type=self.object_type)
 
 
-def typed_folder(folder_cls, object_type):
+def typed_folder(folder_cls, object_type, folder_id=None, parent_folder_id=None):
     """A folder mock that passes isinstance(folder_cls) (as the client now checks)
     while keeping MockOutlookObject's .all().only() dispatch."""
     folder = MagicMock()
     folder.__class__ = folder_cls
     folder.object_type = object_type
+    folder.id = folder_id or f"{object_type}-folder"
+    # Unset, MagicMock would supply an opaque parent id.
+    folder.parent_folder_id = parent_folder_id
     folder.all.return_value = AllObjects(object_type=object_type)
+    return folder
+
+
+def typed_user_mail_folder(
+    folder_cls, object_type, folder_id=None, parent_folder_id=None
+):
+    """Mail folder as Exchange types it (Inbox/Folder), not Messages."""
+    folder = typed_folder(
+        folder_cls, object_type, folder_id=folder_id, parent_folder_id=parent_folder_id
+    )
+    folder.supported_item_models = (Message,)
     return folder
 
 
@@ -372,9 +406,10 @@ class MockAccount:
     def __init__(self):
         self.default_timezone = "UTC"
 
-        self.inbox = MockOutlookObject(object_type=MAIL)
-        self.sent = MockOutlookObject(object_type=MAIL)
-        self.junk = MockOutlookObject(object_type=MAIL)
+        # Distinct ids: the client dedupes default folders by id.
+        self.inbox = MockOutlookObject(object_type=MAIL, folder_id="inbox-id")
+        self.sent = MockOutlookObject(object_type=MAIL, folder_id="sent-id")
+        self.junk = MockOutlookObject(object_type=MAIL, folder_id="junk-id")
         self.tasks = MockOutlookObject(object_type=TASK)
         self.calendar = MockOutlookObject(object_type=CALENDAR)
         # Child folders under Calendar are real Calendar folders (the client only
@@ -478,6 +513,7 @@ async def create_outlook_source(
     ssl_enabled=False,
     ssl_ca="",
     use_text_extraction_service=False,
+    sync_all_mail_folders=False,
 ):
     async with create_source(
         OutlookDataSource,
@@ -493,6 +529,7 @@ async def create_outlook_source(
         ssl_enabled=ssl_enabled,
         ssl_ca=ssl_ca,
         use_text_extraction_service=use_text_extraction_service,
+        sync_all_mail_folders=sync_all_mail_folders,
     ) as source:
         yield source
 
@@ -1610,6 +1647,163 @@ def test_mails_doc_formatter_handles_missing_sender():
 
     assert document["sender"] is None
     assert document["to_recipients"] == ["dummy.user@gmail.com"]
+    assert "folder_name" not in document
+
+
+def test_mails_doc_formatter_adds_folder_name_for_additional_mail():
+    mail = build_mail_document()
+
+    document = OutlookDocFormatter().mails_doc_formatter(
+        mail=mail,
+        mail_type={"constant": MAIL_OBJECT, "folder_name": "PRTG Done"},
+        timezone=TIMEZONE,
+    )
+
+    assert document["type"] == MAIL_OBJECT
+    assert document["folder_name"] == "PRTG Done"
+
+
+def test_is_mail_folder_accepts_user_folder_rejects_calendar():
+    custom = typed_user_mail_folder(Folder, MAIL, folder_id="custom-id")
+    calendar = typed_folder(Calendar, CALENDAR, folder_id="calendar-id")
+    calendar.supported_item_models = ()
+
+    assert _is_mail_folder(custom) is True
+    assert _is_mail_folder(calendar) is False
+
+
+@pytest.mark.parametrize(
+    "folder_cls", [DeletedItems, Drafts, Outbox, SyncIssues, SearchFolders, AllItems]
+)
+def test_is_mail_folder_rejects_non_user_mail_folders(folder_cls):
+    """Mail-capable, but deleted, unsent, or already indexed elsewhere."""
+    folder = typed_user_mail_folder(folder_cls, MAIL, folder_id="system-id")
+
+    assert _is_mail_folder(folder) is False
+
+
+def test_discover_additional_mail_folders_skips_default_and_non_mail():
+    """Archive has no distinguished class, so it is matched by id."""
+    archive = typed_user_mail_folder(Messages, MAIL, folder_id="archive-id")
+    archive.name = "Archive"
+    custom = typed_user_mail_folder(Folder, MAIL, folder_id="custom-id")
+    custom.name = "PRTG Done"
+    calendar = typed_folder(Calendar, CALENDAR, folder_id="calendar-id")
+    calendar.name = "Calendar"
+
+    root = MagicMock()
+    root.walk.return_value = [archive, custom, calendar]
+
+    additional = _discover_additional_mail_folders(root, {"archive-id"})
+
+    assert additional == [custom]
+
+
+def test_discover_additional_mail_folders_prunes_non_user_subtrees():
+    """A user folder under Deleted Items is still deleted mail."""
+    trash = typed_user_mail_folder(DeletedItems, MAIL, folder_id="trash-id")
+    trash.name = "Deleted Items"
+    under_trash = typed_user_mail_folder(
+        Folder, MAIL, folder_id="under-trash-id", parent_folder_id="trash-id"
+    )
+    under_trash.name = "Old PRTG"
+    under_inbox = typed_user_mail_folder(
+        Folder, MAIL, folder_id="under-inbox-id", parent_folder_id="inbox-id"
+    )
+    under_inbox.name = "PRTG Done"
+
+    root = MagicMock()
+    root.walk.return_value = [trash, under_trash, under_inbox]
+
+    additional = _discover_additional_mail_folders(root, {"inbox-id"})
+
+    assert additional == [under_inbox]
+
+
+@pytest.mark.asyncio
+async def test_get_mails_sync_all_mail_folders_includes_custom_folder():
+    async with create_outlook_source(sync_all_mail_folders=True) as source:
+        account = MockAccount()
+        # Inbox is deduped by class, Archive by id: cover both.
+        walked_inbox = typed_user_mail_folder(Inbox, MAIL, folder_id="inbox-id")
+        walked_inbox.name = "Inbox"
+        walked_archive = typed_user_mail_folder(Messages, MAIL, folder_id="archive-id")
+        walked_archive.name = "Archive"
+        custom_folder = typed_user_mail_folder(Folder, MAIL, folder_id="custom-id")
+        custom_folder.name = "PRTG Done"
+        account.msg_folder_root.walk = MagicMock(
+            return_value=[walked_inbox, walked_archive, custom_folder]
+        )
+
+        results = [mail_type async for _, mail_type in source.client.get_mails(account)]
+
+        assert {"constant": MAIL_OBJECT, "folder_name": "PRTG Done"} in results
+        assert sum(1 for mail_type in results if mail_type.get("folder_name")) == 1
+        assert {"folder": "inbox", "constant": INBOX_MAIL_OBJECT} in results
+        assert {"folder": "archive", "constant": ARCHIVE_MAIL_OBJECT} in results
+
+
+@pytest.mark.asyncio
+async def test_get_mails_sync_all_disabled_does_not_walk_folders():
+    async with create_outlook_source(sync_all_mail_folders=False) as source:
+        account = MockAccount()
+        account.msg_folder_root.walk = MagicMock(
+            side_effect=AssertionError("walk should not be called")
+        )
+
+        _ = [item async for item in source.client.get_mails(account)]
+
+
+@pytest.mark.parametrize("folder_cls", [Inbox, SentItems, JunkEmail])
+def test_discover_additional_mail_folders_skips_default_folders_without_id(
+    folder_cls,
+):
+    """A denied GetFolder resolves the default folder with id=None, so it never
+    reaches synced_folder_ids and only its class identifies it."""
+    default = typed_user_mail_folder(folder_cls, MAIL, folder_id="unmatched-id")
+    default.name = folder_cls.__name__
+    under_default = typed_user_mail_folder(
+        Folder, MAIL, folder_id="under-default-id", parent_folder_id="unmatched-id"
+    )
+    under_default.name = "PRTG Done"
+
+    root = MagicMock()
+    root.walk.return_value = [default, under_default]
+
+    additional = _discover_additional_mail_folders(root, set())
+
+    assert additional == [under_default]
+
+
+@pytest.mark.asyncio
+async def test_get_mails_keeps_default_folders_when_walk_fails():
+    async with create_outlook_source(sync_all_mail_folders=True) as source:
+        account = MockAccount()
+        account.msg_folder_root.walk = MagicMock(
+            side_effect=ErrorAccessDenied("no access to the folder tree")
+        )
+
+        results = [mail_type async for _, mail_type in source.client.get_mails(account)]
+
+        assert {"folder": "inbox", "constant": INBOX_MAIL_OBJECT} in results
+        assert not [mail_type for mail_type in results if mail_type.get("folder_name")]
+
+
+@pytest.mark.asyncio
+async def test_get_mails_skips_additional_folder_that_cannot_be_fetched():
+    async with create_outlook_source(sync_all_mail_folders=True) as source:
+        account = MockAccount()
+        unreadable = typed_user_mail_folder(Folder, MAIL, folder_id="unreadable-id")
+        unreadable.name = "Restricted"
+        unreadable.all.side_effect = ErrorAccessDenied("no access to the folder")
+        readable = typed_user_mail_folder(Folder, MAIL, folder_id="custom-id")
+        readable.name = "PRTG Done"
+        account.msg_folder_root.walk = MagicMock(return_value=[unreadable, readable])
+
+        results = [mail_type async for _, mail_type in source.client.get_mails(account)]
+
+        assert {"constant": MAIL_OBJECT, "folder_name": "PRTG Done"} in results
+        assert {"constant": MAIL_OBJECT, "folder_name": "Restricted"} not in results
 
 
 def test_calendar_doc_formatter_handles_missing_organizer():
