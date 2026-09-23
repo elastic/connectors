@@ -238,7 +238,9 @@ class ServiceNowClient:
             query += f"sys_id>{after_sys_id}"
         params = {"sysparm_query": query, "sysparm_limit": TABLE_FETCH_SIZE}
         url = ENDPOINTS["TABLE"].format(table=table_name)
-        response = await self._api_call(url=url, params=params, actions={}, method="get")
+        response = await self._api_call(
+            url=url, params=params, actions={}, method="get"
+        )
         fetched = await self._read_response(response=response)
         return json.loads(fetched)["result"]
 

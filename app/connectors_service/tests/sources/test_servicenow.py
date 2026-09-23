@@ -1404,9 +1404,7 @@ async def test_fetch_user_roles_map_skips_rows_without_role():
                 "sys_id": "row_2",
             },
         ]
-        source.servicenow_client.get_table_rows = mock.AsyncMock(
-            side_effect=[rows, []]
-        )
+        source.servicenow_client.get_table_rows = mock.AsyncMock(side_effect=[rows, []])
         user_roles = await source._fetch_user_roles_map()
         assert user_roles == {"user_id_2": {"role_id_1"}}
 
