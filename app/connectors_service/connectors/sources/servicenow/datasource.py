@@ -25,6 +25,7 @@ from connectors.sources.servicenow.client import (
     MAX_CONCURRENT_CLIENT_SUPPORT,
     RETRIES,
     TABLE_BATCH_SIZE,
+    TABLE_FETCH_SIZE,
     ServiceNowClient,
 )
 from connectors.sources.servicenow.validator import ServiceNowAdvancedRulesValidator
@@ -274,24 +275,41 @@ class ServiceNowDataSource(BaseDataSource):
     async def _fetch_user_roles_map(self):
         """Build a map of user sys_id -> set of role sys_ids from sys_user_has_role.
 
-        API fetches are already paginated via ``_table_data_generator``
-        (``TABLE_FETCH_SIZE``). Only the user→roles map is held in memory for the
-        ACL sync: O(role assignments), not O(users × documents). For large tenants
-        that is tens of MB, versus the GB-scale per-document ACL expansion this
-        compact mode replaces.
+        Uses keyset pagination (ORDER BY sys_id, cursor = last sys_id seen) so
+        each page fetch is O(1) regardless of depth.  Only the user→roles map is
+        held in memory: O(role assignments), not O(users × documents).
         """
         user_roles = {}
-        async for assignment in self._table_data_generator(
-            service_name="sys_user_has_role", params={}
-        ):
-            user_id = (assignment.get("user") or {}).get("value")
-            role_id = (assignment.get("role") or {}).get("value")
-            if not user_id or not role_id:
-                self._logger.debug(
-                    "Skipping sys_user_has_role row with missing user or role reference"
-                )
-                continue
-            user_roles.setdefault(user_id, set()).add(role_id)
+        count = 0
+        last_sys_id = ""
+        while True:
+            rows = await self.servicenow_client.get_table_rows(
+                table_name="sys_user_has_role", after_sys_id=last_sys_id
+            )
+            if not rows:
+                break
+            for assignment in rows:
+                user_id = (assignment.get("user") or {}).get("value")
+                role_id = (assignment.get("role") or {}).get("value")
+                if not user_id or not role_id:
+                    self._logger.debug(
+                        "Skipping sys_user_has_role row with missing user or role reference"
+                    )
+                    continue
+                user_roles.setdefault(user_id, set()).add(role_id)
+                count += 1
+                if count % 10000 == 0:
+                    self._logger.info(
+                        f"Loading sys_user_has_role: {count} assignments processed so far "
+                        f"({len(user_roles)} unique users)..."
+                    )
+            last_sys_id = rows[-1]["sys_id"]
+            if len(rows) < TABLE_FETCH_SIZE:
+                break
+        self._logger.info(
+            f"Finished loading sys_user_has_role: {count} assignments, "
+            f"{len(user_roles)} unique users with roles"
+        )
         return user_roles
 
     async def get_access_control(self):

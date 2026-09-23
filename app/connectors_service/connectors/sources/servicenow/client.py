@@ -222,6 +222,26 @@ class ServiceNowClient:
             url=url, params=params, json=actions
         )
 
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    )
+    async def get_table_rows(self, table_name, after_sys_id=""):
+        """Fetch one page of rows from table_name ordered by sys_id.
+
+        Uses sys_id as a keyset cursor instead of sysparm_offset, so page
+        fetch cost is O(1) regardless of depth rather than O(n) with offset.
+        """
+        query = "ORDERBYsys_id^"
+        if after_sys_id:
+            query += f"sys_id>{after_sys_id}"
+        params = {"sysparm_query": query, "sysparm_limit": TABLE_FETCH_SIZE}
+        url = ENDPOINTS["TABLE"].format(table=table_name)
+        response = await self._api_call(url=url, params=params, actions={}, method="get")
+        fetched = await self._read_response(response=response)
+        return json.loads(fetched)["result"]
+
     async def download_func(self, url):
         response = await self._api_call(url, {}, {}, "get")
         yield response
