@@ -1396,17 +1396,22 @@ async def test_fetch_access_controls_compact_empty_roles_returns_none():
 @pytest.mark.asyncio
 async def test_fetch_user_roles_map_skips_rows_without_role():
     async with create_service_now_source() as source:
-        rows = [
-            {"user": {"value": "user_id_1"}, "sys_id": "row_1"},
-            {
-                "user": {"value": "user_id_2"},
-                "role": {"value": "role_id_1"},
-                "sys_id": "row_2",
-            },
-        ]
-        source.servicenow_client.get_table_rows = mock.AsyncMock(side_effect=[rows, []])
-        user_roles = await source._fetch_user_roles_map()
-        assert user_roles == {"user_id_2": {"role_id_1"}}
+        with mock.patch.object(
+            ServiceNowDataSource,
+            "_iter_table_rows",
+            return_value=AsyncIterator(
+                [
+                    {"user": {"value": "user_id_1"}, "sys_id": "row_1"},
+                    {
+                        "user": {"value": "user_id_2"},
+                        "role": {"value": "role_id_1"},
+                        "sys_id": "row_2",
+                    },
+                ]
+            ),
+        ):
+            user_roles = await source._fetch_user_roles_map()
+            assert user_roles == {"user_id_2": {"role_id_1"}}
 
 
 @pytest.mark.asyncio

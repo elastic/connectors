@@ -272,40 +272,49 @@ class ServiceNowDataSource(BaseDataSource):
         ):
             yield user
 
-    async def _fetch_user_roles_map(self):
-        """Build a map of user sys_id -> set of role sys_ids from sys_user_has_role.
+    async def _iter_table_rows(self, table_name):
+        """Yield raw rows from table_name using keyset pagination on sys_id.
 
-        Uses keyset pagination (ORDER BY sys_id, cursor = last sys_id seen) so
-        each page fetch is O(1) regardless of depth.  Only the user→roles map is
-        held in memory: O(role assignments), not O(users × documents).
+        Each page is an O(1) index seek regardless of depth. An empty page is
+        the normal exit when the table size is an exact multiple of
+        TABLE_FETCH_SIZE (the last page was full, so one extra call returns []).
         """
-        user_roles = {}
-        count = 0
         last_sys_id = ""
         while True:
             rows = await self.servicenow_client.get_table_rows(
-                table_name="sys_user_has_role", after_sys_id=last_sys_id
+                table_name=table_name, after_sys_id=last_sys_id
             )
             if not rows:
-                break
-            for assignment in rows:
-                user_id = (assignment.get("user") or {}).get("value")
-                role_id = (assignment.get("role") or {}).get("value")
-                if not user_id or not role_id:
-                    self._logger.debug(
-                        "Skipping sys_user_has_role row with missing user or role reference"
-                    )
-                    continue
-                user_roles.setdefault(user_id, set()).add(role_id)
-                count += 1
-                if count % 10000 == 0:
-                    self._logger.info(
-                        f"Loading sys_user_has_role: {count} assignments processed so far "
-                        f"({len(user_roles)} unique users)..."
-                    )
+                return
+            for row in rows:
+                yield row
             last_sys_id = rows[-1]["sys_id"]
             if len(rows) < TABLE_FETCH_SIZE:
-                break
+                return
+
+    async def _fetch_user_roles_map(self):
+        """Build a map of user sys_id -> set of role sys_ids from sys_user_has_role.
+
+        Only the user→roles map is held in memory: O(role assignments), not
+        O(users × documents).
+        """
+        user_roles = {}
+        count = 0
+        async for assignment in self._iter_table_rows("sys_user_has_role"):
+            user_id = (assignment.get("user") or {}).get("value")
+            role_id = (assignment.get("role") or {}).get("value")
+            if not user_id or not role_id:
+                self._logger.debug(
+                    "Skipping sys_user_has_role row with missing user or role reference"
+                )
+                continue
+            user_roles.setdefault(user_id, set()).add(role_id)
+            count += 1
+            if count % 10000 == 0:
+                self._logger.info(
+                    f"Loading sys_user_has_role: {count} assignments processed so far "
+                    f"({len(user_roles)} unique users)..."
+                )
         self._logger.info(
             f"Finished loading sys_user_has_role: {count} assignments, "
             f"{len(user_roles)} unique users with roles"
