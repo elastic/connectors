@@ -24,7 +24,9 @@ from connectors.sources.servicenow.client import (
     ENDPOINTS,
     MAX_CONCURRENT_CLIENT_SUPPORT,
     RETRIES,
+    ROLE_FETCH_SIZE,
     TABLE_BATCH_SIZE,
+    TABLE_FETCH_SIZE,
     ServiceNowClient,
 )
 from connectors.sources.servicenow.validator import ServiceNowAdvancedRulesValidator
@@ -271,18 +273,36 @@ class ServiceNowDataSource(BaseDataSource):
         ):
             yield user
 
+    async def _iter_table_rows(self, table_name, limit=TABLE_FETCH_SIZE):
+        """Yield raw rows from table_name using keyset pagination on sys_id.
+
+        Each page is an O(1) index seek regardless of depth. An empty page is
+        the normal exit when the table size is an exact multiple of limit
+        (the last page was full, so one extra call returns []).
+        """
+        last_sys_id = ""
+        while True:
+            rows = await self.servicenow_client.get_table_rows(
+                table_name=table_name, after_sys_id=last_sys_id, limit=limit
+            )
+            if not rows:
+                return
+            for row in rows:
+                yield row
+            last_sys_id = rows[-1]["sys_id"]
+            if len(rows) < limit:
+                return
+
     async def _fetch_user_roles_map(self):
         """Build a map of user sys_id -> set of role sys_ids from sys_user_has_role.
 
-        API fetches are already paginated via ``_table_data_generator``
-        (``TABLE_FETCH_SIZE``). Only the user→roles map is held in memory for the
-        ACL sync: O(role assignments), not O(users × documents). For large tenants
-        that is tens of MB, versus the GB-scale per-document ACL expansion this
-        compact mode replaces.
+        Only the user→roles map is held in memory: O(role assignments), not
+        O(users × documents).
         """
         user_roles = {}
-        async for assignment in self._table_data_generator(
-            service_name="sys_user_has_role", params={}
+        count = 0
+        async for assignment in self._iter_table_rows(
+            "sys_user_has_role", limit=ROLE_FETCH_SIZE
         ):
             user_id = (assignment.get("user") or {}).get("value")
             role_id = (assignment.get("role") or {}).get("value")
@@ -292,6 +312,16 @@ class ServiceNowDataSource(BaseDataSource):
                 )
                 continue
             user_roles.setdefault(user_id, set()).add(role_id)
+            count += 1
+            if count % 10000 == 0:
+                self._logger.info(
+                    f"Loading sys_user_has_role: {count} assignments processed so far "
+                    f"({len(user_roles)} unique users)..."
+                )
+        self._logger.info(
+            f"Finished loading sys_user_has_role: {count} assignments, "
+            f"{len(user_roles)} unique users with roles"
+        )
         return user_roles
 
     async def get_access_control(self):
