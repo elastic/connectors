@@ -301,7 +301,9 @@ class ServiceNowDataSource(BaseDataSource):
         """
         user_roles = {}
         count = 0
-        async for assignment in self._iter_table_rows("sys_user_has_role", limit=ROLE_FETCH_SIZE):
+        async for assignment in self._iter_table_rows(
+            "sys_user_has_role", limit=ROLE_FETCH_SIZE
+        ):
             user_id = (assignment.get("user") or {}).get("value")
             role_id = (assignment.get("role") or {}).get("value")
             if not user_id or not role_id:
