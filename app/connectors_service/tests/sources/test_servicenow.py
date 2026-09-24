@@ -1011,31 +1011,24 @@ async def test_get_access_control_dls_disabled():
 async def test_get_access_control_includes_role_ids():
     async with create_service_now_source(expand_role_members=False) as source:
         source._dls_enabled = Mock(return_value=True)
+        source._fetch_user_roles_map = mock.AsyncMock(
+            return_value={"id_1": {"role_id_1"}}
+        )
         with mock.patch.object(
             ServiceNowDataSource,
             "_table_data_generator",
-            side_effect=[
-                AsyncIterator(
-                    [
-                        {
-                            "user": {"value": "id_1"},
-                            "role": {"value": "role_id_1"},
-                        }
-                    ]
-                ),
-                AsyncIterator(
-                    [
-                        {
-                            "sys_updated_on": "2023-10-10 05:21:45",
-                            "sys_id": "id_1",
-                            "email": "admin@email.com",
-                            "user_name": "demo.user",
-                            "_id": "id_1",
-                            "_timestamp": "2023-10-10T05:21:45",
-                        }
-                    ]
-                ),
-            ],
+            return_value=AsyncIterator(
+                [
+                    {
+                        "sys_updated_on": "2023-10-10 05:21:45",
+                        "sys_id": "id_1",
+                        "email": "admin@email.com",
+                        "user_name": "demo.user",
+                        "_id": "id_1",
+                        "_timestamp": "2023-10-10T05:21:45",
+                    }
+                ]
+            ),
         ):
             users = [user async for user in source.get_access_control()]
 
