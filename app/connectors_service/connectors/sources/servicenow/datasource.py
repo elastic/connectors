@@ -24,6 +24,7 @@ from connectors.sources.servicenow.client import (
     ENDPOINTS,
     MAX_CONCURRENT_CLIENT_SUPPORT,
     RETRIES,
+    ROLE_FETCH_SIZE,
     TABLE_BATCH_SIZE,
     TABLE_FETCH_SIZE,
     ServiceNowClient,
@@ -272,24 +273,24 @@ class ServiceNowDataSource(BaseDataSource):
         ):
             yield user
 
-    async def _iter_table_rows(self, table_name):
+    async def _iter_table_rows(self, table_name, limit=TABLE_FETCH_SIZE):
         """Yield raw rows from table_name using keyset pagination on sys_id.
 
         Each page is an O(1) index seek regardless of depth. An empty page is
-        the normal exit when the table size is an exact multiple of
-        TABLE_FETCH_SIZE (the last page was full, so one extra call returns []).
+        the normal exit when the table size is an exact multiple of limit
+        (the last page was full, so one extra call returns []).
         """
         last_sys_id = ""
         while True:
             rows = await self.servicenow_client.get_table_rows(
-                table_name=table_name, after_sys_id=last_sys_id
+                table_name=table_name, after_sys_id=last_sys_id, limit=limit
             )
             if not rows:
                 return
             for row in rows:
                 yield row
             last_sys_id = rows[-1]["sys_id"]
-            if len(rows) < TABLE_FETCH_SIZE:
+            if len(rows) < limit:
                 return
 
     async def _fetch_user_roles_map(self):
@@ -300,7 +301,7 @@ class ServiceNowDataSource(BaseDataSource):
         """
         user_roles = {}
         count = 0
-        async for assignment in self._iter_table_rows("sys_user_has_role"):
+        async for assignment in self._iter_table_rows("sys_user_has_role", limit=ROLE_FETCH_SIZE):
             user_id = (assignment.get("user") or {}).get("value")
             role_id = (assignment.get("role") or {}).get("value")
             if not user_id or not role_id:

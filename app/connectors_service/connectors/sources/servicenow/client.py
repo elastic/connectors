@@ -18,6 +18,7 @@ from connectors.utils import CancellableSleeps, RetryStrategy, retryable
 MAX_CONCURRENT_CLIENT_SUPPORT = 10
 TABLE_FETCH_SIZE = 50
 TABLE_BATCH_SIZE = 5
+ROLE_FETCH_SIZE = 1000  # larger pages for sys_user_has_role keyset scan
 RETRIES = 3
 RETRY_INTERVAL = 2
 ORDER_BY_CREATION_DATE_QUERY = "ORDERBYsys_created_on^"
@@ -227,7 +228,7 @@ class ServiceNowClient:
         interval=RETRY_INTERVAL,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
-    async def get_table_rows(self, table_name, after_sys_id=""):
+    async def get_table_rows(self, table_name, after_sys_id="", limit=TABLE_FETCH_SIZE):
         """Fetch one page of rows from table_name ordered by sys_id.
 
         Uses sys_id as a keyset cursor instead of sysparm_offset, so page
@@ -236,7 +237,7 @@ class ServiceNowClient:
         query = "ORDERBYsys_id^"
         if after_sys_id:
             query += f"sys_id>{after_sys_id}"
-        params = {"sysparm_query": query, "sysparm_limit": TABLE_FETCH_SIZE}
+        params = {"sysparm_query": query, "sysparm_limit": limit}
         url = ENDPOINTS["TABLE"].format(table=table_name)
         response = await self._api_call(
             url=url, params=params, actions={}, method="get"
