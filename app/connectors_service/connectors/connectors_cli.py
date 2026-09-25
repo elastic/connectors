@@ -18,6 +18,7 @@ import os
 import click
 import yaml
 from colorama import Fore, Style
+from elastic_transport.client_utils import url_to_node_config
 from simple_term_menu import TerminalMenu
 from tabulate import tabulate
 
@@ -45,6 +46,55 @@ def load_config(ctx, config):
         raise FileNotFoundError(msg)
 
 
+class LazyConfig:
+    def __init__(self, ctx, config):
+        self.ctx = ctx
+        self.config = config
+        self.value = None
+
+    def __getitem__(self, key):
+        if self.value is None:
+            try:
+                self.value = load_config(self.ctx, self.config)
+            except (FileNotFoundError, yaml.YAMLError) as error:
+                message = f"{error} Run `connectors login` first, or make sure that the config is either present at the default location ({CONFIG_FILE_PATH}) or it's passed via the '-c' or '--config' option."
+                raise click.ClickException(message) from error
+
+            elasticsearch_config = (
+                self.value.get("elasticsearch")
+                if isinstance(self.value, dict)
+                else None
+            )
+            elasticsearch_host = (
+                elasticsearch_config.get("host")
+                if isinstance(elasticsearch_config, dict)
+                else None
+            )
+            valid_elasticsearch_host = False
+            if isinstance(elasticsearch_host, str) and elasticsearch_host.strip():
+                try:
+                    url_to_node_config(
+                        elasticsearch_host,
+                        use_default_ports_for_scheme=True,
+                    )
+                except ValueError:
+                    pass
+                else:
+                    valid_elasticsearch_host = True
+            if (
+                not isinstance(elasticsearch_config, dict)
+                or not isinstance(elasticsearch_host, str)
+                or not elasticsearch_host.strip()
+                or not valid_elasticsearch_host
+            ):
+                message = (
+                    "The config file is empty or invalid. Run `connectors login` first."
+                )
+                raise click.ClickException(message)
+
+        return self.value[key]
+
+
 # Main group
 @click.group(
     invoke_without_command=True,
@@ -60,13 +110,7 @@ def cli(ctx, config):
         return
 
     ctx.ensure_object(dict)
-    try:
-        ctx.obj["config"] = load_config(ctx, config)
-    except FileNotFoundError as e:
-        click.echo(
-            f"{e} Make sure that the config is either present at the default location ({CONFIG_FILE_PATH}) or it's passed via the '-c' or '--config' option."
-        )
-        ctx.exit(1)
+    ctx.obj["config"] = LazyConfig(ctx, config)
 
 
 @click.command(help="Authenticate Connectors CLI with an Elasticsearch instance")
