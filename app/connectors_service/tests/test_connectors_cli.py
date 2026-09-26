@@ -848,3 +848,27 @@ def test_job_view():
         assert str(indexed_document_count) in result.output
         assert str(indexed_document_volume) in result.output
         assert result.exit_code == 0
+
+
+def test_help_does_not_require_config_file(mock_cli_config, monkeypatch):
+    """Regression test for https://github.com/elastic/connectors/issues/3700.
+
+    `--help` output must render even when the user never ran
+    `connectors login` (i.e. no config file exists yet).
+    """
+    monkeypatch.setattr("sys.argv", ["connectors", "job", "--help"])
+    runner = CliRunner()
+    result = runner.invoke(cli, ["job", "--help"])
+    assert result.exit_code == 0
+    assert "Sync jobs management" in result.output
+    mock_cli_config.assert_not_called()
+
+
+def test_missing_config_error_suggests_login(mock_cli_config):
+    """When the config file is missing for a real command, the error message
+    should point the user at `connectors login` first."""
+    mock_cli_config.side_effect = FileNotFoundError("fake/config.yml was not found.")
+    runner = CliRunner()
+    result = runner.invoke(cli, ["job", "list", "some-connector-id"])
+    assert result.exit_code == 1
+    assert "connectors login" in result.output
