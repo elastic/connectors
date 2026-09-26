@@ -8,6 +8,7 @@ import json
 import logging
 import time
 from contextlib import contextmanager
+from unittest.mock import patch
 
 import pytest
 from freezegun import freeze_time
@@ -160,7 +161,7 @@ async def test_trace_async_gen():
     ],
 )
 def test_colored_logging(log_level, color):
-    with unset_logger():
+    with unset_logger(), patch("sys.stdout.isatty", return_value=True):
         logger = set_logger(logging.DEBUG, filebeat=False)
         logs = []
 
@@ -173,6 +174,34 @@ def test_colored_logging(log_level, color):
 
         assert len(logs) == 1
         assert logs[0].startswith(color)
+
+
+def test_no_colored_logging_without_tty():
+    """Regression test for https://github.com/elastic/connectors/issues/3608.
+
+    When stdout is not a TTY (Docker containers, pipes, Filebeat), log lines
+    must not contain ANSI color escape sequences.
+    """
+    with unset_logger(), patch("sys.stdout.isatty", return_value=False):
+        logger = set_logger(logging.DEBUG, filebeat=False)
+        logs = []
+
+        def _w(msg):
+            logs.append(msg)
+
+        logger.handlers[0].stream.write = _w
+
+        logger.debug("foobar")
+        logger.info("foobar")
+        logger.warning("foobar")
+        logger.error("foobar")
+        logger.critical("foobar")
+
+        assert len(logs) == 5
+        for log in logs:
+            assert "\x1b" not in log
+        # the log format itself is unchanged, only the colors are gone
+        assert logs[0].startswith("[FMWK]")
 
 
 # first param is UTC time, second param is offset we run with

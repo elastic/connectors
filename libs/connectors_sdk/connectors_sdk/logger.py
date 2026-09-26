@@ -10,6 +10,7 @@ Logger -- sets the logging and provides a `logger` global object.
 import contextlib
 import inspect
 import logging
+import sys
 import time
 from datetime import datetime, timezone
 from functools import wraps
@@ -40,7 +41,8 @@ class ColorFormatter(logging.Formatter):
 
     DATE_FMT = "%H:%M:%S"
 
-    def __init__(self, prefix):
+    def __init__(self, prefix, colored=True):
+        self.colored = colored
         self.custom_format = "[" + prefix + "][%(asctime)s][%(levelname)s] %(message)s"
         super().__init__(datefmt=self.DATE_FMT)
         self.local_tz = tzlocal()
@@ -62,8 +64,23 @@ class ColorFormatter(logging.Formatter):
         return s
 
     def format(self, record):  # noqa: A003
-        self._style._fmt = self.COLORS[record.levelno] + self.custom_format + self.RESET
+        if self.colored:
+            self._style._fmt = (
+                self.COLORS[record.levelno] + self.custom_format + self.RESET
+            )
+        else:
+            self._style._fmt = self.custom_format
         return super().format(record)
+
+
+def _color_enabled():
+    """Whether log output should use ANSI colors.
+
+    Colors are only emitted on interactive terminals. Docker containers, pipes
+    and log collectors like Filebeat don't have a TTY, so they get plain log
+    lines without ANSI escape sequences.
+    """
+    return sys.stdout.isatty()
 
 
 class DocumentLogger:
@@ -163,7 +180,7 @@ def set_logger(log_level=logging.INFO, filebeat=False):
     if filebeat:
         formatter = ecs_logging.StdlibFormatter()
     else:
-        formatter = ColorFormatter("FMWK")
+        formatter = ColorFormatter("FMWK", colored=_color_enabled())
 
     if logger is None:
         logging.setLoggerClass(ExtraLogger)
@@ -187,7 +204,7 @@ def set_extra_logger(logger, log_level=logging.INFO, prefix="BYOC", filebeat=Fal
     if filebeat:
         handler.setFormatter(ecs_logging.StdlibFormatter())
     else:
-        formatter = ColorFormatter(prefix)
+        formatter = ColorFormatter(prefix, colored=_color_enabled())
         handler.setFormatter(formatter)
     handler.setLevel(log_level)
     logger.addHandler(handler)
