@@ -425,6 +425,44 @@ async def test_get_docs_with_advanced_rules(filtering):
                 num += 1
 
 
+@pytest.mark.parametrize(
+    "filtering",
+    [
+        Filter(
+            {
+                ADVANCED_SNIPPET: {
+                    "value": [
+                        {"bucket": "bucket1", "pattern": "\\.md$"},
+                    ]
+                }
+            }
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_get_docs_with_advanced_rules_pattern(filtering):
+    """Only objects whose key matches the `pattern` regex should be synced."""
+    async with create_s3_source() as source:
+        source.s3_client.get_bucket_location = mock.Mock(
+            return_value=await create_fake_coroutine("ap-south-1")
+        )
+        with (
+            mock.patch(
+                "aioboto3.resources.collection.AIOResourceCollection",
+                AIOResourceCollection,
+            ),
+            mock.patch("aiobotocore.client.AioBaseClient", S3Object),
+            mock.patch(
+                "aiobotocore.utils.AioInstanceMetadataFetcher.retrieve_iam_role_credentials",
+                get_roles,
+            ),
+        ):
+            filenames = []
+            async for doc, _ in source.get_docs(filtering):
+                filenames.append(doc["filename"])
+            assert filenames == ["2.md"]
+
+
 @pytest.mark.asyncio
 async def test_get_bucket_list():
     """Test get_bucket_list method of S3Client"""
@@ -509,6 +547,31 @@ async def test_close_with_client_session():
 @pytest.mark.parametrize(
     "advanced_rules, expected_validation_result",
     [
+        (
+            # valid: pattern is a string
+            [{"bucket": "bucket1", "pattern": "\\.md$"}],
+            SyncRuleValidationResult.valid_result(
+                SyncRuleValidationResult.ADVANCED_RULES
+            ),
+        ),
+        (
+            # invalid: pattern is not a valid regex
+            [{"bucket": "bucket1", "pattern": "([a-z"}],
+            SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=ANY,
+            ),
+        ),
+        (
+            # invalid: pattern in wrong type
+            [{"bucket": "bucket1", "pattern": [".md"]}],
+            SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=ANY,
+            ),
+        ),
         (
             # valid: empty array should be valid
             [],
