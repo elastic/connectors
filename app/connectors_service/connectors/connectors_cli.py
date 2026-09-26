@@ -14,6 +14,7 @@ executes the `main` function of this module, which starts the service.
 import asyncio
 import json
 import os
+import sys
 
 import click
 import yaml
@@ -59,12 +60,19 @@ def cli(ctx, config):
         click.echo(ctx.get_help())
         return
 
+    # Help output doesn't need any configuration, so don't fail when the
+    # config file is missing just because the user asked for `--help`.
+    if "--help" in sys.argv or "-h" in sys.argv:
+        return
+
     ctx.ensure_object(dict)
     try:
         ctx.obj["config"] = load_config(ctx, config)
     except FileNotFoundError as e:
         click.echo(
-            f"{e} Make sure that the config is either present at the default location ({CONFIG_FILE_PATH}) or it's passed via the '-c' or '--config' option."
+            f"{e} If you haven't authenticated yet, run 'connectors login' first. "
+            f"Otherwise, make sure that the config is either present at the default location ({CONFIG_FILE_PATH}) "
+            f"or it's passed via the '-c' or '--config' option."
         )
         ctx.exit(1)
 
