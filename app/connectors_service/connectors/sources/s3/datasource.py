@@ -3,6 +3,7 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+import re
 from functools import partial
 
 from connectors_sdk.source import BaseDataSource
@@ -82,9 +83,13 @@ class S3DataSource(BaseDataSource):
 
         bucket = rule["bucket"]
         prefix = rule.get("prefix", "")
+        pattern = rule.get("pattern")
+        filename_pattern = re.compile(pattern) if pattern else None
         async for obj_summary, s3_client in self.s3_client.get_bucket_objects(
             bucket=bucket, prefix=prefix
         ):
+            if filename_pattern and not filename_pattern.search(obj_summary.key):
+                continue
             if not rule.get("extension"):
                 yield await process_object(obj_summary, s3_client)
 
