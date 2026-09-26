@@ -115,6 +115,11 @@ def run(action, config_file, log_level, filebeat, service_type, uvloop):
     - list: prints out a list of all connectors and exits
     - poll: starts the event loop and run forever (default)
     """
+    # Set up the logger (including the --filebeat formatter) before the first
+    # log line is emitted, so nothing is printed in the default format first.
+    # The log level is refined below once the config file is loaded.
+    set_logger(logging.INFO, filebeat=filebeat)
+
     logger.info(f"Running connector service version {__version__}")
 
     # load config

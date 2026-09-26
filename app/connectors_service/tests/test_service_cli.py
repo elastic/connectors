@@ -226,3 +226,41 @@ def test_uvloop_error(patched_logger, patched_asyncio, patched_uvloop):
     patched_logger.warning.assert_any_call(
         "Unable to enable uvloop: import fails. Running with default event loop"
     )
+
+
+def test_filebeat_formats_first_log_lines_as_ecs(set_env):
+    """https://github.com/elastic/connectors/issues/897
+
+    With --filebeat, every log line -- including the ones emitted before the
+    config file is loaded -- must be ECS JSON, not the plain [FMWK] format.
+    """
+    import io
+    import json
+
+    from connectors_sdk.logger import logger as sdk_logger
+
+    stream = io.StringIO()
+    main_handler = sdk_logger.handlers[0]
+    old_stream, old_formatter = main_handler.stream, main_handler.formatter
+    main_handler.setStream(stream)
+    try:
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            ["--filebeat", "--config-file", CONFIG, "--action", "list"],
+        )
+    finally:
+        main_handler.setStream(old_stream)
+        main_handler.setFormatter(old_formatter)
+
+    assert result.exit_code == SUCCESS_EXIT_CODE
+
+    lines = [line for line in stream.getvalue().splitlines() if line.strip()]
+    assert lines, "expected log output on the logger stream"
+
+    for line in lines:
+        entry = json.loads(line)  # raises if the line is not ECS JSON
+        assert "log.level" in entry
+        assert "message" in entry
+
+    assert "Running connector service version" in lines[0]
