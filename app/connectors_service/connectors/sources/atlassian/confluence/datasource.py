@@ -222,6 +222,7 @@ class ConfluenceDataSource(BaseDataSource):
             "confluence_url": {
                 "label": "Confluence URL",
                 "order": 10,
+                "tooltip": "Confluence URL, e.g. https://myworkplace.atlassian.net",
                 "type": "str",
             },
             "spaces": {

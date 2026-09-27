@@ -650,6 +650,15 @@ class StreamReaderAsyncMock(AsyncMock):
         self.content = StreamReader
 
 
+def test_confluence_url_field_has_label_and_tooltip():
+    """The confluence_url config field should be labeled "Confluence URL" (no "Label" suffix)
+    and carry a tooltip explaining what value to enter (elastic/connectors#3106)."""
+    config = ConfluenceDataSource.get_default_configuration()
+
+    assert config["confluence_url"]["label"] == "Confluence URL"
+    assert config["confluence_url"]["tooltip"]
+
+
 @pytest.mark.asyncio
 async def test_validate_configuration_with_invalid_concurrent_downloads():
     """Test validate configuration method of BaseDataSource class with invalid concurrent downloads"""
