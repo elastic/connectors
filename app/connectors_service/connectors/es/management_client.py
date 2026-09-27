@@ -211,16 +211,6 @@ class ESManagementClient(ESClient):
 
             yield doc_id, timestamp
 
-    async def get_connector_secret(self, connector_secret_id):
-        secret = await self._retrier.execute_with_retry(
-            partial(
-                self.client.perform_request,
-                "GET",
-                f"/_connector/_secret/{connector_secret_id}",
-            )
-        )
-        return secret.get("value")
-
     async def create_connector_secret(self, secret_value):
         secret = await self._retrier.execute_with_retry(
             partial(
