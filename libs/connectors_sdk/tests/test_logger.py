@@ -161,7 +161,7 @@ async def test_trace_async_gen():
     ],
 )
 def test_colored_logging(log_level, color):
-    with unset_logger(), patch("sys.stdout.isatty", return_value=True):
+    with unset_logger(), patch("sys.stderr.isatty", return_value=True):
         logger = set_logger(logging.DEBUG, filebeat=False)
         logs = []
 
@@ -179,10 +179,10 @@ def test_colored_logging(log_level, color):
 def test_no_colored_logging_without_tty():
     """Regression test for https://github.com/elastic/connectors/issues/3608.
 
-    When stdout is not a TTY (Docker containers, pipes, Filebeat), log lines
+    When stderr is not a TTY (Docker containers, pipes, Filebeat), log lines
     must not contain ANSI color escape sequences.
     """
-    with unset_logger(), patch("sys.stdout.isatty", return_value=False):
+    with unset_logger(), patch("sys.stderr.isatty", return_value=False):
         logger = set_logger(logging.DEBUG, filebeat=False)
         logs = []
 
