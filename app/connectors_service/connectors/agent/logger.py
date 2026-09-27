@@ -26,4 +26,7 @@ def get_logger(module):
 
 
 def update_logger_level(log_level):
+    if isinstance(log_level, str):
+        # accept lowercase levels, like elasticsearch.log_level does
+        log_level = log_level.upper()
     root_logger.setLevel(log_level)

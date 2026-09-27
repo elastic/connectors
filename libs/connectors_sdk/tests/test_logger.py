@@ -33,6 +33,27 @@ def test_logger():
         assert logger.level == logging.DEBUG
 
 
+@pytest.mark.parametrize(
+    "log_level, expected",
+    [
+        ("debug", logging.DEBUG),
+        ("info", logging.INFO),
+        ("warning", logging.WARNING),
+        ("error", logging.ERROR),
+        ("critical", logging.CRITICAL),
+        ("DEBUG", logging.DEBUG),
+        ("INFO", logging.INFO),
+    ],
+)
+def test_logger_accepts_lowercase_log_level(log_level, expected):
+    # https://github.com/elastic/connectors/issues/766
+    # service.log_level should accept lowercase levels like elasticsearch.log_level does
+    with unset_logger():
+        logger = set_logger(log_level)
+        assert logger.level == expected
+        assert logger.handlers[0].level == expected
+
+
 def test_logger_filebeat():
     with unset_logger():
         logger = set_logger(logging.DEBUG, filebeat=True)

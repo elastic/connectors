@@ -160,6 +160,9 @@ class ExtraLogger(logging.Logger):
 
 def set_logger(log_level=logging.INFO, filebeat=False):
     global logger
+    if isinstance(log_level, str):
+        # accept lowercase levels, like elasticsearch.log_level does
+        log_level = log_level.upper()
     if filebeat:
         formatter = ecs_logging.StdlibFormatter()
     else:
