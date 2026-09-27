@@ -10,7 +10,6 @@ Logger -- sets the logging and provides a `logger` global object.
 import contextlib
 import inspect
 import logging
-import sys
 import time
 from datetime import datetime, timezone
 from functools import wraps
@@ -73,14 +72,19 @@ class ColorFormatter(logging.Formatter):
         return super().format(record)
 
 
-def _color_enabled():
+def _color_enabled(stream):
     """Whether log output should use ANSI colors.
 
     Colors are only emitted on interactive terminals. Docker containers, pipes
     and log collectors like Filebeat don't have a TTY, so they get plain log
     lines without ANSI escape sequences.
+
+    The stream checked must be the one the logs are written to (the handler's
+    stream): stdout and stderr can be redirected independently, e.g.
+    `elastic-ingest 2> connectors.log` run from a terminal leaves stdout a TTY
+    while the log file is not.
     """
-    return sys.stdout.isatty()
+    return stream.isatty()
 
 
 class DocumentLogger:
@@ -177,17 +181,18 @@ class ExtraLogger(logging.Logger):
 
 def set_logger(log_level=logging.INFO, filebeat=False):
     global logger
-    if filebeat:
-        formatter = ecs_logging.StdlibFormatter()
-    else:
-        formatter = ColorFormatter("FMWK", colored=_color_enabled())
-
     if logger is None:
         logging.setLoggerClass(ExtraLogger)
         logger = logging.getLogger("connectors")
         logger.handlers.clear()
         handler = logging.StreamHandler()
         logger.addHandler(handler)
+
+    handler = logger.handlers[0]
+    if filebeat:
+        formatter = ecs_logging.StdlibFormatter()
+    else:
+        formatter = ColorFormatter("FMWK", colored=_color_enabled(handler.stream))
 
     logger.propagate = False
     logger.setLevel(log_level)
@@ -204,7 +209,7 @@ def set_extra_logger(logger, log_level=logging.INFO, prefix="BYOC", filebeat=Fal
     if filebeat:
         handler.setFormatter(ecs_logging.StdlibFormatter())
     else:
-        formatter = ColorFormatter(prefix, colored=_color_enabled())
+        formatter = ColorFormatter(prefix, colored=_color_enabled(handler.stream))
         handler.setFormatter(formatter)
     handler.setLevel(log_level)
     logger.addHandler(handler)
