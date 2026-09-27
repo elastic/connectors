@@ -189,7 +189,7 @@ class ESManagementClient(ESClient):
         )
 
     async def yield_existing_documents_metadata(self, index):
-        """Returns an iterator on the `id` and `_timestamp` fields of all documents in an index.
+        """Returns an iterator on the `_id` and `_timestamp` fields of all documents in an index.
 
         WARNING
 
@@ -203,10 +203,10 @@ class ESManagementClient(ESClient):
             return
 
         async for doc in async_scan(
-            client=self.client, index=index, _source=["id", TIMESTAMP_FIELD]
+            client=self.client, index=index, _source=[TIMESTAMP_FIELD]
         ):
             source = doc["_source"]
-            doc_id = source.get("id", doc["_id"])
+            doc_id = doc["_id"]
             timestamp = source.get(TIMESTAMP_FIELD)
 
             yield doc_id, timestamp
