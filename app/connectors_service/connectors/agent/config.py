@@ -38,7 +38,7 @@ class ConnectorsAgentConfigurationWrapper:
 
         self.specific_config = {}
 
-    def try_update(self, connector_id, service_type, output_unit):
+    def try_update(self, connector_id, service_type, output_unit=None):
         """Try update the configuration and see if it changed.
 
         This method takes the check-in event data (connector_id, service_type and output) coming
@@ -46,14 +46,12 @@ class ConnectorsAgentConfigurationWrapper:
 
         If update is needed, configuration is updated and method returns True. If no update is needed
         the method returns False.
+
+        output_unit is optional: Agent can send check-in events that only contain
+        changed units (e.g. only the connector input changed). In that case the
+        connector-related configuration is still updated, while the
+        Elasticsearch-related configuration is left untouched.
         """
-
-        source = output_unit.config.source
-
-        # TODO: find a good link to what this object is.
-        has_hosts = source.fields.get("hosts")
-        has_api_key = source.fields.get("api_key")
-        has_basic_auth = source.fields.get("username") and source.fields.get("password")
 
         assumed_configuration = {}
 
@@ -65,39 +63,49 @@ class ConnectorsAgentConfigurationWrapper:
             }
         ]
 
-        # Log-related
-        assumed_configuration["service"] = {}
-        assumed_configuration["service"]["log_level"] = output_unit.log_level
+        if output_unit is not None:
+            source = output_unit.config.source
 
-        # Auth-related
-        if has_hosts and (has_api_key or has_basic_auth):
-            hosts = (
-                source["hosts"]
-                if isinstance(source["hosts"], str)
-                else source["hosts"][0]
+            # TODO: find a good link to what this object is.
+            has_hosts = source.fields.get("hosts")
+            has_api_key = source.fields.get("api_key")
+            has_basic_auth = source.fields.get("username") and source.fields.get(
+                "password"
             )
 
-            es_creds = {"host": hosts}
+            # Log-related
+            assumed_configuration["service"] = {}
+            assumed_configuration["service"]["log_level"] = output_unit.log_level
 
-            if source.fields.get("api_key"):
-                logger.debug("Found api_key")
-                api_key = source["api_key"]
-                # if beats_logstash_format we need to base64 the key
-                if ":" in api_key:
-                    api_key = base64.b64encode(api_key.encode()).decode()
+            # Auth-related
+            if has_hosts and (has_api_key or has_basic_auth):
+                hosts = (
+                    source["hosts"]
+                    if isinstance(source["hosts"], str)
+                    else source["hosts"][0]
+                )
 
-                es_creds["api_key"] = api_key
-            elif source.fields.get("username") and source.fields.get("password"):
-                logger.debug("Found username and passowrd")
-                es_creds["username"] = source["username"]
-                es_creds["password"] = source["password"]
-            else:
-                msg = "Invalid Elasticsearch credentials"
-                raise ValueError(msg)
+                es_creds = {"host": hosts}
 
-            es_creds.update(self._extract_ssl_config(source))
+                if source.fields.get("api_key"):
+                    logger.debug("Found api_key")
+                    api_key = source["api_key"]
+                    # if beats_logstash_format we need to base64 the key
+                    if ":" in api_key:
+                        api_key = base64.b64encode(api_key.encode()).decode()
 
-            assumed_configuration["elasticsearch"] = es_creds
+                    es_creds["api_key"] = api_key
+                elif source.fields.get("username") and source.fields.get("password"):
+                    logger.debug("Found username and passowrd")
+                    es_creds["username"] = source["username"]
+                    es_creds["password"] = source["password"]
+                else:
+                    msg = "Invalid Elasticsearch credentials"
+                    raise ValueError(msg)
+
+                es_creds.update(self._extract_ssl_config(source))
+
+                assumed_configuration["elasticsearch"] = es_creds
 
         if self.config_changed(assumed_configuration):
             logger.debug("Changes detected for connectors-relevant configurations")
@@ -160,6 +168,12 @@ class ConnectorsAgentConfigurationWrapper:
             return current_config_log_level != new_config_log_level
 
         def _elasticsearch_config_changed():
+            if "elasticsearch" not in new_config:
+                # No Elasticsearch output data was received in this update
+                # (e.g. a check-in event that only changed the connector input).
+                # Missing data must not be treated as a configuration change.
+                return False
+
             return current_config.get("elasticsearch") != new_config.get(
                 "elasticsearch"
             )

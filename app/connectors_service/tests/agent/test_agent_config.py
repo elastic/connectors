@@ -272,6 +272,46 @@ def test_try_update_multiple_times_does_not_reset_config_values():
     assert config_wrapper.get()["service"]["log_level"] == log_level
 
 
+def test_try_update_without_output_unit_updates_connector_config():
+    # Simulates a check-in event that only changed the connector input
+    # (no Elasticsearch output included in the event).
+    config_wrapper = prepare_config_wrapper()
+
+    assert (
+        config_wrapper.try_update(
+            connector_id="new-connector-id",
+            service_type=SERVICE_TYPE,
+        )
+        is True
+    )
+    assert config_wrapper.get_specific_config()["connectors"] == [
+        {"connector_id": "new-connector-id", "service_type": SERVICE_TYPE}
+    ]
+
+
+def test_try_update_without_output_unit_keeps_elasticsearch_config():
+    hosts = ["https://localhost:9200"]
+    api_key = "lemme_in"
+
+    config_wrapper = prepare_config_wrapper()
+    config_wrapper.try_update(
+        connector_id=CONNECTOR_ID,
+        service_type=SERVICE_TYPE,
+        output_unit=prepare_unit_mock({"hosts": hosts, "api_key": api_key}, None),
+    )
+
+    # Same connector id, no output unit: nothing changes, ES config is kept
+    assert (
+        config_wrapper.try_update(
+            connector_id=CONNECTOR_ID,
+            service_type=SERVICE_TYPE,
+        )
+        is False
+    )
+    assert config_wrapper.get()["elasticsearch"]["host"] == hosts[0]
+    assert config_wrapper.get()["elasticsearch"]["api_key"] == api_key
+
+
 def test_config_changed_when_new_variables_are_passed():
     hosts = ["https://localhost:9200"]
     api_key = "lemme_in_lalala"

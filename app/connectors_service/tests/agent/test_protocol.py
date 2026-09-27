@@ -3,7 +3,7 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock, MagicMock, Mock
 
 import pytest
 from elastic_agent_client.client import Unit
@@ -78,8 +78,12 @@ class TestConnectorCheckingHandler:
     async def test_apply_from_client_when_units_with_no_output(
         self, connector_record_manager_mock, input_mock
     ):
+        # Agent can send check-in events that only contain changed units.
+        # If only the connector input changed, no Elasticsearch output is included
+        # in the event. The connector input changes still need to be applied.
         client_mock = Mock()
         config_wrapper_mock = Mock()
+        config_wrapper_mock.try_update.return_value = True
         service_manager_mock = Mock()
         unit_mock = Mock()
         unit_mock.unit_type = "Something else"
@@ -95,8 +99,104 @@ class TestConnectorCheckingHandler:
 
         await checkin_handler.apply_from_client()
 
-        assert not config_wrapper_mock.try_update.called
+        config_wrapper_mock.try_update.assert_called_once()
+        _, called_kwargs = config_wrapper_mock.try_update.call_args
+        assert called_kwargs.get("output_unit") is None
+        assert service_manager_mock.restart.called
+        assert connector_record_manager_mock.ensure_connector_records_exist.called
+
+    @pytest.mark.asyncio
+    async def test_apply_from_client_when_units_with_no_output_and_no_config_change(
+        self, connector_record_manager_mock, input_mock
+    ):
+        client_mock = Mock()
+        config_wrapper_mock = Mock()
+        config_wrapper_mock.try_update.return_value = False
+        service_manager_mock = Mock()
+        unit_mock = Mock()
+        unit_mock.unit_type = "Something else"
+
+        client_mock.units = [unit_mock, input_mock]
+
+        checkin_handler = ConnectorCheckinHandler(
+            client_mock,
+            config_wrapper_mock,
+            service_manager_mock,
+        )
+        checkin_handler.connector_record_manager = connector_record_manager_mock
+
+        await checkin_handler.apply_from_client()
+
+        config_wrapper_mock.try_update.assert_called_once()
         assert not service_manager_mock.restart.called
+
+    @pytest.mark.asyncio
+    async def test_apply_from_client_applies_connector_input_change_without_output(
+        self, connector_record_manager_mock
+    ):
+        # Reproduces https://github.com/elastic/connectors/issues/2992:
+        # a check-in event that only changes the connector input (no ES output
+        # included) must still update the connector configuration, ensure the
+        # connector record exists and restart the service.
+        client_mock = Mock()
+        config_wrapper = ConnectorsAgentConfigurationWrapper()
+        service_manager_mock = Mock()
+
+        def _make_input(connector_id):
+            unit_mock = Mock()
+            unit_mock.unit_type = proto.UnitType.INPUT
+            unit_mock.config.type = "connectors-py"
+
+            def _field(value):
+                field = Mock()
+                field.string_value = value
+                return field
+
+            unit_mock.config.source.fields = {
+                "service_type": _field("google_drive"),
+                "connector_name": _field("Google Drive"),
+                "connector_id": _field(connector_id),
+            }
+            return unit_mock
+
+        def _make_es_output():
+            fields = {"hosts": ["https://localhost:9200"], "api_key": "key"}
+            unit_mock = Mock()
+            unit_mock.unit_type = proto.UnitType.OUTPUT
+            unit_mock.config.type = "elasticsearch"
+            source_mock = MagicMock()
+            source_mock.fields = fields
+            source_mock.__getitem__.side_effect = fields.__getitem__
+            unit_mock.config.source = source_mock
+            unit_mock.log_level = "INFO"
+            return unit_mock
+
+        checkin_handler = ConnectorCheckinHandler(
+            client_mock,
+            config_wrapper,
+            service_manager_mock,
+        )
+        checkin_handler.connector_record_manager = connector_record_manager_mock
+
+        # Initial full check-in: connector input + ES output
+        client_mock.units = [_make_es_output(), _make_input("xd-123")]
+        await checkin_handler.apply_from_client()
+        assert service_manager_mock.restart.called
+        service_manager_mock.reset_mock()
+
+        # Delta check-in: only the connector input changed (new connector id),
+        # no ES output included in the event
+        client_mock.units = [_make_input("xd-456")]
+        await checkin_handler.apply_from_client()
+
+        assert service_manager_mock.restart.called
+        assert connector_record_manager_mock.ensure_connector_records_exist.called
+        specific_config = config_wrapper.get_specific_config()
+        assert specific_config["connectors"] == [
+            {"connector_id": "xd-456", "service_type": "google_drive"}
+        ]
+        # Elasticsearch config from the initial check-in is preserved
+        assert specific_config["elasticsearch"]["host"] == "https://localhost:9200"
 
     @pytest.mark.asyncio
     async def test_apply_from_client_when_units_with_output_and_non_updating_config(
