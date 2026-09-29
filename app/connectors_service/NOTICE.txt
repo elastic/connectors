@@ -5524,7 +5524,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
 motor
-3.4.0
+3.7.1
 Apache Software License
                                  Apache License
                            Version 2.0, January 2004
@@ -6882,8 +6882,8 @@ SOFTWARE.
 
 
 pymongo
-4.6.3
-Apache Software License
+4.18.2
+Apache-2.0
                                  Apache License
                            Version 2.0, January 2004
                         http://www.apache.org/licenses/
