@@ -7,8 +7,7 @@ on:
     types:
       - opened
 
-# The repository default is read-only, so the scopes this job needs must be
-# granted here: checkout reads the VERSION file, the action labels the PR.
+# Reads maintenance branch list from .backportrc.json (maintenanceBranches).
 permissions:
   contents: read
   pull-requests: write
@@ -17,13 +16,44 @@ jobs:
   add_labels:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - id: version
-        uses: juliangruber/read-file-action@ebfa650188272343fef925480eb4d18c5d49b925
+      - uses: actions/checkout@v4
         with:
-          path: ./app/connectors_service/connectors/VERSION
+          fetch-depth: 1
+
+      - name: Build label list
+        id: labels
+        run: |
+          set -euo pipefail
+
+          version_file_for_branch() {
+            case "$1" in
+              8.*|9.0|9.1|9.2|9.3) echo "connectors/VERSION" ;;
+              *) echo "app/connectors_service/connectors/VERSION" ;;
+            esac
+          }
+
+          mapfile -t maintenance_branches < <(jq -r '.maintenanceBranches[]' .backportrc.json)
+          if [ "${#maintenance_branches[@]}" -eq 0 ]; then
+            echo "maintenanceBranches is empty in .backportrc.json" >&2
+            exit 1
+          fi
+
+          git fetch --no-tags --depth=1 origin main "${maintenance_branches[@]}"
+
+          main_version=$(tr -d '[:space:]' < app/connectors_service/connectors/VERSION)
+
+          {
+            echo 'labels<<EOF'
+            echo 'auto-backport'
+            echo "v${main_version}"
+            for branch in "${maintenance_branches[@]}"; do
+              version_file=$(version_file_for_branch "${branch}")
+              branch_version=$(git show "origin/${branch}:${version_file}" | tr -d '[:space:]')
+              echo "v${branch_version}"
+            done
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
       - uses: actions-ecosystem/action-add-labels@v1
         with:
-          labels: |
-            auto-backport
-            v${{ steps.version.outputs.content }}
+          labels: ${{ steps.labels.outputs.labels }}

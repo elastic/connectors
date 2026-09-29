@@ -10,7 +10,6 @@ from unittest.mock import ANY, AsyncMock, Mock, patch
 
 import pytest
 from connectors_sdk.filtering.validation import Filter, SyncRuleValidationResult
-from sqlalchemy.engine import Engine
 from sqlalchemy.exc import ProgrammingError
 
 from connectors.sources.mssql import (
@@ -19,7 +18,9 @@ from connectors.sources.mssql import (
     MSSQLQueries,
 )
 from tests.sources.support import create_source
-from tests.sources.test_generic_database import ConnectionSync
+from tests.sources.test_generic_database import ConnectionSync, mock_sync_db_engine
+
+MSSQL_CREATE_ENGINE = "connectors.sources.mssql.client.create_engine"
 
 ADVANCED_SNIPPET = "advanced_snippet"
 
@@ -43,10 +44,7 @@ class MockEngine:
 @pytest.mark.asyncio
 async def test_ping():
     async with create_source(MSSQLDataSource) as source:
-        source.engine = MockEngine()
-        with patch.object(
-            Engine, "connect", return_value=ConnectionSync(MSSQLQueries())
-        ):
+        with mock_sync_db_engine(MSSQL_CREATE_ENGINE, MSSQLQueries()):
             await source.ping()
 
 
@@ -55,7 +53,10 @@ async def test_ping():
 async def test_ping_negative():
     with pytest.raises(Exception):
         async with create_source(MSSQLDataSource) as source:
-            with patch.object(Engine, "connect", side_effect=Exception()):
+            with mock_sync_db_engine(
+                MSSQL_CREATE_ENGINE, MSSQLQueries()
+            ) as mock_engine:
+                mock_engine.connect.side_effect = Exception()
                 await source.ping()
 
 
@@ -150,9 +151,7 @@ async def test_get_docs():
     async with create_source(
         MSSQLDataSource, database="xe", tables="*", schema="dbo"
     ) as source:
-        with patch.object(
-            Engine, "connect", return_value=ConnectionSync(MSSQLQueries())
-        ):
+        with mock_sync_db_engine(MSSQL_CREATE_ENGINE, MSSQLQueries()):
             actual_response = []
             expected_response = [
                 {
@@ -270,9 +269,7 @@ async def test_advanced_rules_validation(advanced_rules, expected_validation_res
     async with create_source(
         MSSQLDataSource, database="xe", tables="*", schema="dbo"
     ) as source:
-        with patch.object(
-            Engine, "connect", return_value=ConnectionSync(MSSQLQueries())
-        ):
+        with mock_sync_db_engine(MSSQL_CREATE_ENGINE, MSSQLQueries()):
             validation_result = await MSSQLAdvancedRulesValidator(source).validate(
                 advanced_rules
             )
@@ -412,9 +409,7 @@ async def test_advanced_rules_validation_when_id_in_source_available(
     async with create_source(
         MSSQLDataSource, database="xe", tables="*", schema="dbo"
     ) as source:
-        with patch.object(
-            Engine, "connect", return_value=ConnectionSync(MSSQLQueries())
-        ):
+        with mock_sync_db_engine(MSSQL_CREATE_ENGINE, MSSQLQueries()):
             validation_result = await MSSQLAdvancedRulesValidator(source).validate(
                 advanced_rules
             )
@@ -559,9 +554,7 @@ async def test_get_docs_with_advanced_rules(filtering, expected_response):
     async with create_source(
         MSSQLDataSource, database="xe", tables="*", schema="dbo"
     ) as source:
-        with patch.object(
-            Engine, "connect", return_value=ConnectionSync(MSSQLQueries())
-        ):
+        with mock_sync_db_engine(MSSQL_CREATE_ENGINE, MSSQLQueries()):
             actual_response = []
 
             async for doc in source.get_docs(filtering=filtering):

@@ -43,6 +43,24 @@ def _prefix_email(email):
     return prefix_identity("email", email)
 
 
+def _prefix_site_group(site_id, group_id):
+    """Stable token for a SharePoint site group (unique within a Graph site)."""
+    return prefix_identity("site_group", f"{site_id}:{group_id}")
+
+
+def _is_guest_user(user):
+    """Return True when a Graph user represents an external/guest account."""
+    if user.get("userType") == "Guest":
+        return True
+
+    for field in ("userPrincipalName", "UserName", "mail", "Email"):
+        value = user.get(field)
+        if value and "#EXT#" in value:
+            return True
+
+    return False
+
+
 def _get_login_name(raw_login_name):
     if raw_login_name and (
         raw_login_name.startswith("i:0#.f|membership|")
