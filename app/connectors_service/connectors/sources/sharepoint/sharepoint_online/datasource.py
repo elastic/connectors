@@ -266,6 +266,18 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "type": "bool",
                 "value": True,
             },
+            "acl_sync_concurrency": {
+                "default_value": DEFAULT_PARALLEL_CONNECTION_COUNT,
+                "depends_on": [{"field": "use_document_level_security", "value": True}],
+                "display": "numeric",
+                "label": "Maximum concurrent access control requests",
+                "order": 18,
+                "required": False,
+                "tooltip": "Number of users processed in parallel during an access control sync. Lower this value if Microsoft Graph throttles the connector.",
+                "type": "int",
+                "ui_restrictions": ["advanced"],
+                "validations": [{"type": "greater_than", "constraint": 0}],
+            },
         }
 
     async def validate_config(self):
@@ -433,6 +445,18 @@ class SharepointOnlineDataSource(BaseDataSource):
         """
         return self.configuration.get("expand_site_group_members", True)
 
+    def _acl_sync_concurrency(self):
+        """How many users are processed in parallel during an access control sync.
+
+        Falls back to the default for connectors configured before this setting
+        existed, and for values that would stall the task pool.
+        """
+        configured = self.configuration.get("acl_sync_concurrency")
+        if not configured or configured < 1:
+            return DEFAULT_PARALLEL_CONNECTION_COUNT
+
+        return configured
+
     async def _expand_site_group_members_access_control(
         self, site_web_url, site_group_id, role_assignment=None
     ):
@@ -554,7 +578,7 @@ class SharepointOnlineDataSource(BaseDataSource):
         """Yields an access control document for every user of a site.
         Note: this method will cache users and emails it has already and skip the ingestion for those.
 
-        Users are processed concurrently (up to DEFAULT_PARALLEL_CONNECTION_COUNT at a time)
+        Users are processed concurrently (up to `acl_sync_concurrency` at a time)
         to parallelise the Graph API calls required for group membership expansion.
         See: https://github.com/elastic/connectors/issues/4435
 
@@ -615,7 +639,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                 await results.put(person_access_control_doc)
 
         self._logger.info("Fetching all users")
-        task_pool = ConcurrentTasks(max_concurrency=DEFAULT_PARALLEL_CONNECTION_COUNT)
+        task_pool = ConcurrentTasks(max_concurrency=self._acl_sync_concurrency())
         try:
             async for user in self.client.active_users_with_groups():
                 await task_pool.put(lambda u=user: process_user(u))

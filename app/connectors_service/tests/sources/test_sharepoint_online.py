@@ -273,6 +273,7 @@ async def create_spo_source(
     fetch_unique_list_permissions=True,
     enumerate_all_sites=False,
     expand_site_group_members=True,
+    acl_sync_concurrency=DEFAULT_PARALLEL_CONNECTION_COUNT,
 ):
     async with create_source(
         SharepointOnlineDataSource,
@@ -290,6 +291,7 @@ async def create_spo_source(
         fetch_unique_list_permissions=fetch_unique_list_permissions,
         enumerate_all_sites=enumerate_all_sites,
         expand_site_group_members=expand_site_group_members,
+        acl_sync_concurrency=acl_sync_concurrency,
     ) as source:
         source.set_features(
             Features(
@@ -4132,6 +4134,68 @@ class TestSharepointOnlineDataSource:
 
             assert len(docs) == 1
             assert docs[0]["_id"] == duplicate_email
+
+    @pytest.mark.asyncio
+    async def test_get_access_control_respects_configured_concurrency(
+        self, patch_sharepoint_client
+    ):
+        """The task pool must never exceed the configured concurrency."""
+        configured_concurrency = 3
+
+        async with create_spo_source(
+            use_document_level_security=True,
+            acl_sync_concurrency=configured_concurrency,
+        ) as source:
+            users = [
+                {
+                    "userPrincipalName": f"user{i}",
+                    "mail": f"user{i}@acme.co",
+                    "transitiveMemberOf": [],
+                }
+                for i in range(10)
+            ]
+            patch_sharepoint_client.active_users_with_groups = AsyncIterator(users)
+
+            peak_concurrency = 0
+            in_flight = 0
+            tasks_entered = asyncio.Event()
+            release = asyncio.Event()
+
+            async def _suspending_user_doc(user):
+                nonlocal peak_concurrency, in_flight
+                in_flight += 1
+                peak_concurrency = max(peak_concurrency, in_flight)
+                if in_flight >= configured_concurrency:
+                    tasks_entered.set()
+                await release.wait()
+                in_flight -= 1
+                return {"_id": user.get("mail")}
+
+            source._user_access_control_doc = _suspending_user_doc
+
+            async def _collect():
+                docs = []
+                async for doc in source.get_access_control():
+                    docs.append(doc)
+                return docs
+
+            collect_task = asyncio.create_task(_collect())
+            await tasks_entered.wait()
+            release.set()
+
+            docs = await collect_task
+
+            assert len(docs) == 10
+            assert peak_concurrency == configured_concurrency
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("configured", [None, 0, -1])
+    async def test_acl_sync_concurrency_falls_back_to_default(self, configured):
+        """Connectors without a usable value keep the default concurrency."""
+        async with create_spo_source() as source:
+            source.configuration.get_field("acl_sync_concurrency").value = configured
+
+            assert source._acl_sync_concurrency() == DEFAULT_PARALLEL_CONNECTION_COUNT
 
     def test_prefix_group(self):
         group = "group"
