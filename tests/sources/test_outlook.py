@@ -20,6 +20,7 @@ from exchangelib.errors import (
     ErrorAccessDenied,
     ErrorFolderNotFound,
     ErrorManagedFolderNotFound,
+    ErrorMailboxStoreUnavailable,
     ErrorNonExistentMailbox,
     ErrorNonPrimarySmtpAddress,
     TransportError,
@@ -62,10 +63,12 @@ from connectors.sources.outlook import (
     CALENDAR_ITEM_TYPES,
     INBOX_MAIL_OBJECT,
     MAIL_ATTACHMENT,
+    MAIL_FIELDS,
     MAIL_ITEM_TYPES,
     MAIL_OBJECT,
     OUTLOOK_CLOUD,
     OUTLOOK_SERVER,
+    RETRIES,
     TASK_ITEM_TYPES,
     ExchangeUsers,
     Forbidden,
@@ -78,6 +81,7 @@ from connectors.sources.outlook import (
     UsersFetchFailed,
     _discover_additional_mail_folders,
     _is_mail_folder,
+    _materialize_folder_items,
     _prefix_email,
 )
 from connectors.utils import get_pem_format
@@ -2213,6 +2217,44 @@ async def test_get_mails_skips_non_mail_archive_folder():
         ]
 
         assert folders == ["inbox", "sent", "junk"]
+
+
+def test_materialize_folder_items_retries_on_mailbox_store_unavailable():
+    folder = MagicMock()
+    folder.name = "Inbox"
+    attempts = 0
+    mail = MagicMock()
+    store_unavailable_message = "mailbox store unavailable"
+
+    def only_side_effect(*_fields):
+        nonlocal attempts
+        attempts += 1
+        if attempts < RETRIES:
+            raise ErrorMailboxStoreUnavailable(store_unavailable_message)
+        return [mail]
+
+    folder.all.return_value.only.side_effect = only_side_effect
+
+    with patch("connectors.sources.outlook.time.sleep"):
+        items = _materialize_folder_items(folder, MAIL_FIELDS)
+
+    assert items == [mail]
+    assert attempts == RETRIES
+
+
+def test_materialize_folder_items_raises_after_retries_exhausted():
+    folder = MagicMock()
+    folder.name = "Inbox"
+    store_unavailable_message = "mailbox store unavailable"
+    folder.all.return_value.only.side_effect = ErrorMailboxStoreUnavailable(
+        store_unavailable_message
+    )
+
+    with patch("connectors.sources.outlook.time.sleep"):
+        with pytest.raises(ErrorMailboxStoreUnavailable):
+            _materialize_folder_items(folder, MAIL_FIELDS)
+
+    assert folder.all.return_value.only.call_count == RETRIES
 
 
 @pytest.mark.asyncio
