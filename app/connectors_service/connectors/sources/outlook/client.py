@@ -6,6 +6,7 @@
 
 import asyncio
 import ssl
+import time
 from functools import cached_property
 
 import aiohttp
@@ -23,6 +24,7 @@ from exchangelib import (
 )
 from exchangelib.errors import (
     ErrorFolderNotFound,
+    ErrorMailboxStoreUnavailable,
     ErrorManagedFolderNotFound,
     TransportError,
 )
@@ -101,6 +103,7 @@ from connectors.utils import (
     RetryStrategy,
     get_pem_format,
     retryable,
+    time_to_sleep_between_retries,
     url_encode,
 )
 
@@ -175,6 +178,30 @@ def _parent_folder_sync_id(folder):
 
 def _is_non_user_mail_folder(folder):
     return isinstance(folder, NON_USER_MAIL_FOLDERS)
+
+
+def _materialize_folder_items(folder, fields):
+    """List folder items with retries on transient mailbox store errors."""
+    retry = 1
+    while True:
+        try:
+            return list(folder.all().only(*fields))
+        except ErrorMailboxStoreUnavailable:
+            if retry >= RETRIES:
+                raise
+            logger.warning(
+                "Mailbox store unavailable while reading folder %s; "
+                "retrying (%s of %s).",
+                getattr(folder, "name", "unknown"),
+                retry,
+                RETRIES,
+            )
+            time.sleep(
+                time_to_sleep_between_retries(
+                    RetryStrategy.EXPONENTIAL_BACKOFF, RETRY_INTERVAL, retry
+                )
+            )
+            retry += 1
 
 
 def _is_mail_folder(folder):
@@ -608,7 +635,7 @@ class OutlookClient:
     async def _fetch_folder_mails(self, folder_object):
         # Materialize in the thread; lazy iteration would block the event loop.
         return await asyncio.to_thread(
-            lambda folder=folder_object: list(folder.all().only(*MAIL_FIELDS))
+            _materialize_folder_items, folder_object, MAIL_FIELDS
         )
 
     async def get_mails(self, account):
@@ -688,7 +715,7 @@ class OutlookClient:
         # Materialize the queryset in the thread; lazy iteration would run the
         # blocking EWS fetch back on the event loop.
         calendars = await asyncio.to_thread(
-            lambda: list(folder.all().only(*CALENDAR_FIELDS))
+            _materialize_folder_items, folder, CALENDAR_FIELDS
         )
         for calendar in calendars:
             yield calendar
@@ -717,7 +744,7 @@ class OutlookClient:
             # Materialize the queryset in the thread; lazy iteration would run the
             # blocking EWS fetch back on the event loop.
             calendars = await asyncio.to_thread(
-                lambda child=child_calendar: list(child.all().only(*CALENDAR_FIELDS))
+                _materialize_folder_items, child_calendar, CALENDAR_FIELDS
             )
             for calendar in calendars:
                 yield calendar, child_calendar
@@ -733,7 +760,7 @@ class OutlookClient:
             return
         # Materialize the queryset in the thread; lazy iteration would run the
         # blocking EWS fetch back on the event loop.
-        tasks = await asyncio.to_thread(lambda: list(folder.all().only(*TASK_FIELDS)))
+        tasks = await asyncio.to_thread(_materialize_folder_items, folder, TASK_FIELDS)
         for task in tasks:
             yield task
 
@@ -750,7 +777,7 @@ class OutlookClient:
         # Materialize the queryset in the thread; lazy iteration would run the
         # blocking EWS fetch back on the event loop.
         contacts = await asyncio.to_thread(
-            lambda: list(folder.all().only(*CONTACT_FOLDER_FIELDS))
+            _materialize_folder_items, folder, CONTACT_FOLDER_FIELDS
         )
         for contact in contacts:
             yield contact
