@@ -24,8 +24,8 @@ from exchangelib import (
 )
 from exchangelib.errors import (
     ErrorFolderNotFound,
-    ErrorManagedFolderNotFound,
     ErrorMailboxStoreUnavailable,
+    ErrorManagedFolderNotFound,
     TransportError,
 )
 from exchangelib.folders import (
