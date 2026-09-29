@@ -165,10 +165,12 @@ def build_resp():
 
 @pytest.mark.asyncio
 @mock.patch(
-    "pymongo.topology.Topology._select_servers_loop", lambda *x: [mock.MagicMock()]
+    "pymongo.synchronous.topology.Topology._select_servers_loop",
+    lambda *x: [mock.MagicMock()],
 )
 @mock.patch(
-    "pymongo.mongo_client.MongoClient._run_operation", lambda *xi, **kw: build_resp()
+    "pymongo.synchronous.mongo_client.MongoClient._run_operation",
+    lambda *xi, **kw: build_resp(),
 )
 async def test_get_docs(*args):
     async with create_mongo_source() as source:
@@ -182,10 +184,12 @@ async def test_get_docs(*args):
 
 @pytest.mark.asyncio
 @mock.patch(
-    "pymongo.topology.Topology._select_servers_loop", lambda *x: [mock.MagicMock()]
+    "pymongo.synchronous.topology.Topology._select_servers_loop",
+    lambda *x: [mock.MagicMock()],
 )
 @mock.patch(
-    "pymongo.mongo_client.MongoClient._run_operation", lambda *xi, **kw: build_resp()
+    "pymongo.synchronous.mongo_client.MongoClient._run_operation",
+    lambda *xi, **kw: build_resp(),
 )
 async def test_ping_when_called_then_does_not_raise(*args):
     admin_mock = Mock()
