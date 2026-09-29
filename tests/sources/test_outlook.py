@@ -19,8 +19,8 @@ from exchangelib.attachments import FileAttachment, ItemAttachment
 from exchangelib.errors import (
     ErrorAccessDenied,
     ErrorFolderNotFound,
-    ErrorManagedFolderNotFound,
     ErrorMailboxStoreUnavailable,
+    ErrorManagedFolderNotFound,
     ErrorNonExistentMailbox,
     ErrorNonPrimarySmtpAddress,
     TransportError,
