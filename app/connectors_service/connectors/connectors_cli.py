@@ -93,9 +93,10 @@ class LazyConfig:
                 raise click.ClickException(message)
 
             if not isinstance(self.value, dict):
-                raise click.ClickException(
+                message = (
                     "The config file is empty or invalid. Run `connectors login` first."
                 )
+                raise click.ClickException(message)
 
         return self.value[key]
 
