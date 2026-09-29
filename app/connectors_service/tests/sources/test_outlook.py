@@ -2239,12 +2239,13 @@ def test_materialize_folder_items_retries_on_mailbox_store_unavailable():
     folder.name = "Inbox"
     attempts = 0
     mail = MagicMock()
+    store_unavailable_message = "mailbox store unavailable"
 
     def only_side_effect(*_fields):
         nonlocal attempts
         attempts += 1
         if attempts < RETRIES:
-            raise ErrorMailboxStoreUnavailable("mailbox store unavailable")
+            raise ErrorMailboxStoreUnavailable(store_unavailable_message)
         return [mail]
 
     folder.all.return_value.only.side_effect = only_side_effect
@@ -2259,8 +2260,9 @@ def test_materialize_folder_items_retries_on_mailbox_store_unavailable():
 def test_materialize_folder_items_raises_after_retries_exhausted():
     folder = MagicMock()
     folder.name = "Inbox"
+    store_unavailable_message = "mailbox store unavailable"
     folder.all.return_value.only.side_effect = ErrorMailboxStoreUnavailable(
-        "mailbox store unavailable"
+        store_unavailable_message
     )
 
     with patch("connectors.sources.outlook.client.time.sleep"):
