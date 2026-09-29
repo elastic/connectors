@@ -30,8 +30,8 @@ from exchangelib.attachments import FileAttachment
 from exchangelib.errors import (
     ErrorAccessDenied,
     ErrorFolderNotFound,
-    ErrorManagedFolderNotFound,
     ErrorMailboxStoreUnavailable,
+    ErrorManagedFolderNotFound,
     ErrorNonExistentMailbox,
     ErrorNonPrimarySmtpAddress,
     TransportError,
