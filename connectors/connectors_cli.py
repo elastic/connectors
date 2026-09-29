@@ -233,6 +233,8 @@ def interactive_service_type_prompt():
         clear_menu_on_exit=False,
         show_search_hint=True,
     ).show()
+    if not isinstance(result, int):
+        raise click.Abort()
     return options[result]
 
 
