@@ -4241,7 +4241,7 @@ Apache Software License
 
 
 google-auth
-2.58.1
+2.59.0
 Apache Software License
                                  Apache License
                            Version 2.0, January 2004
@@ -6015,7 +6015,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
 oauthlib
-3.3.1
+4.0.0
 BSD-3-Clause
 Copyright (c) The OAuthlib Community
 All rights reserved.
