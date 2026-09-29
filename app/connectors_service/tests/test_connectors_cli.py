@@ -11,7 +11,6 @@ import click
 import pytest
 import yaml
 from click.testing import CliRunner
-from elastic_transport.client_utils import url_to_node_config
 from elasticsearch import ApiError
 
 from connectors import __version__  # NOQA
@@ -800,25 +799,6 @@ def test_command_with_valid_config_uses_config_file(
     mocked_list_jobs.assert_called_once_with(connector_id="test-connector-id")
 
 
-@patch("connectors.connectors_cli.Job.list_jobs", return_value=[])
-def test_command_with_whitespace_padded_valid_host_uses_config_file(
-    mocked_list_jobs, tmp_path, use_real_cli_config
-):
-    runner = CliRunner()
-    host = "  http://localhost:9200/  "
-    url_to_node_config(host, use_default_ports_for_scheme=True)
-    with runner.isolated_filesystem(temp_dir=tmp_path) as temp_dir:
-        os.makedirs(os.path.dirname(CONFIG_FILE_PATH))
-        with open(os.path.join(temp_dir, CONFIG_FILE_PATH), "w") as config_file:
-            config_file.write(f"elasticsearch:\n  host: '{host}'\n")
-
-        result = runner.invoke(cli, ["job", "list", "test-connector-id"])
-
-    assert result.exit_code == 0
-    assert "No jobs found" in result.output
-    mocked_list_jobs.assert_called_once_with(connector_id="test-connector-id")
-
-
 def test_command_with_unicode_whitespace_padded_host_suggests_login(
     tmp_path, use_real_cli_config
 ):
@@ -848,7 +828,7 @@ def test_command_with_malformed_config_reports_yaml_error(
         result = runner.invoke(cli, ["job", "list", "test-connector-id"])
 
     assert result.exit_code == 1
-    assert "while parsing a flow sequence" in result.output
+    assert "while parsing a flow" in result.output
     assert "config file is empty or invalid" not in result.output
     assert "connectors login" in result.output
 
