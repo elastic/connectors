@@ -51,6 +51,7 @@ dependencies = [
     "lxml==6.1.0",
     "msal==1.37.0",
     "notion-client==2.2.1",
+    "oauthlib==4.0.0",
     "oracledb==2.3.0",
     "pip-licenses==5.5.5",
     "protobuf==5.29.6",
