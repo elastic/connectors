@@ -1,5 +1,5 @@
 PyJWT
-2.13.0
+2.15.1
 MIT
 The MIT License (MIT)
 
@@ -2832,7 +2832,7 @@ documentation is licensed as follows:
 
 
 charset-normalizer
-3.5.1
+3.5.2
 MIT
 MIT License
 
@@ -7114,7 +7114,7 @@ THE SOFTWARE.
 
 
 pyspnego
-0.12.2
+0.12.3
 MIT
 MIT License
 
