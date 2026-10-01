@@ -8470,7 +8470,7 @@ made under the terms of *both* these licenses.
 
 
 urllib3
-2.7.0
+2.8.0
 MIT
 MIT License
 
