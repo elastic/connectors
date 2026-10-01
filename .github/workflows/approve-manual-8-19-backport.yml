@@ -22,9 +22,7 @@ concurrency:
 
 jobs:
   approve:
-    if: |
-      github.event.pull_request.user.login != 'github-actions[bot]'
-      && contains(fromJSON('["MEMBER", "OWNER", "COLLABORATOR"]'), github.event.pull_request.author_association)
+    if: github.event.pull_request.user.login != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
