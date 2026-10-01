@@ -2,7 +2,7 @@
 
 import unittest
 
-from validate_manual_8_19_backport import parse_backported_from_pr
+from validate_manual_8_19_backport import _label_names, parse_backported_from_pr
 
 
 class TestParseBackportedFrom(unittest.TestCase):
@@ -18,6 +18,10 @@ class TestParseBackportedFrom(unittest.TestCase):
 
     def test_rejects_missing_line(self):
         self.assertIsNone(parse_backported_from_pr("See main PR 4437"))
+
+    def test_label_names(self):
+        pull = {"labels": [{"name": "backport"}, {"name": "v8.19.23"}]}
+        self.assertEqual(_label_names(pull), ["backport", "v8.19.23"])
 
 
 if __name__ == "__main__":
