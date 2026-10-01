@@ -6,8 +6,7 @@ notify:
     if: (build.branch == 'main' || build.branch =~ /^[0-9]+\.[0-9x]+\$/) && (build.state == 'passed' || build.state == 'failed')
 steps:
   # Fail fast on missing trigger params. Otherwise empty `${BRANCH}` /
-  # `${NEW_VERSION}` interpolate silently and surface only as a 4-hour
-  # json-watcher timeout.
+  # `${NEW_VERSION}` interpolate silently into the steps below.
   - label: ":lock: Validate trigger params"
     key: validate-params
     agents:
@@ -39,7 +38,7 @@ steps:
   # The `connectors` pipeline is gated via `branch_configuration: "main"`, so
   # pushes to release branches don't auto-trigger builds. Explicitly trigger a
   # DRA build on the target branch so the DRA manifest reflects the new version
-  # and the json-watcher steps below can confirm it.
+  # and the version-bump-dra step below can confirm it.
   - label: ":rocket: Trigger DRA build on ${BRANCH}"
     key: trigger-dra-build
     depends_on: version-bump
@@ -49,17 +48,14 @@ steps:
       branch: "${BRANCH}"
       message: "DRA build triggered by version bump to ${NEW_VERSION}"
 
-  - label: "Fetch DRA Staging Artifacts"
-    key: fetch-dra-staging-artifacts
+  - label: "Fetch DRA Artifacts"
+    key: fetch-dra-artifacts
     depends_on: trigger-dra-build
-    if: build.env("BRANCH") =~ /^[0-9]+\.[0-9x]+\$/
     agents:
       image: docker.elastic.co/release-eng/wolfi-build-essential-release-eng:latest
       cpu: 250m
       memory: 512Mi
       ephemeralStorage: 1Gi
-    command:
-      - echo "Polling for staging artifacts..."
     timeout_in_minutes: 240
     retry:
       automatic:
@@ -68,79 +64,8 @@ steps:
       manual:
         permit_on_passed: true
     plugins:
-      - elastic/json-watcher#v1.0.0:
-          url: "https://artifacts-staging.elastic.co/connectors/latest/${BRANCH}.json"
-          field: ".version"
-          expected_value: "${NEW_VERSION}"
-          polling_interval: "30"
-
-  - label: "Fetch DRA Snapshot Artifacts"
-    key: fetch-dra-snapshot-artifacts
-    depends_on: trigger-dra-build
-    agents:
-      image: docker.elastic.co/release-eng/wolfi-build-essential-release-eng:latest
-      cpu: 250m
-      memory: 512Mi
-      ephemeralStorage: 1Gi
-    command:
-      - echo "Polling for snapshot artifacts..."
-    timeout_in_minutes: 240
-    retry:
-      automatic:
-        - exit_status: "*"
-          limit: 2
-      manual:
-        permit_on_passed: true
-    plugins:
-      - elastic/json-watcher#v1.0.0:
-          url: "https://storage.googleapis.com/elastic-artifacts-snapshot/connectors/latest/${BRANCH}.json"
-          field: ".version"
-          expected_value: "${NEW_VERSION}-SNAPSHOT"
-          polling_interval: "30"
-
-  - label: "Generate Fetch master DRA Artifacts step"
-    key: generate-master-dra-check
-    if: build.env("WORKFLOW") == "minor"
-    depends_on: fetch-dra-snapshot-artifacts
-    agents:
-      image: docker.elastic.co/release-eng/wolfi-build-essential-release-eng:latest
-      cpu: 250m
-      memory: 512Mi
-      ephemeralStorage: 1Gi
-    command: |
-      IFS='.' read -r major minor patch <<EOF
-      $${NEW_VERSION}
-      EOF
-      for part in "$$major" "$$minor" "$$patch"; do
-        case "$$part" in
-          ''|*[!0-9]*) echo "ERROR: NEW_VERSION must be MAJOR.MINOR.PATCH, got $${NEW_VERSION}" >&2; exit 1 ;;
-        esac
-      done
-      next_main="$$major.$$((minor + 1)).0"
-      echo "Waiting for $$next_main-SNAPSHOT on master"
-      cat <<EOF | buildkite-agent pipeline upload
-      steps:
-        - label: "Fetch master DRA Artifacts"
-          key: fetch-master-dra-artifacts
-          depends_on: generate-master-dra-check
-          agents:
-            image: docker.elastic.co/release-eng/wolfi-build-essential-release-eng:latest
-            cpu: 250m
-            memory: 512Mi
-            ephemeralStorage: 1Gi
-          command:
-            - echo "Polling $$next_main-SNAPSHOT on master..."
-          timeout_in_minutes: 240
-          retry:
-            automatic:
-              - exit_status: "*"
-                limit: 2
-            manual:
-              permit_on_passed: true
-          plugins:
-            - elastic/json-watcher#v1.0.0:
-                url: "https://storage.googleapis.com/elastic-artifacts-snapshot/connectors/latest/master.json"
-                field: ".version"
-                expected_value: "$$next_main-SNAPSHOT"
-                polling_interval: "30"
-      EOF
+      - elastic/version-bump-dra#v1.0.0:
+          product: "connectors"
+          version: "${NEW_VERSION}"
+          workflow: "${WORKFLOW}"
+          polling_interval: 30
