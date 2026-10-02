@@ -193,6 +193,30 @@ class TestESManagementClient:
             assert ids == ["1", "2"]
 
     @pytest.mark.asyncio
+    async def test_yield_existing_documents_metadata_when_source_id_differs_from_id(
+        self, es_management_client, mock_responses
+    ):
+        es_management_client.index_exists = AsyncMock(return_value=True)
+
+        records = [
+            {"_id": "1", "_source": {"id": "a", "_timestamp": str(datetime.now())}},
+            {"_id": "2", "_source": {"id": "b", "_timestamp": str(datetime.now())}},
+        ]
+
+        with mock.patch(
+            "connectors.es.management_client.async_scan",
+            return_value=AsyncIterator(records),
+        ):
+            ids = []
+            async for (
+                doc_id,
+                _,
+            ) in es_management_client.yield_existing_documents_metadata("something"):
+                ids.append(doc_id)
+
+            assert ids == ["1", "2"]
+
+    @pytest.mark.asyncio
     async def test_get_connector_secret(self, es_management_client, mock_responses):
         secret_id = "secret-id"
 

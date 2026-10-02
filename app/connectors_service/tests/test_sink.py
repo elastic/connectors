@@ -766,6 +766,38 @@ async def test_get_docs(
         assert queue_called_with_operations(queue, expected_queue_operations)
 
 
+@mock.patch("connectors.es.management_client.async_scan")
+@mock.patch(
+    "connectors.es.management_client.ESManagementClient.index_exists",
+    return_value=True,
+)
+@pytest.mark.asyncio
+async def test_get_docs_matches_and_deletes_existing_docs_by_es_id(
+    index_exists, async_scan
+):
+    # e.g. an ingest pipeline rewrote `id`, so it no longer matches `_id`
+    async_scan.return_value = AsyncIterator(
+        [
+            {"_id": "1", "_source": {"id": "rewritten-1", "_timestamp": TIMESTAMP}},
+            {"_id": "2", "_source": {"id": "rewritten-2", "_timestamp": TIMESTAMP}},
+        ]
+    )
+    queue = await queue_mock()
+    extractor = await setup_extractor(queue)
+
+    await extractor.run(
+        AsyncIterator([(deepcopy(DOC_ONE), None, "index")]), JobType.FULL
+    )
+
+    assert extractor.counters.get(UPDATES_QUEUED) == 1
+    assert extractor.counters.get(CREATES_QUEUED) == 0
+    assert extractor.counters.get(DELETES_QUEUED) == 1
+    assert queue_called_with_operations(
+        queue,
+        [index_operation(DOC_ONE), delete_operation(DOC_TWO), end_docs_operation()],
+    )
+
+
 def test_log_progress_includes_extraction_counters():
     logger_mock = Mock()
     extractor = Extractor(None, Mock(), INDEX, logger_=logger_mock)
