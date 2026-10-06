@@ -283,6 +283,33 @@
             "value": true,
             "order": 15,
             "ui_restrictions": []
+        },
+        "acl_sync_concurrency": {
+            "depends_on": [
+                {
+                    "field": "use_document_level_security",
+                    "value": true
+                }
+            ],
+            "display": "numeric",
+            "tooltip": "Number of users processed in parallel during an access control sync. Lower this value if Microsoft Graph throttles the connector.",
+            "default_value": 10,
+            "label": "Maximum concurrent access control requests",
+            "sensitive": false,
+            "type": "int",
+            "required": false,
+            "options": [],
+            "validations": [
+                {
+                    "type": "greater_than",
+                    "constraint": 0
+                }
+            ],
+            "value": 10,
+            "order": 16,
+            "ui_restrictions": [
+                "advanced"
+            ]
         }
     }
 }
