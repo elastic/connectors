@@ -33,6 +33,9 @@ As Elastic adds new features to the framework, internal classes are renamed, mov
 Periodically, the [connector protocol](./CONNECTOR_PROTOCOL.md) changes.
 If you find a change that needs to be made at the framework level, [submit a PR](./CONTRIBUTING.md#pull-request-etiquette) for the fix, so that your branch does not differ from the Elastic-maintained remote.
 
+### Version compatibility with Elasticsearch
+See [Version compatibility with Elasticsearch](../README.md#version-compatibility-with-elasticsearch) in the repository README (including serverless and supported version skew). Do not downgrade the connector service below the version used when connectors were configured.
+
 ### Upgrade all stack components beforehand
 Before upgrading `connectors`, you should first stop your running connectors services, upgrade-and-start Elasticsearch, upgrade-and-start Enterprise Search, upgrade-and-start Kibana, and only then upgrade-and-start `connectors`.
 As a part of Enterprise Search, the connectors framework's data migrations live inside Enterprise Search.
