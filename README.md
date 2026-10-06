@@ -98,22 +98,25 @@ The framework serves two distinct, but related use cases:
 ### Version compatibility with Elasticsearch
 
 > [!NOTE]
-> Version compatibility will not be checked if Elasticsearch is serverless.
+> Version compatibility is not checked when Elasticsearch is **serverless** (the connector service skips the check on startup).
 
-The Connector will perform a version compatibility check with the configured Elasticsearch server on startup.
-If the versions are incompatible, the Connector will terminate and output the incompatible versions in the shell.
-If the versions are different but otherwise compatible, the Connector will output a warning in the shell but will continue operating.
+The connector service compares its version to the configured Elasticsearch server on startup.
+If the versions are incompatible, the service exits and logs the mismatch.
+If the versions differ but are compatible, the service logs a warning and continues.
 
-We recommend running on the same version as Elasticsearch.
-However, if you want to hold back upgrading one or the other for any reason, use this table to determine if your versions will be compatible.
+We recommend running the connector service on the same stack version as Elasticsearch.
+Use this table to decide whether a deliberate version skew is supported.
 
-| Situation                       | Example Connector Framework version | Example ES version | Outcome |
-|---------------------------------|-------------------------------------|--------------------| ------- |
-| Versions are the same.          | 8.15.1.0                            | 8.15.1             | 💚 OK      |
-| Connectors has a build version. | 8.15.1.3                            | 8.15.1             | 💚 OK      |
-| ES patch number is newer.       | 8.15.__0__.0                        | 8.15.__1__         | ⚠️ Logged warning      |
-| ES minor number is newer.       | 8.__14__.2.0                        | 8.__15__.0         | ⚠️ Logged warning      |
-| ES major number is newer.       | __8__.15.1.0                        | __9__.0.0          | 🚫 Fatal error      |
-| ES patch number is older.       | 8.15.__1__.0                        | 8.15.__0__         | ⚠️ Logged warning      |
-| ES minor number is older.       | 8.__15__.1.0                        | 8.__14__.2         | 🚫 Fatal error      |
-| ES major number is older.       | __9__.0.0.0                         | __8__.15.1         | 🚫 Fatal error      |
+Do **not downgrade** the connector service to an older release than the one used when connectors were created.
+If you downgrade anyway, connector configuration stored in Elasticsearch may no longer match what the older service expects — you may need to **recreate** affected connectors.
+
+| Situation | Example connector version | Example ES version | Outcome |
+|-----------|---------------------------|--------------------|---------|
+| Versions match | 8.15.1.0 | 8.15.1 | OK |
+| Connector has a build suffix | 8.15.1.3 | 8.15.1 | OK |
+| ES patch is newer | 8.15.__0__.0 | 8.15.__1__ | Warning |
+| ES minor is newer | 8.__14__.2.0 | 8.__15__.0 | Warning |
+| ES major is newer | __8__.15.1.0 | __9__.0.0 | Fatal error |
+| ES patch is older | 8.15.__1__.0 | 8.15.__0__ | Warning |
+| ES minor is older | 8.__15__.1.0 | 8.__14__.2 | Fatal error |
+| ES major is older | __9__.0.0.0 | __8__.15.1 | Fatal error |
