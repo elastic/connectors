@@ -4283,7 +4283,7 @@ Apache Software License
 
 
 google-auth
-2.59.1
+2.60.0
 Apache Software License
                                  Apache License
                            Version 2.0, January 2004
@@ -7070,7 +7070,7 @@ Apache-2.0
 
 
 pyspnego
-0.12.3
+0.12.4
 MIT
 MIT License
 
