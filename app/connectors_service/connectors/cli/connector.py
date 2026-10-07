@@ -123,7 +123,6 @@ class Connector:
                 await self.cli_client.create_content_index(index_name, language)
 
             api_key_id = None
-            api_key_secret_id = None
             api_key_encoded = None
             api_key_error = None
             api_key_skipped = False
@@ -136,8 +135,6 @@ class Connector:
                     api_key = await self.__create_api_key(index_name)
                     api_key_id = api_key["id"]
                     api_key_encoded = api_key["encoded"]
-                    if is_native:
-                        api_key_secret_id = await self.__store_api_key(api_key_encoded)
 
                 except Exception as e:
                     api_key_error = f"Could not create a connector-specific API key. Elasticsearch reported the following error {e}"
@@ -145,7 +142,7 @@ class Connector:
             # TODO features still required
             doc = {
                 "api_key_id": api_key_id,
-                "api_key_secret_id": api_key_secret_id,
+                "api_key_secret_id": None,
                 "configuration": configuration,
                 "index_name": index_name,
                 "name": name,
@@ -264,6 +261,3 @@ class Connector:
             role_descriptors=role_descriptors,
             metadata=metadata,
         )
-
-    async def __store_api_key(self, encoded_api_key):
-        return await self.cli_client.create_connector_secret(encoded_api_key)
