@@ -330,10 +330,11 @@ class Sink:
                 if "error" in item[action_item]:
                     error = item[action_item].get("error")
                     message = f"Failed to execute '{action_item}' on document with id '{doc_id}'. Error: {error}"
-                    if is_field_limit_error(error):
+                    if self.error_monitor.enabled and is_field_limit_error(error):
                         # Every following document that adds a new field would be
                         # dropped as well, so fail the sync instead of letting it
-                        # complete with silently missing documents.
+                        # complete with silently missing documents. Like the error
+                        # monitor thresholds, this is skipped when the monitor is disabled.
                         self.counters.increment(RESULT_ERROR, namespace=BULK_RESPONSES)
                         msg = (
                             f"Index '{item[action_item].get('_index')}' reached its mapping total fields limit, "

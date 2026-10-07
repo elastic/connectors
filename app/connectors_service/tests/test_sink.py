@@ -1498,6 +1498,47 @@ async def test_batch_bulk_fails_when_total_fields_limit_is_exceeded(error):
     assert sink.counters.get(f"{BULK_RESPONSES}.{RESULT_ERROR}") == 1
 
 
+@pytest.mark.asyncio
+async def test_batch_bulk_does_not_fail_on_field_limit_when_error_monitor_disabled():
+    """With the error monitor disabled, a field limit error is only logged,
+    like any other document error."""
+    config = {
+        "username": "elastic",
+        "password": "changeme",
+        "host": "http://nowhere.com:9200",
+    }
+    client = ESManagementClient(config)
+    client.client = AsyncMock()
+    sink = Sink(
+        client=client,
+        queue=None,
+        error_monitor=ErrorMonitor(enabled=False),
+        chunk_size=0,
+        pipeline={"name": "pipeline"},
+        chunk_mem_size=0,
+        max_concurrency=0,
+        max_retries=3,
+        retry_interval=10,
+    )
+    error = {
+        "type": "illegal_argument_exception",
+        "reason": "Limit of total fields [1000] has been exceeded while adding new fields [2]",
+    }
+    client.bulk_insert = AsyncMock(
+        return_value={
+            "items": [
+                {OP_INDEX: {"_index": INDEX, "_id": "too_many_fields", "error": error}}
+            ],
+            "errors": True,
+        }
+    )
+    stats = {OP_INDEX: {"too_many_fields": 100}, OP_UPDATE: {}, OP_DELETE: {}}
+
+    await sink._batch_bulk([], stats)
+
+    assert sink.counters.get(f"{BULK_RESPONSES}.{RESULT_ERROR}") == 1
+
+
 @pytest.mark.parametrize(
     "error",
     [
