@@ -38,7 +38,6 @@ def mock_connector():
     connector.last_sync_status = JobStatus.COMPLETED
     connector.features.sync_rules_enabled.return_value = True
     connector.features.incremental_sync_enabled.return_value = True
-    connector.features.native_connector_api_keys_enabled.return_value = False
     connector.sync_cursor = SYNC_CURSOR
     connector.document_count = AsyncMock(return_value=TOTAL_DOCUMENT_COUNT)
     connector.sync_starts = AsyncMock(return_value=True)
