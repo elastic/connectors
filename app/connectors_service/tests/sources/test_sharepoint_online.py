@@ -2776,6 +2776,85 @@ class TestSharepointOnlineDataSource:
 
         assert (operations["delete"]) == deleted
 
+    def _drive_items_with_download_url(self):
+        return [
+            DriveItemsPage(
+                items=[
+                    {
+                        "id": "7",
+                        "name": "seventh.txt",
+                        "size": 10,
+                        "lastModifiedDateTime": self.day_ago,
+                        "parentReference": {"driveId": "2"},
+                        "@microsoft.graph.downloadUrl": "https://sharepoint.com/download?tempauth=secret",
+                    },
+                ],
+                delta_link="deltalinksample",
+            )
+        ]
+
+    @pytest.mark.asyncio
+    async def test_get_docs_does_not_index_drive_item_download_url(
+        self, patch_sharepoint_client
+    ):
+        patch_sharepoint_client.drive_items = Mock(
+            side_effect=lambda *args, **kwargs: AsyncIterator(
+                self._drive_items_with_download_url()
+            )
+        )
+
+        async with create_spo_source() as source:
+            source._dls_enabled = Mock(return_value=False)
+
+            drive_items = [
+                (doc, download_func)
+                async for doc, download_func in source.get_docs()
+                if doc["object_type"] == "drive_item"
+            ]
+
+        assert len(drive_items) == 1
+        drive_item, download_func = drive_items[0]
+        assert drive_item["_id"] == "7"
+        assert "@microsoft.graph.downloadUrl" not in drive_item
+        # the item is still considered downloadable
+        assert download_func is not None
+
+    @pytest.mark.asyncio
+    @freeze_time(iso_utc())
+    async def test_get_docs_incrementally_does_not_index_drive_item_download_url(
+        self, patch_sharepoint_client
+    ):
+        patch_sharepoint_client.drive_items = Mock(
+            side_effect=lambda *args, **kwargs: AsyncIterator(
+                self._drive_items_with_download_url()
+            )
+        )
+        sync_cursor = {
+            "site_drives": {
+                site_drive["id"]: "http://fakesharepoint.com/deltalink"
+                for site_drive in self.site_drives
+            },
+            "cursor_timestamp": self.month_ago,
+        }
+
+        async with create_spo_source() as source:
+            source._site_access_control = AsyncMock(return_value=([], [], []))
+
+            drive_items = [
+                (doc, download_func, operation)
+                async for doc, download_func, operation in source.get_docs_incrementally(
+                    sync_cursor=sync_cursor
+                )
+                if doc["object_type"] == "drive_item"
+            ]
+
+        assert len(drive_items) == 1
+        drive_item, download_func, operation = drive_items[0]
+        assert drive_item["_id"] == "7"
+        assert "@microsoft.graph.downloadUrl" not in drive_item
+        assert download_func is not None
+        assert operation == "index"
+
     @pytest.mark.asyncio
     async def test_site_lists(self, patch_sharepoint_client):
         async with create_spo_source(
@@ -3399,6 +3478,31 @@ class TestSharepointOnlineDataSource:
             download_result = source.download_function(drive_item, max_drive_item_age)
 
             assert download_result is not None
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "name, expect_download",
+        [
+            ("test.txt", True),
+            ("filename.randomextention", False),
+        ],
+    )
+    async def test_download_function_removes_download_url(self, name, expect_download):
+        async with create_spo_source() as source:
+            drive_item = {
+                "id": "testid",
+                "name": name,
+                "@microsoft.graph.downloadUrl": "http://localhost/filename?tempauth=secret",
+                "size": 5000,
+                "lastModifiedDateTime": datetime.now(timezone.utc).strftime(
+                    ISO_ZULU_TIMESTAMP_FORMAT
+                ),
+            }
+
+            download_result = source.download_function(drive_item, None)
+
+            assert (download_result is not None) == expect_download
+            assert "@microsoft.graph.downloadUrl" not in drive_item
 
     def test_get_default_configuration(self):
         config = SharepointOnlineDataSource.get_default_configuration()
