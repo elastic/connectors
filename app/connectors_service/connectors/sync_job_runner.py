@@ -87,10 +87,6 @@ class ConnectorJobNotRunningError(Exception):
         )
 
 
-class ApiKeyNotFoundError(Exception):
-    pass
-
-
 class SyncJobRunner:
     """The class to run a sync job.
 

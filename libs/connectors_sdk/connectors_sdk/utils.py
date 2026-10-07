@@ -170,8 +170,6 @@ class Features:
     BASIC_RULES_OLD = "basic_rules_old"
     ADVANCED_RULES_OLD = "advanced_rules_old"
 
-    NATIVE_CONNECTOR_API_KEYS = "native_connector_api_keys"
-
     def __init__(self, features=None):
         if features is None:
             features = {}
@@ -186,11 +184,6 @@ class Features:
     def document_level_security_enabled(self):
         return nested_get_from_dict(
             self.features, ["document_level_security", "enabled"], default=False
-        )
-
-    def native_connector_api_keys_enabled(self):
-        return nested_get_from_dict(
-            self.features, ["native_connector_api_keys", "enabled"], default=True
         )
 
     def sync_rules_enabled(self):
