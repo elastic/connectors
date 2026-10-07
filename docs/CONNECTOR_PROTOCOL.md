@@ -53,7 +53,7 @@ This is our main communication index, used to communicate the connector's config
 ```
 {
   api_key_id: string;           -> ID of the current API key in use
-  api_key_secret_id: string;    -> ID of Connector Secret doc that stores the API key
+  api_key_secret_id: string;    -> ID of Connector Secret doc that stores the API key (not read by the connectors framework since 9.0)
   configuration: {
     [key]: {
       default_value: any;   -> The value used if `value` is empty (only for non-required fields)
