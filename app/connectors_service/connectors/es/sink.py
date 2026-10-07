@@ -131,6 +131,26 @@ class DocumentIngestionError(Exception):
     pass
 
 
+class IndexFieldLimitExceededError(DocumentIngestionError):
+    pass
+
+
+# Elasticsearch rejects any document that would add a new field once the index
+# reached `index.mapping.total_fields.limit`, e.g. "Limit of total fields [1000]
+# has been exceeded while adding new fields [2]".
+FIELD_LIMIT_ERROR_REASON = "Limit of total fields"
+
+
+def is_field_limit_error(error):
+    """Checks whether a bulk item error (or any of its causes) was raised because
+    the index reached its mapping total fields limit."""
+    while isinstance(error, dict):
+        if FIELD_LIMIT_ERROR_REASON in str(error.get("reason", "")):
+            return True
+        error = error.get("caused_by")
+    return False
+
+
 class Sink:
     """Send bulk operations in batches by consuming a queue.
 
@@ -308,7 +328,20 @@ class Sink:
             successful_result = result in SUCCESSFUL_RESULTS
             if not successful_result:
                 if "error" in item[action_item]:
-                    message = f"Failed to execute '{action_item}' on document with id '{doc_id}'. Error: {item[action_item].get('error')}"
+                    error = item[action_item].get("error")
+                    message = f"Failed to execute '{action_item}' on document with id '{doc_id}'. Error: {error}"
+                    if is_field_limit_error(error):
+                        # Every following document that adds a new field would be
+                        # dropped as well, so fail the sync instead of letting it
+                        # complete with silently missing documents.
+                        self.counters.increment(RESULT_ERROR, namespace=BULK_RESPONSES)
+                        msg = (
+                            f"Index '{item[action_item].get('_index')}' reached its mapping total fields limit, "
+                            "so documents adding new fields are being rejected. Reduce the number of synced fields "
+                            "(e.g. with sync rules or an ingest pipeline) or increase the "
+                            f"'index.mapping.total_fields.limit' index setting. {message}"
+                        )
+                        raise IndexFieldLimitExceededError(msg)
                     self.error_monitor.track_error(DocumentIngestionError(message))
                     if do_log:
                         self._logger.debug(message)
