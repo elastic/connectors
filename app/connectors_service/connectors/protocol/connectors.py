@@ -638,10 +638,6 @@ class Connector(ESDocument):
     def sync_cursor(self):
         return self.get("sync_cursor")
 
-    @property
-    def api_key_secret_id(self):
-        return self.get("api_key_secret_id")
-
     async def heartbeat(self, interval, force=False):
         if (
             force
