@@ -3642,7 +3642,7 @@ Apache-2.0
 
 
 elasticsearch-connectors
-9.4.8
+9.4.9
 Elastic-2.0
 Elastic License 2.0
 
@@ -3740,7 +3740,7 @@ these terms.
 
 
 elasticsearch-connectors-sdk
-9.4.8
+9.4.9
 Elastic-2.0
 UNKNOWN
 
@@ -6798,11 +6798,11 @@ POSSIBILITY OF SUCH DAMAGE.
 
 
 pycparser
-3.0
+3.1
 BSD-3-Clause
 pycparser -- A C parser in Python
 
-Copyright (c) 2008-2022, Eli Bendersky
+Copyright (c) 2008-2027, Eli Bendersky
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
