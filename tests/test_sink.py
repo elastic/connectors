@@ -1441,6 +1441,7 @@ async def test_batch_bulk_fails_when_total_fields_limit_is_exceeded(error):
     assert sink.counters.get(INDEXED_DOCUMENT_COUNT) == 9
     assert sink.counters.get(f"{BULK_RESPONSES}.{RESULT_ERROR}") == 1
 
+
 @pytest.mark.parametrize(
     "error",
     [
