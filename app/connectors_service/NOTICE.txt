@@ -4241,7 +4241,7 @@ Apache Software License
 
 
 google-auth
-2.60.0
+2.61.0
 Apache Software License
                                  Apache License
                            Version 2.0, January 2004
