@@ -528,43 +528,38 @@ def test_connector_create_native_connector(patched_confirm):
         AsyncMock(return_value={"id": "api-key-123", "encoded": "foo"}),
     ) as patched_create_api_key:
         with patch(
-            "connectors.cli.connector.Connector._Connector__store_api_key",
-            AsyncMock(return_value="secret-123"),
-        ) as patched_store_api_key:
-            with patch(
-                "connectors.protocol.connectors.ConnectorIndex.index",
-                AsyncMock(return_value={"_id": "new_connector_id"}),
-            ) as patched_create:
-                result = runner.invoke(
-                    cli,
-                    [
-                        "connector",
-                        "create",
-                        "--service-type",
-                        "mongodb",
-                        "--from-index",
-                        "--native",
-                    ],
-                    input=_mongodb_create_cli_input(index_name="test-connector"),
-                )
+            "connectors.protocol.connectors.ConnectorIndex.index",
+            AsyncMock(return_value={"_id": "new_connector_id"}),
+        ) as patched_create:
+            result = runner.invoke(
+                cli,
+                [
+                    "connector",
+                    "create",
+                    "--service-type",
+                    "mongodb",
+                    "--from-index",
+                    "--native",
+                ],
+                input=_mongodb_create_cli_input(index_name="test-connector"),
+            )
 
-                patched_create.assert_called_once()
+            patched_create.assert_called_once()
 
-                call_args = patched_create.call_args[0][0]
-                assert call_args["is_native"] is True
-                assert call_args["api_key_id"] == "api-key-123"
-                assert call_args["api_key_secret_id"] == "secret-123"
-                _assert_mongodb_create_doc(
-                    call_args,
-                    index_name="test-connector",
-                    connector_name=_DEFAULT_CREATE_OPTIONS["connector_name"],
-                )
+            call_args = patched_create.call_args[0][0]
+            assert call_args["is_native"] is True
+            assert call_args["api_key_id"] == "api-key-123"
+            assert call_args["api_key_secret_id"] is None
+            _assert_mongodb_create_doc(
+                call_args,
+                index_name="test-connector",
+                connector_name=_DEFAULT_CREATE_OPTIONS["connector_name"],
+            )
 
-                patched_create_api_key.assert_called_once()
-                patched_store_api_key.assert_called_once()
-                assert result.exit_code == 0
+            patched_create_api_key.assert_called_once()
+            assert result.exit_code == 0
 
-                assert "has been created" in result.output
+            assert "has been created" in result.output
 
 
 def test_index_help_page():
