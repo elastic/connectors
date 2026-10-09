@@ -19,6 +19,7 @@ from connectors.sources.microsoft_teams.client import (
     Schema,
     TeamsObjectType,
     _jwt_payload_roles,
+    encode_sharing_url,
 )
 from connectors.sources.microsoft_teams.datasource import (
     MicrosoftTeamsDataSource,
@@ -327,6 +328,12 @@ class FakeGraphSession:
                     return value(payload)
                 return value
         return {"responses": []}
+
+    async def pipe(self, url, stream):
+        for key, exc in self._raises.items():
+            if key in url:
+                raise exc
+        await stream.write(b"file-bytes")
 
 
 def build_client():
@@ -2098,3 +2105,81 @@ async def test_validate_config_requires_certificate_and_key():
         with patch.object(BaseDataSource, "validate_config", new=AsyncMock()):
             with pytest.raises(ConfigurableFieldValueError):
                 await source.validate_config()
+
+
+def test_encode_sharing_url():
+    url = "https://contoso.sharepoint.com/sites/x/file.pdf"
+    expected = "u!" + base64.urlsafe_b64encode(url.encode()).decode().rstrip("=")
+
+    assert encode_sharing_url(url) == expected
+    assert "=" not in encode_sharing_url(url)
+
+
+@pytest.mark.asyncio
+async def test_get_chats_deduplicates_across_users():
+    client = build_client()
+    shared = {"id": "chat-shared", "topic": "Shared"}
+    client._graph_api_client = FakeGraphSession(
+        pages={
+            "/users/user-a/chats": [[shared, {"id": "chat-only-a"}]],
+            "/users/user-b/chats": [[shared]],
+        }
+    )
+
+    batches = []
+    async for batch in client.get_chats(["user-a", "user-b"]):
+        batches.append(batch)
+
+    assert batches == [[shared, {"id": "chat-only-a"}]]
+
+
+@pytest.mark.asyncio
+async def test_get_chats_skips_user_when_not_found():
+    client = build_client()
+    client._graph_api_client = FakeGraphSession(
+        pages={"/users/user-b/chats": [CHATS]},
+        raises={"/users/missing/chats": NotFound()},
+    )
+
+    batches = []
+    async for batch in client.get_chats(["missing", "user-b"]):
+        batches.append(batch)
+
+    assert batches == [CHATS]
+
+
+@pytest.mark.asyncio
+async def test_get_drive_item_by_content_url():
+    client = build_client()
+    drive_item = {"id": "item-1", "name": "doc.pdf"}
+    client._graph_api_client = FakeGraphSession(fetches={"/shares/": drive_item})
+
+    content_url = "https://contoso.sharepoint.com/:b:/g/file"
+    assert await client.get_drive_item_by_content_url(content_url) == drive_item
+    assert await client.get_drive_item_by_content_url("") is None
+
+
+@pytest.mark.asyncio
+async def test_get_drive_item_by_content_url_returns_none_when_not_found():
+    client = build_client()
+    client._graph_api_client = FakeGraphSession(
+        raises={"/shares/": NotFound()},
+    )
+
+    assert (
+        await client.get_drive_item_by_content_url(
+            "https://contoso.sharepoint.com/:b:/g/missing"
+        )
+        is None
+    )
+
+
+@pytest.mark.asyncio
+async def test_download_drive_item_writes_to_buffer():
+    client = build_client()
+    client._graph_api_client = FakeGraphSession()
+
+    buffer = AsyncMock()
+    await client.download_drive_item("drive-1", "item-1", buffer)
+
+    buffer.write.assert_awaited_once_with(b"file-bytes")
