@@ -158,8 +158,19 @@ class ExtraLogger(logging.Logger):
         super(ExtraLogger, self)._log(level, msg, args, exc_info, extra)
 
 
+def normalize_log_level(log_level):
+    """Upper-cases level names so that "debug" is accepted like "DEBUG".
+
+    Numeric levels are returned unchanged.
+    """
+    if isinstance(log_level, str):
+        return log_level.upper()
+    return log_level
+
+
 def set_logger(log_level=logging.INFO, filebeat=False):
     global logger
+    log_level = normalize_log_level(log_level)
     if filebeat:
         formatter = ecs_logging.StdlibFormatter()
     else:
@@ -183,6 +194,7 @@ def set_logger(log_level=logging.INFO, filebeat=False):
 def set_extra_logger(logger, log_level=logging.INFO, prefix="BYOC", filebeat=False):
     if isinstance(logger, str):
         logger = logging.getLogger(logger)
+    log_level = normalize_log_level(log_level)
     handler = logging.StreamHandler()
     if filebeat:
         handler.setFormatter(ecs_logging.StdlibFormatter())

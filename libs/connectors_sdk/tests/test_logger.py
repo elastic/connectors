@@ -13,7 +13,13 @@ import pytest
 from freezegun import freeze_time
 
 import connectors_sdk.logger
-from connectors_sdk.logger import ColorFormatter, logger, set_logger, tracer
+from connectors_sdk.logger import (
+    ColorFormatter,
+    logger,
+    set_extra_logger,
+    set_logger,
+    tracer,
+)
 
 
 @contextmanager
@@ -31,6 +37,32 @@ def test_logger():
     with unset_logger():
         logger = set_logger(logging.DEBUG)
         assert logger.level == logging.DEBUG
+
+
+@pytest.mark.parametrize(
+    "log_level, expected",
+    [
+        ("debug", logging.DEBUG),
+        ("Info", logging.INFO),
+        ("WARNING", logging.WARNING),
+        (logging.ERROR, logging.ERROR),
+    ],
+)
+def test_logger_accepts_case_insensitive_level(log_level, expected):
+    with unset_logger():
+        logger = set_logger(log_level)
+        assert logger.level == expected
+        assert logger.handlers[0].level == expected
+
+
+def test_extra_logger_accepts_lowercase_level():
+    extra_logger = logging.getLogger("test_extra_logger_lowercase")
+    try:
+        set_extra_logger(extra_logger, log_level="debug")
+        assert extra_logger.level == logging.DEBUG
+        assert extra_logger.handlers[-1].level == logging.DEBUG
+    finally:
+        extra_logger.handlers.clear()
 
 
 def test_logger_filebeat():

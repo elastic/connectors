@@ -95,6 +95,19 @@ def test_list_action(set_env):
     assert "Bye" in output
 
 
+@patch("connectors.service_cli.set_logger")
+def test_log_level_option_is_case_insensitive(set_logger, set_env):
+    runner = CliRunner()
+
+    result = runner.invoke(
+        main,
+        ["--config-file", CONFIG, "--action", "list", "--log-level", "debug"],
+    )
+
+    assert result.exit_code == SUCCESS_EXIT_CODE
+    set_logger.assert_called_with("DEBUG", filebeat=False)
+
+
 def test_config_with_service_type_actions(set_env):
     runner = CliRunner()
 
