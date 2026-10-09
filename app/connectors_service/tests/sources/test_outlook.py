@@ -73,6 +73,7 @@ from connectors.sources.outlook.client import (
 )
 from connectors.sources.outlook.constants import (
     ARCHIVE_MAIL_OBJECT,
+    DEPRECATION_WARNINGS,
     INBOX_MAIL_OBJECT,
     MAIL_ATTACHMENT,
     MAIL_FIELDS,
@@ -1288,6 +1289,7 @@ async def test_get_docs_skips_account_without_mailbox_and_continues():
             [bad_account, MockAccount()]
         )
         source._logger = MagicMock()
+        source._log_deprecation_warning = MagicMock()
 
         documents = [document async for document, _ in source.get_docs()]
 
@@ -1312,6 +1314,7 @@ async def test_get_docs_skips_account_with_non_primary_smtp_address_and_continue
             [bad_account, MockAccount()]
         )
         source._logger = MagicMock()
+        source._log_deprecation_warning = MagicMock()
 
         documents = [document async for document, _ in source.get_docs()]
 
@@ -1334,6 +1337,7 @@ async def test_get_docs_skips_account_on_access_denied_and_continues():
             [bad_account, MockAccount()]
         )
         source._logger = MagicMock()
+        source._log_deprecation_warning = MagicMock()
 
         documents = [document async for document, _ in source.get_docs()]
 
@@ -2592,3 +2596,52 @@ class TestOutlookMailAttachment:
 
         assert attachment == base64.b64encode(_PLAIN_ONLY_MIME).decode("ascii")
         logger.warning.assert_called_once()
+
+
+@pytest.mark.parametrize("data_source", [OUTLOOK_CLOUD, OUTLOOK_SERVER])
+def test_deprecation_warning_points_to_replacement(data_source):
+    replacement = {OUTLOOK_CLOUD: "outlook_cloud", OUTLOOK_SERVER: "exchange_server"}
+
+    assert "deprecated" in DEPRECATION_WARNINGS[data_source]
+    assert replacement[data_source] in DEPRECATION_WARNINGS[data_source]
+
+
+def test_cloud_deprecation_warning_covers_ews_retirement():
+    warning = DEPRECATION_WARNINGS[OUTLOOK_CLOUD]
+
+    assert "full_access_as_app" in warning
+    assert "EWSAllowedAppIDs" in warning
+    assert "April 1, 2027" in warning
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("data_source", [OUTLOOK_CLOUD, OUTLOOK_SERVER])
+async def test_ping_logs_deprecation_warning(data_source):
+    async with create_outlook_source(data_source=data_source) as source:
+        source.client.ping = AsyncMock()
+        source._logger = MagicMock()
+
+        await source.ping()
+
+        source._logger.warning.assert_called_once_with(
+            DEPRECATION_WARNINGS[data_source]
+        )
+        source.client.ping.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("data_source", [OUTLOOK_CLOUD, OUTLOOK_SERVER])
+async def test_get_docs_logs_deprecation_warning_and_still_syncs(data_source):
+    async with create_outlook_source(data_source=data_source) as source:
+        source.client._get_user_instance.get_user_accounts = AsyncIterator(
+            [MockAccount()]
+        )
+        source._logger = MagicMock()
+
+        documents = [document async for document, _ in source.get_docs()]
+
+        assert documents
+        assert all(document in EXPECTED_RESPONSE for document in documents)
+        source._logger.warning.assert_called_once_with(
+            DEPRECATION_WARNINGS[data_source]
+        )

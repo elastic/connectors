@@ -38,7 +38,7 @@ The columns provide specific information about each connector:
 | [OneDrive](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-connectors-onedrive.html) | **GA** | 8.11+ | 8.11+ | 8.11+ | 8.13+ | 8.11+ | [View code](https://github.com/elastic/connectors/tree/main/connectors/sources/onedrive.py) |
 | [Opentext Documentum](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-connectors-opentext.html) | **Example** | n/a | n/a | n/a | n/a | - | [View code](https://github.com/elastic/connectors/tree/main/connectors/sources/opentext_documentum.py) |
 | [Oracle](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-connectors-oracle.html) | **GA** | 8.12+ | - | - | - | - | [View code](https://github.com/elastic/connectors/tree/main/connectors/sources/oracle.py) |
-| [Outlook](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-connectors-outlook.html) | **GA** | 8.13+ | - | 8.11+ | 8.13+ | 8.14+ | [View code](https://github.com/elastic/connectors/tree/main/connectors/sources/outlook.py) |
+| [Outlook](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-connectors-outlook.html) | **GA** (**Deprecated**, see [below](#outlook-deprecation)) | 8.13+ | - | 8.11+ | 8.13+ | 8.14+ | [View code](https://github.com/elastic/connectors/tree/main/connectors/sources/outlook.py) |
 | [PostgreSQL](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-connectors-postgresql.html) | **GA** | 8.8+ | 8.11+ | - | - | - | [View code](https://github.com/elastic/connectors/tree/main/connectors/sources/postgresql.py) |
 | [Redis](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-connectors-redis.html) | **Preview** | - | - | - | - | - | [View code](https://github.com/elastic/connectors/tree/main/connectors/sources/redis.py) |
 | [Amazon S3](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-connectors-s3.html) | **GA** | 8.12+ | 8.12+ | 8.11+ | - | - | [View code](https://github.com/elastic/connectors/tree/main/connectors/sources/s3.py) |
@@ -49,3 +49,17 @@ The columns provide specific information about each connector:
 | [Slack](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-connectors-slack.html) | **Preview** | 8.14+ | - | - | - | - | [View code](https://github.com/elastic/connectors/tree/main/connectors/sources/slack.py) |
 | [Teams](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-connectors-teams.html) | **Preview** | 8.14+ | - | - | 8.13+ | - | [View code](https://github.com/elastic/connectors/tree/main/connectors/sources/teams.py) |
 | [Zoom](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-connectors-zoom.html) | **Preview** | 8.14+ | - | 8.11+ | 8.13+ | - | [View code](https://github.com/elastic/connectors/tree/main/connectors/sources/zoom.py) |
+
+## Outlook deprecation
+
+The Outlook connector (`outlook`) is deprecated. It is frozen (no new features) and remains available only for existing deployments. Create new connectors with its replacements:
+
+* **Exchange Online (Microsoft 365)**: use the upcoming Outlook Cloud connector (`outlook_cloud`), which uses Microsoft Graph.
+* **On-premises Exchange**: use the Exchange Server connector (`exchange_server`). It syncs the same content with the same configuration as the Outlook connector's "Outlook Server" mode.
+
+The Outlook connector's "Outlook Cloud" mode reads mailboxes through Exchange Web Services (EWS) with the `full_access_as_app` application permission. Microsoft is [retiring EWS in Exchange Online](https://techcommunity.microsoft.com/blog/exchange/exchange-online-ews-your-time-is-almost-up/4492361):
+
+* **From October 1, 2026**, EWS is turned off for tenants that have not explicitly enabled it. To keep an existing connector syncing until it is migrated, a tenant admin must set `EWSEnabled` to `True` and make sure the connector's Entra application (client) ID is on the `EWSAllowedAppIDs` list.
+* **On April 1, 2027**, EWS is permanently turned off in Exchange Online, with no workaround. The "Outlook Cloud" mode stops working on that date.
+
+The "Outlook Server" mode is not affected by the EWS retirement.

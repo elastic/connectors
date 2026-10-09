@@ -35,6 +35,7 @@ from connectors.access_control import ACCESS_CONTROL, es_access_control_query
 from connectors.sources.outlook.client import OutlookClient, _extract_ldap_mail
 from connectors.sources.outlook.constants import (
     CALENDAR_ATTACHMENT,
+    DEPRECATION_WARNINGS,
     MAIL_ATTACHMENT,
     OUTLOOK_CLOUD,
     OUTLOOK_SERVER,
@@ -238,7 +239,14 @@ class OutlookDocFormatter:
 
 
 class OutlookDataSource(BaseDataSource):
-    """Outlook"""
+    """Outlook
+
+    Deprecated and frozen: no new features, kept for existing deployments only.
+    New Exchange Online connectors use `outlook_cloud` (Microsoft Graph); new
+    on-premises connectors use `exchange_server`. The Outlook Cloud mode depends
+    on EWS with `full_access_as_app`, which Exchange Online turns off permanently
+    on April 1, 2027.
+    """
 
     name = "Outlook"
     service_type = "outlook"
@@ -757,8 +765,12 @@ class OutlookDataSource(BaseDataSource):
             ):
                 yield doc
 
+    def _log_deprecation_warning(self):
+        self._logger.warning(DEPRECATION_WARNINGS[self.configuration["data_source"]])
+
     async def ping(self):
         """Verify the connection with Outlook"""
+        self._log_deprecation_warning()
         await self.client.ping()
         self._logger.info("Successfully connected to Outlook")
 
@@ -771,6 +783,7 @@ class OutlookDataSource(BaseDataSource):
         Yields:
             dictionary: dictionary containing meta-data of the files.
         """
+        self._log_deprecation_warning()
         async for account in self.client._get_user_instance.get_user_accounts():
             timezone = account.default_timezone or UTC
             try:
