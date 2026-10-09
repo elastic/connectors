@@ -33,6 +33,7 @@ The only application-level concerns are:
 **Affected Connectors:**
 - **SharePoint Server** (`connectors/sources/sharepoint/sharepoint_server/`)
 - **Network Drive** (`connectors/sources/network_drive/`)
+- **Exchange Server** (`connectors/sources/exchange_server/`)
 
 #### Why NTLM Cannot Be FIPS-Compliant
 
@@ -75,6 +76,25 @@ The Network Drive connector uses:
 - `pywinrm` with NTLM transport for WinRM connections
 - `smbprotocol` which uses NTLM for SMB authentication
 
+#### Exchange Server
+
+```python
+# From connectors/sources/exchange_server/client.py
+credentials = Credentials(
+    username=self.user,
+    password=self.password,
+)
+configuration = Configuration(
+    credentials=credentials,
+    server=self.exchange_server,
+    retry_policy=FaultTolerance(max_wait=120),
+)
+```
+
+The Exchange Server connector uses `exchangelib` username/password credentials against on-premises EWS. No `auth_type` is set, so `exchangelib` uses the auth method the server offers, which for on-premises Exchange is typically NTLM (through `requests_ntlm`).
+
+The legacy Outlook connector in `outlook_server` mode uses the same code path. Its `outlook_cloud` mode uses Microsoft OAuth.
+
 #### Dependencies Using NTLM
 
 | Dependency | Usage | FIPS Status |
@@ -82,6 +102,7 @@ The Network Drive connector uses:
 | `httpx-ntlm==1.4.0` | SharePoint Server auth | **Not Compliant** |
 | `pywinrm==0.4.3` | Network Drive WinRM | **Not Compliant** |
 | `smbprotocol==1.10.1` | Network Drive SMB | **Not Compliant** (when using NTLM auth) |
+| `exchangelib==5.4.0` (`requests_ntlm`) | Exchange Server EWS auth | **Not Compliant** (when using NTLM auth) |
 
 #### Resolution
 
@@ -98,6 +119,7 @@ When FIPS mode is enabled in the application, these connectors are automatically
 | Confluence | ✅ Yes | Uses API tokens over TLS |
 | Directory | ✅ Yes | Local filesystem |
 | Dropbox | ✅ Yes | Uses OAuth 2.0 |
+| Exchange Server | ❌ No | NTLM authentication |
 | GitHub | ✅ Yes | Uses OAuth/PAT over TLS |
 | GitLab | ✅ Yes | Uses PAT over TLS |
 | Gmail | ✅ Yes | Uses Google OAuth |
