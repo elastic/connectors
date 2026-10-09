@@ -4,6 +4,8 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import asyncio
+import io
+import json
 import logging
 import os
 import signal
@@ -12,6 +14,7 @@ from unittest.mock import ANY, AsyncMock, Mock, call, patch
 import pytest
 from click import ClickException, UsageError
 from click.testing import CliRunner
+from connectors_sdk.logger import logger
 
 from connectors import __version__
 from connectors.service_cli import _start_service, get_event_loop, main
@@ -181,6 +184,28 @@ def test_main_with_invalid_configuration(load_config, set_logger):
 
     assert result.exit_code == CLICK_EXCEPTION_EXIT_CODE
     set_logger.assert_called_with(logging.INFO, filebeat=True)
+
+
+@patch(
+    "connectors.service_cli.load_config", side_effect=Exception("something went wrong")
+)
+def test_main_with_filebeat_formats_first_log_lines(load_config):
+    handler = logger.handlers[0]
+    old_stream = handler.setStream(io.StringIO())
+    old_formatter = handler.formatter
+    old_filebeat = logger.filebeat
+    try:
+        result = CliRunner().invoke(main, ["--filebeat"])
+        lines = handler.stream.getvalue().splitlines()
+    finally:
+        handler.setStream(old_stream)
+        handler.setFormatter(old_formatter)
+        logger.filebeat = old_filebeat
+
+    assert result.exit_code == CLICK_EXCEPTION_EXIT_CODE
+    records = [json.loads(line) for line in lines if line]
+    assert records[0]["message"] == f"Running connector service version {__version__}"
+    assert records[-1]["log.level"] == "error"
 
 
 def test_unknown_service_type(set_env):
