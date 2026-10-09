@@ -193,56 +193,28 @@ class TestESManagementClient:
             assert ids == ["1", "2"]
 
     @pytest.mark.asyncio
-    async def test_get_connector_secret(self, es_management_client, mock_responses):
-        secret_id = "secret-id"
-
-        es_management_client.client.perform_request = AsyncMock(
-            return_value={"id": secret_id, "value": "secret-value"}
-        )
-
-        secret = await es_management_client.get_connector_secret(secret_id)
-        assert secret == "secret-value"
-        es_management_client.client.perform_request.assert_awaited_with(
-            "GET", f"/_connector/_secret/{secret_id}"
-        )
-
-    @pytest.mark.asyncio
-    async def test_get_connector_secret_when_secret_does_not_exist(
+    async def test_yield_existing_documents_metadata_when_source_id_differs_from_id(
         self, es_management_client, mock_responses
     ):
-        secret_id = "secret-id"
+        es_management_client.index_exists = AsyncMock(return_value=True)
 
-        error_meta = Mock()
-        error_meta.status = 404
-        es_management_client.client.perform_request = AsyncMock(
-            side_effect=ElasticNotFoundError(
-                "resource_not_found_exception",
-                error_meta,
-                f"No secret with id [{secret_id}]",
-            )
-        )
+        records = [
+            {"_id": "1", "_source": {"id": "a", "_timestamp": str(datetime.now())}},
+            {"_id": "2", "_source": {"id": "b", "_timestamp": str(datetime.now())}},
+        ]
 
-        with pytest.raises(ElasticNotFoundError):
-            secret = await es_management_client.get_connector_secret(secret_id)
-            assert secret is None
+        with mock.patch(
+            "connectors.es.management_client.async_scan",
+            return_value=AsyncIterator(records),
+        ):
+            ids = []
+            async for (
+                doc_id,
+                _,
+            ) in es_management_client.yield_existing_documents_metadata("something"):
+                ids.append(doc_id)
 
-    @pytest.mark.asyncio
-    async def test_create_connector_secret(self, es_management_client, mock_responses):
-        secret_id = "secret-id"
-        secret_value = "my-secret"
-
-        es_management_client.client.perform_request = AsyncMock(
-            return_value={"id": secret_id}
-        )
-
-        returned_id = await es_management_client.create_connector_secret(secret_value)
-        assert returned_id == secret_id
-        es_management_client.client.perform_request.assert_awaited_with(
-            "POST",
-            "/_connector/_secret",
-            body={"value": secret_value},
-            headers={"accept": "application/json", "content-type": "application/json"},
-        )
+            assert ids == ["1", "2"]
 
     @pytest.mark.asyncio
     async def test_extract_index_or_alias_with_index(self, es_management_client):
@@ -291,21 +263,3 @@ class TestESManagementClient:
         index = await es_management_client.get_index_or_alias("nonexistent")
 
         assert index is None
-
-    @pytest.mark.asyncio
-    async def test_get_index_or_alias(self, es_management_client, mock_responses):
-        secret_id = "secret-id"
-        secret_value = "my-secret"
-
-        es_management_client.client.perform_request = AsyncMock(
-            return_value={"id": secret_id}
-        )
-
-        returned_id = await es_management_client.create_connector_secret(secret_value)
-        assert returned_id == secret_id
-        es_management_client.client.perform_request.assert_awaited_with(
-            "POST",
-            "/_connector/_secret",
-            body={"value": secret_value},
-            headers={"accept": "application/json", "content-type": "application/json"},
-        )

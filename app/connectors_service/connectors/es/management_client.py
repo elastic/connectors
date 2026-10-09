@@ -189,7 +189,7 @@ class ESManagementClient(ESClient):
         )
 
     async def yield_existing_documents_metadata(self, index):
-        """Returns an iterator on the `id` and `_timestamp` fields of all documents in an index.
+        """Returns an iterator on the `_id` and `_timestamp` fields of all documents in an index.
 
         WARNING
 
@@ -203,35 +203,10 @@ class ESManagementClient(ESClient):
             return
 
         async for doc in async_scan(
-            client=self.client, index=index, _source=["id", TIMESTAMP_FIELD]
+            client=self.client, index=index, _source=[TIMESTAMP_FIELD]
         ):
             source = doc["_source"]
-            doc_id = source.get("id", doc["_id"])
+            doc_id = doc["_id"]
             timestamp = source.get(TIMESTAMP_FIELD)
 
             yield doc_id, timestamp
-
-    async def get_connector_secret(self, connector_secret_id):
-        secret = await self._retrier.execute_with_retry(
-            partial(
-                self.client.perform_request,
-                "GET",
-                f"/_connector/_secret/{connector_secret_id}",
-            )
-        )
-        return secret.get("value")
-
-    async def create_connector_secret(self, secret_value):
-        secret = await self._retrier.execute_with_retry(
-            partial(
-                self.client.perform_request,
-                "POST",
-                "/_connector/_secret",
-                headers={
-                    "accept": "application/json",
-                    "content-type": "application/json",
-                },
-                body={"value": secret_value},
-            )
-        )
-        return secret.get("id")

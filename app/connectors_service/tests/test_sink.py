@@ -32,12 +32,14 @@ from connectors.es.sink import (
     OP_DELETE,
     OP_INDEX,
     OP_UPDATE,
+    RESULT_ERROR,
     RESULT_SUCCESS,
     UPDATES_QUEUED,
     AsyncBulkRunningError,
     ElasticsearchOverloadedError,
     Extractor,
     ForceCanceledError,
+    IndexFieldLimitExceededError,
     Sink,
     SyncOrchestrator,
 )
@@ -766,6 +768,38 @@ async def test_get_docs(
         assert queue_called_with_operations(queue, expected_queue_operations)
 
 
+@mock.patch("connectors.es.management_client.async_scan")
+@mock.patch(
+    "connectors.es.management_client.ESManagementClient.index_exists",
+    return_value=True,
+)
+@pytest.mark.asyncio
+async def test_get_docs_matches_and_deletes_existing_docs_by_es_id(
+    index_exists, async_scan
+):
+    # e.g. an ingest pipeline rewrote `id`, so it no longer matches `_id`
+    async_scan.return_value = AsyncIterator(
+        [
+            {"_id": "1", "_source": {"id": "rewritten-1", "_timestamp": TIMESTAMP}},
+            {"_id": "2", "_source": {"id": "rewritten-2", "_timestamp": TIMESTAMP}},
+        ]
+    )
+    queue = await queue_mock()
+    extractor = await setup_extractor(queue)
+
+    await extractor.run(
+        AsyncIterator([(deepcopy(DOC_ONE), None, "index")]), JobType.FULL
+    )
+
+    assert extractor.counters.get(UPDATES_QUEUED) == 1
+    assert extractor.counters.get(CREATES_QUEUED) == 0
+    assert extractor.counters.get(DELETES_QUEUED) == 1
+    assert queue_called_with_operations(
+        queue,
+        [index_operation(DOC_ONE), delete_operation(DOC_TWO), end_docs_operation()],
+    )
+
+
 def test_log_progress_includes_extraction_counters():
     logger_mock = Mock()
     extractor = Extractor(None, Mock(), INDEX, logger_=logger_mock)
@@ -1395,6 +1429,163 @@ async def test_batch_bulk_still_counts_successful_docs_when_error_monitor_raises
 
     assert sink.counters.get(INDEXED_DOCUMENT_COUNT) == 5
     assert sink.counters.get(INDEXED_DOCUMENT_VOLUME) == 5 * 50
+
+
+# Shape of the bulk item error returned by Elasticsearch 8.x/9.x
+FIELD_LIMIT_ERROR = {
+    "type": "document_parsing_exception",
+    "reason": "[1:119] failed to parse: Limit of total fields [1000] has been exceeded while adding new fields [2]",
+    "caused_by": {
+        "type": "illegal_argument_exception",
+        "reason": "Limit of total fields [1000] has been exceeded while adding new fields [2]",
+    },
+}
+
+# Shape of the bulk item error returned by older Elasticsearch versions
+LEGACY_FIELD_LIMIT_ERROR = {
+    "type": "illegal_argument_exception",
+    "reason": "Limit of total fields [1000] in index [some-index] has been exceeded",
+}
+
+
+@pytest.mark.parametrize("error", [FIELD_LIMIT_ERROR, LEGACY_FIELD_LIMIT_ERROR])
+@pytest.mark.asyncio
+async def test_batch_bulk_fails_when_total_fields_limit_is_exceeded(error):
+    """Hitting the mapping total fields limit must fail the sync instead of
+    silently dropping every document that adds a new field, even when the
+    error rate stays below the error monitor thresholds."""
+    config = {
+        "username": "elastic",
+        "password": "changeme",
+        "host": "http://nowhere.com:9200",
+    }
+    client = ESManagementClient(config)
+    client.client = AsyncMock()
+    error_monitor = ErrorMonitor()
+    sink = Sink(
+        client=client,
+        queue=None,
+        error_monitor=error_monitor,
+        chunk_size=0,
+        pipeline={"name": "pipeline"},
+        chunk_mem_size=0,
+        max_concurrency=0,
+        max_retries=3,
+        retry_interval=10,
+    )
+
+    items = [{OP_INDEX: {"_id": f"ok_{i}", "result": "created"}} for i in range(9)]
+    items.append(
+        {OP_INDEX: {"_index": INDEX, "_id": "too_many_fields", "error": error}}
+    )
+    client.bulk_insert = AsyncMock(return_value={"items": items, "errors": True})
+
+    stats = {
+        OP_INDEX: {f"ok_{i}": 50 for i in range(9)},
+        OP_UPDATE: {},
+        OP_DELETE: {},
+    }
+    stats[OP_INDEX]["too_many_fields"] = 100
+
+    with pytest.raises(IndexFieldLimitExceededError) as e:
+        await sink._batch_bulk([], stats)
+
+    assert INDEX in str(e.value)
+    assert "too_many_fields" in str(e.value)
+    assert "index.mapping.total_fields.limit" in str(e.value)
+    # docs accepted in the same batch are still counted
+    assert sink.counters.get(INDEXED_DOCUMENT_COUNT) == 9
+    assert sink.counters.get(f"{BULK_RESPONSES}.{RESULT_ERROR}") == 1
+
+
+@pytest.mark.asyncio
+async def test_batch_bulk_does_not_fail_on_field_limit_when_error_monitor_disabled():
+    """With the error monitor disabled, a field limit error is only logged,
+    like any other document error."""
+    config = {
+        "username": "elastic",
+        "password": "changeme",
+        "host": "http://nowhere.com:9200",
+    }
+    client = ESManagementClient(config)
+    client.client = AsyncMock()
+    sink = Sink(
+        client=client,
+        queue=None,
+        error_monitor=ErrorMonitor(enabled=False),
+        chunk_size=0,
+        pipeline={"name": "pipeline"},
+        chunk_mem_size=0,
+        max_concurrency=0,
+        max_retries=3,
+        retry_interval=10,
+    )
+    error = {
+        "type": "illegal_argument_exception",
+        "reason": "Limit of total fields [1000] has been exceeded while adding new fields [2]",
+    }
+    client.bulk_insert = AsyncMock(
+        return_value={
+            "items": [
+                {OP_INDEX: {"_index": INDEX, "_id": "too_many_fields", "error": error}}
+            ],
+            "errors": True,
+        }
+    )
+    stats = {OP_INDEX: {"too_many_fields": 100}, OP_UPDATE: {}, OP_DELETE: {}}
+
+    await sink._batch_bulk([], stats)
+
+    assert sink.counters.get(f"{BULK_RESPONSES}.{RESULT_ERROR}") == 1
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        "something went wrong",
+        {
+            "type": "illegal_argument_exception",
+            "reason": "if _id is specified it must not be empty",
+        },
+        {
+            "type": "document_parsing_exception",
+            "reason": "[1:15] failed to parse field [count] of type [long]",
+            "caused_by": {
+                "type": "illegal_argument_exception",
+                "reason": 'For input string: "abc"',
+            },
+        },
+    ],
+)
+@pytest.mark.asyncio
+async def test_batch_bulk_does_not_fail_on_other_document_errors(error):
+    config = {
+        "username": "elastic",
+        "password": "changeme",
+        "host": "http://nowhere.com:9200",
+    }
+    client = ESManagementClient(config)
+    client.client = AsyncMock()
+    error_monitor = Mock()
+    sink = Sink(
+        client=client,
+        queue=None,
+        error_monitor=error_monitor,
+        chunk_size=0,
+        pipeline={"name": "pipeline"},
+        chunk_mem_size=0,
+        max_concurrency=0,
+        max_retries=3,
+        retry_interval=10,
+    )
+
+    items = [{OP_INDEX: {"_index": INDEX, "_id": "1", "error": error}}]
+    client.bulk_insert = AsyncMock(return_value={"items": items, "errors": True})
+
+    await sink._batch_bulk([], {OP_INDEX: {"1": 20}, OP_UPDATE: {}, OP_DELETE: {}})
+
+    error_monitor.track_error.assert_called_once()
+    assert sink.counters.get(f"{BULK_RESPONSES}.{RESULT_ERROR}") == 1
 
 
 def test_sync_orchestrator_passes_error_monitor_config_as_kwargs():

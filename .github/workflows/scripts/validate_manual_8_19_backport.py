@@ -12,6 +12,7 @@ import urllib.request
 
 PATCH_LABEL_RE = re.compile(r"^v8\.19\.\d+$")
 BACKPORTED_FROM_RE = re.compile(r"Backported from #(\d+)", re.IGNORECASE)
+BACKPORT_LABEL = "backport"
 
 
 def parse_backported_from_pr(body: str) -> int | None:
@@ -42,14 +43,44 @@ def _deny(message: str) -> None:
         out.write("approved=false\n")
 
 
+def _label_names(pull: dict) -> list[str]:
+    return [label["name"] for label in pull.get("labels", [])]
+
+
 def main() -> int:
     repo = os.environ["GITHUB_REPOSITORY"]
     token = os.environ["GITHUB_TOKEN"]
     title = os.environ.get("PR_TITLE", "")
     body = os.environ.get("PR_BODY", "") or ""
+    pr_number = os.environ.get("PR_NUMBER", "").strip()
+    if not pr_number.isdigit():
+        print("PR_NUMBER must be set.", file=sys.stderr)
+        return 1
 
     if not title.startswith("[8.19]"):
         _deny("Title must start with [8.19].")
+        return 0
+
+    try:
+        backport_pr = _api_get(
+            f"https://api.github.com/repos/{repo}/pulls/{pr_number}",
+            token,
+        )
+    except urllib.error.HTTPError as exc:
+        print(f"Failed to load backport PR #{pr_number}: {exc.code}", file=sys.stderr)
+        return 1
+
+    if not backport_pr:
+        _deny(f"Backport PR #{pr_number} not found.")
+        return 0
+
+    if BACKPORT_LABEL not in _label_names(backport_pr):
+        _deny(f"PR must have the {BACKPORT_LABEL!r} label.")
+        return 0
+
+    head_repo = backport_pr.get("head", {}).get("repo")
+    if head_repo and head_repo.get("fork"):
+        _deny("Fork PRs are not auto-approved.")
         return 0
 
     source_number = parse_backported_from_pr(body)
@@ -74,15 +105,14 @@ def main() -> int:
         _deny(f"Source PR #{source_number} must target main.")
         return 0
 
-    source_labels = [label["name"] for label in source.get("labels", [])]
-    if not any(PATCH_LABEL_RE.match(label) for label in source_labels):
+    if not any(PATCH_LABEL_RE.match(label) for label in _label_names(source)):
         _deny(f"Source PR #{source_number} must have an 8.19 patch label (v8.19.x).")
         return 0
 
     with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as out:
         out.write("approved=true\n")
         out.write(f"source_pr={source_number}\n")
-    print(f"Validation passed for source PR #{source_number}.")
+    print(f"Validation passed for backport PR #{pr_number} (source #{source_number}).")
     return 0
 
 
