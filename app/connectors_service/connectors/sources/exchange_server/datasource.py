@@ -296,7 +296,7 @@ class ExchangeServerDataSource(BaseDataSource):
             "domain": {
                 "label": "Exchange server domain name",
                 "order": 5,
-                "tooltip": "Domain name such as gmail.com, outlook.com",
+                "tooltip": "Active Directory domain name, used to look up users. E.g. corp.example.com",
                 "type": "str",
             },
             "ssl_enabled": {
