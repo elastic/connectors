@@ -4,8 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 
-OUTLOOK_SERVER = "outlook_server"
-OUTLOOK_CLOUD = "outlook_cloud"
-API_SCOPE = "https://graph.microsoft.com/.default"
-EWS_ENDPOINT = "https://outlook.office365.com/EWS/Exchange.asmx"
-TOP = 999
+from .client import ExchangeServerClient
+from .datasource import ExchangeServerDataSource
+
+__all__ = ["ExchangeServerDataSource", "ExchangeServerClient"]

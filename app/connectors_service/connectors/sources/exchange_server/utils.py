@@ -3,7 +3,7 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-"""Microsoft Outlook source module is responsible to fetch documents from Outlook server or cloud platforms."""
+"""Helpers shared by the Exchange (EWS) based sources."""
 
 from datetime import date
 

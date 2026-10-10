@@ -117,11 +117,16 @@ class TestConnectorCompliance:
 
     def test_non_fips_connectors_list(self):
         """Verify the list of non-FIPS-compliant connectors."""
+        assert "exchange_server" in NON_FIPS_COMPLIANT_CONNECTORS
         assert "network_drive" in NON_FIPS_COMPLIANT_CONNECTORS
         assert "sharepoint_server" in NON_FIPS_COMPLIANT_CONNECTORS
         # FIPS-compliant connectors should not be in the list
         assert "sharepoint_online" not in NON_FIPS_COMPLIANT_CONNECTORS
         assert "github" not in NON_FIPS_COMPLIANT_CONNECTORS
+
+    def test_is_connector_fips_compliant_exchange_server(self):
+        """exchange_server connector should not be FIPS-compliant."""
+        assert is_connector_fips_compliant("exchange_server") is False
 
     def test_is_connector_fips_compliant_network_drive(self):
         """network_drive connector should not be FIPS-compliant."""
