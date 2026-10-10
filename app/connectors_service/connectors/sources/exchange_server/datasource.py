@@ -445,7 +445,14 @@ class ExchangeServerDataSource(BaseDataSource):
         return document
 
     async def close(self):
-        await self.client._get_user_instance.close()
+        # Both are cached properties: only close what was actually created, so
+        # closing an unused source does not build a client just to close it.
+        client = self.__dict__.get("client")
+        if client is None:
+            return
+        user_instance = client.__dict__.get("_get_user_instance")
+        if user_instance is not None:
+            await user_instance.close()
 
     async def get_content(self, attachment, timezone, timestamp=None, doit=False):
         """Extracts the content for allowed file types.

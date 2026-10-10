@@ -440,6 +440,25 @@ async def test_get_docs_reraises_connection_wide_error(exception):
 
 
 @pytest.mark.asyncio
+async def test_close_does_not_create_client_or_users_when_unused():
+    with patch.object(ExchangeServerClient, "_create_exchange_users") as create_users:
+        async with create_exchange_server_source() as source:
+            pass
+
+        assert "client" not in source.__dict__
+    create_users.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_close_does_not_create_users_when_only_client_was_used():
+    with patch.object(ExchangeServerClient, "_create_exchange_users") as create_users:
+        async with create_exchange_server_source() as source:
+            _ = source.client
+
+    create_users.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_close_closes_user_instance():
     async with create_exchange_server_source() as source:
         user_instance = source.client._get_user_instance
