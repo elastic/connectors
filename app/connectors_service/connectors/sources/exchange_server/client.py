@@ -7,6 +7,7 @@
 import asyncio
 import ssl
 import time
+from contextlib import aclosing
 from functools import cached_property
 
 import requests.adapters
@@ -471,7 +472,10 @@ class ExchangeServerClient:
             yield user
 
     async def ping(self):
-        await anext(self._get_user_instance.get_users())
+        # Only the first page is needed; close the generator instead of leaving
+        # it suspended.
+        async with aclosing(self._get_user_instance.get_users()) as users:
+            await anext(users)
 
     async def _resolve_default_mail_folder(self, account, mail_type):
         if mail_type["folder"] == "archive":

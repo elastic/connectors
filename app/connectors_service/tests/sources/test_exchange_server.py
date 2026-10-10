@@ -292,6 +292,25 @@ async def test_ping_raises_when_users_cannot_be_fetched(mock_connection, _mock_s
 
 
 @pytest.mark.asyncio
+async def test_ping_closes_the_users_generator():
+    closed = []
+
+    async def get_users():
+        try:
+            yield LDAP_USER
+            yield LDAP_USER
+        finally:
+            closed.append(True)
+
+    async with create_exchange_server_source() as source:
+        source.client._get_user_instance.get_users = get_users
+
+        await source.ping()
+
+    assert closed == [True]
+
+
+@pytest.mark.asyncio
 async def test_get_access_control_skips_when_dls_disabled():
     async with create_exchange_server_source() as source:
         source.client._get_user_instance.get_users = AsyncIterator([LDAP_USER])
