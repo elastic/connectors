@@ -9,6 +9,7 @@ from contextlib import asynccontextmanager
 from copy import deepcopy
 from http import HTTPStatus
 from unittest.mock import ANY, AsyncMock, Mock, patch
+from urllib.parse import parse_qs, urlsplit
 
 import gidgethub
 import pytest
@@ -17,6 +18,7 @@ from connectors_sdk.filtering.validation import Filter, SyncRuleValidationResult
 from connectors_sdk.source import ConfigurableFieldValueError
 from connectors_sdk.utils import Features
 from gidgethub.abc import BadGraphQLRequest, GraphQLAuthorizationFailure, QueryError
+from gidgethub.sansio import format_url
 
 from connectors.access_control import DLS_QUERY
 from connectors.sources.github import (
@@ -1873,6 +1875,33 @@ async def test_fetch_files():
         ):
             async for document in source._fetch_files("demo_repo", "main"):
                 assert expected_response == document
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "path",
+    [
+        "docs/C#/intro.md",
+        "notes/Q&A.md",
+        "templates/{name}.md",
+        "a b/100%.md",
+        "source/source.md",
+    ],
+)
+async def test_fetch_last_commit_timestamp_encodes_the_file_path(path):
+    async with create_github_source() as source:
+        source.github_client.get_github_item = AsyncMock(return_value=MOCK_COMMITS)
+
+        timestamp = await source._fetch_last_commit_timestamp(
+            repo_name="demo_user/demo_repo", path=path
+        )
+
+        assert timestamp == "2023-04-17T12:55:01Z"
+        resource = source.github_client.get_github_item.call_args.kwargs["resource"]
+        # gidgethub expands the resource as a URI template before sending it
+        url = urlsplit(format_url(resource, {}))
+        assert url.fragment == ""
+        assert parse_qs(url.query) == {"path": [path]}
 
 
 @pytest.mark.asyncio
