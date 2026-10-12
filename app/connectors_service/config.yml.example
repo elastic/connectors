@@ -284,7 +284,7 @@
 #service.job_cleanup_interval: 300
 #
 #
-##  Connector service log level.
+##  Connector service log level: DEBUG, INFO, WARNING, ERROR or CRITICAL (case-insensitive).
 #service.log_level: INFO
 #
 #

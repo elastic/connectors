@@ -228,7 +228,9 @@ def run(action, config_file, log_level, filebeat, service_type, uvloop):
 )
 @click.option(
     "--log-level",
-    type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]),
+    type=click.Choice(
+        ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], case_sensitive=False
+    ),
     help="Set log level for the service.",
 )
 @click.option(
