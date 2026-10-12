@@ -256,7 +256,10 @@ async def test_supported_connectors(
             "http://nowhere.com:9200/.elastic-connectors/_search?expand_wildcards=hidden",
             body={"query": query},
             payload={
-                "hits": {"hits": [{"_id": "1", "_source": mongo}], "total": {"value": 1}}
+                "hits": {
+                    "hits": [{"_id": "1", "_source": mongo}],
+                    "total": {"value": 1},
+                }
             },
             headers=headers,
         )
