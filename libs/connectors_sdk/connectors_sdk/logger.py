@@ -164,7 +164,7 @@ def normalize_log_level(log_level):
     Numeric levels are returned unchanged.
     """
     if isinstance(log_level, str):
-        return log_level.upper()
+        return log_level.strip().upper()
     return log_level
 
 

@@ -43,6 +43,7 @@ def test_logger():
     "log_level, expected",
     [
         ("debug", logging.DEBUG),
+        (" Info ", logging.INFO),
         ("Info", logging.INFO),
         ("WARNING", logging.WARNING),
         (logging.ERROR, logging.ERROR),
