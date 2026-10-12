@@ -202,24 +202,6 @@ class PreflightCheck:
         return False
 
     def _validate_configuration(self):
-        configured_native_types = self.config["service"].get("service_types", [])
-        worker_mode = self.config["service"].get("worker_mode", False)
-
-        if worker_mode:
-            if len(configured_native_types) == 0:
-                logger.error(
-                    "Service is running with 'service.worker_mode: true' with no 'service.service_types' configured"
-                )
-                return False
-            return True
-
-        # else not running all service types
-        if len(configured_native_types) > 0:
-            logger.warning(
-                "Configuration 'service.service_types' is ignored: requires running a service with 'service.worker_mode: true'"
-            )
-
-        # Connector client mode
         configured_connectors = self.config.get("connectors", []) or []
         deprecated_connector_id = self.config.get("connector_id", None)
         deprecated_service_type = self.config.get("service_type", None)
