@@ -10,6 +10,7 @@ import time
 from collections import defaultdict
 from enum import Enum
 from functools import cached_property, partial
+from urllib.parse import quote
 
 import aiohttp
 import fastjsonschema
@@ -2038,7 +2039,7 @@ class GitHubDataSource(BaseDataSource):
     async def _fetch_last_commit_timestamp(self, repo_name, path):
         commit, *_ = await self.github_client.get_github_item(  # pyright: ignore
             resource=self.github_client.endpoints["COMMITS"].format(
-                repo_name=repo_name, path=path
+                repo_name=repo_name, path=quote(path, safe="/")
             )
         )
         return commit["commit"]["committer"]["date"]
