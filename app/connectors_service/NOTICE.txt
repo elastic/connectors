@@ -7769,7 +7769,7 @@ made under the terms of *both* these licenses.
 
 
 soupsieve
-3.0.2
+3.0.3
 MIT
 MIT License
 
