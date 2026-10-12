@@ -98,6 +98,37 @@ def test_list_action(set_env):
     assert "Bye" in output
 
 
+@patch("connectors.service_cli.set_logger")
+def test_log_level_option_is_case_insensitive(set_logger, set_env):
+    runner = CliRunner()
+
+    result = runner.invoke(
+        main,
+        ["--config-file", CONFIG, "--action", "list", "--log-level", "debug"],
+    )
+
+    assert result.exit_code == SUCCESS_EXIT_CODE
+    set_logger.assert_called_with("DEBUG", filebeat=False)
+
+
+@patch("connectors.service_cli.set_logger")
+@patch("connectors.service_cli.load_config")
+def test_service_log_level_from_config_accepts_lowercase(
+    load_config, set_logger, set_env
+):
+    load_config.return_value = {
+        "service": {"log_level": "debug"},
+        "sources": {"fake": "tests.fake_sources:FakeSource"},
+    }
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        ["--config-file", CONFIG, "--action", "list"],
+    )
+    assert result.exit_code == SUCCESS_EXIT_CODE
+    set_logger.assert_called_with("debug", filebeat=False)
+
+
 def test_config_with_service_type_actions(set_env):
     runner = CliRunner()
 
