@@ -14,7 +14,7 @@ from unittest.mock import ANY, AsyncMock, Mock, call, patch
 import pytest
 from click import ClickException, UsageError
 from click.testing import CliRunner
-from connectors_sdk.logger import logger
+from connectors.logger import logger
 
 from connectors import __version__
 from connectors.service_cli import _start_service, get_event_loop, main
