@@ -858,9 +858,7 @@ class Extractor:
             if self.counters.get(DOCS_EXTRACTED) % self.display_every == 0:
                 self._log_progress()
 
-            # ACL ids (e.g. emails) are matched case-insensitively by the
-            # source systems, so normalize them to always be looked up the same way.
-            # Previously indexed mixed-case ids are no longer seen and get deleted.
+            # Lowercase ACL _id.
             doc_id = str(doc.pop("_id")).lower()
             doc["id"] = doc_id
             doc_exists = doc_id in existing_ids
