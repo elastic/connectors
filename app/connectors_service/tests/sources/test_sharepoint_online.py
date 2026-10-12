@@ -2776,6 +2776,49 @@ class TestSharepointOnlineDataSource:
 
         assert (operations["delete"]) == deleted
 
+    @pytest.mark.asyncio
+    @freeze_time(iso_utc())
+    async def test_get_docs_incrementally_visits_sites_not_modified_since_last_sync(
+        self, patch_sharepoint_client
+    ):
+        """Sites whose lastModifiedDateTime is older than the sync cursor must
+        still be visited, otherwise drive delta links are never consumed and
+        drive item deletions/modifications are silently lost."""
+        async with create_spo_source() as source:
+            source._site_access_control = AsyncMock(return_value=([], [], []))
+            source.site_group_users = AsyncMock(return_value=self.site_group_users)
+
+        # Sites were last modified a day ago, i.e. before the cursor timestamp
+        sync_cursor = {
+            "site_drives": {
+                site_drive["id"]: "http://fakesharepoint.com/deltalink"
+                for site_drive in self.site_drives
+            },
+            "cursor_timestamp": self.today,
+        }
+
+        deleted = 0
+        for page in self.drive_items_delta:
+            deleted += len([item for item in page if "deleted" in item])
+
+        docs = []
+        delete_operations = 0
+        async for doc, _download_func, operation in source.get_docs_incrementally(
+            sync_cursor=sync_cursor
+        ):
+            docs.append(doc)
+            if operation == "delete":
+                delete_operations += 1
+
+        assert deleted > 0
+        assert len(self.sites) == len(
+            [doc for doc in docs if doc["object_type"] == "site"]
+        )
+        assert len([doc for doc in docs if doc["object_type"] == "drive_item"]) == sum(
+            len(i) for i in self.drive_items_delta
+        )
+        assert delete_operations == deleted
+
     def _drive_items_with_download_url(self):
         return [
             DriveItemsPage(
