@@ -59,9 +59,11 @@ from connectors.utils import (
     Counters,
     ErrorMonitor,
     MemQueue,
+    RetryStrategy,
     aenumerate,
     get_size,
     sanitize,
+    time_to_sleep_between_retries,
 )
 
 __all__ = ["SyncOrchestrator"]
@@ -96,6 +98,9 @@ ID_DUPLICATE = "_id_duplicates"
 
 # Successful results according to the docs: https://www.elastic.co/guide/en/elasticsearch/reference/current/docs-bulk.html#bulk-api-response-body
 SUCCESSFUL_RESULTS = ("created", "deleted", "updated", "noop")
+
+# Per-item bulk failures that should be retried (aligned with TransientElasticsearchRetrier).
+TRANSIENT_ITEM_STATUS_CODES = frozenset({429, 500, 502, 503, 504})
 
 # Reuse the same serializer the elasticsearch client uses to send bulk
 # requests, so the cap check below sees byte-for-byte the wire payload
@@ -194,8 +199,8 @@ class Sink:
         self.chunk_mem_size = chunk_mem_size * 1024 * 1024
         self.bulk_tasks = ConcurrentTasks(max_concurrency=max_concurrency)
         self.error_monitor = error_monitor
-        # Retries live on TransientElasticsearchRetrier; kwargs kept for call-site compat.
-        _, _ = max_retries, retry_interval
+        self.max_retries = max_retries
+        self.retry_interval = retry_interval
         self.error = None
         self._logger = logger_ or logger
         self._canceled = False
@@ -238,8 +243,9 @@ class Sink:
                 f"Task {task_num} - Sending a batch of {len(operations)} ops -- {get_mib_size(operations)}MiB"
             )
 
-        # TODO: retry 429s for individual items here
-        res = await self.client.bulk_insert(operations, self.pipeline["name"])
+        res = await self._bulk_insert_with_transient_item_retries(
+            operations, self.pipeline["name"]
+        )
         ids_to_ops = self._map_id_to_op(operations)
         # `_process_bulk_response` can raise mid-response, so log failures and
         # populate stats in `finally` to still count already-accepted docs.
@@ -275,6 +281,113 @@ class Sink:
                     ):  # avoiding update bulk extra entries
                         result[doc["_id"]] = op
         return result
+
+    def _operations_by_doc_id(self, operations):
+        by_id = {}
+        i = 0
+        while i < len(operations):
+            entry = operations[i]
+            if isinstance(entry, dict) and len(entry) == 1:
+                action, meta = next(iter(entry.items()))
+                if isinstance(meta, dict) and "_id" in meta and "_index" in meta:
+                    doc_id = meta["_id"]
+                    if action == OP_DELETE:
+                        by_id[doc_id] = [entry]
+                        i += 1
+                    else:
+                        by_id[doc_id] = [entry, operations[i + 1]]
+                        i += 2
+                    continue
+            i += 1
+        return by_id
+
+    def _bulk_item_doc_id(self, item):
+        for action in (OP_INDEX, OP_DELETE, OP_CREATE, OP_UPDATE):
+            if action in item:
+                return item[action].get("_id")
+        return None
+
+    def _is_transient_item_failure(self, item):
+        for action in (OP_INDEX, OP_DELETE, OP_CREATE, OP_UPDATE):
+            if action not in item:
+                continue
+            status = item[action].get("status")
+            if status in TRANSIENT_ITEM_STATUS_CODES:
+                return True
+        return False
+
+    def _bulk_response_from_items(self, items):
+        errors = False
+        for item in items:
+            for action in (OP_INDEX, OP_DELETE, OP_CREATE, OP_UPDATE):
+                if action in item and "error" in item[action]:
+                    errors = True
+                    break
+            if errors:
+                break
+        return {"items": items, "errors": errors}
+
+    def _item_index_by_doc_id(self, items):
+        index_by_id = {}
+        for index, item in enumerate(items):
+            doc_id = self._bulk_item_doc_id(item)
+            if doc_id is not None:
+                index_by_id[doc_id] = index
+        return index_by_id
+
+    async def _bulk_insert_with_transient_item_retries(self, operations, pipeline_name):
+        ops_by_id = self._operations_by_doc_id(operations)
+
+        res = await self.client.bulk_insert(operations, pipeline_name)
+        items = list(res.get("items", []))
+        item_index_by_doc_id = self._item_index_by_doc_id(items)
+
+        for attempt in range(1, self.max_retries + 1):
+            transient_doc_ids = [
+                doc_id
+                for doc_id, index in item_index_by_doc_id.items()
+                if self._is_transient_item_failure(items[index]) and doc_id in ops_by_id
+            ]
+            failed_ops = []
+            for doc_id in transient_doc_ids:
+                failed_ops.extend(ops_by_id[doc_id])
+
+            if not failed_ops:
+                break
+
+            self._logger.warning(
+                f"Retrying {len(transient_doc_ids)} document(s) with transient bulk item failures "
+                f"(attempt {attempt}/{self.max_retries})"
+            )
+            await asyncio.sleep(
+                time_to_sleep_between_retries(
+                    RetryStrategy.LINEAR_BACKOFF, self.retry_interval, attempt
+                )
+            )
+
+            retry_res = await self.client.bulk_insert(failed_ops, pipeline_name)
+            for item in retry_res.get("items", []):
+                doc_id = self._bulk_item_doc_id(item)
+                if doc_id is None:
+                    continue
+                if doc_id in item_index_by_doc_id:
+                    items[item_index_by_doc_id[doc_id]] = item
+                else:
+                    items.append(item)
+                    item_index_by_doc_id[doc_id] = len(items) - 1
+
+        still_failing = [
+            doc_id
+            for doc_id, index in item_index_by_doc_id.items()
+            if self._is_transient_item_failure(items[index])
+        ]
+        if still_failing:
+            self._logger.warning(
+                f"Dropping {len(still_failing)} document(s) after transient bulk item "
+                f"retries were exhausted: {still_failing}"
+            )
+
+        return self._bulk_response_from_items(items)
 
     async def _process_bulk_response(self, res, ids_to_ops, do_log=False):
         for item in res.get("items", []):
