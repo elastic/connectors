@@ -7,6 +7,8 @@ import logging
 
 import ecs_logging
 
+from connectors.logger import normalize_log_level
+
 root_logger = logging.getLogger("agent_component")
 handler = logging.StreamHandler()
 handler.setFormatter(ecs_logging.StdlibFormatter())
@@ -26,4 +28,4 @@ def get_logger(module):
 
 
 def update_logger_level(log_level):
-    root_logger.setLevel(log_level)
+    root_logger.setLevel(normalize_log_level(log_level))
