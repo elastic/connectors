@@ -370,6 +370,46 @@ async def test_fetch():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "total_count, expected_offsets",
+    [
+        (0, [0]),
+        (2, [0]),
+        (1000, [0]),
+        (1001, [0, 1000]),
+        (2500, [0, 1000, 2000]),
+    ],
+)
+async def test_paginated_call_stops_after_last_page(total_count, expected_offsets):
+    requested_offsets = []
+
+    def get_page(url, headers, params):
+        offset = params["offset"]
+        requested_offsets.append(offset)
+        entries = [
+            {"id": str(index)}
+            for index in range(offset, min(offset + params["limit"], total_count))
+        ]
+        return JSONAsyncMock(
+            json={"total_count": total_count, "entries": entries}, status=200
+        )
+
+    async with create_source(BoxDataSource) as source:
+        source.client.token.get = AsyncMock()
+        source.client._http_session.get = AsyncMock(side_effect=get_page)
+
+        items = [
+            item
+            async for item in source.client.paginated_call(
+                url="/2.0/folders/0/items", params={}, headers={}
+            )
+        ]
+
+    assert len(items) == total_count
+    assert requested_offsets == expected_offsets
+
+
+@pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries")
 async def test_fetch_returns_none_on_client_exception(
     mock_time_to_sleep_between_retries,

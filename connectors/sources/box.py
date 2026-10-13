@@ -196,9 +196,9 @@ class BoxClient:
                 total_count = json_response.get("total_count")
                 for doc in json_response.get("entries"):
                     yield doc
+                offset += FETCH_LIMIT
                 if offset >= total_count:
                     break
-                offset += FETCH_LIMIT
         except Exception:
             raise
 
