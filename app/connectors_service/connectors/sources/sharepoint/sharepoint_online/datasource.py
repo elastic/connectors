@@ -957,11 +957,8 @@ class SharepointOnlineDataSource(BaseDataSource):
             async for site in self.sites(
                 site_collection["siteCollection"]["hostname"],
                 self.configuration["site_collections"],
-                # Changes to a site's drive items don't reliably update the
-                # lastModifiedDateTime of the site. Therefore, we set
-                # check_timestamp to False when iterating over sites, otherwise
-                # drive delta links of unchanged sites would never be consumed
-                # and drive item deletions/modifications would be lost.
+                # Drive item changes don't reliably update site lastModifiedDateTime;
+                # visit all sites so drive delta links are still consumed.
                 check_timestamp=False,
             ):
                 (
