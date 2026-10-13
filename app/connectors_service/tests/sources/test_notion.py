@@ -261,7 +261,21 @@ async def test_close_with_client():
         (
             "page",
             ["My Page"],
-            [{"properties": {"title": {"title": [{"text": {"content": "My Page"}}]}}}],
+            [
+                {
+                    "properties": {
+                        "title": {
+                            "type": "title",
+                            "title": [
+                                {
+                                    "text": {"content": "My Page"},
+                                    "plain_text": "My Page",
+                                }
+                            ],
+                        }
+                    }
+                }
+            ],
         ),
     ],
 )
@@ -277,6 +291,72 @@ async def test_get_entities(
         await source.get_entities(entity_type, entity_titles)
 
     mock_notion_client.return_value.fetch_by_query.assert_called_once()
+
+
+def _rich_text(*segments):
+    return [
+        {"type": "text", "text": {"content": segment}, "plain_text": segment}
+        for segment in segments
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "entity_type, entity_titles, search_result",
+    [
+        # A title with mixed formatting is split into several rich text segments
+        (
+            "database",
+            ["Q3 Planning"],
+            {"title": _rich_text("Q3", " Planning")},
+        ),
+        (
+            "page",
+            ["Q3 Planning"],
+            {
+                "properties": {
+                    "title": {"type": "title", "title": _rich_text("Q3", " Planning")}
+                }
+            },
+        ),
+        # A page in a database has its title in the database's title column
+        (
+            "page",
+            ["Release checklist"],
+            {
+                "properties": {
+                    "Status": {"type": "select", "select": None},
+                    "Name": {"type": "title", "title": _rich_text("Release checklist")},
+                }
+            },
+        ),
+        # A mention segment has no "text" key, only "plain_text"
+        (
+            "page",
+            ["Notes for @Jane"],
+            {
+                "properties": {
+                    "title": {
+                        "type": "title",
+                        "title": [
+                            *_rich_text("Notes for "),
+                            {"type": "mention", "plain_text": "@Jane"},
+                        ],
+                    }
+                }
+            },
+        ),
+    ],
+)
+@patch("connectors.sources.notion.datasource.NotionClient", autospec=True)
+async def test_get_entities_matches_the_full_title(
+    mock_notion_client, entity_type, entity_titles, search_result
+):
+    mock_notion_client.return_value.fetch_by_query = AsyncIterator([search_result])
+    async with create_source(NotionDataSource) as source:
+        results = await source.get_entities(entity_type, entity_titles)
+
+    assert results == [search_result]
 
 
 @pytest.mark.asyncio
