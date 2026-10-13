@@ -89,7 +89,7 @@ ID_CHANGED_AFTER_REQUEST = "_ids_changed_after_request"
 ID_DUPLICATE = "_id_duplicates"
 
 # Successful results according to the docs: https://www.elastic.co/guide/en/elasticsearch/reference/current/docs-bulk.html#bulk-api-response-body
-SUCCESSFUL_RESULTS = ("created", "deleted", "updated", "noop")
+SUCCESSFUL_RESULTS = ("created", "deleted", "updated")
 
 # Per-item bulk failures that should be retried (aligned with TransientElasticsearchRetrier).
 TRANSIENT_ITEM_STATUS_CODES = frozenset({429, 500, 502, 503, 504})
