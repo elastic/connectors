@@ -57,38 +57,41 @@ from exchangelib.protocol import BaseProtocol, NoVerifyHTTPAdapter
 from exchangelib.util import to_xml
 
 from connectors.access_control import ACCESS_CONTROL
-from connectors.sources.outlook import OutlookDataSource
-from connectors.sources.outlook import client as outlook_client
-from connectors.sources.outlook.client import (
+from connectors.sources.exchange_server import client as exchange_client
+from connectors.sources.exchange_server.client import (
     ExchangeUsers,
-    Forbidden,
     InMemoryCAAdapter,
-    NotFound,
     SSLCertificateError,
-    UnauthorizedException,
     UsersFetchFailed,
     _discover_additional_mail_folders,
     _is_mail_folder,
     _materialize_folder_items,
 )
-from connectors.sources.outlook.constants import (
+from connectors.sources.exchange_server.constants import (
     ARCHIVE_MAIL_OBJECT,
     INBOX_MAIL_OBJECT,
     MAIL_ATTACHMENT,
     MAIL_FIELDS,
     MAIL_OBJECT,
-    OUTLOOK_CLOUD,
-    OUTLOOK_SERVER,
     RETRIES,
 )
-from connectors.sources.outlook.datasource import (
+from connectors.sources.exchange_server.datasource import (
     CALENDAR_ITEM_TYPES,
     MAIL_ITEM_TYPES,
     TASK_ITEM_TYPES,
-    OutlookDocFormatter,
+    ExchangeDocFormatter,
 )
-from connectors.sources.outlook.mail_attachment import mail_attachment_base64
-from connectors.sources.outlook.utils import _prefix_email
+from connectors.sources.exchange_server.mail_attachment import (
+    mail_attachment_base64,
+)
+from connectors.sources.exchange_server.utils import _prefix_email
+from connectors.sources.outlook import OutlookDataSource
+from connectors.sources.outlook.client import (
+    Forbidden,
+    NotFound,
+    UnauthorizedException,
+)
+from connectors.sources.outlook.constants import OUTLOOK_CLOUD, OUTLOOK_SERVER
 from connectors.utils import get_pem_format
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
@@ -649,7 +652,7 @@ async def test_validate_config_with_valid_dependency_fields_does_not_raise_error
 
 
 @pytest.mark.asyncio
-@patch("connectors.sources.outlook.client.Connection")
+@patch("connectors.sources.exchange_server.client.Connection")
 async def test_ping_for_server(mock_connection):
     mock_connection_instance = mock_connection.return_value
     mock_connection_instance.search.return_value = (
@@ -665,7 +668,7 @@ async def test_ping_for_server(mock_connection):
 
 
 @pytest.mark.asyncio
-@patch("connectors.sources.outlook.client.Connection")
+@patch("connectors.sources.exchange_server.client.Connection")
 async def test_ping_for_server_for_failed_connection(mock_connection):
     mock_connection_instance = mock_connection.return_value
     mock_connection_instance.search.return_value = (
@@ -746,7 +749,7 @@ async def test_get_users_for_cloud():
 
 
 @pytest.mark.asyncio
-@patch("connectors.sources.outlook.client.Connection")
+@patch("connectors.sources.exchange_server.client.Connection")
 async def test_fetch_admin_users_negative(mock_connection):
     async with create_outlook_source() as source:
         mock_connection_instance = mock_connection.return_value
@@ -765,7 +768,7 @@ async def test_fetch_admin_users_negative(mock_connection):
 
 
 @pytest.mark.asyncio
-@patch("connectors.sources.outlook.client.Connection")
+@patch("connectors.sources.exchange_server.client.Connection")
 async def test_fetch_admin_users(mock_connection):
     async with create_outlook_source() as source:
         users = []
@@ -785,7 +788,7 @@ async def test_fetch_admin_users(mock_connection):
 
 
 @patch("connectors.utils.time_to_sleep_between_retries", return_value=0)
-@patch("connectors.sources.outlook.client.Connection")
+@patch("connectors.sources.exchange_server.client.Connection")
 def test_ldap_search_retries_on_transient_error(mock_connection, _mock_sleep):
     mock_connection_instance = mock_connection.return_value
     mock_connection_instance.search.side_effect = [
@@ -809,7 +812,7 @@ def test_ldap_search_retries_on_transient_error(mock_connection, _mock_sleep):
     assert mock_connection_instance.unbind.call_count == 2
 
 
-@patch("connectors.sources.outlook.client.Connection")
+@patch("connectors.sources.exchange_server.client.Connection")
 def test_exchange_ldap_search_uses_fresh_connection_per_search(mock_connection):
     normal_user = {"mail": "normal@example.com"}
     admin_user = {"mail": "admin@example.com"}
@@ -895,8 +898,9 @@ async def test_get_content_with_extraction_service():
     ],
 )
 @patch("connectors.sources.outlook.client.Account", return_value="account")
+@patch("connectors.sources.exchange_server.client.Account", return_value="account")
 async def test_get_user_accounts_for_cloud(
-    account, is_cloud, user_response, reset_http_adapter_cls
+    exchange_account, cloud_account, is_cloud, user_response, reset_http_adapter_cls
 ):
     async with create_outlook_source() as source:
         source.client.is_cloud = is_cloud
@@ -909,8 +913,8 @@ async def test_get_user_accounts_for_cloud(
 
 
 @pytest.mark.asyncio
-@patch("connectors.sources.outlook.client.logger.warning")
-@patch("connectors.sources.outlook.client.Account", return_value="account")
+@patch("connectors.sources.exchange_server.client.logger.warning")
+@patch("connectors.sources.exchange_server.client.Account", return_value="account")
 async def test_exchange_get_user_accounts_skips_empty_mail(
     mock_account, mock_warning, reset_http_adapter_cls
 ):
@@ -948,7 +952,7 @@ async def test_exchange_get_user_accounts_skips_empty_mail(
 
 
 @pytest.mark.asyncio
-@patch("connectors.sources.outlook.client.Account", return_value="account")
+@patch("connectors.sources.exchange_server.client.Account", return_value="account")
 async def test_exchange_get_user_accounts_normalizes_ldap_mail_list(
     mock_account, reset_http_adapter_cls
 ):
@@ -1006,7 +1010,7 @@ def reset_http_adapter_cls():
 
 
 @pytest.mark.asyncio
-@patch("connectors.sources.outlook.client.Account", return_value="account")
+@patch("connectors.sources.exchange_server.client.Account", return_value="account")
 async def test_exchange_get_user_accounts_uses_in_memory_ssl_adapter(
     mock_account, reset_http_adapter_cls
 ):
@@ -1052,8 +1056,8 @@ def test_in_memory_ca_adapter_omits_ssl_context_when_unset(reset_http_adapter_cl
 
 
 @pytest.mark.asyncio
-@patch("connectors.sources.outlook.client.ssl.create_default_context")
-@patch("connectors.sources.outlook.client.Account", return_value="account")
+@patch("connectors.sources.exchange_server.client.ssl.create_default_context")
+@patch("connectors.sources.exchange_server.client.Account", return_value="account")
 async def test_exchange_get_user_accounts_builds_ssl_context_from_pem(
     mock_account, mock_create_default_context, reset_http_adapter_cls
 ):
@@ -1076,7 +1080,7 @@ async def test_exchange_get_user_accounts_builds_ssl_context_from_pem(
 
 
 @pytest.mark.asyncio
-@patch("connectors.sources.outlook.client.Account", return_value="account")
+@patch("connectors.sources.exchange_server.client.Account", return_value="account")
 async def test_exchange_get_user_accounts_raises_when_ssl_enabled_without_cert(
     mock_account, reset_http_adapter_cls
 ):
@@ -1101,7 +1105,7 @@ async def test_exchange_get_user_accounts_raises_when_ssl_enabled_without_cert(
 
 
 @pytest.mark.asyncio
-@patch("connectors.sources.outlook.client.Account", return_value="account")
+@patch("connectors.sources.exchange_server.client.Account", return_value="account")
 async def test_exchange_get_user_accounts_raises_when_ssl_enabled_with_bad_cert(
     mock_account, reset_http_adapter_cls
 ):
@@ -1125,7 +1129,7 @@ async def test_exchange_get_user_accounts_raises_when_ssl_enabled_with_bad_cert(
 
 
 @pytest.mark.asyncio
-@patch("connectors.sources.outlook.client.Account", return_value="account")
+@patch("connectors.sources.exchange_server.client.Account", return_value="account")
 async def test_exchange_get_user_accounts_raises_on_markerless_cert_via_client(
     mock_account, reset_http_adapter_cls
 ):
@@ -1144,7 +1148,7 @@ async def test_exchange_get_user_accounts_raises_on_markerless_cert_via_client(
 
 
 @pytest.mark.asyncio
-@patch("connectors.sources.outlook.client.Account", return_value="account")
+@patch("connectors.sources.exchange_server.client.Account", return_value="account")
 async def test_exchange_get_user_accounts_raises_on_unloadable_pem_via_client(
     mock_account, reset_http_adapter_cls
 ):
@@ -1162,7 +1166,7 @@ async def test_exchange_get_user_accounts_raises_on_unloadable_pem_via_client(
 
 
 @pytest.mark.asyncio
-@patch("connectors.sources.outlook.client.Account", return_value="account")
+@patch("connectors.sources.exchange_server.client.Account", return_value="account")
 async def test_exchange_get_user_accounts_uses_no_verify_when_ssl_disabled(
     mock_account, reset_http_adapter_cls
 ):
@@ -1184,7 +1188,7 @@ async def test_exchange_get_user_accounts_uses_no_verify_when_ssl_disabled(
 
 
 @pytest.mark.asyncio
-@patch("connectors.sources.outlook.client.Account", return_value="account")
+@patch("connectors.sources.exchange_server.client.Account", return_value="account")
 async def test_exchange_get_user_accounts_does_not_write_cert_file(
     mock_account, reset_http_adapter_cls
 ):
@@ -1497,7 +1501,7 @@ async def test_get_methods_resolve_folder_off_event_loop(method_name, folder_att
         account = MockAccount()
         method = getattr(source.client, method_name)
         with patch(
-            "connectors.sources.outlook.client.asyncio.to_thread",
+            "connectors.sources.exchange_server.client.asyncio.to_thread",
             wraps=asyncio.to_thread,
         ) as to_thread:
             _ = [item async for item in method(account)]
@@ -1513,7 +1517,7 @@ async def test_get_mails_resolve_folder_off_event_loop():
     async with create_outlook_source() as source:
         account = MockAccount()
         with patch(
-            "connectors.sources.outlook.client.asyncio.to_thread",
+            "connectors.sources.exchange_server.client.asyncio.to_thread",
             wraps=asyncio.to_thread,
         ) as to_thread:
             _ = [item async for item in source.client.get_mails(account)]
@@ -1539,7 +1543,7 @@ async def test_get_child_calendars_resolve_folder_off_event_loop():
     async with create_outlook_source() as source:
         account = MockAccount()
         with patch(
-            "connectors.sources.outlook.client.asyncio.to_thread",
+            "connectors.sources.exchange_server.client.asyncio.to_thread",
             wraps=asyncio.to_thread,
         ) as to_thread:
             _ = [item async for item in source.client.get_child_calendars(account)]
@@ -1621,7 +1625,7 @@ async def test_fetch_contacts_routes_distribution_list_to_group_formatter():
 
 
 @pytest.mark.asyncio
-@patch("connectors.sources.outlook.client.Account", return_value="account")
+@patch("connectors.sources.exchange_server.client.Account", return_value="account")
 async def test_exchange_get_user_accounts_handles_missing_type_key(
     mock_account, reset_http_adapter_cls
 ):
@@ -1643,7 +1647,7 @@ def test_mails_doc_formatter_handles_missing_sender():
     mail = build_mail_document()
     mail.sender = None
 
-    document = OutlookDocFormatter().mails_doc_formatter(
+    document = ExchangeDocFormatter().mails_doc_formatter(
         mail=mail,
         mail_type={"constant": INBOX_MAIL_OBJECT},
         timezone=TIMEZONE,
@@ -1657,7 +1661,7 @@ def test_mails_doc_formatter_handles_missing_sender():
 def test_mails_doc_formatter_adds_folder_name_for_additional_mail():
     mail = build_mail_document()
 
-    document = OutlookDocFormatter().mails_doc_formatter(
+    document = ExchangeDocFormatter().mails_doc_formatter(
         mail=mail,
         mail_type={"constant": MAIL_OBJECT, "folder_name": "PRTG Done"},
         timezone=TIMEZONE,
@@ -1814,7 +1818,7 @@ def test_calendar_doc_formatter_handles_missing_organizer():
     calendar = build_calendar_document()
     calendar.organizer = None
 
-    document = OutlookDocFormatter().calendar_doc_formatter(
+    document = ExchangeDocFormatter().calendar_doc_formatter(
         calendar=calendar,
         child_calendar="Calendar",
         timezone=TIMEZONE,
@@ -1828,7 +1832,7 @@ def test_calendar_doc_formatter_handles_occurrence_without_recurrence():
     calendar.type = "Occurrence"
     calendar.recurrence = None
 
-    document = OutlookDocFormatter().calendar_doc_formatter(
+    document = ExchangeDocFormatter().calendar_doc_formatter(
         calendar=calendar,
         child_calendar="Calendar",
         timezone=TIMEZONE,
@@ -1841,7 +1845,7 @@ def test_calendar_doc_formatter_handles_birthday_without_start():
     calendar = build_calendar_document()
     calendar.start = None
 
-    document = OutlookDocFormatter().calendar_doc_formatter(
+    document = ExchangeDocFormatter().calendar_doc_formatter(
         calendar=calendar,
         child_calendar="Birthdays (Birthdays)",
         timezone=TIMEZONE,
@@ -1856,7 +1860,7 @@ def test_calendar_doc_formatter_skips_attendees_without_mailbox():
     attendee_without_mailbox.mailbox = None
     calendar.required_attendees = [attendee_without_mailbox]
 
-    document = OutlookDocFormatter().calendar_doc_formatter(
+    document = ExchangeDocFormatter().calendar_doc_formatter(
         calendar=calendar,
         child_calendar="Calendar",
         timezone=TIMEZONE,
@@ -1870,7 +1874,7 @@ def test_contact_doc_formatter_handles_missing_email_and_phone_entries():
     contact.email_addresses = [None, MagicMock(email=None)]
     contact.phone_numbers = [None, MagicMock(phone_number=None)]
 
-    document = OutlookDocFormatter().contact_doc_formatter(
+    document = ExchangeDocFormatter().contact_doc_formatter(
         contact=contact,
         timezone=TIMEZONE,
     )
@@ -1883,7 +1887,7 @@ def test_distribution_list_doc_formatter():
     # A contact group is indexed by name plus its members' emails.
     distribution_list = DistributionListDocument()
 
-    document = OutlookDocFormatter().distribution_list_doc_formatter(
+    document = ExchangeDocFormatter().distribution_list_doc_formatter(
         distribution_list=distribution_list,
         timezone=TIMEZONE,
     )
@@ -2112,9 +2116,9 @@ def test_item_model_from_tag_still_resolves_known_tags(item_model):
 
 
 def test_item_model_from_tag_degrades_unknown_tag_to_item():
-    outlook_client._reported_unexpected_item_tags.clear()
+    exchange_client._reported_unexpected_item_tags.clear()
 
-    with patch("connectors.sources.outlook.client.logger") as logger:
+    with patch("connectors.sources.exchange_server.client.logger") as logger:
         assert BaseFolder.item_model_from_tag(UNEXPECTED_ITEM_TAG) is Item
         assert BaseFolder.item_model_from_tag(UNEXPECTED_ITEM_TAG) is Item
         logger.warning.assert_called_once()
@@ -2250,7 +2254,7 @@ def test_materialize_folder_items_retries_on_mailbox_store_unavailable():
 
     folder.all.return_value.only.side_effect = only_side_effect
 
-    with patch("connectors.sources.outlook.client.time.sleep"):
+    with patch("connectors.sources.exchange_server.client.time.sleep"):
         items = _materialize_folder_items(folder, MAIL_FIELDS)
 
     assert items == [mail]
@@ -2265,7 +2269,7 @@ def test_materialize_folder_items_raises_after_retries_exhausted():
         store_unavailable_message
     )
 
-    with patch("connectors.sources.outlook.client.time.sleep"):
+    with patch("connectors.sources.exchange_server.client.time.sleep"):
         with pytest.raises(ErrorMailboxStoreUnavailable):
             _materialize_folder_items(folder, MAIL_FIELDS)
 
@@ -2578,7 +2582,7 @@ class TestOutlookMailAttachment:
 
     def test_falls_back_when_trim_fails(self, monkeypatch):
         monkeypatch.setattr(
-            "connectors.sources.outlook.mail_attachment.trim_rfc822_bytes_to_base64",
+            "connectors.sources.exchange_server.mail_attachment.trim_rfc822_bytes_to_base64",
             lambda _raw: None,
         )
         mail = self._mail_with_mime(_PLAIN_ONLY_MIME)

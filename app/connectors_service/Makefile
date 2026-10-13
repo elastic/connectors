@@ -121,7 +121,7 @@ deps-csv: .venv/bin/pip-licenses
 	.venv/bin/pip-licenses --format=csv --with-urls > dist/dependencies.csv
 	.venv/bin/python scripts/deps-csv.py dist/dependencies.csv
 
-NON_FIPS_CONNECTORS := network_drive sharepoint_server
+NON_FIPS_CONNECTORS := exchange_server network_drive sharepoint_server
 
 fips-ftest: .venv/bin/pytest
 	@if echo "$(NON_FIPS_CONNECTORS)" | grep -qw "$(NAME)"; then \
