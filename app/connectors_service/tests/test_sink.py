@@ -2683,6 +2683,49 @@ async def test_bulk_insert_with_transient_item_retries_stops_after_max_retries()
 
 
 @pytest.mark.asyncio
+async def test_bulk_insert_transient_retries_handle_duplicate_ids():
+    client = Mock()
+    sink = Sink(
+        client=client,
+        queue=None,
+        error_monitor=Mock(),
+        chunk_size=0,
+        pipeline={"name": "pipeline"},
+        chunk_mem_size=0,
+        max_concurrency=0,
+        max_retries=2,
+        retry_interval=0.01,
+    )
+    operations = [
+        {"index": {"_index": "test", "_id": "1"}},
+        {"data": "first"},
+        {"index": {"_index": "test", "_id": "1"}},
+        {"data": "second"},
+    ]
+    first_response = {
+        "errors": True,
+        "items": [
+            {"index": {"_id": "1", "status": 429, "error": {"type": "too_many"}}},
+            {"index": {"_id": "1", "status": 201, "result": "created"}},
+        ],
+    }
+    retry_response = {
+        "items": [{"index": {"_id": "1", "status": 200, "result": "updated"}}]
+    }
+    client.bulk_insert = AsyncMock(side_effect=[first_response, retry_response])
+
+    with mock.patch.object(asyncio, "sleep"):
+        merged = await sink._bulk_insert_with_transient_item_retries(
+            operations, "pipeline"
+        )
+
+    # Only the earlier duplicate is re-sent, and its own payload at that.
+    assert client.bulk_insert.await_args_list[1].args[0] == operations[:2]
+    assert [i["index"]["result"] for i in merged["items"]] == ["updated", "created"]
+    assert merged["errors"] is False
+
+
+@pytest.mark.asyncio
 async def test_bulk_insert_logs_when_transient_retries_exhausted(patch_logger):
     client = Mock()
     sink = Sink(
