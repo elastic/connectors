@@ -2784,10 +2784,6 @@ class TestSharepointOnlineDataSource:
         """Sites whose lastModifiedDateTime is older than the sync cursor must
         still be visited, otherwise drive delta links are never consumed and
         drive item deletions/modifications are silently lost."""
-        async with create_spo_source() as source:
-            source._site_access_control = AsyncMock(return_value=([], [], []))
-            source.site_group_users = AsyncMock(return_value=self.site_group_users)
-
         # Sites were last modified a day ago, i.e. before the cursor timestamp
         sync_cursor = {
             "site_drives": {
@@ -2803,12 +2799,16 @@ class TestSharepointOnlineDataSource:
 
         docs = []
         delete_operations = 0
-        async for doc, _download_func, operation in source.get_docs_incrementally(
-            sync_cursor=sync_cursor
-        ):
-            docs.append(doc)
-            if operation == "delete":
-                delete_operations += 1
+        async with create_spo_source() as source:
+            source._site_access_control = AsyncMock(return_value=([], [], []))
+            source.site_group_users = AsyncMock(return_value=self.site_group_users)
+
+            async for doc, _download_func, operation in source.get_docs_incrementally(
+                sync_cursor=sync_cursor
+            ):
+                docs.append(doc)
+                if operation == "delete":
+                    delete_operations += 1
 
         assert deleted > 0
         assert len(self.sites) == len(
