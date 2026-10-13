@@ -23,6 +23,7 @@ from connectors_sdk.logger import logger
 # Connectors that use NTLM or other non-FIPS-compliant algorithms
 NON_FIPS_COMPLIANT_CONNECTORS = frozenset(
     {
+        "exchange_server",
         "network_drive",
         "sharepoint_server",
     }
