@@ -56,6 +56,25 @@ CALENDAR_ITEM_TYPES = (CalendarItem,)
 TASK_ITEM_TYPES = (Task,)
 
 
+def _outlook_attachment_refs(attachments):
+    """Lightweight attachment metadata for parent documents (Teams-style)."""
+    refs = []
+    for attachment in attachments or []:
+        attachment_id = getattr(getattr(attachment, "attachment_id", None), "id", None)
+        if not attachment_id:
+            continue
+        refs.append({"id": attachment_id, "title": attachment.name})
+    return refs
+
+
+def _apply_outlook_attachment_refs(document, outlook_object):
+    if getattr(outlook_object, "has_attachments", False):
+        refs = _outlook_attachment_refs(outlook_object.attachments)
+        if refs:
+            document["attachments"] = refs
+    return document
+
+
 def _mailbox_access_control(account):
     """Identities allowed to read everything in a mailbox.
 
@@ -222,7 +241,9 @@ class OutlookDocFormatter:
             ],
         }
 
-    def attachment_doc_formatter(self, attachment, attachment_type, timezone):
+    def attachment_doc_formatter(
+        self, attachment, attachment_type, timezone, parent_id
+    ):
         attachment_id = (
             attachment.attachment_id.id if attachment.attachment_id else None
         )
@@ -230,6 +251,7 @@ class OutlookDocFormatter:
             "_id": attachment_id,
             "title": attachment.name,
             "type": attachment_type,
+            "parent_id": parent_id,
             "_timestamp": ews_format_to_datetime(
                 source_datetime=attachment.last_modified_time, timezone=timezone
             ),
@@ -593,6 +615,7 @@ class OutlookDataSource(BaseDataSource):
                 attachment=attachment,
                 attachment_type=attachment_type,
                 timezone=timezone,
+                parent_id=outlook_object.id,
             )
             yield (
                 self._decorate_with_access_control(
@@ -624,6 +647,7 @@ class OutlookDataSource(BaseDataSource):
                 include_full_raw_message=self.configuration["include_full_raw_message"],
                 logger=self._logger,
             )
+            _apply_outlook_attachment_refs(document, mail)
             yield (
                 self._decorate_with_access_control(
                     document, _mailbox_access_control(account)
@@ -684,6 +708,7 @@ class OutlookDataSource(BaseDataSource):
             document = self.doc_formatter.task_doc_formatter(
                 task=task, timezone=timezone
             )
+            _apply_outlook_attachment_refs(document, task)
             yield (
                 self._decorate_with_access_control(
                     document, _mailbox_access_control(account)
@@ -741,6 +766,7 @@ class OutlookDataSource(BaseDataSource):
             child_calendar=str(child_calendar),
             timezone=timezone,
         )
+        _apply_outlook_attachment_refs(document, calendar)
         yield (
             self._decorate_with_access_control(
                 document, _mailbox_access_control(account)
