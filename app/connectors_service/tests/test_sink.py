@@ -1163,6 +1163,38 @@ async def test_get_access_control_docs(
     assert queue_called_with_operations(queue, expected_queue_operations)
 
 
+@mock.patch(
+    "connectors.es.management_client.ESManagementClient.yield_existing_documents_metadata"
+)
+@pytest.mark.asyncio
+async def test_get_access_control_docs_lowercases_ids(
+    yield_existing_documents_metadata,
+):
+    existing_ts = "2023-01-18T17:18:56.814003+00:00"
+    yield_existing_documents_metadata.return_value = AsyncIterator(
+        [("user@acme.com", existing_ts), ("Stale@Acme.com", existing_ts)]
+    )
+    queue = await queue_mock()
+    docs = [
+        ({"_id": "User@Acme.com", "_timestamp": "new"}, None, None),
+        ({"_id": "NEW@acme.com", "_timestamp": "new"}, None, None),
+    ]
+    extractor = await setup_extractor(queue=queue)
+
+    await extractor.run(AsyncIterator(docs), JobType.ACCESS_CONTROL)
+
+    ops = [call.args[0] for call in queue.put.call_args_list]
+    by_op = {(o["_op_type"], o["_id"]) for o in ops if o != END_DOCS}
+    assert by_op == {
+        ("update", "user@acme.com"),
+        ("index", "new@acme.com"),
+        ("delete", "Stale@Acme.com"),
+    }
+    for o in ops:
+        if o != END_DOCS and o["_op_type"] != "delete":
+            assert o["doc"]["id"] == o["_id"]
+
+
 STATS = {
     "index": {"1": 1},
     "update": {"2": 1},

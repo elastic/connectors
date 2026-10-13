@@ -812,7 +812,7 @@ class Extractor:
             if self.counters.get(DOCS_EXTRACTED) % self.display_every == 0:
                 self._log_progress()
 
-            doc_id = doc.pop("_id")
+            doc_id = str(doc.pop("_id")).lower()
             doc["id"] = doc_id
             doc_exists = doc_id in existing_ids
 
