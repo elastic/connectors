@@ -59,9 +59,11 @@ from connectors.utils import (
     Counters,
     ErrorMonitor,
     MemQueue,
+    RetryStrategy,
     aenumerate,
     get_size,
     sanitize,
+    time_to_sleep_between_retries,
 )
 
 __all__ = ["SyncOrchestrator"]
@@ -96,6 +98,9 @@ ID_DUPLICATE = "_id_duplicates"
 
 # Successful results according to the docs: https://www.elastic.co/guide/en/elasticsearch/reference/current/docs-bulk.html#bulk-api-response-body
 SUCCESSFUL_RESULTS = ("created", "deleted", "updated", "noop")
+
+# Per-item bulk failures that should be retried (aligned with TransientElasticsearchRetrier).
+TRANSIENT_ITEM_STATUS_CODES = frozenset({429, 500, 502, 503, 504})
 
 # Reuse the same serializer the elasticsearch client uses to send bulk
 # requests, so the cap check below sees byte-for-byte the wire payload
@@ -194,8 +199,8 @@ class Sink:
         self.chunk_mem_size = chunk_mem_size * 1024 * 1024
         self.bulk_tasks = ConcurrentTasks(max_concurrency=max_concurrency)
         self.error_monitor = error_monitor
-        # Retries live on TransientElasticsearchRetrier; kwargs kept for call-site compat.
-        _, _ = max_retries, retry_interval
+        self.max_retries = max_retries
+        self.retry_interval = retry_interval
         self.error = None
         self._logger = logger_ or logger
         self._canceled = False
@@ -238,8 +243,9 @@ class Sink:
                 f"Task {task_num} - Sending a batch of {len(operations)} ops -- {get_mib_size(operations)}MiB"
             )
 
-        # TODO: retry 429s for individual items here
-        res = await self.client.bulk_insert(operations, self.pipeline["name"])
+        res = await self._bulk_insert_with_transient_item_retries(
+            operations, self.pipeline["name"]
+        )
         ids_to_ops = self._map_id_to_op(operations)
         # `_process_bulk_response` can raise mid-response, so log failures and
         # populate stats in `finally` to still count already-accepted docs.
@@ -275,6 +281,92 @@ class Sink:
                     ):  # avoiding update bulk extra entries
                         result[doc["_id"]] = op
         return result
+
+    def _split_operations(self, operations):
+        """Groups flat bulk lines into one entry per action (delete: 1 line,
+        index/update: 2 lines), in request order."""
+        entries = []
+        i = 0
+        while i < len(operations):
+            size = 1 if OP_DELETE in operations[i] else 2
+            entries.append(operations[i : i + size])
+            i += size
+        return entries
+
+    def _bulk_item_doc_id(self, item):
+        for action in (OP_INDEX, OP_DELETE, OP_CREATE, OP_UPDATE):
+            if action in item:
+                return item[action].get("_id")
+        return None
+
+    def _is_transient_item_failure(self, item):
+        for action in (OP_INDEX, OP_DELETE, OP_CREATE, OP_UPDATE):
+            if action not in item:
+                continue
+            status = item[action].get("status")
+            if status in TRANSIENT_ITEM_STATUS_CODES:
+                return True
+        return False
+
+    def _bulk_response_from_items(self, items):
+        errors = False
+        for item in items:
+            for action in (OP_INDEX, OP_DELETE, OP_CREATE, OP_UPDATE):
+                if action in item and "error" in item[action]:
+                    errors = True
+                    break
+            if errors:
+                break
+        return {"items": items, "errors": errors}
+
+    async def _bulk_insert_with_transient_item_retries(self, operations, pipeline_name):
+        res = await self.client.bulk_insert(operations, pipeline_name)
+        items = list(res.get("items", []))
+        entries = self._split_operations(operations)
+
+        # Bulk response items are returned in request order, so items are
+        # correlated by position (document ids may repeat within a batch).
+        if len(entries) == len(items):
+            for attempt in range(1, self.max_retries + 1):
+                failed = [
+                    i
+                    for i, item in enumerate(items)
+                    if self._is_transient_item_failure(item)
+                ]
+                if not failed:
+                    break
+
+                self._logger.warning(
+                    f"Retrying {len(failed)} document(s) with transient bulk item failures "
+                    f"(attempt {attempt}/{self.max_retries})"
+                )
+                await asyncio.sleep(
+                    time_to_sleep_between_retries(
+                        RetryStrategy.LINEAR_BACKOFF, self.retry_interval, attempt
+                    )
+                )
+
+                retry_ops = [line for i in failed for line in entries[i]]
+                retry_items = (
+                    await self.client.bulk_insert(retry_ops, pipeline_name)
+                ).get("items", [])
+                if len(retry_items) != len(failed):
+                    break
+                for i, item in zip(failed, retry_items, strict=True):
+                    items[i] = item
+
+            still_failing = [
+                self._bulk_item_doc_id(item)
+                for item in items
+                if self._is_transient_item_failure(item)
+            ]
+            if still_failing:
+                self._logger.warning(
+                    f"Dropping {len(still_failing)} document(s) after transient bulk item "
+                    f"retries were exhausted: {still_failing}"
+                )
+
+        return self._bulk_response_from_items(items)
 
     async def _process_bulk_response(self, res, ids_to_ops, do_log=False):
         for item in res.get("items", []):
