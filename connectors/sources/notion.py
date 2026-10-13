@@ -350,6 +350,19 @@ class NotionAdvancedRulesValidator(AdvancedRulesValidator):
         )
 
 
+def _rich_text_to_plain_text(rich_text):
+    """Join the plain text of every segment of a Notion rich text array."""
+    return "".join(segment.get("plain_text", "") for segment in rich_text or [])
+
+
+def _page_title(page):
+    """Return the plain text of the page's title property, whatever its name."""
+    for page_property in page.get("properties", {}).values():
+        if page_property.get("type") == "title":
+            return _rich_text_to_plain_text(page_property.get("title"))
+    return ""
+
+
 class NotionDataSource(BaseDataSource):
     """Notion"""
 
@@ -405,15 +418,10 @@ class NotionDataSource(BaseDataSource):
                     search_results.append(response)
 
                 get_title = {
-                    "database": lambda result: result.get("title", [{}])[0]
-                    .get("plain_text", "")
-                    .lower(),
-                    "page": lambda result: result.get("properties", {})
-                    .get("title", {})
-                    .get("title", [{}])[0]
-                    .get("text", {})
-                    .get("content", "")
-                    .lower(),
+                    "database": lambda result: _rich_text_to_plain_text(
+                        result.get("title")
+                    ).lower(),
+                    "page": lambda result: _page_title(result).lower(),
                 }.get(entity_type)
                 if get_title is not None:
                     found_titles = {get_title(result) for result in search_results}
