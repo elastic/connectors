@@ -2020,7 +2020,7 @@ class TestSharepointOnlineClient:
             == "SP.Data.Site_x0020_PagesItem"
         )
         patch_fetch.assert_called_once_with(
-            f"{site_web_url}/_api/lists/GetByTitle('Site Pages')/items('5')/FirstUniqueAncestorSecurableObject"
+            f"{site_web_url}/_api/lists/GetByTitle('Site Pages')/items(5)/FirstUniqueAncestorSecurableObject"
         )
 
     @pytest.mark.asyncio
@@ -2058,7 +2058,7 @@ class TestSharepointOnlineClient:
 
         assert actual_role_assignments == role_assignments
         assert (
-            "/items('1')/FirstUniqueAncestorSecurableObject/roleassignments?"
+            "/items(1)/FirstUniqueAncestorSecurableObject/roleassignments?"
             in patch_scroll.call_args[0][0]
         )
 
