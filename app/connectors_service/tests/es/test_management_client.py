@@ -53,7 +53,58 @@ class TestESManagementClient:
         lang_code = "en"
         await es_management_client.create_content_index(index_name, lang_code)
 
-        es_management_client.client.indices.create.assert_called_with(index=index_name)
+        es_management_client.client.indices.create.assert_called_with(
+            index=index_name,
+            mappings={"properties": {"id": {"type": "keyword"}}},
+        )
+
+    @pytest.mark.asyncio
+    async def test_ensure_content_index_id_mapping_when_id_missing(
+        self, es_management_client
+    ):
+        index_name = "search-mongo"
+        es_management_client.client.indices.get_mapping = AsyncMock(
+            return_value={index_name: {"mappings": {"properties": {}}}}
+        )
+
+        await es_management_client.ensure_content_index_id_mapping(index_name)
+
+        es_management_client.client.indices.put_mapping.assert_awaited_with(
+            index=index_name,
+            properties={"id": {"type": "keyword"}},
+        )
+
+    @pytest.mark.asyncio
+    async def test_ensure_content_index_id_mapping_when_id_present(
+        self, es_management_client
+    ):
+        index_name = "search-mongo"
+        es_management_client.client.indices.get_mapping = AsyncMock(
+            return_value={
+                index_name: {
+                    "mappings": {"properties": {"id": {"type": "keyword"}}},
+                }
+            }
+        )
+
+        await es_management_client.ensure_content_index_id_mapping(index_name)
+
+        es_management_client.client.indices.put_mapping.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_ensure_content_index_id_mapping_when_id_dynamically_mapped(
+        self, es_management_client
+    ):
+        index_name = "search-mongo"
+        es_management_client.client.indices.get_mapping = AsyncMock(
+            return_value={
+                index_name: {"mappings": {"properties": {"id": {"type": "long"}}}},
+            }
+        )
+
+        await es_management_client.ensure_content_index_id_mapping(index_name)
+
+        es_management_client.client.indices.put_mapping.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_ensure_ingest_pipeline_exists_when_pipeline_do_not_exist(

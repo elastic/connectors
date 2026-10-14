@@ -15,6 +15,10 @@ from elasticsearch.helpers import async_scan
 
 from connectors.es import TIMESTAMP_FIELD
 from connectors.es.client import ESClient
+from connectors.es.content_index_mappings import (
+    CONTENT_INDEX_DOCUMENT_ID_FIELD,
+    CONTENT_INDEX_DOCUMENT_ID_MAPPING,
+)
 
 
 class ESManagementClient(ESClient):
@@ -55,8 +59,39 @@ class ESManagementClient(ESClient):
             partial(
                 self.client.indices.create,
                 index=search_index_name,
+                mappings={"properties": CONTENT_INDEX_DOCUMENT_ID_MAPPING},
             )
         )
+
+    async def ensure_content_index_id_mapping(self, index_name):
+        """Add the framework-level document `id` mapping when it is not defined yet."""
+        response = await self._retrier.execute_with_retry(
+            partial(self.client.indices.get_mapping, index=index_name)
+        )
+
+        for index, index_definition in response.items():
+            properties = index_definition.get("mappings", {}).get("properties", {})
+            if CONTENT_INDEX_DOCUMENT_ID_FIELD in properties:
+                logger.debug(
+                    "Index %s already defines mapping for `%s`, skipping",
+                    index,
+                    CONTENT_INDEX_DOCUMENT_ID_FIELD,
+                )
+                return
+
+            logger.info(
+                "Adding missing `%s` mapping to content index %s",
+                CONTENT_INDEX_DOCUMENT_ID_FIELD,
+                index,
+            )
+            await self._retrier.execute_with_retry(
+                partial(
+                    self.client.indices.put_mapping,
+                    index=index,
+                    properties=CONTENT_INDEX_DOCUMENT_ID_MAPPING,
+                )
+            )
+            return
 
     async def ensure_ingest_pipeline_exists(
         self, pipeline_id, version, description, processors
