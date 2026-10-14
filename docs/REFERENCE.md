@@ -59,7 +59,7 @@ The Outlook connector (`outlook`) is deprecated. It is frozen (no new features) 
 
 The Outlook connector's "Outlook Cloud" mode reads mailboxes through Exchange Web Services (EWS) with the `full_access_as_app` application permission. Microsoft is [retiring EWS in Exchange Online](https://techcommunity.microsoft.com/blog/exchange/exchange-online-ews-your-time-is-almost-up/4492361):
 
-* **From October 1, 2026**, EWS is turned off for tenants that have not explicitly enabled it. To keep an existing connector syncing until it is migrated, a tenant admin must set `EWSEnabled` to `True` and make sure the connector's Entra application (client) ID is on the `EWSAllowedAppIDs` list.
+* **Since October 1, 2026**, EWS is turned off for tenants that have not explicitly enabled it. To keep an existing connector syncing until it is migrated, a tenant admin must set `EWSEnabled` to `True` and make sure the connector's Entra application (client) ID is on the `EWSAllowedAppIDs` list.
 * **On April 1, 2027**, EWS is permanently turned off in Exchange Online, with no workaround. The "Outlook Cloud" mode stops working on that date.
 
 The "Outlook Server" mode is not affected by the EWS retirement.

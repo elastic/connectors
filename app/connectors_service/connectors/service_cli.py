@@ -115,6 +115,10 @@ def run(action, config_file, log_level, filebeat, service_type, uvloop):
     - list: prints out a list of all connectors and exits
     - poll: starts the event loop and run forever (default)
     """
+    # Apply the output format before the first line is logged, so that with
+    # --filebeat every line is ECS JSON. The configured level is applied once
+    # the config file is loaded.
+    set_logger(logging.INFO, filebeat=filebeat)
     logger.info(f"Running connector service version {__version__}")
 
     # load config
@@ -125,10 +129,6 @@ def run(action, config_file, log_level, filebeat, service_type, uvloop):
             config.get("extraction_service", None)
         )  # Not perfect, let's revisit
     except Exception as e:
-        # If something goes wrong while parsing config file, we still want
-        # to set up the logger so that Cloud deployments report errors to
-        # logs properly
-        set_logger(logging.INFO, filebeat=filebeat)
         msg = f"Could not parse {config_file}. Check logs for more information"
         logger.exception(f"{msg}.\n{e}")
         raise ClickException(msg) from e
@@ -228,7 +228,9 @@ def run(action, config_file, log_level, filebeat, service_type, uvloop):
 )
 @click.option(
     "--log-level",
-    type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]),
+    type=click.Choice(
+        ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], case_sensitive=False
+    ),
     help="Set log level for the service.",
 )
 @click.option(
