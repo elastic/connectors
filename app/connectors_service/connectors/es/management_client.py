@@ -69,20 +69,22 @@ class ESManagementClient(ESClient):
             partial(self.client.indices.get_mapping, index=index_name)
         )
 
+        if not response:
+            logger.warning(f"No mappings returned for index {index_name}")
+            return
+
         for index, index_definition in response.items():
             properties = index_definition.get("mappings", {}).get("properties", {})
             if CONTENT_INDEX_DOCUMENT_ID_FIELD in properties:
                 logger.debug(
-                    "Index %s already defines mapping for `%s`, skipping",
-                    index,
-                    CONTENT_INDEX_DOCUMENT_ID_FIELD,
+                    f"Index {index} already defines mapping for "
+                    f"`{CONTENT_INDEX_DOCUMENT_ID_FIELD}`, skipping"
                 )
-                return
+                continue
 
             logger.info(
-                "Adding missing `%s` mapping to content index %s",
-                CONTENT_INDEX_DOCUMENT_ID_FIELD,
-                index,
+                f"Adding missing `{CONTENT_INDEX_DOCUMENT_ID_FIELD}` mapping to "
+                f"content index {index}"
             )
             await self._retrier.execute_with_retry(
                 partial(
@@ -91,7 +93,6 @@ class ESManagementClient(ESClient):
                     properties=CONTENT_INDEX_DOCUMENT_ID_MAPPING,
                 )
             )
-            return
 
     async def ensure_ingest_pipeline_exists(
         self, pipeline_id, version, description, processors

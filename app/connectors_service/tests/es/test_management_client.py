@@ -92,6 +92,24 @@ class TestESManagementClient:
         es_management_client.client.indices.put_mapping.assert_not_called()
 
     @pytest.mark.asyncio
+    async def test_ensure_content_index_id_mapping_for_multiple_indices(
+        self, es_management_client
+    ):
+        es_management_client.client.indices.get_mapping = AsyncMock(
+            return_value={
+                "index-a": {"mappings": {"properties": {"id": {"type": "keyword"}}}},
+                "index-b": {"mappings": {"properties": {}}},
+            }
+        )
+
+        await es_management_client.ensure_content_index_id_mapping("search-alias")
+
+        es_management_client.client.indices.put_mapping.assert_awaited_once_with(
+            index="index-b",
+            properties={"id": {"type": "keyword"}},
+        )
+
+    @pytest.mark.asyncio
     async def test_ensure_content_index_id_mapping_when_id_dynamically_mapped(
         self, es_management_client
     ):
