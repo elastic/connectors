@@ -222,7 +222,26 @@ class OutlookDocFormatter:
             ],
         }
 
-    def attachment_doc_formatter(self, attachment, attachment_type, timezone):
+    @staticmethod
+    def _attachment_refs(attachments):
+        refs = []
+        for attachment in attachments or []:
+            attachment_id = (
+                attachment.attachment_id.id if attachment.attachment_id else None
+            )
+            if not attachment_id:
+                continue
+            refs.append({"id": attachment_id, "title": attachment.name})
+        return refs
+
+    def add_attachments_field(self, document, outlook_object):
+        refs = self._attachment_refs(outlook_object.attachments)
+        if refs:
+            document["attachments"] = refs
+
+    def attachment_doc_formatter(
+        self, attachment, attachment_type, timezone, parent_id
+    ):
         attachment_id = (
             attachment.attachment_id.id if attachment.attachment_id else None
         )
@@ -230,6 +249,7 @@ class OutlookDocFormatter:
             "_id": attachment_id,
             "title": attachment.name,
             "type": attachment_type,
+            "parent_id": parent_id,
             "_timestamp": ews_format_to_datetime(
                 source_datetime=attachment.last_modified_time, timezone=timezone
             ),
@@ -593,6 +613,7 @@ class OutlookDataSource(BaseDataSource):
                 attachment=attachment,
                 attachment_type=attachment_type,
                 timezone=timezone,
+                parent_id=outlook_object.id,
             )
             yield (
                 self._decorate_with_access_control(
@@ -624,6 +645,7 @@ class OutlookDataSource(BaseDataSource):
                 include_full_raw_message=self.configuration["include_full_raw_message"],
                 logger=self._logger,
             )
+            self.doc_formatter.add_attachments_field(document, mail)
             yield (
                 self._decorate_with_access_control(
                     document, _mailbox_access_control(account)
@@ -684,6 +706,7 @@ class OutlookDataSource(BaseDataSource):
             document = self.doc_formatter.task_doc_formatter(
                 task=task, timezone=timezone
             )
+            self.doc_formatter.add_attachments_field(document, task)
             yield (
                 self._decorate_with_access_control(
                     document, _mailbox_access_control(account)
@@ -741,6 +764,7 @@ class OutlookDataSource(BaseDataSource):
             child_calendar=str(child_calendar),
             timezone=timezone,
         )
+        self.doc_formatter.add_attachments_field(document, calendar)
         yield (
             self._decorate_with_access_control(
                 document, _mailbox_access_control(account)
