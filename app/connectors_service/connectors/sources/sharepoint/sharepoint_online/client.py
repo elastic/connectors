@@ -601,7 +601,7 @@ class SharepointOnlineClient:
         """
         self._validate_sharepoint_rest_url(site_web_url)
 
-        url = f"{site_web_url}/_api/lists/GetByTitle('{site_list_name}')/items({list_item_id})/FirstUniqueAncestorSecurableObject"
+        url = f"{site_web_url}/_api/lists/GetByTitle('{site_list_name}')/items('{list_item_id}')/FirstUniqueAncestorSecurableObject"
 
         try:
             response = await self._rest_api_client.fetch(url)
@@ -629,7 +629,7 @@ class SharepointOnlineClient:
 
         expand = "Member/users,RoleDefinitionBindings"
 
-        url = f"{site_web_url}/_api/lists/GetByTitle('{site_list_name}')/items({list_item_id})/FirstUniqueAncestorSecurableObject/roleassignments?$expand={expand}"
+        url = f"{site_web_url}/_api/lists/GetByTitle('{site_list_name}')/items('{list_item_id}')/FirstUniqueAncestorSecurableObject/roleassignments?$expand={expand}"
 
         try:
             async for page in self._rest_api_client.scroll(url):
