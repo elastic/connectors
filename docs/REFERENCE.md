@@ -52,10 +52,10 @@ The columns provide specific information about each connector:
 
 ## Outlook deprecation
 
-The Outlook connector (`outlook`) is deprecated. It is frozen (no new features) and remains available only for existing deployments. Create new connectors with its replacements:
+The Outlook connector (`outlook`) is deprecated. It is frozen (no new features) and remains available only for existing deployments. Do not create new `outlook` connectors. Plan migration as follows:
 
-* **Exchange Online (Microsoft 365)**: use the upcoming Outlook Cloud connector (`outlook_cloud`), which uses Microsoft Graph.
-* **On-premises Exchange**: use the Exchange Server connector (`exchange_server`). It syncs the same content with the same configuration as the Outlook connector's "Outlook Server" mode.
+* **Exchange Online (Microsoft 365)**: the replacement is the upcoming Outlook Cloud connector (`outlook_cloud`, Microsoft Graph), which is not registered in this release yet. Until it is available, existing Outlook Cloud mode connectors can keep syncing only while EWS remains enabled in the tenant (see below).
+* **On-premises Exchange**: use the Exchange Server connector (`exchange_server`), available now. It syncs the same content with the same configuration as the Outlook connector's "Outlook Server" mode.
 
 The Outlook connector's "Outlook Cloud" mode reads mailboxes through Exchange Web Services (EWS) with the `full_access_as_app` application permission. Microsoft is [retiring EWS in Exchange Online](https://techcommunity.microsoft.com/blog/exchange/exchange-online-ews-your-time-is-almost-up/4492361):
 

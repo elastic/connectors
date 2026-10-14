@@ -2642,6 +2642,7 @@ def test_cloud_deprecation_warning_covers_ews_retirement():
     assert "full_access_as_app" in warning
     assert "EWSAllowedAppIDs" in warning
     assert "April 1, 2027" in warning
+    assert "upcoming" in warning
 
 
 @pytest.mark.asyncio

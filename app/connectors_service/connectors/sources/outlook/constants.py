@@ -14,8 +14,9 @@ DEPRECATION_WARNINGS = {
         "full_access_as_app permission, which Microsoft is retiring in Exchange "
         "Online. Until then, syncs only work if a tenant admin sets EWSEnabled to "
         "True and lists this connector's application ID in EWSAllowedAppIDs. EWS "
-        "is permanently turned off on April 1, 2027. Migrate to the new "
-        "Graph-based connector (outlook_cloud service type)."
+        "is permanently turned off on April 1, 2027. Plan to migrate to the "
+        "upcoming Graph-based connector (outlook_cloud service type) when it "
+        "is available."
     ),
     OUTLOOK_SERVER: (
         "The Outlook connector is deprecated and receives no new features. For "
