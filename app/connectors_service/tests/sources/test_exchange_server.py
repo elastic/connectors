@@ -12,6 +12,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from connectors_sdk.source import ConfigurableFieldValueError
 from exchangelib import UTC
+from exchangelib.attachments import FileAttachment
 from exchangelib.errors import (
     ErrorAccessDenied,
     ErrorNonExistentMailbox,
@@ -30,7 +31,12 @@ from connectors.sources.exchange_server.client import (
     ExchangeUsers,
     UsersFetchFailed,
 )
-from connectors.sources.exchange_server.constants import INBOX_MAIL_OBJECT
+from connectors.sources.exchange_server.constants import (
+    CALENDAR_ATTACHMENT,
+    INBOX_MAIL_OBJECT,
+    MAIL_ATTACHMENT,
+    TASK_ATTACHMENT,
+)
 from connectors.sources.outlook import OutlookDataSource
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
@@ -344,6 +350,82 @@ async def test_get_docs_yields_mailbox_content():
         documents = [document async for document, _ in source.get_docs()]
 
     assert {document["_id"] for document in documents} == EXPECTED_IDS
+
+
+def build_attachment(attachment_id, name="sync.txt"):
+    attachment = MagicMock(spec=FileAttachment)
+    attachment.attachment_id = (
+        MagicMock(id=attachment_id) if attachment_id is not None else None
+    )
+    attachment.name = name
+    attachment.size = 1221
+    attachment.last_modified_time = TIMESTAMP
+    return attachment
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "build_item, attachment_type",
+    [
+        (build_mail, MAIL_ATTACHMENT),
+        (build_task, TASK_ATTACHMENT),
+        (build_calendar, CALENDAR_ATTACHMENT),
+    ],
+)
+async def test_get_docs_links_attachments_to_parent(build_item, attachment_type):
+    item = build_item()
+    item.has_attachments = True
+    item.attachments = [
+        build_attachment("attachment_1", name="first.txt"),
+        build_attachment(None, name="no_id.txt"),
+        build_attachment("attachment_2", name="second.txt"),
+    ]
+
+    async with create_exchange_server_source() as source:
+        source.client._get_user_instance.get_user_accounts = AsyncIterator(
+            [build_account()]
+        )
+        mock_mailbox_content(source)
+        source._logger = MagicMock()
+        if isinstance(item, Message):
+            source.client.get_mails = AsyncIterator(
+                [(item, {"constant": INBOX_MAIL_OBJECT})]
+            )
+        elif isinstance(item, Task):
+            source.client.get_tasks = AsyncIterator([item])
+        else:
+            source.client.get_calendars = AsyncIterator([item])
+
+        documents = [document async for document, _ in source.get_docs()]
+
+    parent = next(document for document in documents if document["_id"] == item.id)
+    assert parent["attachments"] == [
+        {"id": "attachment_1", "title": "first.txt"},
+        {"id": "attachment_2", "title": "second.txt"},
+    ]
+    attachment_documents = [
+        document for document in documents if document.get("type") == attachment_type
+    ]
+    assert [document["_id"] for document in attachment_documents] == [
+        "attachment_1",
+        "attachment_2",
+    ]
+    assert {document["parent_id"] for document in attachment_documents} == {item.id}
+
+
+@pytest.mark.asyncio
+async def test_get_docs_omits_attachments_field_without_attachments():
+    async with create_exchange_server_source() as source:
+        source.client._get_user_instance.get_user_accounts = AsyncIterator(
+            [build_account()]
+        )
+        mock_mailbox_content(source)
+
+        documents = [document async for document, _ in source.get_docs()]
+
+    assert documents
+    assert all("attachments" not in document for document in documents)
+    assert all("parent_id" not in document for document in documents)
 
 
 @pytest.mark.asyncio

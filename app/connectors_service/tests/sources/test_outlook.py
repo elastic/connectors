@@ -115,6 +115,8 @@ TASK = "task"
 CALENDAR = "calendar"
 CONTACT = "contact"
 
+EXPECTED_ATTACHMENT_REF = {"id": "attachment_id_1", "title": "sync.txt"}
+
 EXPECTED_RESPONSE = [
     {
         "_id": "mail_1",
@@ -129,6 +131,7 @@ EXPECTED_RESPONSE = [
         "categories": ["Outlook"],
         "message": "This is a dummy mail",
         "_attachment": EXPECTED_MAIL_ATTACHMENT,
+        "attachments": [EXPECTED_ATTACHMENT_REF],
     },
     {
         "_id": "mail_1",
@@ -143,6 +146,7 @@ EXPECTED_RESPONSE = [
         "categories": ["Outlook"],
         "message": "This is a dummy mail",
         "_attachment": EXPECTED_MAIL_ATTACHMENT,
+        "attachments": [EXPECTED_ATTACHMENT_REF],
     },
     {
         "_id": "mail_1",
@@ -157,6 +161,7 @@ EXPECTED_RESPONSE = [
         "categories": ["Outlook"],
         "message": "This is a dummy mail",
         "_attachment": EXPECTED_MAIL_ATTACHMENT,
+        "attachments": [EXPECTED_ATTACHMENT_REF],
     },
     {
         "_id": "mail_1",
@@ -171,6 +176,7 @@ EXPECTED_RESPONSE = [
         "categories": ["Outlook"],
         "message": "This is a dummy mail",
         "_attachment": EXPECTED_MAIL_ATTACHMENT,
+        "attachments": [EXPECTED_ATTACHMENT_REF],
     },
     {
         "_id": "task_1",
@@ -185,6 +191,7 @@ EXPECTED_RESPONSE = [
         "importance": "High",
         "content": "This is a dummy task",
         "status": "completed",
+        "attachments": [EXPECTED_ATTACHMENT_REF],
     },
     {
         "_id": "calendar_1",
@@ -198,6 +205,7 @@ EXPECTED_RESPONSE = [
         "end_date": "2023-12-12T01:01:01Z",
         "location": "USA",
         "content": "This is a dummy calendar",
+        "attachments": [EXPECTED_ATTACHMENT_REF],
     },
     {
         "_id": "contact_1",
@@ -215,6 +223,7 @@ EXPECTED_RESPONSE = [
         "type": "Mail Attachment",
         "_timestamp": "2023-12-12T01:01:01Z",
         "size": 1221,
+        "parent_id": "mail_1",
     },
     {
         "_id": "attachment_id_1",
@@ -222,6 +231,7 @@ EXPECTED_RESPONSE = [
         "type": "Task Attachment",
         "_timestamp": "2023-12-12T01:01:01Z",
         "size": 1221,
+        "parent_id": "task_1",
     },
     {
         "_id": "attachment_id_1",
@@ -229,6 +239,7 @@ EXPECTED_RESPONSE = [
         "type": "Calendar Attachment",
         "_timestamp": "2023-12-12T01:01:01Z",
         "size": 1221,
+        "parent_id": "calendar_1",
     },
 ]
 
@@ -1896,6 +1907,18 @@ def test_distribution_list_doc_formatter():
     assert document["type"] == "Distribution List"
     assert document["name"] == "Dummy Group"
     assert document["email_addresses"] == ["group.member@gmail.com"]
+
+
+def test_attachment_doc_formatter_includes_parent_id():
+    document = ExchangeDocFormatter().attachment_doc_formatter(
+        attachment=MOCK_ATTACHMENT,
+        attachment_type=MAIL_ATTACHMENT,
+        timezone=TIMEZONE,
+        parent_id="mail_1",
+    )
+
+    assert document["parent_id"] == "mail_1"
+    assert document["_id"] == "attachment_id_1"
 
 
 @pytest.mark.asyncio
