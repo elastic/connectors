@@ -44,6 +44,7 @@ from connectors.sources.sharepoint.sharepoint_online.client import (
     TokenFetchFailed,
 )
 from connectors.sources.sharepoint.sharepoint_online.constants import (
+    ANCESTOR_LOOKUP_FAILED,
     DEFAULT_BACKOFF_MULTIPLIER,
     DEFAULT_RETRY_SECONDS,
     EXCLUDED_SHAREPOINT_LIST_NAMES,
@@ -2005,6 +2006,76 @@ class TestSharepointOnlineClient:
         assert len(role_assignments) == 0
 
     @pytest.mark.asyncio
+    async def test_site_list_item_first_unique_ancestor_type(self, client, patch_fetch):
+        site_web_url = f"https://{self.tenant_name}.sharepoint.com/sites/site"
+        patch_fetch.return_value = {"odata.type": "SP.Data.Site_x0020_PagesItem"}
+
+        assert (
+            await client.site_list_item_first_unique_ancestor_type(
+                site_web_url, "Site Pages", 5
+            )
+            == "SP.Data.Site_x0020_PagesItem"
+        )
+        patch_fetch.assert_called_once_with(
+            f"{site_web_url}/_api/lists/GetByTitle('Site Pages')/items(5)/FirstUniqueAncestorSecurableObject"
+        )
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("error", [NotFound, BadRequestError])
+    async def test_site_list_item_first_unique_ancestor_type_errors(
+        self, client, patch_fetch, error
+    ):
+        site_web_url = f"https://{self.tenant_name}.sharepoint.com/sites/site"
+        patch_fetch.side_effect = error()
+
+        assert (
+            await client.site_list_item_first_unique_ancestor_type(
+                site_web_url, "list_title", 1
+            )
+            is ANCESTOR_LOOKUP_FAILED
+        )
+
+    @pytest.mark.asyncio
+    async def test_site_list_item_first_unique_ancestor_role_assignments(
+        self, client, patch_scroll
+    ):
+        site_web_url = f"https://{self.tenant_name}.sharepoint.com/sites/site"
+        role_assignments = [{"value": ["role"]}]
+
+        actual_role_assignments = await self._execute_scrolling_method(
+            partial(
+                client.site_list_item_first_unique_ancestor_role_assignments,
+                site_web_url,
+                "list_title",
+                1,
+            ),
+            patch_scroll,
+            role_assignments,
+        )
+
+        assert actual_role_assignments == role_assignments
+        assert (
+            "/items(1)/FirstUniqueAncestorSecurableObject/roleassignments?"
+            in patch_scroll.call_args[0][0]
+        )
+
+    @pytest.mark.asyncio
+    async def test_site_list_item_first_unique_ancestor_role_assignments_not_found(
+        self, client, patch_scroll
+    ):
+        site_web_url = f"https://{self.tenant_name}.sharepoint.com/sites/site"
+        patch_scroll.side_effect = NotFound
+
+        role_assignments = [
+            role_assignment
+            async for role_assignment in client.site_list_item_first_unique_ancestor_role_assignments(
+                site_web_url, "list_title", 1
+            )
+        ]
+
+        assert role_assignments == []
+
+    @pytest.mark.asyncio
     async def test_site_page_role_assignments(self, client, patch_scroll):
         site_web_url = f"https://{self.tenant_name}.sharepoint.com/random/totally/made/up/roleassignments"
         site_page_id = 1
@@ -2519,6 +2590,10 @@ class TestSharepointOnlineDataSource:
             )
             client.site_page_role_assignments = AsyncIterator(
                 [self.site_page_role_assignments]
+            )
+            # By default items inherit permissions from the site
+            client.site_list_item_first_unique_ancestor_type = AsyncMock(
+                return_value="SP.Web"
             )
             client.users_and_groups_for_role_assignment = AsyncMock(
                 return_value=self.users_and_groups_for_role_assignments
@@ -5117,6 +5192,261 @@ class TestSharepointOnlineDataSource:
             access_control = page[ALLOW_ACCESS_CONTROL_PATCHED]
             assert _prefix_user("editor") in access_control
             assert _prefix_user("viewer") not in access_control
+
+    @pytest.mark.asyncio
+    @patch(
+        "connectors.sources.sharepoint.sharepoint_online.datasource.ACCESS_CONTROL",
+        ALLOW_ACCESS_CONTROL_PATCHED,
+    )
+    @pytest.mark.parametrize(
+        "published, version, expected_in, expected_not_in",
+        [
+            (True, "2.0", [USER_ONE_EMAIL, USER_TWO_EMAIL], []),
+            (False, "2.1", [USER_TWO_EMAIL], [USER_ONE_EMAIL]),
+        ],
+    )
+    async def test_site_pages_inherit_permissions_from_unique_ancestor(
+        self,
+        patch_sharepoint_client,
+        published,
+        version,
+        expected_in,
+        expected_not_in,
+    ):
+        viewer = {
+            "Member": {"odata.type": "SP.User", "UserPrincipalName": USER_ONE_EMAIL},
+            "RoleDefinitionBindings": READ_BINDING,
+        }
+        editor = {
+            "Member": {"odata.type": "SP.User", "UserPrincipalName": USER_TWO_EMAIL},
+            "RoleDefinitionBindings": EDIT_BINDING,
+        }
+
+        async with create_spo_source(use_document_level_security=True) as source:
+            source.client.site_pages = AsyncIterator(
+                [
+                    {
+                        "Id": "4",
+                        "Modified": self.day_ago,
+                        "OData__UIVersionString": version,
+                    }
+                ]
+            )
+            source.client.site_page_has_unique_role_assignments = AsyncMock(
+                return_value=False
+            )
+            source.client.site_list_item_first_unique_ancestor_type = AsyncMock(
+                return_value="SP.Data.Site_x0020_PagesItem"
+            )
+            source.client.site_list_item_first_unique_ancestor_role_assignments = (
+                AsyncIterator([viewer, editor])
+            )
+
+            pages = [
+                page
+                async for page in source.site_pages(
+                    {"id": "1", "webUrl": "http://fakesharepoint.com/site"},
+                    site_access_control=[_prefix_user("site_user")],
+                    site_editors_access_control=[_prefix_user("site_editor")],
+                )
+            ]
+
+            assert len(pages) == 1
+            assert pages[0]["published"] is published
+            access_control = pages[0][ALLOW_ACCESS_CONTROL_PATCHED]
+            for email in expected_in:
+                assert _prefix_user(email) in access_control
+            for email in expected_not_in:
+                assert _prefix_user(email) not in access_control
+            # Parent site permissions are not used
+            assert _prefix_user("site_user") not in access_control
+            assert _prefix_user("site_editor") not in access_control
+            source.client.site_list_item_first_unique_ancestor_type.assert_awaited_once_with(
+                "http://fakesharepoint.com/site", "Site Pages", "4"
+            )
+
+    @pytest.mark.asyncio
+    @patch(
+        "connectors.sources.sharepoint.sharepoint_online.datasource.ACCESS_CONTROL",
+        ALLOW_ACCESS_CONTROL_PATCHED,
+    )
+    async def test_site_pages_inherit_site_permissions_when_ancestor_is_site(
+        self, patch_sharepoint_client
+    ):
+        async with create_spo_source(use_document_level_security=True) as source:
+            source.client.site_pages = AsyncIterator(
+                [{"Id": "4", "Modified": self.day_ago, "OData__UIVersionString": "2.0"}]
+            )
+            source.client.site_page_has_unique_role_assignments = AsyncMock(
+                return_value=False
+            )
+            source.client.site_list_item_first_unique_ancestor_type = AsyncMock(
+                return_value="SP.Web"
+            )
+
+            pages = [
+                page
+                async for page in source.site_pages(
+                    {"id": "1", "webUrl": "http://fakesharepoint.com/site"},
+                    site_access_control=[_prefix_user("site_user")],
+                    site_editors_access_control=[],
+                )
+            ]
+
+            assert pages[0][ALLOW_ACCESS_CONTROL_PATCHED] == [_prefix_user("site_user")]
+
+    @pytest.mark.asyncio
+    @patch(
+        "connectors.sources.sharepoint.sharepoint_online.datasource.ACCESS_CONTROL",
+        ALLOW_ACCESS_CONTROL_PATCHED,
+    )
+    async def test_site_pages_fail_closed_when_ancestor_lookup_fails(
+        self, patch_sharepoint_client
+    ):
+        async with create_spo_source(use_document_level_security=True) as source:
+            source.client.site_pages = AsyncIterator(
+                [{"Id": "4", "Modified": self.day_ago, "OData__UIVersionString": "2.0"}]
+            )
+            source.client.site_page_has_unique_role_assignments = AsyncMock(
+                return_value=False
+            )
+            source.client.site_list_item_first_unique_ancestor_type = AsyncMock(
+                return_value=ANCESTOR_LOOKUP_FAILED
+            )
+
+            pages = [
+                page
+                async for page in source.site_pages(
+                    {"id": "1", "webUrl": "http://fakesharepoint.com/site"},
+                    site_access_control=[_prefix_user("site_user")],
+                    site_editors_access_control=[],
+                )
+            ]
+
+            assert pages[0][ALLOW_ACCESS_CONTROL_PATCHED] == []
+
+    @pytest.mark.asyncio
+    @patch(
+        "connectors.sources.sharepoint.sharepoint_online.datasource.ACCESS_CONTROL",
+        ALLOW_ACCESS_CONTROL_PATCHED,
+    )
+    async def test_site_pages_unique_permissions_disabled_does_not_look_up_ancestor(
+        self, patch_sharepoint_client
+    ):
+        async with create_spo_source(use_document_level_security=True) as source:
+            source.configuration.get_field(
+                "fetch_unique_page_permissions"
+            ).value = False
+            source.client.site_pages = AsyncIterator(
+                [{"Id": "4", "Modified": self.day_ago, "OData__UIVersionString": "2.0"}]
+            )
+
+            pages = [
+                page
+                async for page in source.site_pages(
+                    {"id": "1", "webUrl": "http://fakesharepoint.com/site"},
+                    site_access_control=[_prefix_user("site_user")],
+                    site_editors_access_control=[],
+                )
+            ]
+
+            assert pages[0][ALLOW_ACCESS_CONTROL_PATCHED] == [_prefix_user("site_user")]
+            source.client.site_list_item_first_unique_ancestor_type.assert_not_called()
+
+    @pytest.mark.asyncio
+    @patch(
+        "connectors.sources.sharepoint.sharepoint_online.datasource.ACCESS_CONTROL",
+        ALLOW_ACCESS_CONTROL_PATCHED,
+    )
+    @pytest.mark.parametrize(
+        "ancestor_type, expected",
+        [
+            ("SP.Data.ListsItem", [_prefix_user(USER_ONE_EMAIL)]),
+            ("SP.Web", [_prefix_user("site_user")]),
+        ],
+    )
+    async def test_site_list_items_inherit_permissions_from_unique_ancestor(
+        self, patch_sharepoint_client, ancestor_type, expected
+    ):
+        viewer = {
+            "Member": {"odata.type": "SP.User", "UserPrincipalName": USER_ONE_EMAIL},
+            "RoleDefinitionBindings": READ_BINDING,
+        }
+
+        async with create_spo_source(use_document_level_security=True) as source:
+            source.client.site_list_items = AsyncIterator(
+                [
+                    {
+                        "id": "7",
+                        "lastModifiedDateTime": self.day_ago,
+                        "contentType": {"name": "Item"},
+                        "fields": {},
+                    }
+                ]
+            )
+            source.client.site_list_item_has_unique_role_assignments = AsyncMock(
+                return_value=False
+            )
+            source.client.site_list_item_first_unique_ancestor_type = AsyncMock(
+                return_value=ancestor_type
+            )
+            source.client.site_list_item_first_unique_ancestor_role_assignments = (
+                AsyncIterator([viewer])
+            )
+
+            items = [
+                item
+                async for item, _ in source.site_list_items(
+                    site={"id": "1", "webUrl": "http://fakesharepoint.com/site"},
+                    site_list_id="list-id",
+                    site_list_name="list name",
+                    site_access_control=[_prefix_user("site_user")],
+                )
+            ]
+
+            assert len(items) == 1
+            assert items[0][ALLOW_ACCESS_CONTROL_PATCHED] == expected
+            source.client.site_list_item_first_unique_ancestor_type.assert_awaited_once_with(
+                "http://fakesharepoint.com/site", "list name", "7"
+            )
+
+    @pytest.mark.asyncio
+    @patch(
+        "connectors.sources.sharepoint.sharepoint_online.datasource.ACCESS_CONTROL",
+        ALLOW_ACCESS_CONTROL_PATCHED,
+    )
+    async def test_site_list_items_fail_closed_when_ancestor_lookup_fails(
+        self, patch_sharepoint_client
+    ):
+        async with create_spo_source(use_document_level_security=True) as source:
+            source.client.site_list_items = AsyncIterator(
+                [
+                    {
+                        "id": "7",
+                        "lastModifiedDateTime": self.day_ago,
+                        "contentType": {"name": "Item"},
+                        "fields": {},
+                    }
+                ]
+            )
+            source.client.site_list_item_has_unique_role_assignments = AsyncMock(
+                return_value=False
+            )
+            source.client.site_list_item_first_unique_ancestor_type = AsyncMock(
+                return_value=ANCESTOR_LOOKUP_FAILED
+            )
+
+            items = [
+                item
+                async for item, _ in source.site_list_items(
+                    site={"id": "1", "webUrl": "http://fakesharepoint.com/site"},
+                    site_list_id="list-id",
+                    site_list_name="list name",
+                    site_access_control=[_prefix_user("site_user")],
+                )
+            ]
+
+            assert items[0][ALLOW_ACCESS_CONTROL_PATCHED] == []
 
     @pytest.mark.parametrize(
         "raw_login_name, expected_login_name",
