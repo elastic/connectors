@@ -172,7 +172,7 @@ class SalesforceDataSource(BaseDataSource):
                 "display": "toggle",
                 "label": "Enable document level security",
                 "order": 8,
-                "tooltip": "Document level security ensures identities and permissions set in Salesforce are maintained in Elasticsearch. This enables you to restrict and personalize read-access users and groups have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
+                "tooltip": "Document level security applies Salesforce object-level Read permissions in Elasticsearch. Every user who can read an object type can access all synced records of that type; record-level sharing is not applied. Access control syncs keep user identities up to date.",
                 "type": "bool",
                 "value": False,
             },
