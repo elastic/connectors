@@ -5584,6 +5584,44 @@ class TestSharepointOnlineDataSource:
                 "http://fakesharepoint.com/site", "list name", "7"
             )
 
+    @pytest.mark.asyncio
+    @patch(
+        "connectors.sources.sharepoint.sharepoint_online.datasource.ACCESS_CONTROL",
+        ALLOW_ACCESS_CONTROL_PATCHED,
+    )
+    async def test_site_list_items_fail_closed_when_ancestor_lookup_fails(
+        self, patch_sharepoint_client
+    ):
+        async with create_spo_source(use_document_level_security=True) as source:
+            source.client.site_list_items = AsyncIterator(
+                [
+                    {
+                        "id": "7",
+                        "lastModifiedDateTime": self.day_ago,
+                        "contentType": {"name": "Item"},
+                        "fields": {},
+                    }
+                ]
+            )
+            source.client.site_list_item_has_unique_role_assignments = AsyncMock(
+                return_value=False
+            )
+            source.client.site_list_item_first_unique_ancestor_type = AsyncMock(
+                return_value=ANCESTOR_LOOKUP_FAILED
+            )
+
+            items = [
+                item
+                async for item, _ in source.site_list_items(
+                    site={"id": "1", "webUrl": "http://fakesharepoint.com/site"},
+                    site_list_id="list-id",
+                    site_list_name="list name",
+                    site_access_control=[_prefix_user("site_user")],
+                )
+            ]
+
+            assert items[0][ALLOW_ACCESS_CONTROL_PATCHED] == []
+
     @pytest.mark.parametrize(
         "raw_login_name, expected_login_name",
         [
