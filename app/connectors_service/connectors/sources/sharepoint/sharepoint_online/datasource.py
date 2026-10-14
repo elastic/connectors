@@ -30,6 +30,7 @@ from connectors.sources.sharepoint.sharepoint_online.client import (
     SharepointOnlineClient,
 )
 from connectors.sources.sharepoint.sharepoint_online.constants import (
+    ANCESTOR_LOOKUP_FAILED,
     CURSOR_SITE_DRIVE_KEY,
     DEFAULT_PARALLEL_CONNECTION_COUNT,
     EDIT_ITEM_MASK,
@@ -1232,15 +1233,21 @@ class SharepointOnlineDataSource(BaseDataSource):
         permissions, which can be a parent folder or the list, not only the site.
 
         Returns:
-            list: access control of that ancestor, or None if the item inherits
-            from the site (or the ancestor cannot be determined), in which case
-            the caller should use the site access control.
+            list: access control of that ancestor; None if the item inherits from
+            the site; an empty list if the ancestor could not be resolved (fail
+            closed for DLS).
         """
         ancestor_type = await self.client.site_list_item_first_unique_ancestor_type(
             site_web_url, site_list_name, list_item_id
         )
 
-        if not ancestor_type or ancestor_type == SHAREPOINT_WEB_ODATA_TYPE:
+        if ancestor_type is ANCESTOR_LOOKUP_FAILED:
+            self._logger.warning(
+                f"Could not resolve permission ancestor for list item '{list_item_id}' in list '{site_list_name}'; applying empty access control"
+            )
+            return []
+
+        if ancestor_type == SHAREPOINT_WEB_ODATA_TYPE:
             return None
 
         self._logger.debug(

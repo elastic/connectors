@@ -93,3 +93,6 @@ SHAREPOINT_WEB_ODATA_TYPE = "SP.Web"
 
 # Title of the list that stores site pages
 SITE_PAGES_LIST_NAME = "Site Pages"
+
+# Sentinel: ancestor lookup failed; must not be treated as site-level inheritance
+ANCESTOR_LOOKUP_FAILED = object()

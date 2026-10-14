@@ -44,6 +44,7 @@ from connectors.sources.sharepoint.sharepoint_online.client import (
     TokenFetchFailed,
 )
 from connectors.sources.sharepoint.sharepoint_online.constants import (
+    ANCESTOR_LOOKUP_FAILED,
     DEFAULT_BACKOFF_MULTIPLIER,
     DEFAULT_PARALLEL_CONNECTION_COUNT,
     DEFAULT_RETRY_SECONDS,
@@ -2034,7 +2035,7 @@ class TestSharepointOnlineClient:
             await client.site_list_item_first_unique_ancestor_type(
                 site_web_url, "list_title", 1
             )
-            is None
+            is ANCESTOR_LOOKUP_FAILED
         )
 
     @pytest.mark.asyncio
@@ -5443,9 +5444,8 @@ class TestSharepointOnlineDataSource:
         "connectors.sources.sharepoint.sharepoint_online.datasource.ACCESS_CONTROL",
         ALLOW_ACCESS_CONTROL_PATCHED,
     )
-    @pytest.mark.parametrize("ancestor_type", ["SP.Web", None])
     async def test_site_pages_inherit_site_permissions_when_ancestor_is_site(
-        self, patch_sharepoint_client, ancestor_type
+        self, patch_sharepoint_client
     ):
         async with create_spo_source(use_document_level_security=True) as source:
             source.client.site_pages = AsyncIterator(
@@ -5455,7 +5455,7 @@ class TestSharepointOnlineDataSource:
                 return_value=False
             )
             source.client.site_list_item_first_unique_ancestor_type = AsyncMock(
-                return_value=ancestor_type
+                return_value="SP.Web"
             )
 
             pages = [
@@ -5468,6 +5468,36 @@ class TestSharepointOnlineDataSource:
             ]
 
             assert pages[0][ALLOW_ACCESS_CONTROL_PATCHED] == [_prefix_user("site_user")]
+
+    @pytest.mark.asyncio
+    @patch(
+        "connectors.sources.sharepoint.sharepoint_online.datasource.ACCESS_CONTROL",
+        ALLOW_ACCESS_CONTROL_PATCHED,
+    )
+    async def test_site_pages_fail_closed_when_ancestor_lookup_fails(
+        self, patch_sharepoint_client
+    ):
+        async with create_spo_source(use_document_level_security=True) as source:
+            source.client.site_pages = AsyncIterator(
+                [{"Id": "4", "Modified": self.day_ago, "OData__UIVersionString": "2.0"}]
+            )
+            source.client.site_page_has_unique_role_assignments = AsyncMock(
+                return_value=False
+            )
+            source.client.site_list_item_first_unique_ancestor_type = AsyncMock(
+                return_value=ANCESTOR_LOOKUP_FAILED
+            )
+
+            pages = [
+                page
+                async for page in source.site_pages(
+                    {"id": "1", "webUrl": "http://fakesharepoint.com/site"},
+                    site_access_control=[_prefix_user("site_user")],
+                    site_editors_access_control=[],
+                )
+            ]
+
+            assert pages[0][ALLOW_ACCESS_CONTROL_PATCHED] == []
 
     @pytest.mark.asyncio
     @patch(
