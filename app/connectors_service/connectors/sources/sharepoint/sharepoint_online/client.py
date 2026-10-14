@@ -588,6 +588,49 @@ class SharepointOnlineClient:
         except NotFound:
             return
 
+    async def site_list_item_first_unique_ancestor_type(
+        self, site_web_url, site_list_name, list_item_id
+    ):
+        """Returns the `odata.type` of the nearest securable object (the item itself,
+        a parent folder, the list or the site) that has unique permissions and
+        therefore defines the permissions of the list item.
+
+        The returned type is `SP.Web` when permissions are inherited from the site.
+        Returns None when it cannot be determined.
+        """
+        self._validate_sharepoint_rest_url(site_web_url)
+
+        url = f"{site_web_url}/_api/lists/GetByTitle('{site_list_name}')/items({list_item_id})/FirstUniqueAncestorSecurableObject"
+
+        try:
+            response = await self._rest_api_client.fetch(url)
+            return response.get("odata.type")
+        except NotFound:
+            return None
+        except BadRequestError:
+            self._logger.warning(
+                f"Received error response when retrieving first unique ancestor of `{list_item_id}` from list: `{site_list_name}` in site: `{site_web_url}`"
+            )
+            return None
+
+    async def site_list_item_first_unique_ancestor_role_assignments(
+        self, site_web_url, site_list_name, list_item_id
+    ):
+        """Yields role assignments of the nearest securable object with unique
+        permissions that the list item inherits its permissions from."""
+        self._validate_sharepoint_rest_url(site_web_url)
+
+        expand = "Member/users,RoleDefinitionBindings"
+
+        url = f"{site_web_url}/_api/lists/GetByTitle('{site_list_name}')/items({list_item_id})/FirstUniqueAncestorSecurableObject/roleassignments?$expand={expand}"
+
+        try:
+            async for page in self._rest_api_client.scroll(url):
+                for role_assignment in page:
+                    yield role_assignment
+        except NotFound:
+            return
+
     async def site_list_items(self, site_id, list_id):
         select = "createdDateTime,id,lastModifiedDateTime,weburl,createdBy,lastModifiedBy,contentType"
         expand = "fields($select=Title,Link,Attachments,LinkTitle,LinkFilename,Description,Conversation)"

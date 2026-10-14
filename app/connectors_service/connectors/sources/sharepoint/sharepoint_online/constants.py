@@ -87,3 +87,9 @@ EXCLUDED_SHAREPOINT_PATH_SEGMENTS = ["/contentstorage/"]
 
 # System / non-content lists that Graph may still return; skip before REST follow-ups
 EXCLUDED_SHAREPOINT_LIST_NAMES = frozenset({"SharePointHomeCacheList"})
+
+# `odata.type` of the site (web) securable object in SharePoint REST responses
+SHAREPOINT_WEB_ODATA_TYPE = "SP.Web"
+
+# Title of the list that stores site pages
+SITE_PAGES_LIST_NAME = "Site Pages"
