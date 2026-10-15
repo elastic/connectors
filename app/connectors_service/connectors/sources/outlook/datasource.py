@@ -18,11 +18,22 @@ from connectors.sources.exchange_server.utils import (
     _prefix_user_id,
 )
 from connectors.sources.outlook.client import OutlookClient
-from connectors.sources.outlook.constants import OUTLOOK_CLOUD, OUTLOOK_SERVER
+from connectors.sources.outlook.constants import (
+    DEPRECATION_WARNINGS,
+    OUTLOOK_CLOUD,
+    OUTLOOK_SERVER,
+)
 
 
 class OutlookDataSource(ExchangeServerDataSource):
-    """Outlook"""
+    """Outlook
+
+    Deprecated and frozen: no new features, kept for existing deployments only.
+    New Exchange Online connectors use the Graph-based `outlook_cloud` service
+    type; new on-premises connectors use `exchange_server`. The legacy Outlook
+    Cloud data source mode depends on EWS with `full_access_as_app`, which
+    Exchange Online turns off permanently on April 1, 2027.
+    """
 
     name = "Outlook"
     service_type = "outlook"
@@ -162,10 +173,22 @@ class OutlookDataSource(ExchangeServerDataSource):
             },
         }
 
+    def _log_deprecation_warning(self):
+        self._logger.warning(DEPRECATION_WARNINGS[self.configuration["data_source"]])
+
     def _validate_ssl_certificate(self):
         if self.configuration["data_source"] != OUTLOOK_SERVER:
             return
         super()._validate_ssl_certificate()
+
+    async def ping(self):
+        self._log_deprecation_warning()
+        await super().ping()
+
+    async def get_docs(self, filtering=None):
+        self._log_deprecation_warning()
+        async for document in super().get_docs(filtering=filtering):
+            yield document
 
     async def get_access_control(self):
         if not self._dls_enabled():
