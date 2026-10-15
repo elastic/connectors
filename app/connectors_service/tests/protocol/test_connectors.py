@@ -227,44 +227,23 @@ mongo = {
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "native_service_types, connector_ids, expected_connector_count",
+    "connector_ids, expected_connector_count",
     [
-        ([], [], 0),
-        (["mongodb"], [], 1),
-        ([], ["1"], 1),
-        (["mongodb"], ["1"], 1),
+        ([], 0),
+        (["1"], 1),
     ],
 )
 async def test_supported_connectors(
-    native_service_types, connector_ids, expected_connector_count, mock_responses
+    connector_ids, expected_connector_count, mock_responses
 ):
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
-    native_connectors_query = {
-        "bool": {
-            "must_not": [{"term": {"deleted": True}}],
-            "filter": [
-                {"term": {"is_native": True}},
-                {"terms": {"service_type": native_service_types}},
-            ],
+    if len(connector_ids) > 0:
+        query = {
+            "bool": {
+                "must_not": [{"term": {"deleted": True}}],
+                "filter": [{"terms": {"_id": connector_ids}}],
+            }
         }
-    }
-
-    custom_connectors_query = {
-        "bool": {
-            "must_not": [{"term": {"deleted": True}}],
-            "filter": [
-                {"term": {"is_native": False}},
-                {"terms": {"_id": connector_ids}},
-            ],
-        }
-    }
-
-    if len(native_service_types) > 0 and len(connector_ids) > 0:
-        query = {"bool": {"should": [native_connectors_query, custom_connectors_query]}}
-    elif len(native_service_types) > 0:
-        query = native_connectors_query
-    elif len(connector_ids) > 0:
-        query = custom_connectors_query
     else:
         query = {}
 
@@ -272,20 +251,24 @@ async def test_supported_connectors(
     mock_responses.post(
         "http://nowhere.com:9200/.elastic-connectors/_refresh", headers=headers
     )
-    mock_responses.post(
-        "http://nowhere.com:9200/.elastic-connectors/_search?expand_wildcards=hidden",
-        body={"query": query},
-        payload={
-            "hits": {"hits": [{"_id": "1", "_source": mongo}], "total": {"value": 1}}
-        },
-        headers=headers,
-    )
+    if len(connector_ids) > 0:
+        mock_responses.post(
+            "http://nowhere.com:9200/.elastic-connectors/_search?expand_wildcards=hidden",
+            body={"query": query},
+            payload={
+                "hits": {
+                    "hits": [{"_id": "1", "_source": mongo}],
+                    "total": {"value": 1},
+                }
+            },
+            headers=headers,
+        )
 
     connector_index = ConnectorIndex(config)
     connectors = [
         connector
         async for connector in connector_index.supported_connectors(
-            native_service_types=native_service_types, connector_ids=connector_ids
+            connector_ids=connector_ids
         )
     ]
     await connector_index.close()
@@ -2427,7 +2410,7 @@ async def test_native_connector_missing_features():
             "is_native": True,
         },
     }
-    config = {"native_service_types": "banana"}
+    config = {}
     sources = {"banana": "tests.protocol.test_connectors:Banana"}
     index = Mock()
     index.fetch_response_by_id = AsyncMock(side_effect=[connector_doc, connector_doc])
