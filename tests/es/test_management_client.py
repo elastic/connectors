@@ -174,6 +174,72 @@ class TestESManagementClient:
         es_management_client.client.perform_request.assert_not_called()
 
     @pytest.mark.asyncio
+    async def test_ensure_content_index_id_mapping_when_id_missing(
+        self, es_management_client
+    ):
+        index_name = "search-mongo"
+        es_management_client.client.indices.get_mapping = AsyncMock(
+            return_value={index_name: {"mappings": {"properties": {}}}}
+        )
+
+        await es_management_client.ensure_content_index_id_mapping(index_name)
+
+        es_management_client.client.indices.put_mapping.assert_awaited_with(
+            index=index_name,
+            properties={"id": {"type": "keyword"}},
+        )
+
+    @pytest.mark.asyncio
+    async def test_ensure_content_index_id_mapping_when_id_present(
+        self, es_management_client
+    ):
+        index_name = "search-mongo"
+        es_management_client.client.indices.get_mapping = AsyncMock(
+            return_value={
+                index_name: {
+                    "mappings": {"properties": {"id": {"type": "keyword"}}},
+                }
+            }
+        )
+
+        await es_management_client.ensure_content_index_id_mapping(index_name)
+
+        es_management_client.client.indices.put_mapping.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_ensure_content_index_id_mapping_for_multiple_indices(
+        self, es_management_client
+    ):
+        es_management_client.client.indices.get_mapping = AsyncMock(
+            return_value={
+                "index-a": {"mappings": {"properties": {"id": {"type": "keyword"}}}},
+                "index-b": {"mappings": {"properties": {}}},
+            }
+        )
+
+        await es_management_client.ensure_content_index_id_mapping("search-alias")
+
+        es_management_client.client.indices.put_mapping.assert_awaited_once_with(
+            index="index-b",
+            properties={"id": {"type": "keyword"}},
+        )
+
+    @pytest.mark.asyncio
+    async def test_ensure_content_index_id_mapping_when_id_dynamically_mapped(
+        self, es_management_client
+    ):
+        index_name = "search-mongo"
+        es_management_client.client.indices.get_mapping = AsyncMock(
+            return_value={
+                index_name: {"mappings": {"properties": {"id": {"type": "long"}}}},
+            }
+        )
+
+        await es_management_client.ensure_content_index_id_mapping(index_name)
+
+        es_management_client.client.indices.put_mapping.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_ensure_ingest_pipeline_exists_when_pipeline_do_not_exist(
         self, es_management_client
     ):

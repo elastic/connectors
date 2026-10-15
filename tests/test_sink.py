@@ -237,6 +237,11 @@ async def test_prepare_content_index(mock_responses):
             es.es_management_client,
             "ensure_content_index_mappings",
         ) as put_mapping_mock,
+        mock.patch.object(
+            es.es_management_client,
+            "ensure_content_index_id_mapping",
+            new_callable=AsyncMock,
+        ) as ensure_id_mapping_mock,
     ):
         await es.prepare_content_index(index_name, language_code)
 
@@ -245,6 +250,7 @@ async def test_prepare_content_index(mock_responses):
         put_mapping_mock.assert_called_with(
             index_name=index_name, index=response[index_name], desired_mappings=mappings
         )
+        ensure_id_mapping_mock.assert_awaited_once_with(index_name)
 
 
 def set_responses(mock_responses, ts=None):
