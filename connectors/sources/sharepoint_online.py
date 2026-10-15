@@ -81,6 +81,15 @@ EXCLUDED_SHAREPOINT_PATH_SEGMENTS = ["/contentstorage/"]
 # System / non-content lists that Graph may still return; skip before REST follow-ups
 EXCLUDED_SHAREPOINT_LIST_NAMES = frozenset({"SharePointHomeCacheList"})
 
+# `odata.type` of the site (web) securable object in SharePoint REST responses
+SHAREPOINT_WEB_ODATA_TYPE = "SP.Web"
+
+# Title of the list that stores site pages
+SITE_PAGES_LIST_NAME = "Site Pages"
+
+# Sentinel: ancestor lookup failed; must not be treated as site-level inheritance
+ANCESTOR_LOOKUP_FAILED = object()
+
 
 def _is_excluded_sharepoint_url(url: str) -> bool:
     try:
@@ -1071,6 +1080,55 @@ class SharepointOnlineClient:
         expand = "Member/users,RoleDefinitionBindings"
 
         url = f"{site_web_url}/_api/lists/GetByTitle('{site_list_name}')/items({list_item_id})/roleassignments?$expand={expand}"
+
+        try:
+            async for page in self._rest_api_client.scroll(url):
+                for role_assignment in page:
+                    yield role_assignment
+        except NotFound:
+            return
+
+    async def site_list_item_first_unique_ancestor_type(
+        self, site_web_url, site_list_name, list_item_id
+    ):
+        """Returns the `odata.type` of the nearest securable object (the item itself,
+        a parent folder, the list or the site) that has unique permissions and
+        therefore defines the permissions of the list item.
+
+        The returned type is `SP.Web` when permissions are inherited from the site.
+        Returns ANCESTOR_LOOKUP_FAILED when the ancestor cannot be determined.
+        """
+        self._validate_sharepoint_rest_url(site_web_url)
+
+        url = f"{site_web_url}/_api/lists/GetByTitle('{site_list_name}')/items({list_item_id})/FirstUniqueAncestorSecurableObject"
+
+        try:
+            response = await self._rest_api_client.fetch(url)
+            ancestor_type = response.get("odata.type")
+            if not ancestor_type:
+                self._logger.warning(
+                    f"First unique ancestor response missing odata.type for `{list_item_id}` in list `{site_list_name}` at `{site_web_url}`"
+                )
+                return ANCESTOR_LOOKUP_FAILED
+            return ancestor_type
+        except NotFound:
+            return ANCESTOR_LOOKUP_FAILED
+        except BadRequestError:
+            self._logger.warning(
+                f"Received error response when retrieving first unique ancestor of `{list_item_id}` from list: `{site_list_name}` in site: `{site_web_url}`"
+            )
+            return ANCESTOR_LOOKUP_FAILED
+
+    async def site_list_item_first_unique_ancestor_role_assignments(
+        self, site_web_url, site_list_name, list_item_id
+    ):
+        """Yields role assignments of the nearest securable object with unique
+        permissions that the list item inherits its permissions from."""
+        self._validate_sharepoint_rest_url(site_web_url)
+
+        expand = "Member/users,RoleDefinitionBindings"
+
+        url = f"{site_web_url}/_api/lists/GetByTitle('{site_list_name}')/items({list_item_id})/FirstUniqueAncestorSecurableObject/roleassignments?$expand={expand}"
 
         try:
             async for page in self._rest_api_client.scroll(url):
@@ -2449,6 +2507,58 @@ class SharepointOnlineDataSource(BaseDataSource):
 
                 yield drive_item, self.download_function(drive_item, max_drive_item_age)
 
+    async def _inherited_list_item_access_control(
+        self,
+        site_id,
+        site_web_url,
+        site_list_name,
+        list_item_id,
+        require_edit_access=False,
+    ):
+        """Resolves permissions of a list item that does not have unique permissions.
+
+        Such an item inherits permissions from its nearest ancestor with unique
+        permissions, which can be a parent folder or the list, not only the site.
+
+        Returns:
+            list: access control of that ancestor; None if the item inherits from
+            the site; an empty list if the ancestor could not be resolved (fail
+            closed for DLS).
+        """
+        ancestor_type = await self.client.site_list_item_first_unique_ancestor_type(
+            site_web_url, site_list_name, list_item_id
+        )
+
+        if ancestor_type is ANCESTOR_LOOKUP_FAILED:
+            self._logger.warning(
+                f"Could not resolve permission ancestor for list item '{list_item_id}' in list '{site_list_name}'; applying empty access control"
+            )
+            return []
+
+        if ancestor_type == SHAREPOINT_WEB_ODATA_TYPE:
+            return None
+
+        self._logger.debug(
+            f"List item with id '{list_item_id}' inherits permissions from a parent object of type '{ancestor_type}'. Ignoring parent site permissions."
+        )
+
+        access_control = []
+        async for (
+            role_assignment
+        ) in self.client.site_list_item_first_unique_ancestor_role_assignments(
+            site_web_url, site_list_name, list_item_id
+        ):
+            access_control.extend(
+                await self._get_access_control_from_role_assignment(
+                    role_assignment,
+                    site_id=site_id,
+                    site_web_url=site_web_url,
+                    require_edit_access=require_edit_access,
+                )
+            )
+
+        return access_control
+
     async def site_list_items(
         self,
         site,
@@ -2522,8 +2632,27 @@ class SharepointOnlineDataSource(BaseDataSource):
                         )
 
                 if not has_unique_role_assignments:
+                    list_item_access_control = None
+
+                    if (
+                        self._dls_enabled()
+                        and self.configuration["fetch_unique_list_item_permissions"]
+                    ):
+                        # Item may inherit from a parent folder or list with unique permissions
+                        list_item_access_control = (
+                            await self._inherited_list_item_access_control(
+                                site_id,
+                                site_web_url,
+                                site_list_name,
+                                list_item_natural_id,
+                            )
+                        )
+
                     list_item = self._decorate_with_access_control(
-                        list_item, site_access_control
+                        list_item,
+                        site_access_control
+                        if list_item_access_control is None
+                        else list_item_access_control,
                     )
 
                 if "Attachments" in list_item["fields"]:
@@ -2794,11 +2923,29 @@ class SharepointOnlineDataSource(BaseDataSource):
                         )
 
                 if not has_unique_role_assignments:
-                    inherited_access_control = (
-                        site_access_control
-                        if published
-                        else site_editors_access_control
-                    )
+                    inherited_access_control = None
+
+                    if (
+                        self._dls_enabled()
+                        and self.configuration["fetch_unique_page_permissions"]
+                    ):
+                        # Page may inherit from a parent folder or list with unique permissions
+                        inherited_access_control = (
+                            await self._inherited_list_item_access_control(
+                                site_id,
+                                url,
+                                SITE_PAGES_LIST_NAME,
+                                site_page["Id"],
+                                require_edit_access=not published,
+                            )
+                        )
+
+                    if inherited_access_control is None:
+                        inherited_access_control = (
+                            site_access_control
+                            if published
+                            else site_editors_access_control
+                        )
                     site_page = self._decorate_with_access_control(
                         site_page, inherited_access_control
                     )
