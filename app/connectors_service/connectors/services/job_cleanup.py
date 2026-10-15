@@ -21,7 +21,6 @@ class JobCleanUpService(BaseService):
     def __init__(self, config):
         super().__init__(config, "job_cleanup_service")
         self.idling = int(self.service_config.get("job_cleanup_interval", 60 * 5))
-        self.native_service_types = self.config.get("native_service_types", []) or []
         self.connector_ids = list(self.connectors.keys())
 
     async def _run(self):
@@ -84,7 +83,6 @@ class JobCleanUpService(BaseService):
             connector_ids = [
                 connector.id
                 async for connector in self.connector_index.supported_connectors(
-                    native_service_types=self.native_service_types,
                     connector_ids=self.connector_ids,
                 )
             ]
