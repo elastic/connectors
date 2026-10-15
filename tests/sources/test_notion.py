@@ -349,7 +349,7 @@ def _rich_text(*segments):
         ),
     ],
 )
-@patch("connectors.sources.notion.datasource.NotionClient", autospec=True)
+@patch("connectors.sources.notion.NotionClient", autospec=True)
 async def test_get_entities_matches_the_full_title(
     mock_notion_client, entity_type, entity_titles, search_result
 ):
