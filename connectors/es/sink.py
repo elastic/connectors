@@ -1012,6 +1012,7 @@ class SyncOrchestrator:
             await self.es_management_client.ensure_content_index_mappings(
                 index_name=index_name, index=index, desired_mappings=mappings
             )
+            await self.es_management_client.ensure_content_index_id_mapping(index_name)
         else:
             # Create a new index
             self._logger.info(f"Creating content index: {index_name}")
