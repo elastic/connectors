@@ -30,6 +30,7 @@ from connectors.sources.shared.microsoft.graph import (  # noqa: F401
     retryable_aiohttp_call,
 )
 from connectors.sources.sharepoint.sharepoint_online.constants import (
+    ANCESTOR_LOOKUP_FAILED,
     DEFAULT_PARALLEL_CONNECTION_COUNT,
     DEFAULT_RETRY_COUNT,
     DELTA_LINK_KEY,
@@ -580,6 +581,55 @@ class SharepointOnlineClient:
         expand = "Member/users,RoleDefinitionBindings"
 
         url = f"{site_web_url}/_api/lists/GetByTitle('{site_list_name}')/items({list_item_id})/roleassignments?$expand={expand}"
+
+        try:
+            async for page in self._rest_api_client.scroll(url):
+                for role_assignment in page:
+                    yield role_assignment
+        except NotFound:
+            return
+
+    async def site_list_item_first_unique_ancestor_type(
+        self, site_web_url, site_list_name, list_item_id
+    ):
+        """Returns the `odata.type` of the nearest securable object (the item itself,
+        a parent folder, the list or the site) that has unique permissions and
+        therefore defines the permissions of the list item.
+
+        The returned type is `SP.Web` when permissions are inherited from the site.
+        Returns ANCESTOR_LOOKUP_FAILED when the ancestor cannot be determined.
+        """
+        self._validate_sharepoint_rest_url(site_web_url)
+
+        url = f"{site_web_url}/_api/lists/GetByTitle('{site_list_name}')/items({list_item_id})/FirstUniqueAncestorSecurableObject"
+
+        try:
+            response = await self._rest_api_client.fetch(url)
+            ancestor_type = response.get("odata.type")
+            if not ancestor_type:
+                self._logger.warning(
+                    f"First unique ancestor response missing odata.type for `{list_item_id}` in list `{site_list_name}` at `{site_web_url}`"
+                )
+                return ANCESTOR_LOOKUP_FAILED
+            return ancestor_type
+        except NotFound:
+            return ANCESTOR_LOOKUP_FAILED
+        except BadRequestError:
+            self._logger.warning(
+                f"Received error response when retrieving first unique ancestor of `{list_item_id}` from list: `{site_list_name}` in site: `{site_web_url}`"
+            )
+            return ANCESTOR_LOOKUP_FAILED
+
+    async def site_list_item_first_unique_ancestor_role_assignments(
+        self, site_web_url, site_list_name, list_item_id
+    ):
+        """Yields role assignments of the nearest securable object with unique
+        permissions that the list item inherits its permissions from."""
+        self._validate_sharepoint_rest_url(site_web_url)
+
+        expand = "Member/users,RoleDefinitionBindings"
+
+        url = f"{site_web_url}/_api/lists/GetByTitle('{site_list_name}')/items({list_item_id})/FirstUniqueAncestorSecurableObject/roleassignments?$expand={expand}"
 
         try:
             async for page in self._rest_api_client.scroll(url):
