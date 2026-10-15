@@ -100,16 +100,6 @@ class JobExecutionService(BaseService):
         self.connector_index = ConnectorIndex(self.es_config)
         self.sync_job_index = SyncJobIndex(self.es_config)
 
-        native_service_types = self.config.get("native_service_types", []) or []
-        if len(native_service_types) > 0:
-            self.logger.debug(
-                f"Native support for {self.display_name} for {', '.join(native_service_types)}"
-            )
-        else:
-            self.logger.debug(
-                f"No native service types configured for {self.display_name}"
-            )
-
         connector_ids = list(self.connectors.keys())
 
         self.logger.info(
@@ -125,14 +115,13 @@ class JobExecutionService(BaseService):
                     supported_connector_ids = [
                         connector.id
                         async for connector in self.connector_index.supported_connectors(
-                            native_service_types=native_service_types,
                             connector_ids=connector_ids,
                         )
                     ]
 
                     if len(supported_connector_ids) == 0:
                         self.logger.debug(
-                            f"There's no supported connectors found with native service types [{', '.join(native_service_types)}] or connector ids [{', '.join(connector_ids)}]"
+                            f"There's no supported connectors found for connector ids [{', '.join(connector_ids)}]"
                         )
                     else:
                         async for sync_job in self.sync_job_index.pending_jobs(
