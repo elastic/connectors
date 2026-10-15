@@ -6,6 +6,7 @@
 """Azure Blob Storage source module responsible to fetch documents from Azure Blob Storage"""
 
 import base64
+import json
 from functools import partial
 
 from azure.storage.blob.aio import BlobServiceClient, ContainerClient
@@ -22,6 +23,20 @@ MAX_CONCURRENT_DOWNLOADS = (
     100  # Max concurrent download supported by Azure Blob Storage
 )
 INITIAL_DOWNLOAD_SIZE = 100000
+
+
+def _to_json(properties):
+    """Serialize blob or container properties to a JSON string.
+
+    Args:
+        properties (dict-like): Metadata dictionary or Azure model such as LeaseProperties
+
+    Returns:
+        string: JSON object, or None if there are no properties
+    """
+    if not properties:
+        return None
+    return json.dumps(dict(properties), default=str)
 
 
 class AzureBlobStorageDataSource(BaseDataSource):
@@ -175,7 +190,7 @@ class AzureBlobStorageDataSource(BaseDataSource):
 
         Args:
             blob (dictionary): Blob document from Azure Blob Storage
-            container_metadata (string): Blob container metadata
+            container_metadata (dictionary): Blob container metadata
 
         Returns:
             dictionary: Modified document with the help of adapter schema
@@ -185,9 +200,9 @@ class AzureBlobStorageDataSource(BaseDataSource):
             "_timestamp": blob["last_modified"].isoformat(),
             "created at": blob["creation_time"].isoformat(),
             "content type": blob["content_settings"]["content_type"],
-            "container metadata": str(container_metadata),
-            "metadata": str(blob["metadata"]),
-            "leasedata": str(blob["lease"]),
+            "container metadata": _to_json(container_metadata),
+            "metadata": _to_json(blob["metadata"]),
+            "leasedata": _to_json(blob["lease"]),
         }
         for elasticsearch_field, azure_blob_storage_field in BLOB_SCHEMA.items():
             document[elasticsearch_field] = blob[azure_blob_storage_field]

@@ -7,11 +7,13 @@
 
 import asyncio
 import base64
+import json
 from contextlib import asynccontextmanager
 from datetime import datetime
 from unittest.mock import Mock, patch
 
 import pytest
+from azure.storage.blob import BlobProperties
 from azure.storage.blob.aio import BlobServiceClient, ContainerClient
 from connectors_sdk.source import ConfigurableFieldValueError
 
@@ -90,7 +92,7 @@ async def test_prepare_blob_doc():
             "content_settings": {"content_type": "plain/text"},
             "last_modified": datetime(2022, 4, 21, 12, 12, 30),
             "creation_time": datetime(2022, 4, 21, 12, 12, 30),
-            "metadata": "{'key1': 'value1', 'key2': 'value2'}",
+            "metadata": {"key1": "value1", "key2": "value2"},
             "lease": {"status": "Locked", "state": "Leased", "duration": "Infinite"},
             "blob_tier": "private",
             "size": 1000,
@@ -100,9 +102,9 @@ async def test_prepare_blob_doc():
             "_timestamp": "2022-04-21T12:12:30",
             "created at": "2022-04-21T12:12:30",
             "content type": "plain/text",
-            "container metadata": "{'key1': 'value1', 'key2': 'value2'}",
-            "metadata": "{'key1': 'value1', 'key2': 'value2'}",
-            "leasedata": "{'status': 'Locked', 'state': 'Leased', 'duration': 'Infinite'}",
+            "container metadata": '{"key1": "value1", "key2": "value2"}',
+            "metadata": '{"key1": "value1", "key2": "value2"}',
+            "leasedata": '{"status": "Locked", "state": "Leased", "duration": "Infinite"}',
             "title": "blob1",
             "tier": "private",
             "size": 1000,
@@ -116,6 +118,36 @@ async def test_prepare_blob_doc():
 
         # Assert
         assert actual_output == expected_output
+
+
+@pytest.mark.asyncio
+async def test_prepare_blob_doc_with_azure_models():
+    """Test prepare_blob_doc with the models returned by the Azure SDK"""
+
+    blob = BlobProperties(
+        name="blob1",
+        container="container1",
+        **{
+            "Last-Modified": datetime(2022, 4, 21, 12, 12, 30),
+            "x-ms-creation-time": datetime(2022, 4, 21, 12, 12, 30),
+            "Content-Type": "plain/text",
+            "x-ms-lease-status": "unlocked",
+            "x-ms-lease-state": "available",
+            "Content-Length": 1000,
+        },
+    )
+    blob.metadata = {}
+
+    async with create_abs_source() as source:
+        document = source.prepare_blob_doc(blob, {"owner": "team-a"})
+
+    assert document["container metadata"] == '{"owner": "team-a"}'
+    assert document["metadata"] is None
+    assert json.loads(document["leasedata"]) == {
+        "status": "unlocked",
+        "state": "available",
+        "duration": None,
+    }
 
 
 @pytest.mark.asyncio
@@ -171,7 +203,7 @@ async def test_get_blob():
                     "content_settings": {"content_type": "plain/text"},
                     "last_modified": datetime(2022, 4, 21, 12, 12, 30),
                     "creation_time": datetime(2022, 4, 21, 12, 12, 30),
-                    "metadata": "{'key1': 'value1', 'key2': 'value2'}",
+                    "metadata": {"key1": "value1", "key2": "value2"},
                     "lease": {
                         "status": "Locked",
                         "state": "Leased",
@@ -188,9 +220,9 @@ async def test_get_blob():
                 "_timestamp": "2022-04-21T12:12:30",
                 "created at": "2022-04-21T12:12:30",
                 "content type": "plain/text",
-                "container metadata": "{'key1': 'value1'}",
-                "metadata": "{'key1': 'value1', 'key2': 'value2'}",
-                "leasedata": "{'status': 'Locked', 'state': 'Leased', 'duration': 'Infinite'}",
+                "container metadata": '{"key1": "value1"}',
+                "metadata": '{"key1": "value1", "key2": "value2"}',
+                "leasedata": '{"status": "Locked", "state": "Leased", "duration": "Infinite"}',
                 "title": "blob1",
                 "tier": "private",
                 "size": 1000,
