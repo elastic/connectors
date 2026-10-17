@@ -218,7 +218,9 @@ class OracleDataSource(BaseDataSource):
                         row = dict(zip(column_names, row, strict=True))
                         keys_value = ""
                         for key in keys:
-                            keys_value += f"{row.get(key)}_" if row.get(key) else ""
+                            keys_value += (
+                                f"{row.get(key)}_" if row.get(key) is not None else ""
+                            )
                         row.update(
                             {
                                 "_id": f"{self.database}_{table}_{keys_value}",
