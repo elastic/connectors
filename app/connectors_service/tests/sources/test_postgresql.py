@@ -7,7 +7,7 @@
 
 import ssl
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from ipaddress import (
     IPv4Address,
@@ -17,7 +17,7 @@ from ipaddress import (
     IPv6Interface,
     IPv6Network,
 )
-from unittest.mock import ANY, Mock, patch
+from unittest.mock import ANY, AsyncMock, Mock, patch
 from uuid import UUID
 
 import pytest
@@ -625,6 +625,64 @@ async def test_get_docs_with_advanced_rules(filtering, expected_response):
                 actual_response.append(doc[0])
 
             assert actual_response == expected_response
+
+
+LAST_UPDATE_TIME = datetime(2023, 2, 21, 8, 37, 15, tzinfo=timezone.utc)
+SYNC_TIME = "2023-03-09T00:00:00+00:00"
+
+
+@pytest.mark.parametrize(
+    "last_update_times, expected_timestamp",
+    [
+        pytest.param(
+            [None, LAST_UPDATE_TIME], LAST_UPDATE_TIME.isoformat(), id="one-table-empty"
+        ),
+        pytest.param([None, None], SYNC_TIME, id="no-table-has-commit-timestamps"),
+        pytest.param(
+            [Exception("commit timestamp lookup failed"), LAST_UPDATE_TIME],
+            SYNC_TIME,
+            id="lookup-failed-for-one-table",
+        ),
+    ],
+)
+@freeze_time(SYNC_TIME)
+@pytest.mark.asyncio
+async def test_yield_docs_custom_query_timestamp_across_tables(
+    last_update_times, expected_timestamp
+):
+    async def rows(**kwargs):
+        yield {"public_emp_table_ids": 1}
+
+    async with create_source(
+        PostgreSQLDataSource,
+        database="xe",
+        tables="*",
+        schema="public",
+        port=5432,
+    ) as source:
+        with (
+            patch.object(
+                source,
+                "get_primary_key",
+                AsyncMock(return_value=(["public_emp_table_ids"], ["ids"])),
+            ),
+            patch.object(
+                source.postgresql_client,
+                "get_table_last_update_time",
+                AsyncMock(side_effect=last_update_times),
+            ),
+            patch.object(source, "yield_rows_for_query", rows),
+        ):
+            docs = [
+                doc
+                async for doc in source._yield_docs_custom_query(
+                    tables=[TABLE, CUSTOMER_TABLE],
+                    query="select * from emp_table left join customer on true",
+                    id_columns=None,
+                )
+            ]
+
+    assert [doc["_timestamp"] for doc in docs] == [expected_timestamp]
 
 
 def test_table_primary_key_query():
