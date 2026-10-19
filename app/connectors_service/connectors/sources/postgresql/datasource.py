@@ -3,6 +3,7 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+from datetime import datetime, timezone
 from ipaddress import (
     IPv4Address,
     IPv4Interface,
@@ -319,14 +320,17 @@ class PostgreSQLDataSource(BaseDataSource):
                 last_update_time = (
                     await self.postgresql_client.get_table_last_update_time(table)
                 )
-                last_update_times.append(last_update_time)
             except Exception:
-                self._logger.warning("Last update time is not found for Table: {table}")
-                last_update_times.append(iso_utc())
+                self._logger.warning(
+                    f"Last update time is not found for Table: {table}"
+                )
+                last_update_time = datetime.now(timezone.utc)
+            # MAX() is NULL for a table without commit timestamps (an empty table,
+            # or rows written before track_commit_timestamp was enabled)
+            if last_update_time is not None:
+                last_update_times.append(last_update_time)
 
-        last_update_time = (
-            max(last_update_times) if len(last_update_times) else iso_utc()
-        )
+        last_update_time = max(last_update_times) if last_update_times else None
 
         async for row in self.yield_rows_for_query(
             primary_key_columns=primary_key_columns, tables=tables, query=query
