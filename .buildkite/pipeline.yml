@@ -53,12 +53,11 @@ steps:
       PYTHON_VERSION: "3.11" # We don't really care about notice on multiple versions
     timeout_in_minutes: 5
 
-  - wait: ~
-
   - label: ":face_with_peeking_eye: Lint"
     <<: *test-agents
     <<: *retries
     key: "lint"
+    depends_on: "notice_check"
     command: ".buildkite/run_linter.sh"
     env:
       PYTHON_VERSION: "3.11" # We don't really care about linter on multiple versions for now
@@ -68,6 +67,7 @@ steps:
     <<: *test-agents
     <<: *retries
     key: "unit_tests"
+    depends_on: "notice_check"
     command: ".buildkite/run_tests.sh"
     env:
       PYTHON_VERSION: "{{ matrix }}"
@@ -81,6 +81,7 @@ steps:
     <<: *test-agents
     <<: *ftest_defaults
     key: "smoke_test"
+    depends_on: "notice_check"
     env:
       PYTHON_VERSION: "3.11" # TODO: can actually do a matrix too
       CONNECTOR: "dir"
@@ -92,6 +93,8 @@ steps:
     <<: *test-agents
     key: "build_fips_image"
     command: ".buildkite/run_fips_build.sh"
+    env:
+      FIPS_BUILD_ARGS: "--build-arg PYTHON_OPTIMIZATIONS=false"
     timeout_in_minutes: 45
     artifact_paths:
       - ".artifacts/connectors-fips-*.tar.gz"
@@ -99,7 +102,9 @@ steps:
   - label: ":pytest: FIPS Unit tests {{ matrix }}"
     <<: *retries
     key: "fips_unit_tests"
-    depends_on: "build_fips_image"
+    depends_on:
+      - "notice_check"
+      - "build_fips_image"
     commands: ".buildkite/run_fips_unit_tests.sh"
     env:
       PYTHON_VERSION: "{{ matrix }}"
@@ -118,6 +123,9 @@ steps:
     <<: *test-agents
     <<: *fips_ftest_defaults
     key: "fips_smoke_test"
+    depends_on:
+      - "notice_check"
+      - "build_fips_image"
     env:
       PYTHON_VERSION: "3.11"
       CONNECTOR: "dir"
@@ -125,6 +133,7 @@ steps:
 
   - label: ":sweating: Checking for changes in connectors"
     key: "relevant_ftests"
+    depends_on: "notice_check"
     plugins:
       monorepo-diff#v1.5.2:
         diff: ".buildkite/diff ${BUILDKITE_COMMIT}"
@@ -608,6 +617,7 @@ steps:
 
   - label: ":lock: Checking for changes in connectors (FIPS)"
     key: "relevant_fips_ftests"
+    depends_on: "notice_check"
     plugins:
       monorepo-diff#v1.5.2:
         diff: ".buildkite/diff ${BUILDKITE_COMMIT}"
@@ -1057,6 +1067,7 @@ steps:
 
   - group: ":building_construction: Build and Test Python Packages"
     key: "test_packages"
+    depends_on: "notice_check"
     steps:
       - label: ":python: Build Python {{matrix.python_version}} {{matrix.package_path}} package"
         <<: *test-agents
