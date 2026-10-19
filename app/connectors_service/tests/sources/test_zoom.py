@@ -5,6 +5,7 @@
 #
 """Tests the Zoom source class methods"""
 
+import base64
 from contextlib import asynccontextmanager
 from unittest import mock
 from unittest.mock import Mock, patch
@@ -293,6 +294,21 @@ FILE_EXPECTED_CONTENT = {
     "_timestamp": "2023-03-09T00:00:00Z",
     "_attachment": "Q29udGVudA==",
 }
+SAMPLE_PDF_CONTENT = b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n1 0 obj\n<<>>\nendobj\n"
+PDF_FILE = {
+    "id": "file5",
+    "file_id": "file5",
+    "type": "file",
+    "date_time": "2023-03-09T00:00:00Z",
+    "file_size": len(SAMPLE_PDF_CONTENT),
+    "file_name": "file5.pdf",
+    "download_url": "https://api.zoom.us/v2/pdf_download_url",
+}
+PDF_FILE_EXPECTED_CONTENT = {
+    "_id": "file5",
+    "_timestamp": "2023-03-09T00:00:00Z",
+    "_attachment": base64.b64encode(SAMPLE_PDF_CONTENT).decode(),
+}
 FILE_EXPECTED_CONTENT_EXTRACTED = {
     "_id": "file1",
     "_timestamp": "2023-03-09T00:00:00Z",
@@ -398,6 +414,12 @@ class ZoomAsyncMock(mock.AsyncMock):
         return self._data
 
     async def text(self):
+        # Like aiohttp, decode a binary body strictly as UTF-8
+        if isinstance(self._data, bytes):
+            return self._data.decode("utf-8")
+        return self._data
+
+    async def read(self):
         return self._data
 
 
@@ -504,7 +526,9 @@ def mock_zoom_apis(url, headers):
 
     # Content APIS
     elif url == "https://api.zoom.us/v2/download_url":
-        return get_mock(mock_response=SAMPLE_CONTENT)
+        return get_mock(mock_response=SAMPLE_CONTENT.encode("utf-8"))
+    elif url == "https://api.zoom.us/v2/pdf_download_url":
+        return get_mock(mock_response=SAMPLE_PDF_CONTENT)
 
     # Emtpy Response
     else:
@@ -636,7 +660,7 @@ async def test_content_for_successful_call():
                 response = await source.client.api_client.content(
                     url="https://api.zoom.us/v2/download_url"
                 )
-                assert response == SAMPLE_CONTENT
+                assert response == SAMPLE_CONTENT.encode("utf-8")
 
 
 @pytest.mark.asyncio
@@ -750,6 +774,7 @@ async def test_ping_for_unsuccessful_connection():
     "attachment, doit, expected_content",
     [
         (FILE, True, FILE_EXPECTED_CONTENT),
+        (PDF_FILE, True, PDF_FILE_EXPECTED_CONTENT),
         (FILE, False, None),
         (FILE_WITHOUT_EXTENSION, True, None),
         (FILE_WITH_LARGE_DATA, True, None),
