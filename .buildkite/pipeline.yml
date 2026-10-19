@@ -44,10 +44,6 @@ env:
   DRA_PYTHON_VERSION: "3.11"
 
 steps:
-  # NOTE: there is intentionally no global `wait` after the notice check.
-  # Steps that may push commits (lint/autoformat) or need a settled tree declare
-  # `depends_on: notice_check` instead, so that independent long-running steps
-  # (e.g. build_fips_image) can start immediately.
   - label: ":eyes: Notice check"
     <<: *test-agents
     <<: *retries
@@ -98,7 +94,6 @@ steps:
     key: "build_fips_image"
     command: ".buildkite/run_fips_build.sh"
     env:
-      # PGO build of CPython adds many minutes; the CI test image doesn't need it
       FIPS_BUILD_ARGS: "--build-arg PYTHON_OPTIMIZATIONS=false"
     timeout_in_minutes: 45
     artifact_paths:

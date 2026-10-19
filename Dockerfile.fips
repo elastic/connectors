@@ -81,8 +81,6 @@ EOF
 FROM cgr.dev/chainguard/wolfi-base:latest AS python-builder
 
 ARG PYTHON_VERSION=3.11.9
-# --enable-optimizations (PGO) roughly doubles the CPython build time.
-# On by default; CI test images set it to "false" (see FIPS_BUILD_ARGS in the Makefile).
 ARG PYTHON_OPTIMIZATIONS=true
 
 USER root
