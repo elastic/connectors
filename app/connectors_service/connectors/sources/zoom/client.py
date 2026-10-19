@@ -171,7 +171,7 @@ class ZoomAPISession:
     async def content(self, url):
         try:
             async with self._get(absolute_url=url) as response:
-                return await response.text()
+                return await response.read()
         except Exception as exception:
             self._logger.warning(
                 f"Content for {url} is being skipped. Error: {exception}."
@@ -294,4 +294,4 @@ class ZoomClient:
 
     async def get_file_content(self, download_url):
         content = await self.api_client.content(url=download_url)
-        yield content.encode("utf-8")
+        yield content
