@@ -26,7 +26,7 @@ buildkite-agent artifact download '.artifacts/connectors-fips-test.tar.gz' .arti
 docker load < .artifacts/connectors-fips-test.tar.gz
 rm -f .artifacts/connectors-fips-test.tar.gz
 
-make install build-connectors-base-image
+make install
 
 export PIP=$VENV_ROOT/bin/pip
 
