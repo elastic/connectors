@@ -282,7 +282,7 @@ class JiraClient:
                     response_json = await response.json()
                     total = response_json["total"]
                     yield response_json
-                    if start_at + FETCH_SIZE > total or total <= FETCH_SIZE:
+                    if start_at + FETCH_SIZE >= total:
                         return
                     start_at += FETCH_SIZE
             except Exception as exception:
