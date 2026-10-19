@@ -81,6 +81,7 @@ EOF
 FROM cgr.dev/chainguard/wolfi-base:latest AS python-builder
 
 ARG PYTHON_VERSION=3.11.9
+ARG PYTHON_OPTIMIZATIONS=true
 
 USER root
 
@@ -121,7 +122,7 @@ RUN wget https://www.python.org/ftp/python/${PYTHON_VERSION}/Python-${PYTHON_VER
   cd Python-${PYTHON_VERSION} && \
   ./configure \
     --prefix=/usr/local \
-    --enable-optimizations \
+    $([ "$PYTHON_OPTIMIZATIONS" = "true" ] && echo --enable-optimizations) \
     --with-openssl=/usr/local \
     --with-openssl-rpath=auto \
     --enable-shared \
