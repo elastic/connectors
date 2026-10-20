@@ -244,7 +244,7 @@ class ServiceNowClient:
             )
         return apis
 
-    def get_attachment_apis(self, url, ids):
+    def get_attachment_apis(self, url, ids, offset=0):
         headers = [
             {"name": "Content-Type", "value": "application/json"},
             {"name": "Accept", "value": "application/json"},
@@ -257,7 +257,9 @@ class ServiceNowClient:
                     "id": str(uuid.uuid4()),
                     "headers": headers,
                     "method": "GET",
-                    "url": self._prepare_url(url=url, params=params.copy(), offset=0),
+                    "url": self._prepare_url(
+                        url=url, params=params.copy(), offset=offset
+                    ),
                 }
             )
         return apis
@@ -784,28 +786,48 @@ class ServiceNowDataSource(BaseDataSource):
         return data
 
     async def _fetch_attachment_metadata(self, batched_apis, table_access_control):
+        offsets = {}
         try:
-            async for attachments_metadata in self.servicenow_client.get_data(
-                batched_apis=batched_apis
-            ):
-                for record in attachments_metadata:
-                    formatted_attachment_metadata = self._format_doc(data=record)
-                    serialized_attachment_metadata = self.serialize(
-                        doc=formatted_attachment_metadata
-                    )
-                    attachment_with_access_control = self._decorate_with_access_control(
-                        document=serialized_attachment_metadata,
-                        access_control=table_access_control,
-                    )
-                    await self.queue.put(
-                        (
-                            attachment_with_access_control,
-                            partial(
-                                self.get_content,
-                                attachment_with_access_control,
-                            ),
+            while batched_apis:
+                next_page_apis = []
+                async for attachments_metadata in self.servicenow_client.get_data(
+                    batched_apis=batched_apis
+                ):
+                    for record in attachments_metadata:
+                        formatted_attachment_metadata = self._format_doc(data=record)
+                        serialized_attachment_metadata = self.serialize(
+                            doc=formatted_attachment_metadata
                         )
-                    )
+                        attachment_with_access_control = (
+                            self._decorate_with_access_control(
+                                document=serialized_attachment_metadata,
+                                access_control=table_access_control,
+                            )
+                        )
+                        await self.queue.put(
+                            (
+                                attachment_with_access_control,
+                                partial(
+                                    self.get_content,
+                                    attachment_with_access_control,
+                                ),
+                            )
+                        )
+
+                    # A full page means the record may have more attachments
+                    if len(attachments_metadata) == TABLE_FETCH_SIZE:
+                        table_sys_id = attachments_metadata[0]["table_sys_id"]
+                        offsets[table_sys_id] = (
+                            offsets.get(table_sys_id, 0) + TABLE_FETCH_SIZE
+                        )
+                        next_page_apis.extend(
+                            self.servicenow_client.get_attachment_apis(
+                                url=ENDPOINTS["ATTACHMENT"],
+                                ids=[table_sys_id],
+                                offset=offsets[table_sys_id],
+                            )
+                        )
+                batched_apis = next_page_apis
         except Exception as exception:
             self._logger.warning(
                 f"Skipping batch data for {batched_apis}. Exception: {exception}."
