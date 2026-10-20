@@ -8,6 +8,7 @@
 from contextlib import asynccontextmanager
 from unittest import mock
 from unittest.mock import Mock, patch
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 from aiohttp.client_exceptions import ServerDisconnectedError
@@ -17,6 +18,8 @@ from connectors.filtering.validation import SyncRuleValidationResult
 from connectors.protocol import Filter
 from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
 from connectors.sources.servicenow import (
+    ENDPOINTS,
+    EndSignal,
     InvalidResponse,
     ServiceNowAdvancedRulesValidator,
     ServiceNowClient,
@@ -1480,3 +1483,46 @@ async def test_end_signal_is_added_to_queue_in_case_of_exception():
                     records_ids=["record_1", "record_2"], access_control=[]
                 )
                 assert source.queue.get_nowait() == END_SIGNAL
+
+
+@pytest.mark.asyncio
+async def test_fetch_attachment_metadata_reads_every_page_of_attachments():
+    # record_1 has more attachments than fit in one page, record_2 fills exactly
+    # one page and record_3 has a few
+    attachment_counts = {"record_1": 120, "record_2": 50, "record_3": 3}
+
+    async def get_data(batched_apis):
+        for api in batched_apis:
+            query = parse_qs(urlparse(api["url"]).query)
+            table_sys_id = query["table_sys_id"][0]
+            offset = int(query["sysparm_offset"][0])
+            limit = int(query["sysparm_limit"][0])
+            count = attachment_counts[table_sys_id]
+            yield [
+                {
+                    "sys_id": f"{table_sys_id}_attachment_{index}",
+                    "sys_updated_on": "1212-12-12 12:12:12",
+                    "table_sys_id": table_sys_id,
+                    "file_name": f"file_{index}.txt",
+                }
+                for index in range(offset, min(offset + limit, count))
+            ]
+
+    async with create_service_now_source() as source:
+        source.servicenow_client.get_data = get_data
+        batched_apis = source.servicenow_client.get_attachment_apis(
+            url=ENDPOINTS["ATTACHMENT"], ids=list(attachment_counts)
+        )
+
+        await source._fetch_attachment_metadata(batched_apis, [])
+
+        attachment_ids = []
+        while (item := source.queue.get_nowait()[1]) is not EndSignal.ATTACHMENT:
+            attachment_ids.append(item[0]["_id"])
+
+    assert len(attachment_ids) == sum(attachment_counts.values())
+    assert set(attachment_ids) == {
+        f"{table_sys_id}_attachment_{index}"
+        for table_sys_id, count in attachment_counts.items()
+        for index in range(count)
+    }
