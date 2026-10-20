@@ -579,7 +579,8 @@ class DropBoxAdvancedRulesValidator(AdvancedRulesValidator):
         "type": "object",
         "properties": {
             "path": {"type": "string", "minLength": 1},
-            "max_results": {"type": "string", "minLength": 1},
+            # files/search_v2 takes max_results as an integer from 1 to 1000
+            "max_results": {"type": "integer", "minimum": 1, "maximum": 1000},
             "order_by": FILE_CATEGORY_DEFINITION,
             "file_status": FILE_CATEGORY_DEFINITION,
             "account_id": {"type": "string", "minLength": 1},
