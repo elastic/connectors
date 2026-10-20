@@ -339,7 +339,9 @@ def test_exchange_users_defaults_auth_method_to_ntlm():
     assert users.auth_method == "ntlm"
 
 
-@patch("connectors.sources.exchange_server.client.ensure_kerberos_dependencies_available")
+@patch(
+    "connectors.sources.exchange_server.client.ensure_kerberos_dependencies_available"
+)
 def test_kerberos_ldap_connection_uses_gssapi(_mock_kerberos_deps):
     users = ExchangeUsers(
         ad_server="127.0.0.1",
@@ -361,7 +363,9 @@ def test_kerberos_ldap_connection_uses_gssapi(_mock_kerberos_deps):
 
 
 @pytest.mark.asyncio
-@patch("connectors.sources.exchange_server.client.ensure_kerberos_dependencies_available")
+@patch(
+    "connectors.sources.exchange_server.client.ensure_kerberos_dependencies_available"
+)
 @patch("connectors.sources.exchange_server.client.Account", return_value="account")
 @patch("connectors.sources.exchange_server.client.Configuration")
 async def test_kerberos_ews_configuration_uses_gssapi(
