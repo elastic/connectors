@@ -305,6 +305,18 @@ async def test_validate_config_kerberos_does_not_require_username_password():
         await source.validate_config()
 
 
+@pytest.mark.asyncio
+@patch(
+    "connectors.sources.exchange_server.auth.kerberos_dependencies_missing",
+    return_value=["requests-gssapi", "gssapi"],
+)
+async def test_validate_config_kerberos_requires_optional_dependencies(_mock_missing):
+    async with create_exchange_server_source(auth_method=AUTH_METHOD_KERBEROS) as source:
+        with pytest.raises(ConfigurableFieldValueError) as exc_info:
+            await source.validate_config()
+        assert "elasticsearch-connectors[kerberos]" in str(exc_info.value)
+
+
 def test_kerberos_ldap_connection_uses_gssapi():
     users = ExchangeUsers(
         ad_server="127.0.0.1",

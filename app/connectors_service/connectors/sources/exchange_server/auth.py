@@ -27,3 +27,30 @@ def get_auth_method(configuration) -> str:
 def ensure_fips_compatible_auth(auth_method: str) -> None:
     if FIPSConfig.is_fips_mode_enabled() and auth_method == AUTH_METHOD_NTLM:
         raise FIPSModeError(_FIPS_NTLM_MESSAGE)
+
+
+def kerberos_dependencies_missing() -> list[str]:
+    missing = []
+    try:
+        import requests_gssapi  # noqa: F401
+    except ImportError:
+        missing.append("requests-gssapi")
+    try:
+        import gssapi  # noqa: F401
+    except ImportError:
+        missing.append("gssapi")
+    return missing
+
+
+def ensure_kerberos_dependencies_available() -> None:
+    missing = kerberos_dependencies_missing()
+    if not missing:
+        return
+    msg = (
+        "Kerberos authentication requires optional Python packages "
+        f"({', '.join(missing)}) and Kerberos libraries on the host. "
+        "Install with: pip install 'elasticsearch-connectors[kerberos]' "
+        "(the build may require krb5 development packages, for example "
+        "libkrb5-dev on Debian or krb5-dev on Alpine)."
+    )
+    raise ValueError(msg)

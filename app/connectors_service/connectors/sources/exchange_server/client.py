@@ -83,6 +83,7 @@ from ldap3 import GSSAPI, SAFE_SYNC, SASL, Connection, Server
 from connectors.sources.exchange_server.auth import (
     AUTH_METHOD_KERBEROS,
     ensure_fips_compatible_auth,
+    ensure_kerberos_dependencies_available,
     get_auth_method,
 )
 from connectors.sources.exchange_server.constants import (
@@ -322,6 +323,7 @@ class ExchangeUsers:
     def _create_ldap_connection(self):
         ensure_fips_compatible_auth(self.auth_method)
         if self.auth_method == AUTH_METHOD_KERBEROS:
+            ensure_kerberos_dependencies_available()
             return Connection(
                 server=self.ad_server,
                 authentication=SASL,
@@ -426,6 +428,7 @@ class ExchangeUsers:
 
         ensure_fips_compatible_auth(self.auth_method)
         if self.auth_method == AUTH_METHOD_KERBEROS:
+            ensure_kerberos_dependencies_available()
             configuration = Configuration(
                 credentials=None,
                 auth_type=EWS_GSSAPI,

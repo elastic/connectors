@@ -47,6 +47,12 @@ install-package: .venv/bin/python
 	.venv/bin/python -m build
 	.venv/bin/pip install dist/*.whl
 
+install-package-kerberos: .venv/bin/python
+	.venv/bin/python -m build ../../libs/connectors_sdk
+	.venv/bin/pip install ../../libs/connectors_sdk/dist/*.whl
+	.venv/bin/python -m build
+	.venv/bin/pip install "dist/*.whl[kerberos]"
+
 .venv/bin/elastic-ingest: .venv/bin/python
 	.venv/bin/pip install -e ../../libs/connectors_sdk
 	.venv/bin/pip install -e .

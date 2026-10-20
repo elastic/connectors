@@ -34,8 +34,10 @@ from exchangelib.items import (
 from connectors.access_control import ACCESS_CONTROL, es_access_control_query
 from connectors.fips import FIPSModeError
 from connectors.sources.exchange_server.auth import (
+    AUTH_METHOD_KERBEROS,
     AUTH_METHODS,
     ensure_fips_compatible_auth,
+    ensure_kerberos_dependencies_available,
     get_auth_method,
 )
 from connectors.sources.exchange_server.client import (
@@ -425,6 +427,11 @@ class ExchangeServerDataSource(BaseDataSource):
             ensure_fips_compatible_auth(auth_method)
         except FIPSModeError as error:
             raise ConfigurableFieldValueError(str(error)) from error
+        if auth_method == AUTH_METHOD_KERBEROS:
+            try:
+                ensure_kerberos_dependencies_available()
+            except ValueError as error:
+                raise ConfigurableFieldValueError(str(error)) from error
 
     def _validate_ssl_certificate(self):
         if not self.configuration["ssl_enabled"]:
