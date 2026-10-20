@@ -33,7 +33,8 @@ The only application-level concerns are:
 **Affected Connectors:**
 - **SharePoint Server** (`connectors/sources/sharepoint/sharepoint_server/`)
 - **Network Drive** (`connectors/sources/network_drive/`)
-- **Exchange Server** (`connectors/sources/exchange_server/`)
+
+**Exchange Server** (`connectors/sources/exchange_server/`) and the legacy **Outlook** connector in `outlook_server` mode use the same EWS and LDAP code path. They support Kerberos (GSSAPI) via the `auth_method` configuration field. NTLM remains the default outside FIPS mode; when FIPS mode is enabled, `auth_method: ntlm` is rejected and you must use `auth_method: kerberos` with a valid Kerberos ticket for the connector service account (for example via `KRB5CCNAME`).
 
 #### Why NTLM Cannot Be FIPS-Compliant
 
@@ -78,20 +79,9 @@ The Network Drive connector uses:
 
 #### Exchange Server
 
-```python
-# From connectors/sources/exchange_server/client.py
-credentials = Credentials(
-    username=self.user,
-    password=self.password,
-)
-configuration = Configuration(
-    credentials=credentials,
-    server=self.exchange_server,
-    retry_policy=FaultTolerance(max_wait=120),
-)
-```
+With `auth_method: ntlm` (default), the connector uses username/password credentials. `exchangelib` negotiates NTLM for EWS and `ldap3` uses simple bind for Active Directory user lookup.
 
-The Exchange Server connector uses `exchangelib` username/password credentials against on-premises EWS. No `auth_type` is set, so `exchangelib` uses the auth method the server offers, which for on-premises Exchange is typically NTLM (through `requests_ntlm`).
+With `auth_method: kerberos`, EWS uses `exchangelib` GSSAPI authentication (`requests-gssapi`) and LDAP uses SASL GSSAPI. The connector does not manage Kerberos tickets; the host must provide a valid ticket cache for the service account.
 
 The legacy Outlook connector in `outlook_server` mode uses the same code path. Its `outlook_cloud` mode uses Microsoft OAuth.
 
@@ -103,12 +93,13 @@ The legacy Outlook connector in `outlook_server` mode uses the same code path. I
 | `pywinrm==0.4.3` | Network Drive WinRM | **Not Compliant** |
 | `smbprotocol==1.10.1` | Network Drive SMB | **Not Compliant** (when using NTLM auth) |
 | `exchangelib==5.4.0` (`requests_ntlm`) | Exchange Server EWS auth | **Not Compliant** (when using NTLM auth) |
+| `requests-gssapi` | Exchange Server EWS/LDAP Kerberos | **Compliant** (when using Kerberos auth) |
 
 #### Resolution
 
-**These connectors CANNOT be made FIPS-compliant while using NTLM authentication.**
+**SharePoint Server and Network Drive cannot be made FIPS-compliant while using NTLM authentication.** When FIPS mode is enabled, they are automatically disabled.
 
-When FIPS mode is enabled in the application, these connectors are automatically disabled.
+**Exchange Server** remains available in FIPS mode when configured with `auth_method: kerberos`. NTLM is rejected at configuration validation and at connection time when FIPS mode is enabled.
 
 ## Connector FIPS Compatibility Matrix
 
@@ -119,7 +110,7 @@ When FIPS mode is enabled in the application, these connectors are automatically
 | Confluence | ✅ Yes | Uses API tokens over TLS |
 | Directory | ✅ Yes | Local filesystem |
 | Dropbox | ✅ Yes | Uses OAuth 2.0 |
-| Exchange Server | ❌ No | NTLM authentication |
+| Exchange Server | ✅ Yes | Kerberos (GSSAPI); NTLM disabled in FIPS mode |
 | GitHub | ✅ Yes | Uses OAuth/PAT over TLS |
 | GitLab | ✅ Yes | Uses PAT over TLS |
 | Gmail | ✅ Yes | Uses Google OAuth |
@@ -135,7 +126,7 @@ When FIPS mode is enabled in the application, these connectors are automatically
 | Notion | ✅ Yes | Uses API tokens |
 | OneDrive | ✅ Yes | Uses Microsoft OAuth |
 | Oracle | ✅ Yes | Uses TLS |
-| Outlook | ✅ Yes | Uses Microsoft OAuth (when not using on-prem with NTLM) |
+| Outlook | ✅ Yes | OAuth for `outlook_cloud`; Kerberos for `outlook_server` in FIPS mode |
 | PostgreSQL | ✅ Yes | Uses TLS |
 | Redis | ✅ Yes | Uses TLS |
 | S3 | ✅ Yes | Uses AWS SigV4 (HMAC-SHA256) |

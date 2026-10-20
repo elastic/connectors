@@ -6,6 +6,7 @@
 
 from functools import cached_property
 
+from connectors_sdk.source import BaseDataSource
 from connectors_sdk.utils import iso_utc
 
 from connectors.access_control import es_access_control_query
@@ -94,23 +95,46 @@ class OutlookDataSource(ExchangeServerDataSource):
                 "tooltip": "Active Directory server's IP address. E.g. 127.0.0.1",
                 "type": "str",
             },
-            "username": {
+            "auth_method": {
                 "depends_on": [{"field": "data_source", "value": OUTLOOK_SERVER}],
-                "label": "Exchange server username",
+                "display": "dropdown",
+                "label": "Authentication method",
+                "options": [
+                    {"label": "NTLM", "value": "ntlm"},
+                    {"label": "Kerberos (GSSAPI)", "value": "kerberos"},
+                ],
                 "order": 7,
+                "tooltip": (
+                    "Use Kerberos (GSSAPI) in FIPS mode. Kerberos relies on a valid "
+                    "ticket for the connector service account (for example via "
+                    "KRB5CCNAME); username and password are not used."
+                ),
+                "type": "str",
+                "value": "ntlm",
+            },
+            "username": {
+                "depends_on": [
+                    {"field": "data_source", "value": OUTLOOK_SERVER},
+                    {"field": "auth_method", "value": "ntlm"},
+                ],
+                "label": "Exchange server username",
+                "order": 8,
                 "type": "str",
             },
             "password": {
-                "depends_on": [{"field": "data_source", "value": OUTLOOK_SERVER}],
+                "depends_on": [
+                    {"field": "data_source", "value": OUTLOOK_SERVER},
+                    {"field": "auth_method", "value": "ntlm"},
+                ],
                 "label": "Exchange server password",
-                "order": 8,
+                "order": 9,
                 "sensitive": True,
                 "type": "str",
             },
             "domain": {
                 "depends_on": [{"field": "data_source", "value": OUTLOOK_SERVER}],
                 "label": "Exchange server domain name",
-                "order": 9,
+                "order": 10,
                 "tooltip": "Domain name such as gmail.com, outlook.com",
                 "type": "str",
             },
@@ -118,7 +142,7 @@ class OutlookDataSource(ExchangeServerDataSource):
                 "depends_on": [{"field": "data_source", "value": OUTLOOK_SERVER}],
                 "display": "toggle",
                 "label": "Enable SSL",
-                "order": 10,
+                "order": 11,
                 "type": "bool",
                 "value": False,
             },
@@ -128,13 +152,13 @@ class OutlookDataSource(ExchangeServerDataSource):
                     {"field": "ssl_enabled", "value": True},
                 ],
                 "label": "SSL certificate",
-                "order": 11,
+                "order": 12,
                 "type": "str",
             },
             "sync_all_mail_folders": {
                 "display": "toggle",
                 "label": "Sync all mail folders",
-                "order": 12,
+                "order": 13,
                 "tooltip": "When enabled, indexes the user mail folders in each mailbox, not only Inbox, Sent, Junk, and Archive. System folders such as Deleted Items, Drafts, Outbox, and search folders are never indexed. Expect longer syncs, more Exchange load, and a larger index.",
                 "type": "bool",
                 "ui_restrictions": ["advanced"],
@@ -143,7 +167,7 @@ class OutlookDataSource(ExchangeServerDataSource):
             "use_text_extraction_service": {
                 "display": "toggle",
                 "label": "Use text extraction service",
-                "order": 13,
+                "order": 14,
                 "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
                 "type": "bool",
                 "ui_restrictions": ["advanced"],
@@ -152,7 +176,7 @@ class OutlookDataSource(ExchangeServerDataSource):
             "include_full_raw_message": {
                 "display": "toggle",
                 "label": "Index full raw email (including headers)",
-                "order": 13,
+                "order": 15,
                 "tooltip": (
                     "When disabled (default), the email body and a small set of headers "
                     "(such as Subject, From, and To) are indexed. "
@@ -166,7 +190,7 @@ class OutlookDataSource(ExchangeServerDataSource):
             "use_document_level_security": {
                 "display": "toggle",
                 "label": "Enable document level security",
-                "order": 14,
+                "order": 16,
                 "tooltip": "Document level security ensures identities and permissions set in Outlook are maintained in Elasticsearch. This enables you to restrict and personalize read-access users and groups have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
                 "type": "bool",
                 "value": False,
@@ -180,6 +204,12 @@ class OutlookDataSource(ExchangeServerDataSource):
         if self.configuration["data_source"] != OUTLOOK_SERVER:
             return
         super()._validate_ssl_certificate()
+
+    async def validate_config(self):
+        if self.configuration["data_source"] == OUTLOOK_SERVER:
+            await super().validate_config()
+        else:
+            await BaseDataSource.validate_config(self)
 
     async def ping(self):
         self._log_deprecation_warning()
