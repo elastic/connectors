@@ -1,4 +1,4 @@
-aiohttp==3.14.3
+aiohttp==3.14.4
 aiofiles==23.2.1
 aiomysql==0.3.2
 httpx==0.27.0
