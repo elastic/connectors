@@ -12,9 +12,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 from connectors_sdk.source import ConfigurableFieldValueError
 from exchangelib import UTC
-from exchangelib.protocol import NoVerifyHTTPAdapter
-from exchangelib.transport import GSSAPI as EWS_GSSAPI
-from ldap3 import GSSAPI, SASL
 from exchangelib.attachments import FileAttachment
 from exchangelib.errors import (
     ErrorAccessDenied,
@@ -23,15 +20,18 @@ from exchangelib.errors import (
     TransportError,
 )
 from exchangelib.items import CalendarItem, Contact, Message, Task
+from exchangelib.protocol import NoVerifyHTTPAdapter
+from exchangelib.transport import GSSAPI as EWS_GSSAPI
+from ldap3 import GSSAPI, SASL
 
 from connectors.access_control import ACCESS_CONTROL
 from connectors.config import _default_config
 from connectors.fips import FIPSConfig
-from connectors.sources.exchange_server.auth import AUTH_METHOD_KERBEROS
 from connectors.sources.exchange_server import (
     ExchangeServerClient,
     ExchangeServerDataSource,
 )
+from connectors.sources.exchange_server.auth import AUTH_METHOD_KERBEROS
 from connectors.sources.exchange_server.client import (
     ExchangeUsers,
     UsersFetchFailed,
@@ -55,6 +55,8 @@ def reset_fips_config():
     FIPSConfig.reset()
     yield
     FIPSConfig.reset()
+
+
 LDAP_USER = {
     "attributes": {"mail": [MAILBOX]},
     "dn": "CN=Dummy,CN=Users,DC=es,DC=local",
@@ -296,7 +298,12 @@ async def test_validate_config_rejects_ntlm_when_fips_enabled():
 
 
 @pytest.mark.asyncio
-async def test_validate_config_kerberos_does_not_require_username_password():
+@patch(
+    "connectors.sources.exchange_server.datasource.ensure_kerberos_dependencies_available"
+)
+async def test_validate_config_kerberos_does_not_require_username_password(
+    _mock_kerberos_deps,
+):
     async with create_exchange_server_source(
         auth_method=AUTH_METHOD_KERBEROS,
         username="",
@@ -311,7 +318,9 @@ async def test_validate_config_kerberos_does_not_require_username_password():
     return_value=["requests-gssapi", "gssapi"],
 )
 async def test_validate_config_kerberos_requires_optional_dependencies(_mock_missing):
-    async with create_exchange_server_source(auth_method=AUTH_METHOD_KERBEROS) as source:
+    async with create_exchange_server_source(
+        auth_method=AUTH_METHOD_KERBEROS
+    ) as source:
         with pytest.raises(ConfigurableFieldValueError) as exc_info:
             await source.validate_config()
         assert "elasticsearch-connectors[kerberos]" in str(exc_info.value)
@@ -330,7 +339,8 @@ def test_exchange_users_defaults_auth_method_to_ntlm():
     assert users.auth_method == "ntlm"
 
 
-def test_kerberos_ldap_connection_uses_gssapi():
+@patch("connectors.sources.exchange_server.client.ensure_kerberos_dependencies_available")
+def test_kerberos_ldap_connection_uses_gssapi(_mock_kerberos_deps):
     users = ExchangeUsers(
         ad_server="127.0.0.1",
         domain="es.local",
@@ -341,7 +351,9 @@ def test_kerberos_ldap_connection_uses_gssapi():
         ssl_ca="",
         auth_method=AUTH_METHOD_KERBEROS,
     )
-    with patch("connectors.sources.exchange_server.client.Connection") as mock_connection:
+    with patch(
+        "connectors.sources.exchange_server.client.Connection"
+    ) as mock_connection:
         users._create_ldap_connection()
         mock_connection.assert_called_once()
         assert mock_connection.call_args.kwargs["authentication"] == SASL
@@ -349,9 +361,12 @@ def test_kerberos_ldap_connection_uses_gssapi():
 
 
 @pytest.mark.asyncio
+@patch("connectors.sources.exchange_server.client.ensure_kerberos_dependencies_available")
 @patch("connectors.sources.exchange_server.client.Account", return_value="account")
 @patch("connectors.sources.exchange_server.client.Configuration")
-async def test_kerberos_ews_configuration_uses_gssapi(mock_configuration, _mock_account):
+async def test_kerberos_ews_configuration_uses_gssapi(
+    mock_configuration, _mock_account, _mock_kerberos_deps
+):
     users = ExchangeUsers(
         ad_server="127.0.0.1",
         domain="es.local",
