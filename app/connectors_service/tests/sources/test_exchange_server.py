@@ -317,6 +317,19 @@ async def test_validate_config_kerberos_requires_optional_dependencies(_mock_mis
         assert "elasticsearch-connectors[kerberos]" in str(exc_info.value)
 
 
+def test_exchange_users_defaults_auth_method_to_ntlm():
+    users = ExchangeUsers(
+        ad_server="127.0.0.1",
+        domain="es.local",
+        exchange_server="127.0.0.1",
+        user="fee",
+        password="fuu",
+        ssl_enabled=False,
+        ssl_ca="",
+    )
+    assert users.auth_method == "ntlm"
+
+
 def test_kerberos_ldap_connection_uses_gssapi():
     users = ExchangeUsers(
         ad_server="127.0.0.1",

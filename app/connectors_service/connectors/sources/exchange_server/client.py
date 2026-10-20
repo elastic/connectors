@@ -82,6 +82,7 @@ from ldap3 import GSSAPI, SAFE_SYNC, SASL, Connection, Server
 
 from connectors.sources.exchange_server.auth import (
     AUTH_METHOD_KERBEROS,
+    AUTH_METHOD_NTLM,
     ensure_fips_compatible_auth,
     ensure_kerberos_dependencies_available,
     get_auth_method,
@@ -309,7 +310,7 @@ class ExchangeUsers:
         password,
         ssl_enabled,
         ssl_ca,
-        auth_method,
+        auth_method=AUTH_METHOD_NTLM,
     ):
         self.ad_server = Server(host=ad_server)
         self.domain = domain
