@@ -1262,7 +1262,7 @@ PERFORMANCE OF THIS SOFTWARE.
 
 
 aiohttp
-3.14.3
+3.14.4
 Apache-2.0 AND MIT
 Apache License
                            Version 2.0, January 2004
