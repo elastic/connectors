@@ -295,6 +295,16 @@ async def test_validate_config_rejects_ntlm_when_fips_enabled():
         assert "kerberos" in str(exc_info.value).lower()
 
 
+@pytest.mark.asyncio
+async def test_validate_config_kerberos_does_not_require_username_password():
+    async with create_exchange_server_source(
+        auth_method=AUTH_METHOD_KERBEROS,
+        username="",
+        password="",
+    ) as source:
+        await source.validate_config()
+
+
 def test_kerberos_ldap_connection_uses_gssapi():
     users = ExchangeUsers(
         ad_server="127.0.0.1",

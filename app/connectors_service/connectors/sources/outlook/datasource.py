@@ -135,7 +135,7 @@ class OutlookDataSource(ExchangeServerDataSource):
                 "depends_on": [{"field": "data_source", "value": OUTLOOK_SERVER}],
                 "label": "Exchange server domain name",
                 "order": 10,
-                "tooltip": "Domain name such as gmail.com, outlook.com",
+                "tooltip": "Active Directory domain name, used to look up users. E.g. corp.example.com",
                 "type": "str",
             },
             "ssl_enabled": {
