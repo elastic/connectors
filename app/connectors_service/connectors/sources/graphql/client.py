@@ -9,9 +9,16 @@ import aiohttp
 from aiohttp import ClientResponseError
 from connectors_sdk.logger import logger
 from connectors_sdk.source import ConfigurableFieldValueError
-from graphql.language import parse, visit
+from graphql.language import (
+    FieldNode,
+    FragmentDefinitionNode,
+    FragmentSpreadNode,
+    InlineFragmentNode,
+    OperationDefinitionNode,
+    OperationType,
+    parse,
+)
 from graphql.language.ast import VariableNode
-from graphql.language.visitor import Visitor
 
 from connectors.sources.graphql.constants import (
     BASIC,
@@ -25,21 +32,67 @@ from connectors.sources.graphql.constants import (
 from connectors.utils import CancellableSleeps, RetryStrategy, retryable
 
 
-class FieldVisitor(Visitor):
-    fields_dict = {}
-    variables_dict = {}
+def response_key(field):
+    # The response uses the alias of a field when it has one.
+    return field.alias.value if field.alias else field.name.value
 
-    def enter_field(self, node, *args):
-        # Key fields like the response does, by alias when there is one, so they
-        # match the pagination key path read from the response.
-        key = node.alias.value if node.alias else node.name.value
-        self.fields_dict[key] = []
-        self.variables_dict[key] = {}
-        if node.arguments:
-            for arg in node.arguments:
-                self.fields_dict[key].append(arg.name.value)
-                if isinstance(arg.value, VariableNode):
-                    self.variables_dict[key][arg.name.value] = arg.value.name.value
+
+def selected_fields(selection_sets, fragments):
+    """Yield the fields that the given selection sets of one object select.
+
+    The fields of inline fragments and fragment spreads belong to the enclosing
+    object in the response, so look through them. Every named fragment is
+    expanded at most once per object, which keeps the walk linear in the size
+    of the query and stops a fragment that spreads itself.
+    """
+    expanded = set()
+    pending = list(selection_sets)
+    while pending:
+        for selection in pending.pop(0):
+            if isinstance(selection, FieldNode):
+                yield selection
+            elif isinstance(selection, InlineFragmentNode):
+                pending.append(selection.selection_set.selections)
+            elif isinstance(selection, FragmentSpreadNode):
+                name = selection.name.value
+                if name in fragments and name not in expanded:
+                    expanded.add(name)
+                    pending.append(fragments[name].selection_set.selections)
+
+
+def fields_at_path(ast, path):
+    """Return every selection of the field at a response path of the query.
+
+    Response keys are only unique within their parent object, so the path is
+    followed from the root of the first query operation. A field can be
+    selected more than once (for example in two fragments); all of its
+    selections are returned, as the response merges them.
+    """
+    fragments = {
+        definition.name.value: definition
+        for definition in ast.definitions
+        if isinstance(definition, FragmentDefinitionNode)
+    }
+    for definition in ast.definitions:
+        if (
+            isinstance(definition, OperationDefinitionNode)
+            and definition.operation == OperationType.QUERY
+        ):
+            selection_sets = [definition.selection_set.selections]
+            matches = []
+            for key in path:
+                matches = [
+                    field
+                    for field in selected_fields(selection_sets, fragments)
+                    if response_key(field) == key
+                ]
+                selection_sets = [
+                    field.selection_set.selections
+                    for field in matches
+                    if field.selection_set
+                ]
+            return matches, fragments
+    return [], fragments
 
 
 class UnauthorizedException(Exception):
@@ -158,23 +211,38 @@ class GraphQLClient:
             msg = "Pagination is enabled but the query is missing 'pageInfo'. Please include 'pageInfo { hasNextPage endCursor }' in the query to support pagination."
             raise ConfigurableFieldValueError(msg)
 
-    def validate_paginated_query(self, graphql_query, visitor):
+    def validate_paginated_query(self, ast):
+        """Return the variable that carries the cursor of the paginated field."""
         graphql_object = self.pagination_key.split(".")[-1]
         self._logger.debug(f"Finding pageInfo field in {graphql_object}.")
-        if not (
-            {"after"}.issubset(set(visitor.fields_dict.get(graphql_object, [])))
-            and "pageInfo" in visitor.fields_dict.keys()
-        ):
+        fields, fragments = fields_at_path(ast, self.pagination_key.split("."))
+        cursor_variables = [
+            argument.value.name.value
+            for field in fields
+            for argument in field.arguments or ()
+            if argument.name.value == "after"
+            and isinstance(argument.value, VariableNode)
+        ]
+        page_info_present = any(
+            response_key(field) == "pageInfo"
+            for field in selected_fields(
+                [
+                    field.selection_set.selections
+                    for field in fields
+                    if field.selection_set
+                ],
+                fragments,
+            )
+        )
+        if not (cursor_variables and page_info_present):
             msg = f"Pagination is enabled but 'pageInfo' not found. Please include 'pageInfo' field inside '{graphql_object}' and 'after' argument in '{graphql_object}'."
             raise ConfigurableFieldValueError(msg)
+        return cursor_variables[0]
 
     async def paginated_call(self, graphql_query):
         if self.pagination_model == CURSOR_PAGINATION:
             ast = parse(graphql_query)  # pyright: ignore
-            visitor = FieldVisitor()
-            visit(ast, visitor)  # pyright: ignore
-
-            self.validate_paginated_query(graphql_query, visitor)
+            cursor_variable = self.validate_paginated_query(ast)
             while True:
                 self._logger.debug(
                     f"Fetching document with variables: {self.variables}."
@@ -185,13 +253,11 @@ class GraphQLClient:
                 (
                     has_next_page,
                     end_cursor,
-                    pagination_key,
+                    _,
                 ) = self.extract_pagination_info(data)
 
                 if has_next_page and end_cursor:
-                    self.variables[visitor.variables_dict[pagination_key]["after"]] = (
-                        end_cursor
-                    )
+                    self.variables[cursor_variable] = end_cursor
                     has_new_page = True
 
                 for documents in self.extract_graphql_data_items(data=data):

@@ -312,6 +312,61 @@ async def test_fetch_data_with_pagination():
 
 
 @pytest.mark.asyncio
+async def test_fetch_data_with_pagination_when_a_nested_alias_reuses_the_key():
+    # `issues: title` reuses the response key of the paginated field one level
+    # down; it must not hide the arguments of `repository.issues`.
+    actual_response = []
+    async with create_graphql_source() as source:
+        source.graphql_client.pagination_model = "cursor_pagination"
+        source.graphql_client.graphql_object_to_id_map = {
+            "repository.issues.nodes": "id"
+        }
+        source.graphql_client.pagination_key = "repository.issues"
+        source.graphql_client.post = AsyncMock(
+            side_effect=[
+                {
+                    "repository": {
+                        "issues": {
+                            "nodes": [{"id": "1", "issues": "first"}],
+                            "pageInfo": {"hasNextPage": True, "endCursor": "c1"},
+                        }
+                    }
+                },
+                {
+                    "repository": {
+                        "issues": {
+                            "nodes": [{"id": "2", "issues": "second"}],
+                            "pageInfo": {"hasNextPage": False, "endCursor": "c2"},
+                        }
+                    }
+                },
+            ]
+        )
+        async for doc in source.fetch_data(
+            "query($cursor: String) {repository {issues(first: 5, after: $cursor) "
+            "{nodes {id issues: title} pageInfo {hasNextPage endCursor}}}}"
+        ):
+            actual_response.append(doc["_id"])
+        assert source.graphql_client.variables == {"cursor": "c1"}
+    assert actual_response == ["1", "2"]
+
+
+@pytest.mark.asyncio
+async def test_fetch_data_with_pagination_requires_page_info_under_the_key():
+    async with create_graphql_source() as source:
+        source.graphql_client.pagination_model = "cursor_pagination"
+        source.graphql_client.pagination_key = "repository.issues"
+        source.graphql_client.post = AsyncMock()
+        with pytest.raises(ConfigurableFieldValueError):
+            async for _ in source.fetch_data(
+                "query($cursor: String) {repository {issues(first: 5, after: $cursor) "
+                "{nodes {id}}} pageInfo {hasNextPage endCursor}}"
+            ):
+                pass
+        source.graphql_client.post.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_fetch_data_with_pagination_on_aliased_field():
     actual_response = []
     async with create_graphql_source() as source:
@@ -479,6 +534,35 @@ async def test_validate_config_with_invalid_pagination_key():
         source.graphql_client.pagination_key = "organization.repository.pullRequest"
         with pytest.raises(ConfigurableFieldValueError):
             await source.validate_config()
+
+
+def fragment_chain(depth, leaf):
+    # Each fragment spreads the next one twice, so the query grows linearly with
+    # the depth while a naive expansion visits 2 ** depth copies of the leaf.
+    chain = "".join(
+        f"fragment F{i} on Query {{...F{i + 1} ...F{i + 1}}} " for i in range(depth)
+    )
+    return f"query {{...F0}} {chain}fragment F{depth} on Query {{{leaf}}}"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "leaf, valid",
+    [
+        ('search(query: "is:issue", type: ISSUE, first: 10) {nodes {id}}', True),
+        ('search(query: "is:issue", type: ISSUE, first: 10) {nodes {title}}', False),
+    ],
+)
+async def test_validate_config_expands_each_fragment_once(leaf, valid):
+    async with create_graphql_source(
+        graphql_query=fragment_chain(40, leaf),
+        graphql_object_to_id_map='{"search.nodes": "id"}',
+    ) as source:
+        if valid:
+            await source.validate_config()
+        else:
+            with pytest.raises(ConfigurableFieldValueError):
+                await source.validate_config()
 
 
 @pytest.mark.asyncio
