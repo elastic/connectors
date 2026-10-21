@@ -1135,6 +1135,33 @@ async def test_get_issues_for_jql_uses_deprecated_v2_search_for_server(data_sour
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("total, expected_pages", [(100, 1), (200, 2), (201, 3)])
+async def test_offset_pagination_stops_after_the_last_page(total, expected_pages):
+    """A total that is an exact multiple of the page size must not trigger a request
+    for an empty page past the end."""
+    requested_urls = []
+
+    def server_side_effect(url, ssl):
+        requested_urls.append(url)
+        return get_json_mock(mock_response={"issues": [MOCK_ISSUE], "total": total})
+
+    async with create_jira_source(data_source=JIRA_SERVER) as source:
+        with mock.patch.object(
+            source.jira_client._get_session(), "get", side_effect=server_side_effect
+        ):
+            _ = [
+                issue
+                async for issue in source.jira_client.get_issues_for_jql(
+                    jql="key%20IS%20NOT%20EMPTY"
+                )
+            ]
+
+    assert [url.rsplit("startAt=", 1)[1] for url in requested_urls] == [
+        str(page * 100) for page in range(expected_pages)
+    ]
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("data_source", [JIRA_SERVER, JIRA_DATA_CENTER])
 async def test_get_issues_for_jql_none_uses_catch_all_for_server(data_source):
     """jql=None on Server/Data Center must fall back to the "key IS NOT EMPTY" catch-all,
