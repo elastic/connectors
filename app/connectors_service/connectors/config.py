@@ -138,6 +138,7 @@ def _default_config():
             "onedrive": "connectors.sources.onedrive:OneDriveDataSource",
             "oracle": "connectors.sources.oracle:OracleDataSource",
             "outlook": "connectors.sources.outlook:OutlookDataSource",
+            "outlook_cloud": "connectors.sources.outlook_cloud:OutlookCloudDataSource",
             "postgresql": "connectors.sources.postgresql:PostgreSQLDataSource",
             "redis": "connectors.sources.redis:RedisDataSource",
             "s3": "connectors.sources.s3:S3DataSource",
