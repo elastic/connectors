@@ -168,7 +168,7 @@ class ServiceNowClient:
             )
         return apis
 
-    def get_attachment_apis(self, url, ids):
+    def get_attachment_apis(self, url, ids, offset=0):
         headers = [
             {"name": "Content-Type", "value": "application/json"},
             {"name": "Accept", "value": "application/json"},
@@ -181,7 +181,9 @@ class ServiceNowClient:
                     "id": str(uuid.uuid4()),
                     "headers": headers,
                     "method": "GET",
-                    "url": self._prepare_url(url=url, params=params.copy(), offset=0),
+                    "url": self._prepare_url(
+                        url=url, params=params.copy(), offset=offset
+                    ),
                 }
             )
         return apis

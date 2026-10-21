@@ -202,15 +202,21 @@ class PreflightCheck:
         return False
 
     def _validate_configuration(self):
-        # "Native" mode
-        configured_native_types = "native_service_types" in self.config
-        force_allowed_native = self.config.get("_force_allow_native", False)
-        if configured_native_types and not force_allowed_native:
+        configured_native_types = self.config["service"].get("service_types", [])
+        worker_mode = self.config["service"].get("worker_mode", False)
+
+        if worker_mode:
+            if len(configured_native_types) == 0:
+                logger.error(
+                    "Service is running with 'service.worker_mode: true' with no 'service.service_types' configured"
+                )
+                return False
+            return True
+
+        # else not running all service types
+        if len(configured_native_types) > 0:
             logger.warning(
-                "The configuration 'native_service_types' has been deprecated. Please remove this configuration."
-            )
-            logger.warning(
-                "Native Connectors are only supported internal to Elastic Cloud deployments, which this process is not."
+                "Configuration 'service.service_types' is ignored: requires running a service with 'service.worker_mode: true'"
             )
 
         # Connector client mode
@@ -223,7 +229,7 @@ class PreflightCheck:
             and deprecated_service_type
         ):
             logger.warning(
-                "The configuration 'connector_id' and 'serivce_type' has been deprecated and will be removed in later release. Please configure the connector in 'connectors'."
+                "The configuration 'connector_id' and 'service_type' has been deprecated and will be removed in later release. Please configure the connector in 'connectors'"
             )
             configured_connectors.append(
                 {
@@ -232,17 +238,11 @@ class PreflightCheck:
                 }
             )
 
-        if not configured_connectors and not force_allowed_native:
-            logger.warning(
-                "Please update your config.yml to configure at least one connector"
-            )
+        if not configured_connectors:
+            logger.error("You must configure at least one connector")
             logger.info(
                 "Using Kibana or the connectors CLI, create a connector. You will then be provided with the necessary fields (connector_id, service_type, api_key) to add to your config.yml"
             )
-
-        # Unset configuration
-        if not configured_native_types and not configured_connectors:
-            logger.error("You must configure at least one connector. ")
             return False
 
         # Default configuration
