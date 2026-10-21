@@ -30,7 +30,7 @@ dependencies = [
     "azure-identity==1.19.0",
     "azure-storage-blob==12.19.1",
     "beautifulsoup4==4.12.2",
-    "certifi==2024.7.4",
+    "certifi==2026.10.19",
     "cffi==2.0.0",
     "click==8.3.3",
     "colorama==0.4.6",
