@@ -1,0 +1,11 @@
+.git
+.github
+.cursor
+**/.venv
+**/__pycache__
+**/*.egg-info
+**/.pytest_cache
+**/.ruff_cache
+**/htmlcov
+.artifacts
+perf8-report-*

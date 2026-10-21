@@ -1235,6 +1235,31 @@ async def test_advanced_rules_validation_with_invalid_repos(
 
 
 @pytest.mark.parametrize(
+    "max_results, is_valid",
+    [
+        (1, True),
+        (100, True),
+        (1000, True),
+        ("100", False),
+        (0, False),
+        (1001, False),
+        (True, False),
+    ],
+)
+@pytest.mark.asyncio
+async def test_advanced_rules_validation_of_max_results(max_results, is_valid):
+    async with create_source(DropboxDataSource) as source:
+        setup_dropbox(source)
+        source.dropbox_client.check_path = AsyncMock()
+
+        validation_result = await DropBoxAdvancedRulesValidator(source).validate(
+            [{"query": "copy", "options": {"max_results": max_results}}]
+        )
+
+        assert validation_result.is_valid is is_valid
+
+
+@pytest.mark.parametrize(
     "filtering",
     [
         Filter(
