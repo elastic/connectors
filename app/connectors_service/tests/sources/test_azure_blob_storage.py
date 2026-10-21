@@ -6,6 +6,7 @@
 """Tests the Azure Blob Storage source class methods"""
 
 import asyncio
+import base64
 import json
 from contextlib import asynccontextmanager
 from datetime import datetime
@@ -19,6 +20,9 @@ from connectors_sdk.source import ConfigurableFieldValueError
 from connectors.sources.azure_blob_storage import AzureBlobStorageDataSource
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
+
+# Azure storage account keys are 64 random bytes, base64-encoded to 88 characters
+VALID_ACCOUNT_KEY = base64.b64encode(bytes(64)).decode()
 
 
 @asynccontextmanager
@@ -619,6 +623,39 @@ async def test_validate_config_no_account_name():
         with pytest.raises(ConfigurableFieldValueError):
             # Execute
             await source.validate_config()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "account_key",
+    [
+        VALID_ACCOUNT_KEY[:-1],  # last character lost while copying
+        VALID_ACCOUNT_KEY[:-2],
+        "bar",
+    ],
+)
+async def test_validate_config_invalid_account_key(account_key):
+    async with create_source(
+        AzureBlobStorageDataSource,
+        account_name="foo",
+        account_key=account_key,
+        blob_endpoint="https://foo.endpoint.com",
+        containers="container1",
+    ) as source:
+        with pytest.raises(ConfigurableFieldValueError, match="account key"):
+            await source.validate_config()
+
+
+@pytest.mark.asyncio
+async def test_validate_config_valid_account_key():
+    async with create_source(
+        AzureBlobStorageDataSource,
+        account_name="foo",
+        account_key=VALID_ACCOUNT_KEY,
+        blob_endpoint="https://foo.endpoint.com",
+        containers="container1",
+    ) as source:
+        await source.validate_config()
 
 
 @pytest.mark.asyncio
