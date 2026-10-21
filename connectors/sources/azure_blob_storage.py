@@ -5,12 +5,13 @@
 #
 """Azure Blob Storage source module responsible to fetch documents from Azure Blob Storage"""
 
+import base64
 import json
 from functools import partial
 
 from azure.storage.blob.aio import BlobServiceClient, ContainerClient
 
-from connectors.source import BaseDataSource
+from connectors.source import BaseDataSource, ConfigurableFieldValueError
 
 BLOB_SCHEMA = {
     "title": "name",
@@ -139,6 +140,30 @@ class AzureBlobStorageDataSource(BaseDataSource):
         """
 
         return f'AccountName={self.configuration["account_name"]};AccountKey={self.configuration["account_key"]};BlobEndpoint={self.configuration["blob_endpoint"]}'
+
+    async def validate_config(self):
+        """Validate the configuration, including the format of the account key.
+
+        Raises:
+            ConfigurableFieldValueError: if the account key is not valid base64.
+        """
+        await super().validate_config()
+        self._validate_account_key()
+
+    def _validate_account_key(self):
+        # The Azure SDK base64-decodes the account key when it signs a request,
+        # so a mistyped or truncated key otherwise fails later with a bare
+        # "Incorrect padding" error. Decode it the same way here to fail early.
+        try:
+            base64.b64decode(self.configuration["account_key"].encode("utf-8"))
+        except ValueError as exception:  # binascii.Error is a ValueError
+            msg = (
+                "The Azure Blob Storage account key is not valid. It must be "
+                "base64-encoded: copy it again from the 'Access keys' page of "
+                "the storage account in the Azure portal. A valid key is 88 "
+                "characters long and usually ends with '=='."
+            )
+            raise ConfigurableFieldValueError(msg) from exception
 
     async def ping(self):
         """Verify the connection with Azure Blob Storage"""
