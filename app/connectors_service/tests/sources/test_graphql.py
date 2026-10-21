@@ -472,3 +472,76 @@ async def test_validate_config_with_invalid_json():
         )
         with pytest.raises(ConfigurableFieldValueError):
             await source.validate_config()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "graphql_query, graphql_object_to_id_map",
+    [
+        (
+            # inline fragment under the mapped object
+            'query {search(query: "is:issue", type: ISSUE, first: 10) {nodes {... on Issue {id title}}}}',
+            '{"search.nodes": "id"}',
+        ),
+        (
+            # named fragment spread under the mapped object
+            'query {search(query: "is:issue", type: ISSUE, first: 10) {nodes {...IssueFields}}} fragment IssueFields on Issue {id title}',
+            '{"search.nodes": "id"}',
+        ),
+        (
+            # fragment definition before the query
+            'fragment IssueFields on Issue {id title} query {search(query: "is:issue", type: ISSUE, first: 10) {nodes {...IssueFields}}}',
+            '{"search.nodes": "id"}',
+        ),
+        (
+            # aliased field on the path; the response is keyed by the alias
+            'query {repo: repository(owner: "elastic", name: "connectors") {issues(first: 10) {nodes {id}}}}',
+            '{"repo.issues.nodes": "id"}',
+        ),
+        (
+            # the id comes from a second selection of the same field
+            'query {search(query: "is:issue", type: ISSUE, first: 10) {nodes {title}} ...SearchIds} fragment SearchIds on Query {search(query: "is:issue", type: ISSUE, first: 10) {nodes {id}}}',
+            '{"search.nodes": "id"}',
+        ),
+    ],
+)
+async def test_validate_config_with_fragments_and_aliases(
+    graphql_query, graphql_object_to_id_map
+):
+    async with create_graphql_source(
+        graphql_query=graphql_query,
+        graphql_object_to_id_map=graphql_object_to_id_map,
+    ) as source:
+        await source.validate_config()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "graphql_query, graphql_object_to_id_map",
+    [
+        (
+            # the inline fragment does not select the id
+            'query {search(query: "is:issue", type: ISSUE, first: 10) {nodes {... on Issue {title}}}}',
+            '{"search.nodes": "id"}',
+        ),
+        (
+            # the path uses the field name, but the response is keyed by the alias
+            'query {repo: repository(owner: "elastic", name: "connectors") {issues(first: 10) {nodes {id}}}}',
+            '{"repository.issues.nodes": "id"}',
+        ),
+        (
+            # a fragment that spreads itself is not followed forever
+            'query {search(query: "is:issue", type: ISSUE, first: 10) {nodes {...Loop}}} fragment Loop on Issue {title ...Loop}',
+            '{"search.nodes": "id"}',
+        ),
+    ],
+)
+async def test_validate_config_with_fragments_and_aliases_missing_id(
+    graphql_query, graphql_object_to_id_map
+):
+    async with create_graphql_source(
+        graphql_query=graphql_query,
+        graphql_object_to_id_map=graphql_object_to_id_map,
+    ) as source:
+        with pytest.raises(ConfigurableFieldValueError):
+            await source.validate_config()

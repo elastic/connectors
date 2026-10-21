@@ -13,7 +13,15 @@ from connectors_sdk.source import BaseDataSource, ConfigurableFieldValueError
 from connectors_sdk.utils import (
     iso_utc,
 )
-from graphql.language import parse
+from graphql.language import (
+    FieldNode,
+    FragmentDefinitionNode,
+    FragmentSpreadNode,
+    InlineFragmentNode,
+    OperationDefinitionNode,
+    OperationType,
+    parse,
+)
 
 from connectors.sources.graphql.client import GraphQLClient
 from connectors.sources.graphql.constants import (
@@ -177,24 +185,63 @@ class GraphQLDataSource(BaseDataSource):
     def check_field_existence(
         self, ast, field_path, graphql_field_id=None, check_id=False
     ):
-        def traverse(selections, path):
+        fragments = {
+            definition.name.value: definition
+            for definition in ast.definitions
+            if isinstance(definition, FragmentDefinitionNode)
+        }
+
+        def fields(selections, seen_fragments=frozenset()):
+            # The fields of inline fragments and fragment spreads belong to the
+            # enclosing object in the response, so look through them.
             for selection in selections:
-                if selection.name.value == path[0]:
-                    if len(path) == 1:
-                        if check_id and selection.selection_set:
-                            for selection_node in selection.selection_set.selections:
-                                if selection_node.name.value == graphql_field_id:
-                                    return True, True
-                        return True, False
-                    if selection.selection_set:
-                        return traverse(
-                            selections=selection.selection_set.selections, path=path[1:]
+                if isinstance(selection, FieldNode):
+                    yield selection
+                elif isinstance(selection, InlineFragmentNode):
+                    yield from fields(
+                        selection.selection_set.selections, seen_fragments
+                    )
+                elif isinstance(selection, FragmentSpreadNode):
+                    name = selection.name.value
+                    if name in fragments and name not in seen_fragments:
+                        yield from fields(
+                            fragments[name].selection_set.selections,
+                            seen_fragments | {name},
                         )
-            return False, False
+
+        def response_key(field):
+            # The response uses the alias of a field when it has one.
+            return field.alias.value if field.alias else field.name.value
+
+        def traverse(selections, path):
+            # A field can be selected more than once (for example in two
+            # fragments), so combine every selection of it.
+            found = (False, False)
+            for selection in fields(selections):
+                if response_key(selection) != path[0]:
+                    continue
+                if len(path) == 1:
+                    id_present = (
+                        check_id
+                        and selection.selection_set is not None
+                        and any(
+                            response_key(field) == graphql_field_id
+                            for field in fields(selection.selection_set.selections)
+                        )
+                    )
+                    found = max(found, (True, id_present))
+                elif selection.selection_set:
+                    found = max(
+                        found, traverse(selection.selection_set.selections, path[1:])
+                    )
+            return found
 
         field_path = field_path.split(".")
         for definition in ast.definitions:
-            if definition.operation.value == "query":
+            if (
+                isinstance(definition, OperationDefinitionNode)
+                and definition.operation == OperationType.QUERY
+            ):
                 return traverse(definition.selection_set.selections, field_path)
 
         return False, False
