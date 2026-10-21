@@ -30,15 +30,16 @@ class FieldVisitor(Visitor):
     variables_dict = {}
 
     def enter_field(self, node, *args):
-        self.fields_dict[node.name.value] = []
-        self.variables_dict[node.name.value] = {}
+        # Key fields like the response does, by alias when there is one, so they
+        # match the pagination key path read from the response.
+        key = node.alias.value if node.alias else node.name.value
+        self.fields_dict[key] = []
+        self.variables_dict[key] = {}
         if node.arguments:
             for arg in node.arguments:
-                self.fields_dict[node.name.value].append(arg.name.value)
+                self.fields_dict[key].append(arg.name.value)
                 if isinstance(arg.value, VariableNode):
-                    self.variables_dict[node.name.value][arg.name.value] = (
-                        arg.value.name.value
-                    )
+                    self.variables_dict[key][arg.name.value] = arg.value.name.value
 
 
 class UnauthorizedException(Exception):

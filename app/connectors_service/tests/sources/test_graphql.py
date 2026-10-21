@@ -312,6 +312,37 @@ async def test_fetch_data_with_pagination():
 
 
 @pytest.mark.asyncio
+async def test_fetch_data_with_pagination_on_aliased_field():
+    actual_response = []
+    async with create_graphql_source() as source:
+        source.graphql_client.pagination_model = "cursor_pagination"
+        source.graphql_client.graphql_object_to_id_map = {"people": "id"}
+        source.graphql_client.pagination_key = "people"
+        source.graphql_client.post = AsyncMock(
+            side_effect=[
+                {
+                    "people": {
+                        "id": "1",
+                        "pageInfo": {"hasNextPage": True, "endCursor": "xyz#123"},
+                    }
+                },
+                {
+                    "people": {
+                        "id": "2",
+                        "pageInfo": {"hasNextPage": False, "endCursor": "pqr#123"},
+                    }
+                },
+            ]
+        )
+        async for doc in source.fetch_data(
+            "query($afterCursor: String!) {people: users(first:5, after:$afterCursor) {id pageInfo}}"
+        ):
+            actual_response.append(doc["_id"])
+        assert source.graphql_client.variables == {"afterCursor": "xyz#123"}
+    assert actual_response == ["1", "2"]
+
+
+@pytest.mark.asyncio
 async def test_fetch_data_without_pageinfo():
     async with create_graphql_source() as source:
         source.graphql_client.pagination_model = "cursor_pagination"
