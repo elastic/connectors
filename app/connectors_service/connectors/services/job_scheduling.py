@@ -155,6 +155,13 @@ class JobSchedulingService(BaseService):
         self.connector_index = ConnectorIndex(self.es_config)
         self.sync_job_index = SyncJobIndex(self.es_config)
 
+        native_service_types = self.service_config.get("service_types", []) or []
+        if len(native_service_types) > 0:
+            self.logger.debug(
+                f"Native support for job scheduling for {', '.join(native_service_types)}"
+            )
+        else:
+            self.logger.debug("No service types configured")
         connector_ids = list(self.connectors.keys())
 
         self.logger.info(
@@ -168,6 +175,7 @@ class JobSchedulingService(BaseService):
                         f"Polling every {self.idling} seconds for Job Scheduling"
                     )
                     async for connector in self.connector_index.supported_connectors(
+                        native_service_types=native_service_types,
                         connector_ids=connector_ids,
                     ):
                         if not self.schedule_tasks_pool.try_put(
