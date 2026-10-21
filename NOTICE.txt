@@ -2728,7 +2728,7 @@ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND 
 
 
 certifi
-2024.7.4
+2026.10.19
 Mozilla Public License 2.0 (MPL 2.0)
 This package contains a modified version of ca-bundle.crt:
 

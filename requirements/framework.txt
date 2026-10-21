@@ -43,7 +43,7 @@ redis==5.0.1
 simple-term-menu==1.6.4
 graphql-core==3.2.3
 notion-client==2.2.1
-certifi==2024.7.4
+certifi==2026.10.19
 aioboto3==12.4.0
 pyasn1==0.6.4
 azure-identity==1.19.0
