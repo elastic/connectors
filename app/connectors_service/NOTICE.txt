@@ -6763,7 +6763,7 @@ POSSIBILITY OF SUCH DAMAGE.
 
 
 pycparser
-3.11
+3.12
 BSD-3-Clause
 pycparser -- A C parser in Python
 
