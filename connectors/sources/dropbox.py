@@ -247,14 +247,16 @@ class DropboxClient:
         request_headers = {
             "Authorization": f"Bearer {self.access_token}",
         }
+        # Dropbox-API-Arg must be JSON with non-ASCII characters escaped,
+        # which json.dumps does by default (ensure_ascii=True)
         if file_type == FILE:
-            request_headers["Dropbox-API-Arg"] = f'{{"path": "{kwargs["path"]}"}}'
+            request_headers["Dropbox-API-Arg"] = json.dumps({"path": kwargs["path"]})
         elif file_type == PAPER:
-            request_headers["Dropbox-API-Arg"] = (
-                f'{{"path": "{kwargs["path"]}", "export_format": "markdown"}}'
+            request_headers["Dropbox-API-Arg"] = json.dumps(
+                {"path": kwargs["path"], "export_format": "markdown"}
             )
         elif file_type == RECEIVED_FILE:
-            request_headers["Dropbox-API-Arg"] = f'{{"url": "{kwargs["url"]}"}}'
+            request_headers["Dropbox-API-Arg"] = json.dumps({"url": kwargs["url"]})
         else:
             request_headers["Content-Type"] = "application/json"
 

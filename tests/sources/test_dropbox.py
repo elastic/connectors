@@ -25,6 +25,9 @@ from connectors.protocol import Filter
 from connectors.source import ConfigurableFieldValueError
 from connectors.sources.dropbox import (
     AUTHENTICATED_ADMIN_URL,
+    FILE,
+    PAPER,
+    RECEIVED_FILE,
     DropBoxAdvancedRulesValidator,
     DropboxClient,
     DropboxDataSource,
@@ -978,6 +981,40 @@ async def test_api_call_when_status_429_exception():
             )
             actual_response = await response.json()
             assert actual_response == MOCK_FILES_FOLDERS
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "file_type, kwargs, expected_arg",
+    [
+        (
+            FILE,
+            {"path": '/Café/文件 "draft" v2.txt'},
+            {"path": '/Café/文件 "draft" v2.txt'},
+        ),
+        (
+            PAPER,
+            {"path": "/Ünïcode notes.paper"},
+            {"path": "/Ünïcode notes.paper", "export_format": "markdown"},
+        ),
+        (
+            RECEIVED_FILE,
+            {"url": "https://www.dropbox.com/scl/fi/abc/résumé.pdf"},
+            {"url": "https://www.dropbox.com/scl/fi/abc/résumé.pdf"},
+        ),
+    ],
+)
+async def test_get_request_headers_dropbox_api_arg_is_header_safe_json(
+    file_type, kwargs, expected_arg
+):
+    async with create_dropbox_source() as source:
+        headers = source.dropbox_client._get_request_headers(
+            file_type=file_type, url_name="files/download", kwargs=kwargs
+        )
+
+        # Dropbox requires the argument to be JSON with non-ASCII characters escaped
+        assert headers["Dropbox-API-Arg"].isascii()
+        assert json.loads(headers["Dropbox-API-Arg"]) == expected_arg
 
 
 @pytest.mark.asyncio
