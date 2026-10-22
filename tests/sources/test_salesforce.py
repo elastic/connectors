@@ -1538,6 +1538,55 @@ async def test_get_all_with_content_docs_when_success(
 
 
 @pytest.mark.asyncio
+async def test_get_all_with_content_docs_larger_than_max_file_size(mock_responses):
+    async with create_salesforce_source() as source:
+        # The mocked ContentDocument has a ContentSize of 1000 bytes
+        source.framework_config.max_file_size = 100
+        expected_doc = {
+            "_id": "content_document_id",
+            "content_size": 1000,
+            "created_at": "",
+            "created_by": "Frodo",
+            "created_by_email": "frodo@tlotr.com",
+            "description": "A file about a ring.",
+            "file_extension": "txt",
+            "last_updated": "",
+            "linked_ids": [
+                "account_id",
+                "campaign_id",
+                "case_id",
+                "contact_id",
+                "custom_object_id",
+                "lead_id",
+                "opportunity_id",
+            ],
+            "owner": "Frodo",
+            "owner_email": "frodo@tlotr.com",
+            "title": "the_ring.txt",
+            "type": "content_document",
+            "url": f"{TEST_BASE_URL}/content_document_id",
+            "version_number": "2",
+            "version_url": f"{TEST_BASE_URL}/content_version_id",
+        }
+
+        mock_responses.get(
+            TEST_QUERY_MATCH_URL, repeat=True, callback=salesforce_query_callback
+        )
+        source.salesforce_client.sync_custom_objects = True
+        source.salesforce_client.custom_objects_to_sync = ["CustomObject"]
+        source.salesforce_client._custom_objects = AsyncMock(
+            return_value=["CustomObject"]
+        )
+
+        content_document_records = []
+        async for record, _ in source.get_docs():
+            if record.get("type") == "content_document":
+                content_document_records.append(record)
+        # The document is still indexed, only its content is skipped
+        TestCase().assertCountEqual(content_document_records, [expected_doc])
+
+
+@pytest.mark.asyncio
 async def test_get_all_with_content_docs_and_extraction_service(mock_responses):
     with (
         patch(
