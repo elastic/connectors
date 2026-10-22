@@ -26,7 +26,7 @@ from ldap3 import GSSAPI, SASL
 
 from connectors.access_control import ACCESS_CONTROL
 from connectors.config import _default_config
-from connectors.fips import FIPSConfig
+from connectors.fips import FIPSConfig, FIPSModeError
 from connectors.sources.exchange_server import (
     ExchangeServerClient,
     ExchangeServerDataSource,
@@ -334,6 +334,53 @@ async def test_validate_config_kerberos_requires_optional_dependencies(_mock_mis
         with pytest.raises(ConfigurableFieldValueError) as exc_info:
             await source.validate_config()
         assert "elasticsearch-connectors[kerberos]" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_validate_config_rejects_ntlm_for_outlook_server_when_fips_enabled():
+    FIPSConfig.set_fips_mode(True)
+    async with create_source(
+        OutlookDataSource,
+        data_source="outlook_server",
+        exchange_server="127.0.0.1",
+        active_directory_server="127.0.0.1",
+        username="fee",
+        password="fuu",
+        domain="es.local",
+        ssl_enabled=False,
+        ssl_ca="",
+    ) as source:
+        with pytest.raises(ConfigurableFieldValueError) as exc_info:
+            await source.validate_config()
+        assert "kerberos" in str(exc_info.value).lower()
+
+
+@pytest.mark.asyncio
+async def test_validate_config_outlook_cloud_is_not_affected_by_fips():
+    FIPSConfig.set_fips_mode(True)
+    async with create_source(
+        OutlookDataSource,
+        data_source="outlook_cloud",
+        tenant_id="foo",
+        client_id="bar",
+        client_secret="faa",
+    ) as source:
+        await source.validate_config()
+
+
+def test_ldap_connection_rejects_ntlm_when_fips_enabled():
+    FIPSConfig.set_fips_mode(True)
+    users = ExchangeUsers(
+        ad_server="127.0.0.1",
+        domain="es.local",
+        exchange_server="127.0.0.1",
+        user="fee",
+        password="fuu",
+        ssl_enabled=False,
+        ssl_ca="",
+    )
+    with pytest.raises(FIPSModeError):
+        users._create_ldap_connection()
 
 
 def test_exchange_users_defaults_auth_method_to_ntlm():

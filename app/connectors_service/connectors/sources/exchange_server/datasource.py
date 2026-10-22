@@ -321,7 +321,8 @@ class ExchangeServerDataSource(BaseDataSource):
                 "tooltip": (
                     "Use Kerberos (GSSAPI) in FIPS mode. Kerberos relies on a valid "
                     "ticket for the connector service account (for example via "
-                    "KRB5CCNAME); username and password are not used."
+                    "KRB5CCNAME); username and password are not used. Exchange and "
+                    "Active Directory servers must be set by host name (FQDN), not IP address."
                 ),
                 "type": "str",
                 "ui_restrictions": ["advanced"],
