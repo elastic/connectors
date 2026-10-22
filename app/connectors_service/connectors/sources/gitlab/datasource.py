@@ -61,6 +61,8 @@ from connectors.sources.gitlab.queries import VALIDATE_PROJECTS_QUERY
 from connectors.utils import decode_base64_value
 
 SUPPORTED_EXTENSION = [".md", ".rst", ".txt"]
+# Largest page size the GitLab REST API accepts
+REPOSITORY_TREE_PAGE_SIZE = 100
 
 
 class GitLabDataSource(BaseDataSource):
@@ -1004,11 +1006,27 @@ class GitLabDataSource(BaseDataSource):
         if not default_branch:
             return
 
+        tree_items = []
+        page = 1
         try:
-            tree_items = await self.gitlab_client._get_rest(
-                f"projects/{project_id}/repository/tree",
-                params={"ref": default_branch, "path": "/", "recursive": "false"},
-            )
+            # The tree endpoint is paginated (20 items per page by default)
+            while True:
+                tree_page = await self.gitlab_client._get_rest(
+                    f"projects/{project_id}/repository/tree",
+                    params={
+                        "ref": default_branch,
+                        "path": "/",
+                        "recursive": "false",
+                        "per_page": REPOSITORY_TREE_PAGE_SIZE,
+                        "page": page,
+                    },
+                )
+                if not tree_page:
+                    break
+                tree_items.extend(tree_page)
+                if len(tree_page) < REPOSITORY_TREE_PAGE_SIZE:
+                    break
+                page += 1
         except (
             aiohttp.ClientError,
             TimeoutError,
