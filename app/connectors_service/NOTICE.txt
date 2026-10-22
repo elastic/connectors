@@ -3607,7 +3607,7 @@ Apache-2.0
 
 
 elasticsearch-connectors
-9.6.0
+9.7.0
 Elastic-2.0
 Elastic License 2.0
 
@@ -3705,7 +3705,7 @@ these terms.
 
 
 elasticsearch-connectors-sdk
-9.6.0
+9.7.0
 Elastic-2.0
 UNKNOWN
 
