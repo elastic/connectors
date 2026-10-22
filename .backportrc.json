@@ -1,16 +1,17 @@
 {
   "targetBranchChoices": [
     { "name": "main", "checked": true },
+    "9.6",
     "9.5",
     "9.4",
     "8.19"
   ],
-  "maintenanceBranches": ["9.5", "9.4", "8.19"],
-  "renovateVersionLabels": ["v8.19.0", "v9.4.0", "v9.5.0", "v9.6.0"],
+  "maintenanceBranches": ["9.6", "9.5", "9.4", "8.19"],
+  "renovateVersionLabels": ["v8.19.0", "v9.4.0", "v9.5.0", "v9.6.0", "v9.7.0"],
   "fork": false,
   "targetPRLabels": ["backport"],
   "branchLabelMapping": {
-    "^v9.6.0$": "main",
+    "^v9.7.0$": "main",
     "^v(\\d+).(\\d+)(.\\d+)*$": "$1.$2"
   },
   "upstream": "elastic/connectors"
