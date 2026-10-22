@@ -45,7 +45,7 @@ DRIVE_API_TIMEOUT = 1 * 60  # 1 min
 
 FOLDER_MIME_TYPE = "application/vnd.google-apps.folder"
 
-DRIVE_ITEMS_FIELDS = "id,createdTime,driveId,modifiedTime,name,size,mimeType,fileExtension,webViewLink,owners,parents,trashed,trashedTime"
+DRIVE_ITEMS_FIELDS = "id,createdTime,driveId,modifiedTime,name,size,mimeType,fileExtension,webViewLink,owners,lastModifyingUser,parents,trashed,trashedTime"
 DRIVE_ITEMS_FIELDS_WITH_PERMISSIONS = f"{DRIVE_ITEMS_FIELDS},permissions"
 
 # Export Google Workspace documents to TIKA compatible format, prefer 'text/plain' where possible to be
