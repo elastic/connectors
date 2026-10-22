@@ -1626,7 +1626,8 @@ class SalesforceDataSource(BaseDataSource):
         filename = doc["title"]
         file_extension = self.get_file_extension(filename)
         if not self.can_file_be_downloaded(file_extension, filename, file_size):
-            return
+            # index the document without its content, as on a download failure
+            return doc
 
         return await self.download_and_extract_file(
             doc,
