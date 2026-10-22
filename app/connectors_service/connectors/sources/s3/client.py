@@ -17,6 +17,10 @@ if "AWS_ENDPOINT_URL" in os.environ:
 else:
     AWS_ENDPOINT = None
 
+# GetBucketLocation returns the legacy "EU" location constraint, not "eu-west-1",
+# for older buckets in Ireland. "EU" is not a valid region name for a client.
+LEGACY_LOCATION_CONSTRAINTS = {"EU": "eu-west-1"}
+
 
 class S3Client:
     """Amazon S3 client to handle method calls made to S3"""
@@ -141,6 +145,7 @@ class S3Client:
                 Bucket=bucket_name,
             )
             region = response.get("LocationConstraint")
+            region = LEGACY_LOCATION_CONSTRAINTS.get(region, region)
         except ClientError:
             self._logger.warning(f"Unable to fetch the region for {bucket_name}")
 
