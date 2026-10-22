@@ -188,6 +188,32 @@ async def test_get_bucket_region():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "location_constraint, expected_region",
+    [
+        (None, None),
+        ("us-west-2", "us-west-2"),
+        ("eu-west-1", "eu-west-1"),
+        # Legacy alias still returned for older eu-west-1 buckets
+        ("EU", "eu-west-1"),
+    ],
+)
+async def test_get_bucket_region_normalizes_location_constraint(
+    location_constraint, expected_region
+):
+    async with create_s3_source() as source:
+        s3 = MagicMock()
+        s3.get_bucket_location = AsyncMock(
+            return_value={"LocationConstraint": location_constraint}
+        )
+        source.s3_client.client = AsyncMock(return_value=s3)
+
+        region = await source.s3_client.get_bucket_region("dummy")
+
+        assert region == expected_region
+
+
+@pytest.mark.asyncio
 async def test_get_bucket_region_negative():
     """Test get_bucket_region method of S3DataSource for negative case"""
     async with create_s3_source() as source:
