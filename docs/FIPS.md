@@ -81,7 +81,7 @@ The Network Drive connector uses:
 
 With `auth_method: ntlm` (default), the connector uses username/password credentials. `exchangelib` negotiates NTLM for EWS and `ldap3` uses simple bind for Active Directory user lookup.
 
-With `auth_method: kerberos`, EWS uses `exchangelib` GSSAPI authentication (`requests-gssapi`) and LDAP uses SASL GSSAPI. Install the optional Kerberos dependencies on the connector host: `pip install 'elasticsearch-connectors[kerberos]'` (building `gssapi` may require krb5 development packages, for example `libkrb5-dev`). The connector does not manage Kerberos tickets; the host must provide a valid ticket cache for the service account.
+With `auth_method: kerberos`, EWS uses `exchangelib` GSSAPI authentication (`requests-gssapi`) and LDAP uses SASL GSSAPI. Install the optional Kerberos dependencies on the connector host: `pip install 'elasticsearch-connectors[kerberos]'` (building `gssapi` may require krb5 development packages, for example `libkrb5-dev`). The connector does not manage Kerberos tickets; the host must provide a valid ticket cache for the service account. Because Elastic-managed (native) connectors cannot provide a ticket, the `auth_method` field is marked `advanced`: it is hidden in the native connector UI and shown only for self-managed connectors.
 
 The legacy Outlook connector in `outlook_server` mode uses the same code path. Its `outlook_cloud` mode uses Microsoft OAuth.
 

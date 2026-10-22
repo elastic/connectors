@@ -228,6 +228,16 @@ def test_default_configuration_keys_match_legacy_server_fields():
     )
 
 
+@pytest.mark.parametrize("source_class", [ExchangeServerDataSource, OutlookDataSource])
+def test_auth_method_is_hidden_from_native_ui(source_class):
+    # Kerberos needs a ticket on the connector host, which Elastic-managed
+    # (native) connectors cannot provide, so the field is "advanced" only.
+    auth_method = source_class.get_default_configuration()["auth_method"]
+
+    assert auth_method["ui_restrictions"] == ["advanced"]
+    assert auth_method["value"] == "ntlm"
+
+
 @pytest.mark.asyncio
 async def test_client_uses_exchange_users():
     async with create_exchange_server_source() as source:

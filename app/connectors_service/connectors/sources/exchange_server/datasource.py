@@ -324,6 +324,7 @@ class ExchangeServerDataSource(BaseDataSource):
                     "KRB5CCNAME); username and password are not used."
                 ),
                 "type": "str",
+                "ui_restrictions": ["advanced"],
                 "value": "ntlm",
             },
             "username": {
