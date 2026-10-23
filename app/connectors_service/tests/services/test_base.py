@@ -19,6 +19,11 @@ HERE = os.path.dirname(__file__)
 FIXTURES_DIR = os.path.abspath(os.path.join(HERE, "..", "fixtures"))
 CONFIG_FILE = os.path.join(FIXTURES_DIR, "config.yml")
 
+# Wall-clock window for service loop tests. Short values (e.g. 0.1–0.2s) race with
+# CI/FIPS load: stop() cancels in-flight scheduling tasks before assertions run.
+# Must stay below Makefile SLOW_TEST_THRESHOLD (1s) because make test uses --fail-slow.
+SERVICE_TEST_STOP_AFTER_SECONDS = 0.75
+
 
 def create_service(service_klass, config=None, config_file=None, idling=None):
     if config is None:

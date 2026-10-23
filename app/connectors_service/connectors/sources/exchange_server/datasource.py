@@ -32,6 +32,14 @@ from exchangelib.items import (
 )
 
 from connectors.access_control import ACCESS_CONTROL, es_access_control_query
+from connectors.fips import FIPSModeError
+from connectors.sources.exchange_server.auth import (
+    AUTH_METHOD_KERBEROS,
+    AUTH_METHODS,
+    ensure_fips_compatible_auth,
+    ensure_kerberos_dependencies_available,
+    get_auth_method,
+)
 from connectors.sources.exchange_server.client import (
     ExchangeServerClient,
     _extract_ldap_mail,
@@ -302,40 +310,60 @@ class ExchangeServerDataSource(BaseDataSource):
                 "tooltip": "Active Directory server's IP address. E.g. 127.0.0.1",
                 "type": "str",
             },
-            "username": {
-                "label": "Exchange server username",
+            "auth_method": {
+                "display": "dropdown",
+                "label": "Authentication method",
+                "options": [
+                    {"label": "NTLM", "value": "ntlm"},
+                    {"label": "Kerberos (GSSAPI)", "value": "kerberos"},
+                ],
                 "order": 3,
+                "tooltip": (
+                    "Use Kerberos (GSSAPI) in FIPS mode. Kerberos relies on a valid "
+                    "ticket for the connector service account (for example via "
+                    "KRB5CCNAME); username and password are not used. Exchange and "
+                    "Active Directory servers must be set by host name (FQDN), not IP address."
+                ),
+                "type": "str",
+                "ui_restrictions": ["advanced"],
+                "value": "ntlm",
+            },
+            "username": {
+                "depends_on": [{"field": "auth_method", "value": "ntlm"}],
+                "label": "Exchange server username",
+                "order": 4,
                 "type": "str",
             },
             "password": {
+                "depends_on": [{"field": "auth_method", "value": "ntlm"}],
                 "label": "Exchange server password",
-                "order": 4,
+                "order": 5,
                 "sensitive": True,
                 "type": "str",
             },
             "domain": {
                 "label": "Exchange server domain name",
-                "order": 5,
+                "order": 6,
                 "tooltip": "Active Directory domain name, used to look up users. E.g. corp.example.com",
                 "type": "str",
             },
             "ssl_enabled": {
                 "display": "toggle",
                 "label": "Enable SSL",
-                "order": 6,
+                "order": 7,
                 "type": "bool",
                 "value": False,
             },
             "ssl_ca": {
                 "depends_on": [{"field": "ssl_enabled", "value": True}],
                 "label": "SSL certificate",
-                "order": 7,
+                "order": 8,
                 "type": "str",
             },
             "sync_all_mail_folders": {
                 "display": "toggle",
                 "label": "Sync all mail folders",
-                "order": 8,
+                "order": 9,
                 "tooltip": "When enabled, indexes the user mail folders in each mailbox, not only Inbox, Sent, Junk, and Archive. System folders such as Deleted Items, Drafts, Outbox, and search folders are never indexed. Expect longer syncs, more Exchange load, and a larger index.",
                 "type": "bool",
                 "ui_restrictions": ["advanced"],
@@ -344,7 +372,7 @@ class ExchangeServerDataSource(BaseDataSource):
             "use_text_extraction_service": {
                 "display": "toggle",
                 "label": "Use text extraction service",
-                "order": 9,
+                "order": 10,
                 "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
                 "type": "bool",
                 "ui_restrictions": ["advanced"],
@@ -353,7 +381,7 @@ class ExchangeServerDataSource(BaseDataSource):
             "include_full_raw_message": {
                 "display": "toggle",
                 "label": "Index full raw email (including headers)",
-                "order": 10,
+                "order": 11,
                 "tooltip": (
                     "When disabled (default), the email body and a small set of headers "
                     "(such as Subject, From, and To) are indexed. "
@@ -367,7 +395,7 @@ class ExchangeServerDataSource(BaseDataSource):
             "use_document_level_security": {
                 "display": "toggle",
                 "label": "Enable document level security",
-                "order": 11,
+                "order": 12,
                 "tooltip": "Document level security ensures identities and permissions set in Exchange Server are maintained in Elasticsearch. This enables you to restrict and personalize read-access users and groups have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
                 "type": "bool",
                 "value": False,
@@ -386,7 +414,26 @@ class ExchangeServerDataSource(BaseDataSource):
                 not a loadable PEM certificate.
         """
         await super().validate_config()
+        self._validate_auth_configuration()
         self._validate_ssl_certificate()
+
+    def _validate_auth_configuration(self):
+        auth_method = get_auth_method(self.configuration)
+        if auth_method not in AUTH_METHODS:
+            msg = (
+                f"Invalid auth_method '{auth_method}'. "
+                f"Supported values: {', '.join(sorted(AUTH_METHODS))}."
+            )
+            raise ConfigurableFieldValueError(msg)
+        try:
+            ensure_fips_compatible_auth(auth_method)
+        except FIPSModeError as error:
+            raise ConfigurableFieldValueError(str(error)) from error
+        if auth_method == AUTH_METHOD_KERBEROS:
+            try:
+                ensure_kerberos_dependencies_available()
+            except ValueError as error:
+                raise ConfigurableFieldValueError(str(error)) from error
 
     def _validate_ssl_certificate(self):
         if not self.configuration["ssl_enabled"]:
