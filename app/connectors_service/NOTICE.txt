@@ -4412,7 +4412,7 @@ Apache Software License
 
 
 graphql-core
-3.2.3
+3.2.12
 MIT License
 MIT License
 
