@@ -10,6 +10,7 @@ from contextlib import asynccontextmanager
 from copy import copy
 from unittest import mock
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
+from urllib.parse import parse_qs, urlsplit
 
 import aiohttp
 import pytest
@@ -1228,6 +1229,42 @@ async def test_search_by_query_for_datacenter():
 
         if len(documents) != 0:
             assert documents == EXPECTED_SEARCH_RESULT_FOR_FILTERING_DATA_CENTER
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "data_source", [CONFLUENCE_CLOUD, CONFLUENCE_DATA_CENTER, CONFLUENCE_SERVER]
+)
+@pytest.mark.parametrize(
+    "cql",
+    [
+        'space = RD AND title ~ "R&D"',
+        'type = page AND text ~ "C#"',
+        'text ~ "a+b" ORDER BY created',
+        'text ~ "100%"',
+    ],
+)
+async def test_search_by_query_encodes_the_query(data_source, cql):
+    """The CQL from an advanced sync rule must reach Confluence intact, even when it
+    contains characters that have a meaning in a URL ("&", "#", "+", "%")."""
+    requested_urls = []
+
+    async def get(url, ssl):
+        requested_urls.append(url)
+        return JSONAsyncMock({"results": [{"title": "Product Details"}], "_links": {}})
+
+    async with create_confluence_source(data_source=data_source) as source:
+        source.confluence_client._get_session().get = get
+        documents = [
+            document
+            async for document in source.confluence_client.search_by_query(query=cql)
+        ]
+
+    assert documents == [{"title": "Product Details"}]
+    assert len(requested_urls) == 1
+    query = parse_qs(urlsplit(requested_urls[0]).query)
+    assert query["cql"] == [cql]
+    assert query["limit"] == ["100"]
 
 
 @pytest.mark.asyncio
