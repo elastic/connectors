@@ -26,6 +26,7 @@ from connectors.utils import (
     RetryStrategy,
     TooManyErrors,
     UnknownRetryStrategyError,
+    _quartz_day_of_week_to_cron,
     base64url_to_base64,
     decode_base64_value,
     deep_merge_dicts,
@@ -150,6 +151,54 @@ from connectors.utils import (
             "0 3 5 5 1 ?",
             datetime(2023, 1, 5, 6, 18, 56, 814, tzinfo=timezone.utc),  # Wednesday
             datetime(2024, 1, 5, 5, 3, 0, tzinfo=timezone.utc),
+        ),
+        (
+            # Monday to Friday at 9:00, as a Quartz range
+            "0 0 9 ? * 2-6",
+            datetime(2023, 1, 20, 17, 0, 0, tzinfo=timezone.utc),  # Friday
+            datetime(2023, 1, 23, 9, 0, 0, tzinfo=timezone.utc),  # Monday
+        ),
+        (
+            # Sunday and Saturday at 9:00, as a Quartz list
+            "0 0 9 ? * 1,7",
+            datetime(2023, 1, 18, 17, 18, 56, 814, tzinfo=timezone.utc),  # Wednesday
+            datetime(2023, 1, 21, 9, 0, 0, tzinfo=timezone.utc),  # Saturday
+        ),
+        (
+            # Friday and Saturday at 9:00, as a Quartz list
+            "0 0 9 ? * 6,7",
+            datetime(2023, 1, 21, 10, 0, 0, tzinfo=timezone.utc),  # Saturday
+            datetime(2023, 1, 27, 9, 0, 0, tzinfo=timezone.utc),  # Friday
+        ),
+        (
+            # Every day of the week at 9:00, as a Quartz range
+            "0 0 9 ? * 1-7",
+            datetime(2023, 1, 18, 17, 18, 56, 814, tzinfo=timezone.utc),  # Wednesday
+            datetime(2023, 1, 19, 9, 0, 0, tzinfo=timezone.utc),  # Thursday
+        ),
+        (
+            # Wednesday at 9:00, zero-padded
+            "0 0 9 ? * 04",
+            datetime(2023, 1, 20, 17, 0, 0, tzinfo=timezone.utc),  # Friday
+            datetime(2023, 1, 25, 9, 0, 0, tzinfo=timezone.utc),  # Wednesday
+        ),
+        (
+            # Monday to Friday at 9:00, as a zero-padded Quartz range
+            "0 0 9 ? * 02-06",
+            datetime(2023, 1, 20, 17, 0, 0, tzinfo=timezone.utc),  # Friday
+            datetime(2023, 1, 23, 9, 0, 0, tzinfo=timezone.utc),  # Monday
+        ),
+        (
+            # Sunday and Saturday at 9:00, as a zero-padded Quartz list
+            "0 0 9 ? * 01,07",
+            datetime(2023, 1, 18, 17, 18, 56, 814, tzinfo=timezone.utc),  # Wednesday
+            datetime(2023, 1, 21, 9, 0, 0, tzinfo=timezone.utc),  # Saturday
+        ),
+        (
+            # Monday to Friday at 9:00, with day names
+            "0 0 9 ? * MON-FRI",
+            datetime(2023, 1, 20, 17, 0, 0, tzinfo=timezone.utc),  # Friday
+            datetime(2023, 1, 23, 9, 0, 0, tzinfo=timezone.utc),  # Monday
         ),
     ],
 )
@@ -1354,3 +1403,27 @@ def test_get_source_klasses():
 
     sources = list(get_source_klasses(settings))
     assert sources == [MyConnector, MyConnector]
+
+
+@pytest.mark.parametrize(
+    "day_of_week, expected",
+    [
+        ("4", "WED"),
+        ("2-6", "MON-FRI"),
+        ("1,7", "SUN,SAT"),
+        ("1-3,5", "SUN-TUE,THU"),
+        ("04", "WED"),
+        ("01,07", "SUN,SAT"),
+        ("02-06", "MON-FRI"),
+        ("0", "0"),
+        ("8", "8"),
+        ("MON-FRI", "MON-FRI"),
+        ("?", "?"),
+        ("*", "*"),
+        ("2/2", "2/2"),
+        ("6#3", "6#3"),
+        ("6L", "6L"),
+    ],
+)
+def test_quartz_day_of_week_to_cron(day_of_week, expected):
+    assert _quartz_day_of_week_to_cron(day_of_week) == expected

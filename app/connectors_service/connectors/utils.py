@@ -40,6 +40,36 @@ def parse_datetime_string(datetime):
     return parser.parse(datetime)
 
 
+QUARTZ_DAYS_OF_WEEK = {
+    1: "SUN",
+    2: "MON",
+    3: "TUE",
+    4: "WED",
+    5: "THU",
+    6: "FRI",
+    7: "SAT",
+}
+
+
+def _quartz_day_of_week_to_cron(day_of_week):
+    """Rewrite the numeric days of a Quartz day-of-week field as day names.
+
+    Day of week is 1-7 starting from Sunday in Quartz and from Monday in regular Cron,
+    so every number in a list (`1,7`) or range (`2-6`) is replaced by its day name,
+    which both read the same way. Numbers are matched by value, so zero-padded days
+    (`04`, `01,07`, `02-06`) are converted too. Fields with a step, `#` or `L` are
+    left unchanged.
+    """
+    if not re.fullmatch(r"[\d,-]+", day_of_week):
+        return day_of_week
+
+    return re.sub(
+        r"\d+",
+        lambda match: QUARTZ_DAYS_OF_WEEK.get(int(match.group()), match.group()),
+        day_of_week,
+    )
+
+
 def next_run(quartz_definition, now):
     """Returns the datetime in UTC timezone of the next run."""
     # Year is optional and is never present.
@@ -47,11 +77,7 @@ def next_run(quartz_definition, now):
         quartz_definition.split(" ") + [None]
     )[:7]
 
-    # Day of week is 1-7 starting from Sunday in Quartz and from Monday in regular Cron, adjust
-    # Days before: 1 - SUN, 2 - MON ... 7 - SAT
-    # Days after: 1 - MON, 2 - TUE ... 7 - SUN
-    if day_of_week.isnumeric():
-        day_of_week = (int(day_of_week) - 2) % 7 + 1
+    day_of_week = _quartz_day_of_week_to_cron(day_of_week)
 
     if not year:
         year = "*"
