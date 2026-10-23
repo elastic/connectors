@@ -245,6 +245,9 @@ class GraphQLClient:
 
     async def get(self, graphql_query):
         params = {"query": graphql_query}
+        if self.variables:
+            # GraphQL over HTTP sends variables on GET as a JSON-encoded query parameter
+            params["variables"] = json.dumps(self.variables)
         async with self.session.get(url=self.url, params=params) as response:
             json_response = await response.json()
             if not json_response.get("errors"):
