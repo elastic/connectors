@@ -4,7 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import os
-from urllib.parse import urljoin
+from urllib.parse import quote, urljoin
 
 import aiohttp
 from aiohttp import ClientResponseError, ServerDisconnectedError
@@ -323,6 +323,9 @@ class ConfluenceClient:
         yield await self.api_call(url)
 
     async def search_by_query(self, query):
+        # The CQL is formatted into the query string, so percent-encode it: a raw
+        # "&", "#" or "+" would split the parameter, start a fragment or read as a space.
+        query = quote(query, safe="")
         if self.data_source_type == CONFLUENCE_DATA_CENTER:
             search_documents = self.paginated_api_call_for_datacenter_syncrule(
                 url_name=SEARCH_FOR_DATA_CENTER,
