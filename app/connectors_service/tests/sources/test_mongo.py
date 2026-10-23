@@ -12,12 +12,20 @@ from uuid import UUID
 
 import bson
 import pytest
-from bson import Binary, DatetimeConversion, DatetimeMS, DBRef, ObjectId
+from bson import (
+    Binary,
+    DatetimeConversion,
+    DatetimeMS,
+    DBRef,
+    ObjectId,
+    Timestamp,
+)
 from bson.codec_options import CodecOptions
 from bson.decimal128 import Decimal128
 from bson.errors import InvalidBSON
 from connectors_sdk.filtering.validation import Filter
 from connectors_sdk.source import ConfigurableFieldValueError
+from elastic_transport import JsonSerializer
 from pymongo.errors import OperationFailure
 
 from connectors.sources.mongo import MongoAdvancedRulesValidator, MongoDataSource
@@ -494,11 +502,46 @@ async def test_validate_config_when_configuration_valid_then_does_not_raise(
             {"nested": {"ms": DatetimeMS(5)}, "list": [DatetimeMS(-(2**62))]},
             {"nested": {"ms": 5}, "list": [-(2**62)]},
         ),
+        (
+            # generic binary data is decoded by pymongo as bytes -> base64
+            {"blob": b"\x00\x01\xff"},
+            {"blob": "AAH/"},
+        ),
+        (
+            # non-UUID Binary subtypes (here MD5) -> base64
+            {"md5": Binary(b"\x00\x01\xff", 5)},
+            {"md5": "AAH/"},
+        ),
+        (
+            {"files": [{"data": b"ab"}], "nested": {"data": Binary(b"ab", 128)}},
+            {"files": [{"data": "YWI="}], "nested": {"data": "YWI="}},
+        ),
+        (
+            # BSON Timestamp -> ISO string of its time part
+            {"ts": Timestamp(1700000000, 1)},
+            {"ts": "2023-11-14T22:13:20+00:00"},
+        ),
     ],
 )
 async def test_serialize(raw, output):
     async with create_mongo_source() as source:
         assert source.serialize(raw) == output
+
+
+@pytest.mark.asyncio
+async def test_serialize_output_is_accepted_by_the_bulk_serializer():
+    doc = {
+        "_id": ObjectId("507f1f77bcf86cd799439011"),
+        "blob": b"\x00\x01\xff",
+        "md5": Binary(b"\x00\x01\xff", 5),
+        "uuid": Binary(b'\xab\xdd\xda.\x96\xf9OQ\xa5\x12\xf1"[\x07\x17\xc0', 4),
+        "ts": Timestamp(1700000000, 1),
+        "nested": {"chunks": [b"ab", Binary(b"cd", 128)]},
+    }
+    async with create_mongo_source() as source:
+        # The elasticsearch client serializes bulk bodies with this serializer;
+        # a value it cannot encode fails the whole bulk request.
+        JsonSerializer().dumps(source.serialize(doc))
 
 
 @pytest.mark.asyncio

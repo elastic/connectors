@@ -126,9 +126,11 @@ Make sure to include the appropriate backport labels, if your PR needs to be bac
 
 New pull requests to `main` automatically receive `auto-backport`, `v<main VERSION>`, and `v<VERSION>` for each branch listed in `maintenanceBranches` in [`.backportrc.json`](../.backportrc.json) (VERSION read from that branch when the PR opens). On release rotation, update `maintenanceBranches`, `targetBranchChoices`, and `renovateVersionLabels` in [`.backportrc.json`](../.backportrc.json), then copy `renovateVersionLabels` into the `labels` array in `renovate.json` (must stay in sync; `test_backport_config.py` enforces this). Remove labels on a PR if a fix should not be backported to a given branch.
 
-For manual `8.19` backports, open a PR from a branch on this repository (not a fork) with title `[8.19] …`, label `backport`, and a body line `Backported from #<main-pr>` (main PR must be merged and include a `v8.19.x` label). Automatic approval requires an Elastic org owner or member (`OWNER` or `MEMBER` on GitHub); everyone else needs a human review. Validation checks PR metadata only (not a diff against the cited main PR).
+Backport PRs created by the backport bot are approved automatically. Once approved, `enable-backport-automerge.yml` enables squash auto-merge, so they merge once the required checks pass. The ruleset requires branches to be up to date, so a backport that falls behind its base branch (for example after another backport to the same branch) needs "Update branch" until a merge queue is enabled there.
 
-This workflow file must exist on the `8.19` branch before it runs: merge the automation to `main`, then include the same `.github` changes in the first backport PR to `8.19` (that first PR will still need a human approval).
+For manual backports to any maintenance branch (`X.Y`, e.g. `9.5`, `9.4`, `8.19`), open a PR from a branch on this repository (not a fork) with title `[X.Y] …`, label `backport`, and a body line `Backported from #<main-pr>` (the main PR must be merged and carry a `vX.Y.z` patch label for that same branch). Such PRs are approved automatically and then auto-merge like bot backports. Fork PRs need a human review. Validation checks PR metadata only (not a diff against the cited main PR).
+
+These workflows run from the base branch of the PR, so they must exist on every maintenance branch: after merging changes to them on `main`, backport the `.github` changes to each maintenance branch (those first backports still need a human approval and merge). Branches cut from `main` later inherit them.
 
 
 ## Pull Request Etiquette
