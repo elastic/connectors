@@ -41,13 +41,13 @@ def parse_datetime_string(datetime):
 
 
 QUARTZ_DAYS_OF_WEEK = {
-    "1": "SUN",
-    "2": "MON",
-    "3": "TUE",
-    "4": "WED",
-    "5": "THU",
-    "6": "FRI",
-    "7": "SAT",
+    1: "SUN",
+    2: "MON",
+    3: "TUE",
+    4: "WED",
+    5: "THU",
+    6: "FRI",
+    7: "SAT",
 }
 
 
@@ -56,14 +56,16 @@ def _quartz_day_of_week_to_cron(day_of_week):
 
     Day of week is 1-7 starting from Sunday in Quartz and from Monday in regular Cron,
     so every number in a list (`1,7`) or range (`2-6`) is replaced by its day name,
-    which both read the same way. Fields with a step, `#` or `L` are left unchanged.
+    which both read the same way. Numbers are matched by value, so zero-padded days
+    (`04`, `01,07`, `02-06`) are converted too. Fields with a step, `#` or `L` are
+    left unchanged.
     """
     if not re.fullmatch(r"[\d,-]+", day_of_week):
         return day_of_week
 
     return re.sub(
         r"\d+",
-        lambda match: QUARTZ_DAYS_OF_WEEK.get(match.group(), match.group()),
+        lambda match: QUARTZ_DAYS_OF_WEEK.get(int(match.group()), match.group()),
         day_of_week,
     )
 

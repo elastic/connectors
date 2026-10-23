@@ -177,6 +177,24 @@ from connectors.utils import (
             datetime(2023, 1, 19, 9, 0, 0, tzinfo=timezone.utc),  # Thursday
         ),
         (
+            # Wednesday at 9:00, zero-padded
+            "0 0 9 ? * 04",
+            datetime(2023, 1, 20, 17, 0, 0, tzinfo=timezone.utc),  # Friday
+            datetime(2023, 1, 25, 9, 0, 0, tzinfo=timezone.utc),  # Wednesday
+        ),
+        (
+            # Monday to Friday at 9:00, as a zero-padded Quartz range
+            "0 0 9 ? * 02-06",
+            datetime(2023, 1, 20, 17, 0, 0, tzinfo=timezone.utc),  # Friday
+            datetime(2023, 1, 23, 9, 0, 0, tzinfo=timezone.utc),  # Monday
+        ),
+        (
+            # Sunday and Saturday at 9:00, as a zero-padded Quartz list
+            "0 0 9 ? * 01,07",
+            datetime(2023, 1, 18, 17, 18, 56, 814, tzinfo=timezone.utc),  # Wednesday
+            datetime(2023, 1, 21, 9, 0, 0, tzinfo=timezone.utc),  # Saturday
+        ),
+        (
             # Monday to Friday at 9:00, with day names
             "0 0 9 ? * MON-FRI",
             datetime(2023, 1, 20, 17, 0, 0, tzinfo=timezone.utc),  # Friday
@@ -1394,6 +1412,11 @@ def test_get_source_klasses():
         ("2-6", "MON-FRI"),
         ("1,7", "SUN,SAT"),
         ("1-3,5", "SUN-TUE,THU"),
+        ("04", "WED"),
+        ("01,07", "SUN,SAT"),
+        ("02-06", "MON-FRI"),
+        ("0", "0"),
+        ("8", "8"),
         ("MON-FRI", "MON-FRI"),
         ("?", "?"),
         ("*", "*"),
