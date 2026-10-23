@@ -43,7 +43,7 @@ dependencies = [
     "exchangelib==5.4.0",
     "fastjsonschema==2.16.2",
     "gidgethub==5.2.1",
-    "graphql-core==3.2.3",
+    "graphql-core==3.2.12",
     "httpx-ntlm==1.4.0",
     "httpx==0.27.0",
     "idna==3.18",
