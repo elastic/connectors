@@ -5,6 +5,7 @@
 #
 """Tests the GraphQL source class methods"""
 
+import json
 from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -308,6 +309,73 @@ async def test_fetch_data_with_pagination():
         ):
             actual_response.append(doc)
     assert actual_response == expected_response
+
+
+@pytest.mark.asyncio
+async def test_get_sends_variables():
+    async with create_graphql_source() as source:
+        source.graphql_client.variables = {"id": "123"}
+        source.graphql_client.session.get = Mock(
+            return_value=get_json_mock(
+                mock_response={"data": {"users": "xyz"}}, status=200
+            )
+        )
+        await source.graphql_client.get("query")
+
+        params = source.graphql_client.session.get.call_args.kwargs["params"]
+        assert params == {"query": "query", "variables": json.dumps({"id": "123"})}
+
+
+@pytest.mark.asyncio
+async def test_fetch_data_with_pagination_over_get():
+    query = "query($afterCursor: String) {users(first:5, after:$afterCursor) {name pageInfo}}"
+    async with create_graphql_source() as source:
+        source.graphql_client.http_method = "get"
+        source.graphql_client.pagination_model = "cursor_pagination"
+        source.graphql_client.graphql_object_to_id_map = {"users": "id"}
+        source.graphql_client.pagination_key = "users"
+        source.graphql_client.session.get = Mock(
+            side_effect=[
+                get_json_mock(
+                    mock_response={
+                        "data": {
+                            "users": {
+                                "id": "1",
+                                "pageInfo": {
+                                    "hasNextPage": True,
+                                    "endCursor": "xyz#123",
+                                },
+                            }
+                        }
+                    },
+                    status=200,
+                ),
+                get_json_mock(
+                    mock_response={
+                        "data": {
+                            "users": {
+                                "id": "2",
+                                "pageInfo": {
+                                    "hasNextPage": False,
+                                    "endCursor": "pqr#123",
+                                },
+                            }
+                        }
+                    },
+                    status=200,
+                ),
+            ]
+        )
+
+        docs = [doc async for doc in source.fetch_data(query)]
+
+        assert [doc["_id"] for doc in docs] == ["1", "2"]
+        first_call, second_call = source.graphql_client.session.get.call_args_list
+        assert first_call.kwargs["params"] == {"query": query}
+        assert second_call.kwargs["params"] == {
+            "query": query,
+            "variables": json.dumps({"afterCursor": "xyz#123"}),
+        }
 
 
 @pytest.mark.asyncio
