@@ -18,7 +18,10 @@ from connectors.services.content_sync_job_execution import (
     ContentSyncJobExecutionService,
 )
 from tests.commons import AsyncIterator
-from tests.services.test_base import create_and_run_service
+from tests.services.test_base import (
+    SERVICE_TEST_STOP_AFTER_SECONDS,
+    create_and_run_service,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -361,7 +364,9 @@ async def test_job_execution_new_sync_job_not_blocked(
         AsyncIterator([second_sync_job]),
     ]
 
-    await create_and_run_service(service_klass, stop_after=0.2)
+    await create_and_run_service(
+        service_klass, stop_after=SERVICE_TEST_STOP_AFTER_SECONDS
+    )
 
     sync_job_pool_mock.try_put.assert_called_with(sync_job_runner_mock.execute)
     assert sync_job_pool_mock.try_put.call_count == 2
