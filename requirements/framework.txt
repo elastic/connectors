@@ -41,7 +41,7 @@ colorama==0.4.6
 tabulate==0.9.0
 redis==5.0.1
 simple-term-menu==1.6.4
-graphql-core==3.2.3
+graphql-core==3.2.12
 notion-client==2.2.1
 certifi==2026.10.19
 aioboto3==12.4.0
