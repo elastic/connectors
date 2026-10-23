@@ -1,11 +1,14 @@
-name: Approve manual 8.19 backport
+name: Approve manual backport
 
 # Uses pull_request_target so approvals can use REPO_SCOPED_TOKEN; only runs
 # checked-in validation logic (not code from the PR branch).
+# Applies to every maintenance branch (X.Y); the patch label required on the
+# source PR is derived from the base branch. This file must exist on each
+# maintenance branch, because pull_request_target runs the base branch version.
 on:
   pull_request_target:
-    branches:
-      - 8.19
+    branches-ignore:
+      - main
     types:
       - opened
       - synchronize
@@ -17,12 +20,14 @@ permissions:
   contents: read
 
 concurrency:
-  group: approve-manual-8-19-${{ github.event.pull_request.number }}
+  group: approve-manual-backport-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
   approve:
-    if: github.event.pull_request.user.login != 'github-actions[bot]'
+    if: >-
+      github.event.pull_request.user.login != 'github-actions[bot]'
+      && github.event.pull_request.head.repo.fork == false
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -35,9 +40,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          BASE_BRANCH: ${{ github.event.pull_request.base.ref }}
           PR_TITLE: ${{ github.event.pull_request.title }}
           PR_BODY: ${{ github.event.pull_request.body }}
-        run: python3 .github/workflows/scripts/validate_manual_8_19_backport.py
+        run: python3 .github/workflows/scripts/validate_manual_backport.py
 
       - name: Approve
         if: steps.validate.outputs.approved == 'true'
