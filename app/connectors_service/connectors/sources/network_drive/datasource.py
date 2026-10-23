@@ -301,7 +301,9 @@ class NASDataSource(BaseDataSource):
         for i, char in enumerate(pattern):
             if char in wildcards:
                 return rf"\\{self.server_ip}/{pattern[:i].rsplit('/', 1)[0]}/"
-        return rf"\\{self.server_ip}/{pattern}"
+        # A pattern without wildcards names one file or folder. It can only match as an
+        # entry of its parent folder, so scan the parent instead of the path itself.
+        return rf"\\{self.server_ip}/{pattern.rsplit('/', 1)[0]}/"
 
     async def fetch_filtered_directory(self, advanced_rules):
         """
