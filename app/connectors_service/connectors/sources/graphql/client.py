@@ -3,6 +3,7 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+import json
 from functools import cached_property
 
 import aiohttp
@@ -288,6 +289,9 @@ class GraphQLClient:
 
     async def get(self, graphql_query):
         params = {"query": graphql_query}
+        if self.variables:
+            # GraphQL over HTTP sends variables on GET as a JSON-encoded query parameter
+            params["variables"] = json.dumps(self.variables)
         async with self.session.get(url=self.url, params=params) as response:
             json_response = await response.json()
             if not json_response.get("errors"):

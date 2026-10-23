@@ -1482,6 +1482,34 @@ class TestGitLabDataSourceIntegration:
         assert readme_docs[1]["file_name"] == "README.rst"
 
     @pytest.mark.asyncio
+    async def test_fetch_readme_files_reads_every_page_of_the_tree(
+        self, mock_configuration, mock_gitlab_project
+    ):
+        """Test _fetch_readme_files finds a README that is not on the first tree page."""
+        source = GitLabDataSource(configuration=mock_configuration)
+
+        # GitLab lists directories before files, so a README can be on a later page
+        first_page = [
+            {"type": "tree", "name": f"dir{i}", "path": f"dir{i}"} for i in range(100)
+        ]
+        second_page = [{"type": "blob", "name": "README.md", "path": "README.md"}]
+        source.gitlab_client._get_rest = AsyncMock(
+            side_effect=[first_page, second_page]
+        )
+
+        readme_docs = []
+        async for doc, _ in source._fetch_readme_files("123", mock_gitlab_project):
+            readme_docs.append(doc)
+
+        assert [doc["file_name"] for doc in readme_docs] == ["README.md"]
+        assert source.gitlab_client._get_rest.await_count == 2
+        pages = [
+            call.kwargs["params"]["page"]
+            for call in source.gitlab_client._get_rest.await_args_list
+        ]
+        assert pages == [1, 2]
+
+    @pytest.mark.asyncio
     async def test_fetch_readme_files_no_default_branch(self, mock_configuration):
         """Test _fetch_readme_files handles missing default branch."""
         source = GitLabDataSource(configuration=mock_configuration)
