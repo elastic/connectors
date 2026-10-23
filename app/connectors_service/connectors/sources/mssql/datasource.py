@@ -190,7 +190,7 @@ class MSSQLDataSource(BaseDataSource):
             column_names=column_names, schema=self.schema, tables=tables
         )
 
-        if (not set(primary_key_columns) - set(column_names)) or primary_key_columns:
+        if not set(primary_key_columns) - set(column_names):
             async for row in streamer:
                 row = dict(zip(column_names, row, strict=True))
                 yield row

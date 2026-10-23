@@ -2231,3 +2231,28 @@ async def test_list_files_from_my_drive(
                 fetch_permissions, last_sync_time
             ):
                 assert file == expected_response
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("list_method", ["list_files", "list_files_from_my_drive"])
+@pytest.mark.parametrize("fetch_permissions", [False, True])
+@pytest.mark.parametrize("last_sync_time", [None, "2023-12-30T23:35:56.000Z"])
+async def test_list_files_requests_last_modifying_user(
+    list_method, fetch_permissions, last_sync_time
+):
+    # prepare_file reads lastModifyingUser for the updated_by fields, so it has to be requested
+    async with create_gdrive_source() as source:
+        with mock.patch.object(
+            GoogleServiceAccountClient,
+            "api_call_paged",
+            return_value=AsyncIterator([]),
+        ) as api_call_paged:
+            client = source.google_drive_client()
+            async for _ in getattr(client, list_method)(
+                fetch_permissions, last_sync_time
+            ):
+                pass
+
+        fields = api_call_paged.call_args.kwargs["fields"]
+        files_fields = re.search(r"files\(([^)]*)\)", fields).group(1).split(",")
+        assert "lastModifyingUser" in files_fields
