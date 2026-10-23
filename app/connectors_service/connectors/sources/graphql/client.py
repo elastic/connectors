@@ -4,6 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import json
+from collections import deque
 from functools import cached_property
 
 import aiohttp
@@ -47,9 +48,9 @@ def selected_fields(selection_sets, fragments):
     of the query and stops a fragment that spreads itself.
     """
     expanded = set()
-    pending = list(selection_sets)
+    pending = deque(selection_sets)
     while pending:
-        for selection in pending.pop(0):
+        for selection in pending.popleft():
             if isinstance(selection, FieldNode):
                 yield selection
             elif isinstance(selection, InlineFragmentNode):
@@ -217,12 +218,20 @@ class GraphQLClient:
         graphql_object = self.pagination_key.split(".")[-1]
         self._logger.debug(f"Finding pageInfo field in {graphql_object}.")
         fields, fragments = fields_at_path(ast, self.pagination_key.split("."))
+        # A field selected more than once (for example in `... on User` and
+        # `... on Organization`) yields one cursor variable per selection; None
+        # when that selection has no `after: $variable`.
         cursor_variables = [
-            argument.value.name.value
+            next(
+                (
+                    argument.value.name.value
+                    for argument in field.arguments or ()
+                    if argument.name.value == "after"
+                    and isinstance(argument.value, VariableNode)
+                ),
+                None,
+            )
             for field in fields
-            for argument in field.arguments or ()
-            if argument.name.value == "after"
-            and isinstance(argument.value, VariableNode)
         ]
         page_info_present = any(
             response_key(field) == "pageInfo"
@@ -235,8 +244,14 @@ class GraphQLClient:
                 fragments,
             )
         )
-        if not (cursor_variables and page_info_present):
+        if not (any(cursor_variables) and page_info_present):
             msg = f"Pagination is enabled but 'pageInfo' not found. Please include 'pageInfo' field inside '{graphql_object}' and 'after' argument in '{graphql_object}'."
+            raise ConfigurableFieldValueError(msg)
+        # Only one variable is advanced between pages, so every selection of the
+        # paginated field has to read the cursor from it. Otherwise the branch the
+        # response takes could keep requesting the same page.
+        if len(set(cursor_variables)) > 1:
+            msg = f"Pagination key '{self.pagination_key}' is selected more than once with different 'after' arguments. Please pass the same variable to 'after' in every selection of '{graphql_object}'."
             raise ConfigurableFieldValueError(msg)
         return cursor_variables[0]
 

@@ -398,6 +398,80 @@ async def test_fetch_data_with_pagination_on_aliased_field():
     assert actual_response == ["1", "2"]
 
 
+def owner_repos_query(user_cursor, org_cursor):
+    # `node` is a User or an Organization; both branches alias their
+    # repositories to `repos`, so the response path is the same.
+    declarations = ", ".join(
+        f"${name}: String" for name in dict.fromkeys([user_cursor, org_cursor])
+    )
+    return (
+        f'query({declarations}) {{node(id: "1") {{'
+        f"... on User {{repos: repositories(first: 5, after: ${user_cursor}) "
+        "{nodes {id} pageInfo {hasNextPage endCursor}}} "
+        f"... on Organization {{repos: repositories(first: 5, after: ${org_cursor}) "
+        "{nodes {id} pageInfo {hasNextPage endCursor}}}}}"
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "query",
+    [
+        owner_repos_query("userCursor", "orgCursor"),
+        # the Organization branch has no cursor at all
+        owner_repos_query("cursor", "cursor").replace(
+            "repositories(first: 5, after: $cursor) {nodes {id} pageInfo {hasNextPage endCursor}}}}}",
+            "repositories(first: 5) {nodes {id} pageInfo {hasNextPage endCursor}}}}}",
+        ),
+    ],
+)
+async def test_fetch_data_with_pagination_rejects_different_cursors_for_one_key(
+    query,
+):
+    async with create_graphql_source() as source:
+        source.graphql_client.pagination_model = "cursor_pagination"
+        source.graphql_client.graphql_object_to_id_map = {"node.repos.nodes": "id"}
+        source.graphql_client.pagination_key = "node.repos"
+        source.graphql_client.post = AsyncMock()
+        with pytest.raises(ConfigurableFieldValueError, match="same variable"):
+            async for _ in source.fetch_data(query):
+                pass
+        source.graphql_client.post.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_fetch_data_with_pagination_shares_one_cursor_across_fragments():
+    actual_response = []
+    async with create_graphql_source() as source:
+        source.graphql_client.pagination_model = "cursor_pagination"
+        source.graphql_client.graphql_object_to_id_map = {"node.repos.nodes": "id"}
+        source.graphql_client.pagination_key = "node.repos"
+        source.graphql_client.post = AsyncMock(
+            side_effect=[
+                {
+                    "node": {
+                        "repos": {
+                            "nodes": [{"id": "1"}],
+                            "pageInfo": {"hasNextPage": True, "endCursor": "c1"},
+                        }
+                    }
+                },
+                {
+                    "node": {
+                        "repos": {
+                            "nodes": [{"id": "2"}],
+                            "pageInfo": {"hasNextPage": False, "endCursor": "c2"},
+                        }
+                    }
+                },
+            ]
+        )
+        async for doc in source.fetch_data(owner_repos_query("cursor", "cursor")):
+            actual_response.append(doc["_id"])
+        assert source.graphql_client.variables == {"cursor": "c1"}
+    assert actual_response == ["1", "2"]
+
+
 @pytest.mark.asyncio
 async def test_get_sends_variables():
     async with create_graphql_source() as source:
