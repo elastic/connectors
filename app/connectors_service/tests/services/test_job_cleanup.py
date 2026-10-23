@@ -11,7 +11,10 @@ import pytest
 from connectors.es.index import DocumentNotFoundError
 from connectors.services.job_cleanup import IDLE_JOB_ERROR, JobCleanUpService
 from tests.commons import AsyncIterator
-from tests.services.test_base import create_and_run_service
+from tests.services.test_base import (
+    SERVICE_TEST_STOP_AFTER_SECONDS,
+    create_and_run_service,
+)
 
 CONFIG = {
     "elasticsearch": {
@@ -70,7 +73,9 @@ async def test_cleanup_jobs(
     orphaned_idle_jobs.return_value = AsyncIterator([orphaned_idle_sync_job])
     idle_jobs.return_value = AsyncIterator([idle_sync_job])
 
-    await create_and_run_service(JobCleanUpService, config=CONFIG, stop_after=0.1)
+    await create_and_run_service(
+        JobCleanUpService, config=CONFIG, stop_after=SERVICE_TEST_STOP_AFTER_SECONDS
+    )
 
     orphaned_idle_sync_job.fail.assert_called_with(IDLE_JOB_ERROR)
     idle_sync_job.fail.assert_called_with(IDLE_JOB_ERROR)
@@ -99,7 +104,9 @@ async def test_orphaned_idle_job_failures_do_not_stop_cleanup(
     orphaned_idle_jobs.return_value = AsyncIterator([failing_job])
     idle_jobs.return_value = AsyncIterator([])
 
-    await create_and_run_service(JobCleanUpService, config=CONFIG, stop_after=0.1)
+    await create_and_run_service(
+        JobCleanUpService, config=CONFIG, stop_after=SERVICE_TEST_STOP_AFTER_SECONDS
+    )
 
     failing_job.fail.assert_awaited_once_with(IDLE_JOB_ERROR)
     connector.sync_done.assert_not_called()
@@ -127,7 +134,9 @@ async def test_idle_job_skips_sync_done_when_connector_missing(
     orphaned_idle_jobs.return_value = AsyncIterator([])
     idle_jobs.return_value = AsyncIterator([idle_sync_job])
 
-    await create_and_run_service(JobCleanUpService, config=CONFIG, stop_after=0.1)
+    await create_and_run_service(
+        JobCleanUpService, config=CONFIG, stop_after=SERVICE_TEST_STOP_AFTER_SECONDS
+    )
 
     idle_sync_job.fail.assert_called_with(IDLE_JOB_ERROR)
     connector.sync_done.assert_not_called()
@@ -156,6 +165,8 @@ async def test_idle_job_sync_done_when_job_reload_fails(
     orphaned_idle_jobs.return_value = AsyncIterator([])
     idle_jobs.return_value = AsyncIterator([idle_sync_job])
 
-    await create_and_run_service(JobCleanUpService, config=CONFIG, stop_after=0.1)
+    await create_and_run_service(
+        JobCleanUpService, config=CONFIG, stop_after=SERVICE_TEST_STOP_AFTER_SECONDS
+    )
 
     connector.sync_done.assert_called_once_with(job=None)
