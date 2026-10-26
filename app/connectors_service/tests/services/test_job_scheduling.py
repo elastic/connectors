@@ -23,7 +23,10 @@ from connectors.protocol import (
 )
 from connectors.services.job_scheduling import JobSchedulingService
 from tests.commons import AsyncIterator
-from tests.services.test_base import create_and_run_service
+from tests.services.test_base import (
+    SERVICE_TEST_STOP_AFTER_SECONDS,
+    create_and_run_service,
+)
 
 JOB_TYPES = [JobType.FULL, JobType.ACCESS_CONTROL]
 
@@ -374,10 +377,9 @@ async def test_run_when_sync_fails_then_continues_service_execution(
 
     connector.heartbeat.side_effect = Exception("Something went wrong!")
 
-    # 0.15 is a bit arbitrary here
-    # It should be enough to make the loop execute a couple of times
-    # but is there a better way to tell service to execute loop a couple of times?
-    await create_and_run_service(JobSchedulingService, stop_after=0.15)
+    await create_and_run_service(
+        JobSchedulingService, stop_after=SERVICE_TEST_STOP_AFTER_SECONDS
+    )
 
     # assert that service tried to call connector heartbeat for all connectors
     connector.heartbeat.assert_awaited()
@@ -410,7 +412,9 @@ async def test_run_when_connector_fields_are_invalid(
 
     connector = mock_connector(next_sync=datetime.now(timezone.utc))
     connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
-    await create_and_run_service(JobSchedulingService, stop_after=0.15)
+    await create_and_run_service(
+        JobSchedulingService, stop_after=SERVICE_TEST_STOP_AFTER_SECONDS
+    )
 
     data_source_mock.validate_config_fields.assert_called()
     data_source_mock.validate_config.assert_awaited_once()
@@ -448,7 +452,9 @@ async def test_run_when_connector_failed_validation_then_succeeded(
     connector_index_mock.supported_connectors.return_value = AsyncIterator(
         [connector], reusable=True
     )
-    await create_and_run_service(JobSchedulingService, stop_after=0.15)
+    await create_and_run_service(
+        JobSchedulingService, stop_after=SERVICE_TEST_STOP_AFTER_SECONDS
+    )
 
     data_source_mock.validate_config_fields.assert_called()
     data_source_mock.validate_config.assert_awaited()
@@ -481,7 +487,9 @@ async def test_run_when_connector_ping_fails(
 
     connector = mock_connector(next_sync=datetime.now(timezone.utc))
     connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
-    await create_and_run_service(JobSchedulingService, stop_after=0.15)
+    await create_and_run_service(
+        JobSchedulingService, stop_after=SERVICE_TEST_STOP_AFTER_SECONDS
+    )
 
     data_source_mock.validate_config_fields.assert_called()
     data_source_mock.validate_config.assert_awaited_once()
@@ -512,7 +520,9 @@ async def test_run_when_connector_validate_config_fails(
     connector = mock_connector(next_sync=datetime.now(timezone.utc))
     connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
 
-    await create_and_run_service(JobSchedulingService, stop_after=0.15)
+    await create_and_run_service(
+        JobSchedulingService, stop_after=SERVICE_TEST_STOP_AFTER_SECONDS
+    )
 
     data_source_mock.validate_config_fields.assert_called()
     data_source_mock.validate_config.assert_awaited_once()
@@ -566,7 +576,9 @@ async def test_run_when_validation_is_very_slow(
 
     connector = mock_connector(next_sync=datetime.now(timezone.utc))
     connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
-    await create_and_run_service(JobSchedulingService, stop_after=0.15)
+    await create_and_run_service(
+        JobSchedulingService, stop_after=SERVICE_TEST_STOP_AFTER_SECONDS
+    )
 
     data_source_mock.validate_config_fields.assert_called()
     data_source_mock.validate_config.assert_awaited_once()

@@ -593,3 +593,53 @@ async def test_yield_docs_custom_query():
             ["tables"], "select * form tables"
         ):
             pass
+
+
+def mock_data_streamer(column_names, rows):
+    async def data_streamer(table=None, query=None):
+        yield column_names
+        for row in rows:
+            yield row
+
+    return data_streamer
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "query_columns, id_columns, expected_ids",
+    [
+        # the query selects the primary key: one document per row
+        (["ids", "names"], None, ["xe_dbo_emp_table_1", "xe_dbo_emp_table_2"]),
+        # the query does not select the primary key: the query is skipped
+        (["names"], None, []),
+        # the query selects the configured id column: one document per row
+        (["names"], ["names"], ["xe_dbo_emp_table_abcd", "xe_dbo_emp_table_xyz"]),
+        # the query does not select the configured id column: the query is skipped
+        (["ids"], ["names"], []),
+    ],
+)
+async def test_yield_docs_custom_query_requires_id_columns_in_query(
+    query_columns, id_columns, expected_ids
+):
+    rows = {
+        ("ids", "names"): [[1, "abcd"], [2, "xyz"]],
+        ("names",): [["abcd"], ["xyz"]],
+        ("ids",): [[1], [2]],
+    }[tuple(query_columns)]
+    async with create_source(
+        MSSQLDataSource, database="xe", tables="*", schema="dbo"
+    ) as source:
+        source.mssql_client.get_table_primary_key = AsyncMock(return_value=["ids"])
+        source.mssql_client.get_table_last_update_time = AsyncMock(return_value=None)
+        source.mssql_client.data_streamer = mock_data_streamer(query_columns, rows)
+        if id_columns:
+            id_columns = [f"dbo_emp_table_{column}" for column in id_columns]
+
+        docs = [
+            doc
+            async for doc in source._yield_docs_custom_query(
+                ["emp_table"], "select ... from emp_table", id_columns=id_columns
+            )
+        ]
+
+        assert [doc["_id"] for doc in docs] == expected_ids
