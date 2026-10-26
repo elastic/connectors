@@ -22,7 +22,6 @@ from aiohttp.client_exceptions import (
 from aioresponses.core import normalize_url
 from connectors_sdk.source import DataSourceConfiguration
 
-from connectors.config import _default_config
 from connectors.sources import outlook_cloud
 from connectors.sources.outlook_cloud import OutlookCloudDataSource
 from connectors.sources.outlook_cloud import client as outlook_cloud_client
@@ -91,13 +90,6 @@ def test_get_configuration():
 
     assert list(config.to_dict()) == ["tenant_id", "client_id", "client_secret"]
     assert config.to_dict()["client_secret"]["sensitive"] is True
-
-
-def test_outlook_cloud_is_registered():
-    assert (
-        _default_config()["sources"]["outlook_cloud"]
-        == "connectors.sources.outlook_cloud:OutlookCloudDataSource"
-    )
 
 
 def test_outlook_cloud_does_not_use_ews():

@@ -16,6 +16,10 @@ class OutlookCloudDataSource(BaseDataSource):
 
     Only the connection, user listing and mailbox checks exist so far. `get_docs` fails
     on purpose, so a sync stops instead of replacing the index with an empty one.
+
+    Not registered in `connectors/config.py` on purpose (dark launch): the service type is
+    added there by the last content-sync PR of #4264, so no release exposes a connector
+    that cannot sync yet.
     """
 
     name = "Outlook Cloud"
