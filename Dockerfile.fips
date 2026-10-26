@@ -81,6 +81,7 @@ EOF
 FROM cgr.dev/chainguard/wolfi-base:latest AS python-builder
 
 ARG PYTHON_VERSION=3.11.9
+ARG PYTHON_OPTIMIZATIONS=true
 
 USER root
 
@@ -121,7 +122,7 @@ RUN wget https://www.python.org/ftp/python/${PYTHON_VERSION}/Python-${PYTHON_VER
   cd Python-${PYTHON_VERSION} && \
   ./configure \
     --prefix=/usr/local \
-    --enable-optimizations \
+    $([ "$PYTHON_OPTIMIZATIONS" = "true" ] && echo --enable-optimizations) \
     --with-openssl=/usr/local \
     --with-openssl-rpath=auto \
     --enable-shared \
@@ -163,6 +164,9 @@ RUN apk add --no-cache \
   ca-certificates \
   git \
   make \
+  build-base \
+  krb5 \
+  krb5-dev \
   libffi \
   bzip2 \
   xz \
@@ -204,12 +208,12 @@ COPY --chown=nonroot:nonroot . /app
 # Install application
 USER nonroot
 WORKDIR /app
-RUN make clean install-package freeze
+RUN make clean install-package-kerberos freeze
 RUN ln -s app/connectors_service/.venv/bin /app/bin
 
 # Clean up build tools
 USER root
-RUN apk del git make
+RUN apk del git make build-base krb5-dev
 
 USER nonroot
 ENTRYPOINT []

@@ -31,6 +31,7 @@ from connectors.sources.dropbox import (
     InvalidPathException,
     InvalidRefreshTokenException,
 )
+from connectors.sources.dropbox.common import FILE, PAPER, RECEIVED_FILE
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
 
@@ -980,6 +981,40 @@ async def test_api_call_when_status_429_exception():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "file_type, kwargs, expected_arg",
+    [
+        (
+            FILE,
+            {"path": '/Café/文件 "draft" v2.txt'},
+            {"path": '/Café/文件 "draft" v2.txt'},
+        ),
+        (
+            PAPER,
+            {"path": "/Ünïcode notes.paper"},
+            {"path": "/Ünïcode notes.paper", "export_format": "markdown"},
+        ),
+        (
+            RECEIVED_FILE,
+            {"url": "https://www.dropbox.com/scl/fi/abc/résumé.pdf"},
+            {"url": "https://www.dropbox.com/scl/fi/abc/résumé.pdf"},
+        ),
+    ],
+)
+async def test_get_request_headers_dropbox_api_arg_is_header_safe_json(
+    file_type, kwargs, expected_arg
+):
+    async with create_dropbox_source() as source:
+        headers = source.dropbox_client._get_request_headers(
+            file_type=file_type, url_name="files/download", kwargs=kwargs
+        )
+
+        # Dropbox requires the argument to be JSON with non-ASCII characters escaped
+        assert headers["Dropbox-API-Arg"].isascii()
+        assert json.loads(headers["Dropbox-API-Arg"]) == expected_arg
+
+
+@pytest.mark.asyncio
 @patch("connectors.sources.dropbox.client.DEFAULT_RETRY_AFTER", 0)
 async def test_api_call_when_status_429_exception_without_retry_after_header():
     async with create_source(DropboxDataSource) as source:
@@ -1232,6 +1267,31 @@ async def test_advanced_rules_validation_with_invalid_repos(
         )
 
         assert validation_result == expected_validation_result
+
+
+@pytest.mark.parametrize(
+    "max_results, is_valid",
+    [
+        (1, True),
+        (100, True),
+        (1000, True),
+        ("100", False),
+        (0, False),
+        (1001, False),
+        (True, False),
+    ],
+)
+@pytest.mark.asyncio
+async def test_advanced_rules_validation_of_max_results(max_results, is_valid):
+    async with create_source(DropboxDataSource) as source:
+        setup_dropbox(source)
+        source.dropbox_client.check_path = AsyncMock()
+
+        validation_result = await DropBoxAdvancedRulesValidator(source).validate(
+            [{"query": "copy", "options": {"max_results": max_results}}]
+        )
+
+        assert validation_result.is_valid is is_valid
 
 
 @pytest.mark.parametrize(

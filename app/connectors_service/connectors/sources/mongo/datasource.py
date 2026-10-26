@@ -3,6 +3,7 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+import base64
 import os
 import urllib.parse
 from contextlib import contextmanager
@@ -18,6 +19,7 @@ from bson import (
     DBRef,
     Decimal128,
     ObjectId,
+    Timestamp,
 )
 from bson.binary import UUID_SUBTYPE
 from connectors_sdk.source import BaseDataSource, ConfigurableFieldValueError
@@ -230,6 +232,14 @@ class MongoDataSource(BaseDataSource):
                         f"Unexpected uuid subtype, skipping serialization of a field {value}. Please provide uuidRepresentation=VALUE with correct value in connection string"
                     )
                     return None
+                # Any other subtype (MD5, encrypted, user-defined, ...) is raw binary data
+                else:
+                    value = base64.b64encode(value).decode("ascii")
+            elif isinstance(value, bytes):
+                # Generic binary data (subtype 0) is decoded by pymongo as plain bytes
+                value = base64.b64encode(value).decode("ascii")
+            elif isinstance(value, Timestamp):
+                value = value.as_datetime().isoformat()
             return value
 
         for key, value in doc.items():

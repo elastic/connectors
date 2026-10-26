@@ -5,10 +5,12 @@
 #
 """Azure Blob Storage source module responsible to fetch documents from Azure Blob Storage"""
 
+import base64
+import json
 from functools import partial
 
 from azure.storage.blob.aio import BlobServiceClient, ContainerClient
-from connectors_sdk.source import BaseDataSource
+from connectors_sdk.source import BaseDataSource, ConfigurableFieldValueError
 
 BLOB_SCHEMA = {
     "title": "name",
@@ -21,6 +23,20 @@ MAX_CONCURRENT_DOWNLOADS = (
     100  # Max concurrent download supported by Azure Blob Storage
 )
 INITIAL_DOWNLOAD_SIZE = 100000
+
+
+def _to_json(properties):
+    """Serialize blob or container properties to a JSON string.
+
+    Args:
+        properties (dict-like): Metadata dictionary or Azure model such as LeaseProperties
+
+    Returns:
+        string: JSON object, or None if there are no properties
+    """
+    if not properties:
+        return None
+    return json.dumps(dict(properties), default=str)
 
 
 class AzureBlobStorageDataSource(BaseDataSource):
@@ -124,6 +140,30 @@ class AzureBlobStorageDataSource(BaseDataSource):
 
         return f'AccountName={self.configuration["account_name"]};AccountKey={self.configuration["account_key"]};BlobEndpoint={self.configuration["blob_endpoint"]}'
 
+    async def validate_config(self):
+        """Validate the configuration, including the format of the account key.
+
+        Raises:
+            ConfigurableFieldValueError: if the account key is not valid base64.
+        """
+        await super().validate_config()
+        self._validate_account_key()
+
+    def _validate_account_key(self):
+        # The Azure SDK base64-decodes the account key when it signs a request,
+        # so a mistyped or truncated key otherwise fails later with a bare
+        # "Incorrect padding" error. Decode it the same way here to fail early.
+        try:
+            base64.b64decode(self.configuration["account_key"].encode("utf-8"))
+        except ValueError as exception:  # binascii.Error is a ValueError
+            msg = (
+                "The Azure Blob Storage account key is not valid. It must be "
+                "base64-encoded: copy it again from the 'Access keys' page of "
+                "the storage account in the Azure portal. A valid key is 88 "
+                "characters long and usually ends with '=='."
+            )
+            raise ConfigurableFieldValueError(msg) from exception
+
     async def ping(self):
         """Verify the connection with Azure Blob Storage"""
         self._logger.info("Generating connection string...")
@@ -150,7 +190,7 @@ class AzureBlobStorageDataSource(BaseDataSource):
 
         Args:
             blob (dictionary): Blob document from Azure Blob Storage
-            container_metadata (string): Blob container metadata
+            container_metadata (dictionary): Blob container metadata
 
         Returns:
             dictionary: Modified document with the help of adapter schema
@@ -160,9 +200,9 @@ class AzureBlobStorageDataSource(BaseDataSource):
             "_timestamp": blob["last_modified"].isoformat(),
             "created at": blob["creation_time"].isoformat(),
             "content type": blob["content_settings"]["content_type"],
-            "container metadata": str(container_metadata),
-            "metadata": str(blob["metadata"]),
-            "leasedata": str(blob["lease"]),
+            "container metadata": _to_json(container_metadata),
+            "metadata": _to_json(blob["metadata"]),
+            "leasedata": _to_json(blob["lease"]),
         }
         for elasticsearch_field, azure_blob_storage_field in BLOB_SCHEMA.items():
             document[elasticsearch_field] = blob[azure_blob_storage_field]

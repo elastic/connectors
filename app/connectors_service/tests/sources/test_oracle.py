@@ -135,3 +135,46 @@ async def test_get_docs():
 
             # Assert
             assert actual_response == expected_response
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "keys, rows, expected_ids",
+    [
+        (["ids"], [(0, "zero")], ["xe_emp_table_0_"]),
+        (
+            ["ids", "names"],
+            [(0, 1), (1, 0)],
+            ["xe_emp_table_0_1_", "xe_emp_table_1_0_"],
+        ),
+    ],
+)
+async def test_fetch_documents_keeps_zero_primary_key_values_in_id(
+    keys, rows, expected_ids
+):
+    async with create_source(OracleDataSource, sid="xe") as source:
+
+        async def data_streamer(table):
+            yield ["ids", "names"]
+            for row in rows:
+                yield row
+
+        with (
+            patch.object(
+                source.oracle_client, "get_table_row_count", return_value=len(rows)
+            ),
+            patch.object(
+                source.oracle_client, "get_table_primary_key", return_value=keys
+            ),
+            patch.object(
+                source.oracle_client,
+                "get_table_last_update_time",
+                return_value="2023-02-21T08:37:15+00:00",
+            ),
+            patch.object(
+                source.oracle_client, "data_streamer", side_effect=data_streamer
+            ),
+        ):
+            docs = [doc async for doc in source.fetch_documents(table="emp_table")]
+
+    assert [doc["_id"] for doc in docs] == expected_ids

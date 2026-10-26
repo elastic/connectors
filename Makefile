@@ -8,6 +8,7 @@ DOCKERFILE_PATH?=Dockerfile
 DOCKERFILE_FTEST_PATH?=app/connectors_service/tests/Dockerfile.ftest
 
 FIPS_DOCKERFILE_PATH?=Dockerfile.fips
+FIPS_BUILD_ARGS?=
 FIPS_DOCKERFILE_FTEST_PATH?=app/connectors_service/tests/Dockerfile.fips-ftest
 
 PACKAGE_NAME_VERSION="elasticsearch_connectors-$(VERSION)"
@@ -21,6 +22,10 @@ install-agent: install
 install-package:
 	cd $(connectors_sdk_dir); make install-package
 	cd $(app_dir); make install-package
+
+install-package-kerberos:
+	cd $(connectors_sdk_dir); make install-package
+	cd $(app_dir); make install-package-kerberos
 
 test: install
 	cd $(connectors_sdk_dir); make test
@@ -93,7 +98,7 @@ zip: clean
 ## FIPS Zone
 # Build FIPS images
 fips-build-base:
-	docker build -f $(FIPS_DOCKERFILE_PATH) -t connectors-fips-base .
+	docker build $(FIPS_BUILD_ARGS) -f $(FIPS_DOCKERFILE_PATH) -t connectors-fips-base .
 
 fips-build-test: fips-build-base
 	docker build -f $(FIPS_DOCKERFILE_FTEST_PATH) -t connectors-fips-test .
