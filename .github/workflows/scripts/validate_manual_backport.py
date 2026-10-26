@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Gate auto-approval for human-opened 8.19 backport pull requests."""
+"""Gate auto-approval for human-opened backport PRs to maintenance branches."""
 
 from __future__ import annotations
 
@@ -10,9 +10,17 @@ import sys
 import urllib.error
 import urllib.request
 
-PATCH_LABEL_RE = re.compile(r"^v8\.19\.\d+$")
+BRANCH_RE = re.compile(r"^(\d+)\.(\d+)$")
 BACKPORTED_FROM_RE = re.compile(r"Backported from #(\d+)", re.IGNORECASE)
 BACKPORT_LABEL = "backport"
+
+
+def patch_label_re(base_branch: str) -> re.Pattern[str] | None:
+    """Return the patch-label regex for a maintenance branch, e.g. 9.5 -> v9.5.N."""
+    match = BRANCH_RE.match(base_branch or "")
+    if not match:
+        return None
+    return re.compile(rf"^v{match.group(1)}\.{match.group(2)}\.\d+$")
 
 
 def parse_backported_from_pr(body: str) -> int | None:
@@ -53,12 +61,18 @@ def main() -> int:
     title = os.environ.get("PR_TITLE", "")
     body = os.environ.get("PR_BODY", "") or ""
     pr_number = os.environ.get("PR_NUMBER", "").strip()
+    base_branch = os.environ.get("BASE_BRANCH", "").strip()
     if not pr_number.isdigit():
         print("PR_NUMBER must be set.", file=sys.stderr)
         return 1
 
-    if not title.startswith("[8.19]"):
-        _deny("Title must start with [8.19].")
+    label_re = patch_label_re(base_branch)
+    if label_re is None:
+        _deny(f"Base branch {base_branch!r} is not a maintenance branch.")
+        return 0
+
+    if not title.startswith(f"[{base_branch}]"):
+        _deny(f"Title must start with [{base_branch}].")
         return 0
 
     try:
@@ -105,8 +119,11 @@ def main() -> int:
         _deny(f"Source PR #{source_number} must target main.")
         return 0
 
-    if not any(PATCH_LABEL_RE.match(label) for label in _label_names(source)):
-        _deny(f"Source PR #{source_number} must have an 8.19 patch label (v8.19.x).")
+    if not any(label_re.match(label) for label in _label_names(source)):
+        _deny(
+            f"Source PR #{source_number} must have a {base_branch} patch label "
+            f"(v{base_branch}.x)."
+        )
         return 0
 
     with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as out:
