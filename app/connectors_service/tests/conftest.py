@@ -10,7 +10,7 @@ import os
 import re
 import sys
 import traceback
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 import pytest_asyncio
@@ -131,6 +131,10 @@ def mock_responses():
 @pytest.fixture(autouse=True)
 def block_aiogoogle_discovery_http():
     """Avoid real HTTP to Google's Discovery API (slow and flaky under --fail-slow)."""
+    if os.environ.get("RUNNING_FTEST", "").lower() in ("1", "true", "yes"):
+        yield
+        return
+
     try:
         from aiogoogle import Aiogoogle
     except ImportError:
@@ -138,7 +142,7 @@ def block_aiogoogle_discovery_http():
         return
 
     with patch.object(Aiogoogle, "discover", new_callable=AsyncMock) as mock_discover:
-        mock_discover.return_value = Mock()
+        mock_discover.return_value = MagicMock()
         yield mock_discover
 
 
