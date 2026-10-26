@@ -232,7 +232,12 @@ async def test_other_errors_are_not_retried(graph, patch_cancellable_sleeps):
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "error",
-    [ClientOSError(), ServerDisconnectedError(), ClientPayloadError(), TimeoutError()],
+    [
+        ClientOSError(),
+        ServerDisconnectedError(),
+        ClientPayloadError(),
+        asyncio.TimeoutError(),
+    ],
 )
 async def test_network_faults_are_retried(graph, patch_cancellable_sleeps, error):
     graph.get(PING_URL, exception=error)
