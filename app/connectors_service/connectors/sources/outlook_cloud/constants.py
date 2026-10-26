@@ -5,6 +5,9 @@
 #
 
 GRAPH_BASE_URL = "https://graph.microsoft.com/v1.0"
+GRAPH_HOST_URL = (
+    "https://graph.microsoft.com/"  # the only place the access token may be sent
+)
 
 # Graph returns stable ids that do not change when an item moves between folders.
 GRAPH_REQUEST_HEADERS = {"Prefer": 'IdType="ImmutableId"'}

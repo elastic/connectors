@@ -19,6 +19,7 @@ from connectors_sdk.logger import logger
 from connectors.sources.outlook_cloud.constants import (
     DEFAULT_RETRY_SECONDS,
     GRAPH_BASE_URL,
+    GRAPH_HOST_URL,
     GRAPH_REQUEST_HEADERS,
     MAILBOX_ACCESSIBLE,
     MAILBOX_MISSING,
@@ -97,7 +98,15 @@ class OutlookCloudClient:
         return first * 2 ** (attempt - 1)
 
     async def _get_json(self, url):
-        """GET a Graph URL. Throttling, temporary server errors and network faults are retried, then raised."""
+        """GET a Graph URL. Throttling, temporary server errors and network faults are retried, then raised.
+
+        Raises:
+            ValueError: the URL is not on Microsoft Graph. The access token is never sent elsewhere,
+                e.g. to a paging link (`@odata.nextLink`) that points to another host.
+        """
+        if not url.startswith(GRAPH_HOST_URL):
+            msg = f"Refusing to send the Microsoft Graph access token to {url.split('?')[0]}"
+            raise ValueError(msg)
         for attempt in range(1, RETRIES + 1):
             token = await self._token.get()
             headers = {"Authorization": f"Bearer {token}"} | GRAPH_REQUEST_HEADERS

@@ -168,6 +168,22 @@ async def test_get_users_follows_pagination(graph):
 
 
 @pytest.mark.asyncio
+async def test_paging_link_to_another_host_is_not_followed(graph):
+    other_host_url = "https://other.example.com/users?$skiptoken=page-2"
+    graph.get(
+        USERS_URL,
+        payload={"value": [user("1")], "@odata.nextLink": other_host_url},
+    )
+    graph.get(other_host_url, payload={"value": [user("2")]})
+
+    async with create_outlook_cloud_source() as source:
+        with pytest.raises(ValueError, match="other.example.com"):
+            [u async for u in source.client.get_users()]
+
+    assert not requests_to(graph, other_host_url)
+
+
+@pytest.mark.asyncio
 async def test_get_users_raises_when_users_cannot_be_listed(graph):
     graph.get(USERS_URL, status=403)
 
