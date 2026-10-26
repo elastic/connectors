@@ -128,6 +128,20 @@ def mock_responses():
         yield m
 
 
+@pytest.fixture(autouse=True)
+def block_aiogoogle_discovery_http():
+    """Avoid real HTTP to Google's Discovery API (slow and flaky under --fail-slow)."""
+    try:
+        from aiogoogle import Aiogoogle
+    except ImportError:
+        yield
+        return
+
+    with patch.object(Aiogoogle, "discover", new_callable=AsyncMock) as mock_discover:
+        mock_discover.return_value = Mock()
+        yield mock_discover
+
+
 @pytest_asyncio.fixture
 async def patch_cancellable_sleeps():
     with patch(

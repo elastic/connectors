@@ -373,19 +373,24 @@ async def test_connector_properties():
 
 
 @pytest.mark.asyncio
+# Do not call iso_utc() or datetime.now() in the parametrize tuple: those values are
+# fixed at collection time, while Connector.heartbeat() uses datetime.now() at test run.
+# A "recent" last_seen would look stale after a long suite and trip the interval check.
 @pytest.mark.parametrize(
-    "interval, last_seen, should_send_heartbeat",
+    "interval, last_seen_age_seconds, should_send_heartbeat",
     [
         (60, None, True),
-        (
-            60,
-            iso_utc(),
-            False,
-        ),
-        (60, iso_utc(datetime.now(timezone.utc) - timedelta(seconds=70)), True),
+        (60, 0, False),
+        (60, 70, True),
     ],
 )
-async def test_heartbeat(interval, last_seen, should_send_heartbeat):
+async def test_heartbeat(interval, last_seen_age_seconds, should_send_heartbeat):
+    if last_seen_age_seconds is None:
+        last_seen = None
+    else:
+        last_seen = iso_utc(
+            datetime.now(timezone.utc) - timedelta(seconds=last_seen_age_seconds)
+        )
     source = {
         "_id": "1",
         "_source": {
