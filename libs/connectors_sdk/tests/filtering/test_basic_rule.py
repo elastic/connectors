@@ -1252,8 +1252,35 @@ def test_coerce_rule_value_to_bool():
 
     coerced_rule_value = basic_rule.coerce_rule_value_based_on_document_value(True)
 
-    assert isinstance(coerced_rule_value, str)
-    assert bool(coerced_rule_value)
+    assert coerced_rule_value is True
+
+
+@pytest.mark.parametrize(
+    "rule_value, document_value, should_match",
+    [
+        ("true", True, True),
+        ("t", True, True),
+        ("yes", True, True),
+        ("false", False, True),
+        ("off", False, True),
+        ("true", False, False),
+        ("false", True, False),
+        ("maybe", True, False),
+    ],
+)
+def test_equals_rule_matches_boolean_document_values(
+    rule_value, document_value, should_match
+):
+    basic_rule = BasicRule(
+        id_=1,
+        order=1,
+        policy=Policy.EXCLUDE,
+        field=DESCRIPTION_KEY,
+        rule=Rule.EQUALS,
+        value=rule_value,
+    )
+
+    assert basic_rule.matches({DESCRIPTION_KEY: document_value}) is should_match
 
 
 def test_coerce_rule_value_to_datetime_date_if_it_is_datetime():
@@ -1288,8 +1315,33 @@ def test_coerce_rule_value_to_datetime_date_if_it_is_date():
         datetime.date(year=2023, month=2, day=2)
     )
 
-    assert isinstance(coerced_rule_value, datetime.date)
-    assert coerced_rule_value == datetime.datetime(year=2022, month=1, day=1)
+    assert type(coerced_rule_value) is datetime.date
+    assert coerced_rule_value == datetime.date(year=2022, month=1, day=1)
+
+
+@pytest.mark.parametrize(
+    "rule, rule_value, should_match",
+    [
+        (Rule.LESS_THAN, "2024-01-01", True),
+        (Rule.LESS_THAN, "2022-01-01T10:30:00", False),
+        (Rule.GREATER_THAN, "2022-01-01", True),
+        (Rule.GREATER_THAN, "2024-01-01", False),
+        (Rule.EQUALS, "2023-02-02", True),
+    ],
+)
+def test_rules_compare_date_document_values(rule, rule_value, should_match):
+    basic_rule = BasicRule(
+        id_=1,
+        order=1,
+        policy=Policy.INCLUDE,
+        field=DESCRIPTION_KEY,
+        rule=rule,
+        value=rule_value,
+    )
+
+    document = {DESCRIPTION_KEY: datetime.date(year=2023, month=2, day=2)}
+
+    assert basic_rule.matches(document) is should_match
 
 
 def test_coerce_rule_to_default_if_type_is_not_registered():
