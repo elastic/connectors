@@ -24,6 +24,7 @@ from connectors.sources.outlook_cloud.constants import (
     MAILBOX_MISSING,
     MAILBOX_OUT_OF_SCOPE,
     MAX_CONCURRENT_MAILBOXES,
+    NETWORK_RETRY_SECONDS,
     REQUEST_TIMEOUT,
     RETRIES,
     RETRYABLE_STATUSES,
@@ -79,11 +80,21 @@ class OutlookCloudClient:
 
     @staticmethod
     def _retry_delay(error, attempt):
-        """Seconds to wait before retrying: Retry-After if Graph sent one, otherwise a doubling default."""
+        """Seconds to wait before retrying.
+
+        Retry-After if Graph sent one. Otherwise a doubling default: 30 s for a Graph
+        answer, 2 s for a network fault (nothing to wait for, the server did not answer).
+        """
         try:
             return int(error.headers["Retry-After"])
         except (AttributeError, KeyError, TypeError, ValueError):
-            return DEFAULT_RETRY_SECONDS * 2 ** (attempt - 1)
+            pass
+        first = (
+            DEFAULT_RETRY_SECONDS
+            if isinstance(error, ClientResponseError)
+            else NETWORK_RETRY_SECONDS
+        )
+        return first * 2 ** (attempt - 1)
 
     async def _get_json(self, url):
         """GET a Graph URL. Throttling, temporary server errors and network faults are retried, then raised."""

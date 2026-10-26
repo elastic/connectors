@@ -33,6 +33,7 @@ from connectors.sources.outlook_cloud.constants import (
     MAILBOX_ACCESSIBLE,
     MAILBOX_MISSING,
     MAILBOX_OUT_OF_SCOPE,
+    NETWORK_RETRY_SECONDS,
     RETRIES,
 )
 from connectors.sources.shared.microsoft.graph import (
@@ -187,7 +188,7 @@ async def test_throttled_request_waits_for_retry_after(graph, patch_cancellable_
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("status", [429, 503, 504])
+@pytest.mark.parametrize("status", [429, 502, 503, 504])
 async def test_retryable_status_without_retry_after_uses_doubling_default(
     graph, patch_cancellable_sleeps, status
 ):
@@ -246,7 +247,7 @@ async def test_network_faults_are_retried(graph, patch_cancellable_sleeps, error
     async with create_outlook_cloud_source() as source:
         await source.ping()
 
-    patch_cancellable_sleeps.assert_awaited_once_with(DEFAULT_RETRY_SECONDS)
+    patch_cancellable_sleeps.assert_awaited_once_with(NETWORK_RETRY_SECONDS)
 
 
 @pytest.mark.asyncio

@@ -14,8 +14,11 @@ USERS_PAGE_SIZE = 999
 
 REQUEST_TIMEOUT = 300  # seconds
 RETRIES = 5
-RETRYABLE_STATUSES = frozenset({429, 503, 504})
+RETRYABLE_STATUSES = frozenset({429, 502, 503, 504})
 DEFAULT_RETRY_SECONDS = 30  # used when Graph sends no usable Retry-After header
+NETWORK_RETRY_SECONDS = (
+    2  # first wait after a dropped connection or timeout, doubled each time
+)
 
 # How many mailboxes are handled at the same time. Not exposed in the configuration.
 MAX_CONCURRENT_MAILBOXES = 10
