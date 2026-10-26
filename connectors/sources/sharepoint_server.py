@@ -283,11 +283,14 @@ class SharepointServerClient:
         """
         next_url = ""
         while True:
+            # `_api_call` yields nothing once its retries are exhausted
+            page_fetched = False
             if next_url != "":
                 async for response in self._api_call(
                     url_name=param_name,
                     url=next_url,
                 ):
+                    page_fetched = True
                     yield response.get("value", [])  # pyright: ignore
 
                     next_url = response.get("odata.nextLink", "")  # pyright: ignore
@@ -300,9 +303,16 @@ class SharepointServerClient:
                     host_url=self.host_url,
                     selected_field=selected_field,
                 ):
+                    page_fetched = True
                     yield response.get("value", [])  # pyright: ignore
 
                     next_url = response.get("odata.nextLink", "")  # pyright: ignore
+            if not page_fetched:
+                if next_url != "":
+                    self._logger.warning(
+                        f"Stopping pagination for '{param_name}': the request for {next_url} failed after retries."
+                    )
+                break
             if next_url == "":
                 break
 
@@ -316,8 +326,9 @@ class SharepointServerClient:
             Response of the GET call.
         """
         skip = 0
-        response_result = []
         while True:
+            # `_api_call` yields nothing once its retries are exhausted
+            response_result = None
             async for response in self._api_call(
                 url_name=param_name,
                 parent_site_url=site_url,
@@ -330,6 +341,12 @@ class SharepointServerClient:
                 yield response_result
 
                 skip += TOP
+            if response_result is None:
+                if skip > 0:
+                    self._logger.warning(
+                        f"Stopping pagination for '{param_name}' of {site_url}: the request at offset {skip} failed after retries."
+                    )
+                break
             if len(response_result) < TOP:
                 break
 
