@@ -957,6 +957,63 @@ async def test_fetch_data_with_next_url_list_items():
         ]
 
 
+def api_call_failing_after(responses, max_calls=5):
+    """Fake `_api_call` that yields each response once, then yields nothing,
+    like `_api_call` does when every retry of a request has failed."""
+    calls = []
+
+    async def _api_call(url_name, url="", **url_kwargs):
+        calls.append(url or url_kwargs)
+        assert len(calls) <= max_calls, "the failed request was repeated forever"
+        if len(calls) <= len(responses):
+            yield responses[len(calls) - 1]
+
+    return _api_call, calls
+
+
+@pytest.mark.asyncio
+@patch("connectors.sources.sharepoint.sharepoint_server.client.TOP", 2)
+async def test_fetch_data_with_query_stops_when_a_later_page_fails():
+    full_page = {"value": [{"Id": "1"}, {"Id": "2"}]}
+    async with create_sps_source() as source:
+        api_call, calls = api_call_failing_after([full_page])
+        source.sharepoint_client._api_call = api_call
+
+        pages = [
+            page
+            async for page in source.sharepoint_client._fetch_data_with_query(
+                site_url="/sites/collection1", param_name="lists"
+            )
+        ]
+
+        assert pages == [[{"Id": "1"}, {"Id": "2"}]]
+        assert [call["skip"] for call in calls] == [0, 2]
+
+
+@pytest.mark.asyncio
+async def test_fetch_data_with_next_url_stops_when_a_later_page_fails():
+    first_page = {
+        "value": [{"Id": "1"}],
+        "odata.nextLink": "https://sharepoint.example/next-page",
+    }
+    async with create_sps_source() as source:
+        api_call, calls = api_call_failing_after([first_page])
+        source.sharepoint_client._api_call = api_call
+
+        pages = [
+            page
+            async for page in source.sharepoint_client._fetch_data_with_next_url(
+                site_url="/sites/collection1",
+                list_id="123abc",
+                param_name="list_items",
+            )
+        ]
+
+        assert pages == [[{"Id": "1"}]]
+        assert len(calls) == 2
+        assert calls[1] == "https://sharepoint.example/next-page"
+
+
 class ClientSession:
     """Mock Client Session Class"""
 
