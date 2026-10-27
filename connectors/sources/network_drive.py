@@ -68,6 +68,7 @@ STATUS_PASSWORD_MUST_CHANGE = 3221226020
 MAX_CHUNK_SIZE = 65536
 RETRIES = 3
 RETRY_INTERVAL = 2
+WILDCARDS = ("*", "?", "[", "{", "!", "^")
 
 WINDOWS = "windows"
 LINUX = "linux"
@@ -518,6 +519,9 @@ class NASDataSource(BaseDataSource):
         )
         stack = deque()
         stack.append(path)
+        # A pattern without wildcards names a single path, so there is no need to
+        # descend into subfolders to look for it.
+        has_wildcard = any(char in glob_pattern for char in WILDCARDS)
 
         while stack:
             directory_info = []
@@ -535,7 +539,7 @@ class NASDataSource(BaseDataSource):
                 )
                 for file in directory_info:
                     match_with_previous_rules = False
-                    if file.is_dir():
+                    if file.is_dir() and has_wildcard:
                         stack.append(file.path)
                     file_path = file.path.split("/", 1)[1].replace("\\", "/")
                     is_file_match = glob.globmatch(
@@ -560,11 +564,12 @@ class NASDataSource(BaseDataSource):
                 continue
 
     def get_base_path(self, pattern):
-        wildcards = ["*", "?", "[", "{", "!", "^"]
         for i, char in enumerate(pattern):
-            if char in wildcards:
+            if char in WILDCARDS:
                 return rf"\\{self.server_ip}/{pattern[:i].rsplit('/', 1)[0]}/"
-        return rf"\\{self.server_ip}/{pattern}"
+        # A pattern without wildcards names one file or folder. It can only match as an
+        # entry of its parent folder, so scan the parent instead of the path itself.
+        return rf"\\{self.server_ip}/{pattern.rsplit('/', 1)[0]}/"
 
     async def fetch_filtered_directory(self, advanced_rules):
         """
