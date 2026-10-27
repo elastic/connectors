@@ -19,6 +19,17 @@ HERE = os.path.dirname(__file__)
 FIXTURES_DIR = os.path.abspath(os.path.join(HERE, "..", "fixtures"))
 CONFIG_FILE = os.path.join(FIXTURES_DIR, "config.yml")
 
+# Service loop tests use create_and_run_service(..., stop_after=...):
+#
+# - SERVICE_TEST_STOP_GRACEFULLY (0): stop after the current loop via running=False
+#   without cancelling in-flight work. Use when one poll/scheduling cycle is enough.
+#
+# - SERVICE_TEST_STOP_AFTER_SECONDS: sleep then service.stop() so multi-iteration
+#   cases can finish (or slow work can be interrupted). Keep well below Makefile
+#   SLOW_TEST_THRESHOLD (1s); values near 1s flake on loaded CI workers.
+SERVICE_TEST_STOP_GRACEFULLY = 0
+SERVICE_TEST_STOP_AFTER_SECONDS = 0.55
+
 
 def create_service(service_klass, config=None, config_file=None, idling=None):
     if config is None:
