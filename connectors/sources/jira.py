@@ -89,7 +89,7 @@ ATLASSIAN = "atlassian"
 USER_QUERY = "expand=groups,applicationRoles"
 # Bounded JQL catch-all for "all issues". The newer Cloud issue-search API only accepts
 # bounded JQL (empty-string is rejected); every issue has a key, so this matches them all.
-ALL_ISSUES_JQL = "key%20IS%20NOT%20EMPTY"
+ALL_ISSUES_JQL = "key IS NOT EMPTY"
 
 
 class ThrottledError(Exception):
@@ -357,10 +357,12 @@ class JiraClient:
         Yields:
             response: Return api response.
         """
-        if not jql and url_name == ISSUES:
+        if url_name == ISSUES:
             # Resolved once here so both pagination styles share a single source of the
             # bounded "all issues" catch-all and never format jql=None into the URL.
-            jql = ALL_ISSUES_JQL
+            # The JQL is formatted into the query string, so percent-encode it: a raw
+            # "&", "#" or "+" would split the parameter, start a fragment or read as a space.
+            jql = parse.quote(jql or ALL_ISSUES_JQL, safe="")
 
         use_cursor_pagination = (
             url_name == ISSUES and self.data_source_type == JIRA_CLOUD
