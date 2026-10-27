@@ -1344,6 +1344,32 @@ async def test_fetch_filtered_directory_matches_pattern_without_wildcards(
     assert sorted(paths) == expected_paths
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "pattern, expected_scans",
+    [
+        # no wildcard: only the parent folder is scanned, not its subfolders
+        ("share/folder/file.txt", 1),
+        # wildcard: subfolders are still scanned
+        ("share/folder/*.txt", 2),
+    ],
+)
+async def test_fetch_filtered_directory_descends_only_for_wildcards(
+    pattern, expected_scans
+):
+    async with create_source(NASDataSource) as source:
+        source.format_document = lambda file: file.path
+        with mock.patch("smbclient.scandir", side_effect=fake_scandir) as scandir:
+            _ = [
+                path
+                async for path in source.fetch_filtered_directory(
+                    advanced_rules=[{"pattern": pattern}]
+                )
+            ]
+
+    assert scandir.call_count == expected_scans
+
+
 # Cross-domain SID collision tests
 # Two users from different domains can share the same RID (last SID segment).
 # Using full SIDs as identities prevents one user from inheriting another's permissions.
