@@ -415,7 +415,27 @@ async def test_client_get_column_names_for_query_drops_trailing_semicolon(
         await client.get_column_names_for_query(query)
 
     mock_cursor.execute.assert_awaited_once_with(
-        "SELECT q.* FROM (SELECT id, class FROM students) as q LIMIT 0"
+        "SELECT q.* FROM (SELECT id, class FROM students\n) as q LIMIT 0"
+    )
+
+
+@pytest.mark.asyncio
+async def test_client_get_column_names_for_query_keeps_closing_parenthesis_after_comment(
+    patch_connection_pool,
+):
+    mock_cursor = MagicMock(spec=aiomysql.Cursor)
+    mock_cursor.description = [("id",)]
+    mock_cursor.__aenter__.return_value = mock_cursor
+
+    patch_connection_pool.acquire.return_value = await mock_connection(mock_cursor)
+
+    client = await setup_mysql_client()
+
+    async with client:
+        await client.get_column_names_for_query("SELECT id FROM students -- all\n")
+
+    mock_cursor.execute.assert_awaited_once_with(
+        "SELECT q.* FROM (SELECT id FROM students -- all\n) as q LIMIT 0"
     )
 
 
@@ -1270,37 +1290,42 @@ def test_row2doc(
         # Query without ORDER BY and semicolon
         (
             "SELECT id, name FROM table_name",
-            "SELECT id, name FROM table_name ORDER BY id LIMIT 5000 OFFSET 0;",
+            "SELECT id, name FROM table_name\nORDER BY id LIMIT 5000 OFFSET 0;",
         ),
         # Query with semicolon but without ORDER BY
         (
             "SELECT id, name FROM table_name;",
-            "SELECT id, name FROM table_name ORDER BY id LIMIT 5000 OFFSET 0;",
+            "SELECT id, name FROM table_name\nORDER BY id LIMIT 5000 OFFSET 0;",
         ),
         # Query with ORDER BY but without semicolon
         (
             "SELECT id, name FROM table_name ORDER BY marks",
-            "SELECT id, name FROM table_name ORDER BY marks LIMIT 5000 OFFSET 0;",
+            "SELECT id, name FROM table_name ORDER BY marks\nLIMIT 5000 OFFSET 0;",
         ),
         # Query with ORDER BY and semicolon
         (
             "SELECT id, name FROM table_name ORDER BY marks;",
-            "SELECT id, name FROM table_name ORDER BY marks LIMIT 5000 OFFSET 0;",
+            "SELECT id, name FROM table_name ORDER BY marks\nLIMIT 5000 OFFSET 0;",
         ),
         # Query with whitespace after the semicolon
         (
             "SELECT id, name FROM table_name;\n",
-            "SELECT id, name FROM table_name ORDER BY id LIMIT 5000 OFFSET 0;",
+            "SELECT id, name FROM table_name\nORDER BY id LIMIT 5000 OFFSET 0;",
         ),
         # Query with whitespace before the semicolon and after ORDER BY
         (
             "SELECT id, name FROM table_name ORDER BY marks ; ",
-            "SELECT id, name FROM table_name ORDER BY marks LIMIT 5000 OFFSET 0;",
+            "SELECT id, name FROM table_name ORDER BY marks\nLIMIT 5000 OFFSET 0;",
         ),
         # Query with trailing whitespace only
         (
             "SELECT id, name FROM table_name  ",
-            "SELECT id, name FROM table_name ORDER BY id LIMIT 5000 OFFSET 0;",
+            "SELECT id, name FROM table_name\nORDER BY id LIMIT 5000 OFFSET 0;",
+        ),
+        # Query ending with a line comment: the suffix must not end up in the comment
+        (
+            "SELECT id, name FROM table_name -- all rows\n",
+            "SELECT id, name FROM table_name -- all rows\nORDER BY id LIMIT 5000 OFFSET 0;",
         ),
     ],
 )

@@ -108,8 +108,9 @@ class MySQLClient:
     )
     async def get_column_names_for_query(self, query):
         async with self.connection.cursor(aiomysql.cursors.SSCursor) as cursor:
+            # The newline keeps a trailing `-- comment` from swallowing the closing parenthesis
             await cursor.execute(
-                f"SELECT q.* FROM ({strip_trailing_semicolons(query)}) as q LIMIT 0"
+                f"SELECT q.* FROM ({strip_trailing_semicolons(query)}\n) as q LIMIT 0"
             )
 
             return [f"{column[0]}" for column in cursor.description]
@@ -231,10 +232,11 @@ class MySQLClient:
         updated_query = ""
         has_orderby = bool(re.search(r"\bORDER\s+BY\b", query, flags=re.IGNORECASE))
         query = strip_trailing_semicolons(query)
+        # The newline keeps a trailing `-- comment` from swallowing the generated suffix
         if has_orderby:
-            updated_query = f"{query} LIMIT {self.fetch_size} OFFSET {offset};"
+            updated_query = f"{query}\nLIMIT {self.fetch_size} OFFSET {offset};"
         else:
-            updated_query = f"{query} ORDER BY {', '.join(primary_key_columns)} LIMIT {self.fetch_size} OFFSET {offset};"
+            updated_query = f"{query}\nORDER BY {', '.join(primary_key_columns)} LIMIT {self.fetch_size} OFFSET {offset};"
 
         return updated_query
 
