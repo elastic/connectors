@@ -4,7 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import os
-from urllib.parse import quote, urljoin
+from urllib.parse import quote
 
 import aiohttp
 from aiohttp import ClientResponseError, ServerDisconnectedError
@@ -430,11 +430,11 @@ class ConfluenceClient:
         if self.data_source_type == CONFLUENCE_DATA_CENTER:
             limit = DATACENTER_USER_BATCH
             key = "results"
-            url = urljoin(self.host_url, URLS[USERS_FOR_DATA_CENTER])
+            url = os.path.join(self.host_url, URLS[USERS_FOR_DATA_CENTER])
         else:
             limit = SERVER_USER_BATCH
             key = "users"
-            url = urljoin(self.host_url, URLS[USERS_FOR_SERVER])
+            url = os.path.join(self.host_url, URLS[USERS_FOR_SERVER])
 
         while True:
             url_ = url.format(start=start_at, limit=limit)
