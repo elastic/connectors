@@ -10,6 +10,7 @@ from contextlib import asynccontextmanager
 from copy import copy
 from unittest import mock
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
+from urllib.parse import parse_qs, urlsplit
 
 import aiohttp
 import pytest
@@ -418,7 +419,7 @@ def side_effect_function(url, ssl):
         return get_json_mock(mock_response=MOCK_PROJECT)
     elif (
         url
-        == f"{HOST_URL}/rest/api/3/search/jql?jql=type=bug&fields=*all&maxResults=100"
+        == f"{HOST_URL}/rest/api/3/search/jql?jql=type%3Dbug&fields=*all&maxResults=100"
     ):
         mocked_issue_data_bug = {
             "issues": [MOCK_ISSUE_TYPE_BUG],
@@ -428,7 +429,7 @@ def side_effect_function(url, ssl):
         return get_json_mock(mock_response=MOCK_ISSUE_TYPE_BUG)
     elif (
         url
-        == f"{HOST_URL}/rest/api/3/search/jql?jql=type=task&fields=*all&maxResults=100"
+        == f"{HOST_URL}/rest/api/3/search/jql?jql=type%3Dtask&fields=*all&maxResults=100"
     ):
         mocked_issue_data_task = {"issues": [MOCK_ISSUE]}
         return get_json_mock(mock_response=mocked_issue_data_task)
@@ -1117,7 +1118,7 @@ async def test_get_issues_for_jql_uses_deprecated_v2_search_for_server(data_sour
             issues = [
                 issue
                 async for issue in source.jira_client.get_issues_for_jql(
-                    jql="key%20IS%20NOT%20EMPTY"
+                    jql="key IS NOT EMPTY"
                 )
             ]
 
@@ -1152,7 +1153,7 @@ async def test_offset_pagination_stops_after_the_last_page(total, expected_pages
             _ = [
                 issue
                 async for issue in source.jira_client.get_issues_for_jql(
-                    jql="key%20IS%20NOT%20EMPTY"
+                    jql="key IS NOT EMPTY"
                 )
             ]
 
@@ -1203,7 +1204,7 @@ async def test_get_issues_for_jql_uses_cursor_based_v3_search_for_cloud():
             issues = [
                 issue
                 async for issue in source.jira_client.get_issues_for_jql(
-                    jql="key%20IS%20NOT%20EMPTY"
+                    jql="key IS NOT EMPTY"
                 )
             ]
 
@@ -1214,6 +1215,39 @@ async def test_get_issues_for_jql_uses_cursor_based_v3_search_for_cloud():
     assert all("rest/api/2/search" not in url for url in requested_urls)
     # get_issues_for_jql yields only keys.
     assert issues == [MOCK_ISSUE["key"]]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("data_source", [JIRA_CLOUD, JIRA_SERVER])
+@pytest.mark.parametrize(
+    "jql",
+    [
+        'project = "R&D" AND summary ~ "C#"',
+        'summary ~ "a+b" ORDER BY key',
+        'summary ~ "100%"',
+    ],
+)
+async def test_get_issues_for_jql_encodes_the_query(data_source, jql):
+    """The JQL from an advanced sync rule must reach Jira intact, even when it contains
+    characters that have a meaning in a URL ("&", "#", "+", "%")."""
+    requested_urls = []
+
+    def side_effect(url, ssl):
+        requested_urls.append(url)
+        return get_json_mock(mock_response={"issues": [MOCK_ISSUE], "total": 1})
+
+    async with create_jira_source(data_source=data_source) as source:
+        with mock.patch.object(
+            source.jira_client._get_session(), "get", side_effect=side_effect
+        ):
+            _ = [
+                issue async for issue in source.jira_client.get_issues_for_jql(jql=jql)
+            ]
+
+    assert len(requested_urls) == 1
+    query = parse_qs(urlsplit(requested_urls[0]).query)
+    assert query["jql"] == [jql]
+    assert query["fields"] == ["*all"]
 
 
 @pytest.mark.parametrize(
