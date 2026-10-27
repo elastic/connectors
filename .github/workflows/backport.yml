@@ -48,35 +48,3 @@ jobs:
           auto_merge: 'true'
           auto_merge_method: 'squash'
           manual_backport_command_template: 'backport --pr %pullNumber% --autoMerge --autoMergeMethod squash'
-
-      # The action's own auto-merge call fails ("Could not enable auto merging")
-      # because the bot PAT is rejected on protected branches. Enable it here
-      # for the backport PRs it just opened (matched by the "(#<source>)" title
-      # suffix). The scripts come from the default branch, not from the PR.
-      - name: Checkout trusted scripts
-        if: ${{ !cancelled() }}
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.repository.default_branch }}
-          sparse-checkout: .github/workflows/scripts
-          path: trusted
-          persist-credentials: false
-
-      - name: Enable auto-merge on created backport PRs
-        if: ${{ !cancelled() }}
-        env:
-          GH_REPO: ${{ github.repository }}
-          GH_TOKEN: ${{ github.token }}
-          DEFAULT_TOKEN: ${{ github.token }}
-          BOT_TOKEN: ${{ secrets.REPO_SCOPED_TOKEN }}
-          SOURCE_PR: ${{ github.event.pull_request.number }}
-        run: |
-          set -uo pipefail
-          if ! prs=$(gh api "repos/${GH_REPO}/pulls?state=open&sort=created&direction=desc&per_page=100" \
-            --jq ".[] | select((.title | endswith(\"(#${SOURCE_PR})\")) and ([.labels[].name] | index(\"backport\"))) | .number"); then
-            echo "::warning::Could not list backport PRs for #${SOURCE_PR}; enable auto-merge manually."
-            exit 0
-          fi
-          for pr in ${prs}; do
-            bash trusted/.github/workflows/scripts/enable_auto_merge.sh "${pr}"
-          done

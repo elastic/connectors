@@ -23,7 +23,7 @@ on:
 
 permissions:
   pull-requests: write
-  contents: write
+  contents: read
 
 concurrency:
   group: approve-manual-backport-${{ github.event.pull_request.number }}
@@ -40,7 +40,6 @@ jobs:
         with:
           ref: ${{ github.event.repository.default_branch }}
           sparse-checkout: .github/workflows/scripts
-          persist-credentials: false
 
       - name: Validate backport PR
         id: validate
@@ -72,14 +71,3 @@ jobs:
             --method POST \
             "repos/${{ github.repository }}/pulls/${PR_NUMBER}/reviews" \
             -f event=APPROVE
-
-      # Only reached for PRs whose author passed the team check above. Auto-merge
-      # still waits for the required checks.
-      - name: Enable auto-merge
-        if: steps.validate.outputs.approved == 'true'
-        env:
-          GH_REPO: ${{ github.repository }}
-          DEFAULT_TOKEN: ${{ github.token }}
-          BOT_TOKEN: ${{ secrets.REPO_SCOPED_TOKEN }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: bash .github/workflows/scripts/enable_auto_merge.sh "${PR_NUMBER}"
