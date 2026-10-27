@@ -372,20 +372,23 @@ async def test_connector_properties():
     assert isinstance(connector.last_access_control_sync_scheduled_at, datetime)
 
 
-@pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "interval, last_seen, should_send_heartbeat",
+    "interval, last_seen_age_seconds, should_send_heartbeat",
     [
         (60, None, True),
-        (
-            60,
-            iso_utc(),
-            False,
-        ),
-        (60, iso_utc(datetime.now(timezone.utc) - timedelta(seconds=70)), True),
+        (60, 0, False),
+        (60, 70, True),
     ],
 )
-async def test_heartbeat(interval, last_seen, should_send_heartbeat):
+@pytest.mark.asyncio
+async def test_heartbeat(interval, last_seen_age_seconds, should_send_heartbeat):
+    # Build last_seen here: @parametrize runs at collection time, heartbeat() uses now() at test run.
+    if last_seen_age_seconds is None:
+        last_seen = None
+    else:
+        last_seen = iso_utc(
+            datetime.now(timezone.utc) - timedelta(seconds=last_seen_age_seconds)
+        )
     source = {
         "_id": "1",
         "_source": {
