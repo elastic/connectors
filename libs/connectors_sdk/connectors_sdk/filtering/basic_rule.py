@@ -321,11 +321,17 @@ class BasicRule:
                 case str():
                     return str(self.value)
                 case bool():
-                    return str(to_bool(self.value))
+                    return to_bool(self.value)
                 case float() | int():
                     return float(self.value)
-                case datetime.date() | datetime.datetime:
+                case datetime.datetime():
                     return to_datetime(self.value)
+                case datetime.date():
+                    # A date and a datetime don't compare, so match the document's type
+                    coerced_value = to_datetime(self.value)
+                    if isinstance(coerced_value, datetime.datetime):
+                        return coerced_value.date()
+                    return coerced_value
                 case _:
                     return str(self.value)
         except ValueError as e:
