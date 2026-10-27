@@ -51,7 +51,7 @@ jobs:
           PR_TITLE: ${{ github.event.pull_request.title }}
           PR_BODY: ${{ github.event.pull_request.body }}
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
-          ALLOWED_TEAMS: ${{ vars.BACKPORT_APPROVER_TEAMS || 'search-extract-and-transform,enterprise-search' }}
+          ALLOWED_TEAMS: ${{ vars.BACKPORT_APPROVER_TEAMS || 'search-extract-and-transform' }}
           TEAM_TOKEN: ${{ secrets.REPO_SCOPED_TOKEN }}
         run: python3 .github/workflows/scripts/validate_manual_backport.py
 
