@@ -602,14 +602,16 @@ EXPECTED_QUERY_RESPONSE = {
 
 @asynccontextmanager
 async def create_confluence_source(
-    use_text_extraction_service=False, data_source=CONFLUENCE_SERVER
+    use_text_extraction_service=False,
+    data_source=CONFLUENCE_SERVER,
+    confluence_url=HOST_URL,
 ):
     async with create_source(
         ConfluenceDataSource,
         data_source=data_source,
         username="admin",
         password="changeme",
-        confluence_url=HOST_URL,
+        confluence_url=confluence_url,
         spaces="*",
         ssl_enabled=False,
         use_document_level_security=False,
@@ -1657,6 +1659,41 @@ async def test_fetch_confluence_server_users():
         ):
             async for user in source.confluence_client.fetch_confluence_server_users():
                 assert user is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "data_source, expected_path",
+    [
+        (
+            CONFLUENCE_SERVER,
+            "/confluence/rest/extender/1.0/user/getUsersWithConfluenceAccess?showExtendedDetails=true&startAt=0&maxResults=1000",
+        ),
+        (
+            CONFLUENCE_DATA_CENTER,
+            "/confluence/rest/api/user/list?limit=200&start=0",
+        ),
+    ],
+)
+async def test_fetch_confluence_server_users_keeps_context_path(
+    data_source, expected_path
+):
+    """Confluence Server/Data Center is often served under a context path
+    (https://host/confluence). The user listing must keep it, like the other API calls."""
+    async with create_confluence_source(
+        data_source=data_source, confluence_url=f"{HOST_URL}/confluence"
+    ) as source:
+        async_response = AsyncMock()
+        async_response.json.return_value = {"users": [], "results": []}
+        with mock.patch.object(
+            ConfluenceClient, "api_call", return_value=async_response
+        ) as api_call:
+            _ = [
+                users
+                async for users in source.confluence_client.fetch_confluence_server_users()
+            ]
+
+        api_call.assert_awaited_once_with(url=f"{HOST_URL}{expected_path}")
 
 
 @pytest.mark.asyncio
