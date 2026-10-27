@@ -22,6 +22,12 @@ from connectors.utils import (
 )
 
 
+def strip_trailing_semicolons(query):
+    """Drop the statement terminator, and any whitespace around it, from a custom
+    query so that it can be wrapped in a subquery or extended with ORDER BY/LIMIT."""
+    return re.sub(r"[\s;]+$", "", query)
+
+
 class MySQLClient:
     def __init__(
         self,
@@ -102,7 +108,9 @@ class MySQLClient:
     )
     async def get_column_names_for_query(self, query):
         async with self.connection.cursor(aiomysql.cursors.SSCursor) as cursor:
-            await cursor.execute(f"SELECT q.* FROM ({query}) as q LIMIT 0")
+            await cursor.execute(
+                f"SELECT q.* FROM ({strip_trailing_semicolons(query)}) as q LIMIT 0"
+            )
 
             return [f"{column[0]}" for column in cursor.description]
 
@@ -222,9 +230,7 @@ class MySQLClient:
     ):
         updated_query = ""
         has_orderby = bool(re.search(r"\bORDER\s+BY\b", query, flags=re.IGNORECASE))
-        # Checking if custom query has a semicolon at the end or not
-        if query.endswith(";"):
-            query = query[:-1]
+        query = strip_trailing_semicolons(query)
         if has_orderby:
             updated_query = f"{query} LIMIT {self.fetch_size} OFFSET {offset};"
         else:

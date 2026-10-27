@@ -391,6 +391,35 @@ async def test_client_get_column_names_for_query(patch_connection_pool):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "query",
+    [
+        "SELECT id, class FROM students",
+        "SELECT id, class FROM students;",
+        "SELECT id, class FROM students; \n",
+        "SELECT id, class FROM students ;;",
+    ],
+)
+async def test_client_get_column_names_for_query_drops_trailing_semicolon(
+    patch_connection_pool, query
+):
+    mock_cursor = MagicMock(spec=aiomysql.Cursor)
+    mock_cursor.description = [("id",), ("class",)]
+    mock_cursor.__aenter__.return_value = mock_cursor
+
+    patch_connection_pool.acquire.return_value = await mock_connection(mock_cursor)
+
+    client = await setup_mysql_client()
+
+    async with client:
+        await client.get_column_names_for_query(query)
+
+    mock_cursor.execute.assert_awaited_once_with(
+        "SELECT q.* FROM (SELECT id, class FROM students) as q LIMIT 0"
+    )
+
+
+@pytest.mark.asyncio
 async def test_client_get_last_update_time(patch_connection_pool):
     last_update_time = iso_utc()
 
@@ -1257,6 +1286,21 @@ def test_row2doc(
         (
             "SELECT id, name FROM table_name ORDER BY marks;",
             "SELECT id, name FROM table_name ORDER BY marks LIMIT 5000 OFFSET 0;",
+        ),
+        # Query with whitespace after the semicolon
+        (
+            "SELECT id, name FROM table_name;\n",
+            "SELECT id, name FROM table_name ORDER BY id LIMIT 5000 OFFSET 0;",
+        ),
+        # Query with whitespace before the semicolon and after ORDER BY
+        (
+            "SELECT id, name FROM table_name ORDER BY marks ; ",
+            "SELECT id, name FROM table_name ORDER BY marks LIMIT 5000 OFFSET 0;",
+        ),
+        # Query with trailing whitespace only
+        (
+            "SELECT id, name FROM table_name  ",
+            "SELECT id, name FROM table_name ORDER BY id LIMIT 5000 OFFSET 0;",
         ),
     ],
 )
