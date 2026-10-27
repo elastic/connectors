@@ -1293,6 +1293,83 @@ async def test_traverse_diretory_with_invalid_path_for_syncrule(dir_mock):
             assert file == []
 
 
+SHARE_FOLDERS = {
+    "share": ["folder", "folder2"],
+    "share/folder": ["file.txt", "other.txt", "sub"],
+    "share/folder/sub": ["nested.txt"],
+    "share/folder2": ["x.txt"],
+}
+
+
+def fake_scandir(path, **kwargs):
+    """Mimics smbclient.scandir over SHARE_FOLDERS: entry paths are "<path>\\<name>",
+    and scanning anything but a folder fails like it does on a real share."""
+    folder = path.split("/", 1)[1].replace("\\", "/").replace("//", "/").strip("/")
+    if folder not in SHARE_FOLDERS:
+        raise SMBOSError(ntstatus=0xC0000103, filename=path)  # STATUS_NOT_A_DIRECTORY
+    entries = []
+    for name in SHARE_FOLDERS[folder]:
+        entry = mock.Mock()
+        entry.path = f"{path}\\{name}"
+        entry.is_dir.return_value = f"{folder}/{name}" in SHARE_FOLDERS
+        entries.append(entry)
+    return entries
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "pattern, expected_paths",
+    [
+        ("share/folder/file.txt", ["share/folder/file.txt"]),
+        ("share/folder/sub/nested.txt", ["share/folder/sub/nested.txt"]),
+        ("share/folder", ["share/folder"]),
+        ("share/folder/*.txt", ["share/folder/file.txt", "share/folder/other.txt"]),
+    ],
+)
+async def test_fetch_filtered_directory_matches_pattern_without_wildcards(
+    pattern, expected_paths
+):
+    async with create_source(NASDataSource) as source:
+        source.format_document = lambda file: (
+            file.path.split("/", 1)[1].replace("\\", "/").replace("//", "/")
+        )
+        with mock.patch("smbclient.scandir", side_effect=fake_scandir):
+            paths = [
+                path
+                async for path in source.fetch_filtered_directory(
+                    advanced_rules=[{"pattern": pattern}]
+                )
+            ]
+
+    assert sorted(paths) == expected_paths
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "pattern, expected_scans",
+    [
+        # no wildcard: only the parent folder is scanned, not its subfolders
+        ("share/folder/file.txt", 1),
+        # wildcard: subfolders are still scanned
+        ("share/folder/*.txt", 2),
+    ],
+)
+async def test_fetch_filtered_directory_descends_only_for_wildcards(
+    pattern, expected_scans
+):
+    async with create_source(NASDataSource) as source:
+        source.format_document = lambda file: file.path
+        with mock.patch("smbclient.scandir", side_effect=fake_scandir) as scandir:
+            _ = [
+                path
+                async for path in source.fetch_filtered_directory(
+                    advanced_rules=[{"pattern": pattern}]
+                )
+            ]
+
+    assert scandir.call_count == expected_scans
+
+
 # Cross-domain SID collision tests
 # Two users from different domains can share the same RID (last SID segment).
 # Using full SIDs as identities prevents one user from inheriting another's permissions.
