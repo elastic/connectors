@@ -25,6 +25,7 @@ from connectors.source import ConfigurableFieldValueError, DataSourceConfigurati
 from tests.commons import AsyncIterator
 from tests.services.test_base import (
     SERVICE_TEST_STOP_AFTER_SECONDS,
+    SERVICE_TEST_STOP_GRACEFULLY,
     create_and_run_service,
 )
 
@@ -413,7 +414,7 @@ async def test_run_when_connector_fields_are_invalid(
     connector = mock_connector(next_sync=datetime.now(timezone.utc))
     connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
     await create_and_run_service(
-        JobSchedulingService, stop_after=SERVICE_TEST_STOP_AFTER_SECONDS
+        JobSchedulingService, stop_after=SERVICE_TEST_STOP_GRACEFULLY
     )
 
     data_source_mock.validate_config_fields.assert_called()
@@ -488,7 +489,7 @@ async def test_run_when_connector_ping_fails(
     connector = mock_connector(next_sync=datetime.now(timezone.utc))
     connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
     await create_and_run_service(
-        JobSchedulingService, stop_after=SERVICE_TEST_STOP_AFTER_SECONDS
+        JobSchedulingService, stop_after=SERVICE_TEST_STOP_GRACEFULLY
     )
 
     data_source_mock.validate_config_fields.assert_called()
@@ -521,7 +522,7 @@ async def test_run_when_connector_validate_config_fails(
     connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
 
     await create_and_run_service(
-        JobSchedulingService, stop_after=SERVICE_TEST_STOP_AFTER_SECONDS
+        JobSchedulingService, stop_after=SERVICE_TEST_STOP_GRACEFULLY
     )
 
     data_source_mock.validate_config_fields.assert_called()
