@@ -3,8 +3,14 @@ name: Approve manual backport
 # Uses pull_request_target so approvals can use REPO_SCOPED_TOKEN; only runs
 # checked-in validation logic (not code from the PR branch).
 # Applies to every maintenance branch (X.Y); the patch label required on the
-# source PR is derived from the base branch. This file must exist on each
-# maintenance branch, because pull_request_target runs the base branch version.
+# source PR is derived from the base branch. The validator is always taken from
+# the default branch, so maintenance branches cannot drift from it.
+#
+# The PR author must also be an active member of one of ALLOWED_TEAMS. Set the
+# repository variable BACKPORT_APPROVER_TEAMS (comma separated team slugs) to
+# change the default. The team lookup uses REPO_SCOPED_TOKEN, which needs org
+# read access; if membership cannot be verified the job fails and nothing is
+# approved.
 on:
   pull_request_target:
     branches-ignore:
@@ -27,12 +33,12 @@ jobs:
   approve:
     if: >-
       github.event.pull_request.user.login != 'github-actions[bot]'
-      && github.event.pull_request.head.repo.fork == false
+      && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.base.ref }}
+          ref: ${{ github.event.repository.default_branch }}
           sparse-checkout: .github/workflows/scripts
 
       - name: Validate backport PR
@@ -43,6 +49,9 @@ jobs:
           BASE_BRANCH: ${{ github.event.pull_request.base.ref }}
           PR_TITLE: ${{ github.event.pull_request.title }}
           PR_BODY: ${{ github.event.pull_request.body }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          ALLOWED_TEAMS: ${{ vars.BACKPORT_APPROVER_TEAMS || 'search-extract-and-transform' }}
+          TEAM_TOKEN: ${{ secrets.REPO_SCOPED_TOKEN }}
         run: python3 .github/workflows/scripts/validate_manual_backport.py
 
       - name: Approve
