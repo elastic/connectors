@@ -1327,6 +1327,53 @@ def test_row2doc(
             "SELECT id, name FROM table_name -- all rows\n",
             "SELECT id, name FROM table_name -- all rows\nORDER BY id LIMIT 5000 OFFSET 0;",
         ),
+        # ORDER BY of a window function doesn't order the result
+        (
+            "SELECT id, ROW_NUMBER() OVER (ORDER BY marks) AS rank_no FROM table_name",
+            "SELECT id, ROW_NUMBER() OVER (ORDER BY marks) AS rank_no FROM table_name\nORDER BY id LIMIT 5000 OFFSET 0;",
+        ),
+        # ORDER BY of a subquery doesn't order the result
+        (
+            "SELECT id, name FROM table_name WHERE id IN (SELECT id FROM top_ids ORDER BY marks LIMIT 10)",
+            "SELECT id, name FROM table_name WHERE id IN (SELECT id FROM top_ids ORDER BY marks LIMIT 10)\nORDER BY id LIMIT 5000 OFFSET 0;",
+        ),
+        # ORDER BY of a derived table doesn't order the result
+        (
+            "SELECT t.id, t.name FROM (SELECT id, name FROM table_name ORDER BY marks) AS t",
+            "SELECT t.id, t.name FROM (SELECT id, name FROM table_name ORDER BY marks) AS t\nORDER BY id LIMIT 5000 OFFSET 0;",
+        ),
+        # ORDER BY in a string literal, a quoted identifier or a comment isn't SQL
+        (
+            "SELECT id, name FROM table_name WHERE note = 'order by date'",
+            "SELECT id, name FROM table_name WHERE note = 'order by date'\nORDER BY id LIMIT 5000 OFFSET 0;",
+        ),
+        (
+            "SELECT id, `order by` FROM table_name",
+            "SELECT id, `order by` FROM table_name\nORDER BY id LIMIT 5000 OFFSET 0;",
+        ),
+        (
+            "SELECT id, name FROM table_name /* order by marks */",
+            "SELECT id, name FROM table_name /* order by marks */\nORDER BY id LIMIT 5000 OFFSET 0;",
+        ),
+        (
+            "SELECT id, name FROM table_name # order by marks\n",
+            "SELECT id, name FROM table_name # order by marks\nORDER BY id LIMIT 5000 OFFSET 0;",
+        ),
+        # A quote or parenthesis inside a literal doesn't hide the query's ORDER BY
+        (
+            "SELECT id, name FROM table_name WHERE note = 'it''s (open' ORDER BY marks",
+            "SELECT id, name FROM table_name WHERE note = 'it''s (open' ORDER BY marks\nLIMIT 5000 OFFSET 0;",
+        ),
+        # The query's own ORDER BY after a subquery and a window function is kept
+        (
+            "SELECT id, ROW_NUMBER() OVER (ORDER BY marks) AS rank_no FROM table_name WHERE id IN (SELECT id FROM top_ids) ORDER BY rank_no",
+            "SELECT id, ROW_NUMBER() OVER (ORDER BY marks) AS rank_no FROM table_name WHERE id IN (SELECT id FROM top_ids) ORDER BY rank_no\nLIMIT 5000 OFFSET 0;",
+        ),
+        # ORDER BY of a UNION applies to the whole result
+        (
+            "SELECT id, name FROM a UNION SELECT id, name FROM b ORDER BY name",
+            "SELECT id, name FROM a UNION SELECT id, name FROM b ORDER BY name\nLIMIT 5000 OFFSET 0;",
+        ),
     ],
 )
 async def test_update_query_with_pagination_attributes(query, updated_query):

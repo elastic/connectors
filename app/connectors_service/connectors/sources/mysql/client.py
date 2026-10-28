@@ -28,6 +28,39 @@ def strip_trailing_semicolons(query):
     return re.sub(r"[\s;]+$", "", query)
 
 
+# Tokens that matter when looking for the ORDER BY of the query itself: string
+# literals, quoted identifiers and comments (skipped), parentheses and ORDER BY.
+_ORDER_BY_SCAN = re.compile(
+    r"'(?:[^'\\]|\\.|'')*'"
+    r'|"(?:[^"\\]|\\.|"")*"'
+    r"|`(?:[^`]|``)*`"
+    r"|(?:--(?=\s)|\#)[^\n]*"
+    r"|/\*.*?\*/"
+    r"|(?P<open>\()"
+    r"|(?P<close>\))"
+    r"|(?P<order_by>\bORDER\s+BY\b)",
+    flags=re.IGNORECASE | re.DOTALL,
+)
+
+
+def has_top_level_order_by(query):
+    """Whether the query orders its own result.
+
+    An ORDER BY inside parentheses belongs to a subquery, a derived table or a
+    window definition (`ROW_NUMBER() OVER (ORDER BY ...)`) and doesn't order the
+    rows the query returns. One inside a string literal or a comment isn't SQL.
+    """
+    depth = 0
+    for match in _ORDER_BY_SCAN.finditer(query):
+        if match.group("open"):
+            depth += 1
+        elif match.group("close"):
+            depth = max(depth - 1, 0)
+        elif match.group("order_by") and depth == 0:
+            return True
+    return False
+
+
 class MySQLClient:
     def __init__(
         self,
@@ -230,7 +263,9 @@ class MySQLClient:
         self, query, offset, primary_key_columns
     ):
         updated_query = ""
-        has_orderby = bool(re.search(r"\bORDER\s+BY\b", query, flags=re.IGNORECASE))
+        # Paging with LIMIT/OFFSET needs a stable order, so add one unless the
+        # query already orders its result.
+        has_orderby = has_top_level_order_by(query)
         query = strip_trailing_semicolons(query)
         # The newline keeps a trailing `-- comment` from swallowing the generated suffix
         if has_orderby:
