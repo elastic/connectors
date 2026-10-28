@@ -146,12 +146,7 @@ A small set of mechanical PRs to `main` can be approved by `entsearchmachine` wi
 
 Every PR must also: target `main` from a branch in this repository, not be a draft, only modify existing files (no adds, deletes or renames), touch nothing under `.github/`, and have the `CLA` and `buildkite/connectors` statuses and all checks green before it is approved. Team members means members of `BACKPORT_APPROVER_TEAMS` (default `search-extract-and-transform`). The approval is tied to the checked commit. If a new commit makes the PR match no category, the bot approval is withdrawn. A failing or flaky CI run never withdraws it: re-run the check and the PR is approved once it is green. Matching PRs get the `mechanical-pr` label (information only, it is not a gate). Merging stays manual.
 
-It is on by default for all categories. Optional repository variables:
-
-| Variable | Meaning |
-| --- | --- |
-| `AUTO_APPROVE_MODE` | `live` (default), or `dry-run` to only comment what it would do. |
-| `AUTO_APPROVE_DISABLED_CATEGORIES` | Comma separated categories to switch off, for example `dependency-bump`. |
+It is always on. To turn it off, open a PR that edits or removes `auto-approve-mechanical.yml`. The repository variable `BACKPORT_APPROVER_TEAMS` is the only setting.
 
 The approver needs `REPO_SCOPED_TOKEN` with org read access (team lookup) and the `main` ruleset must count `entsearchmachine` approvals. The weekly workflow `mechanical-auto-approve-metrics.yml` writes merged, labelled and bot-approved counts to its run summary.
 

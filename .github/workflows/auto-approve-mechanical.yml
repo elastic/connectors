@@ -5,10 +5,9 @@ name: Auto-approve mechanical PRs
 # and the validator in .github/workflows/scripts; both are always read from the
 # default branch, never from the PR branch (pull_request_target / status events).
 #
-# Repository variables:
-#   AUTO_APPROVE_MODE                live (default) or dry-run (comment only)
-#   AUTO_APPROVE_DISABLED_CATEGORIES comma separated category ids to switch off
-#   BACKPORT_APPROVER_TEAMS          team slugs allowed to author team categories
+# Repository variable BACKPORT_APPROVER_TEAMS (comma separated team slugs, default
+# search-extract-and-transform) lists who may author the team categories.
+# To turn this off, open a PR that removes or edits this workflow.
 #
 # It re-runs when a required commit status (CLA, Buildkite) turns green, because
 # approval needs green CI. A red or flaky CI run never withdraws an approval;
@@ -87,8 +86,6 @@ jobs:
           PR_NUMBER: ${{ steps.pr.outputs.number }}
           ALLOWED_TEAMS: ${{ vars.BACKPORT_APPROVER_TEAMS || 'search-extract-and-transform' }}
           TEAM_TOKEN: ${{ secrets.REPO_SCOPED_TOKEN }}
-          AUTO_APPROVE_MODE: ${{ vars.AUTO_APPROVE_MODE || 'live' }}
-          AUTO_APPROVE_DISABLED_CATEGORIES: ${{ vars.AUTO_APPROVE_DISABLED_CATEGORIES }}
         run: |
           python3 -c 'import yaml' 2>/dev/null || pip install --quiet pyyaml
           python3 .github/workflows/scripts/validate_mechanical_pr.py

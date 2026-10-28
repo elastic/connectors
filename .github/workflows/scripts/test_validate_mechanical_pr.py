@@ -287,23 +287,6 @@ class TestGlobalGates(Base):
         self.assertIsNone(self.classify(TestRenovateWolfi.TITLE, files, TestRenovateWolfi.BOT)[0])
 
 
-class TestMode(unittest.TestCase):
-    def test_live_by_default(self):
-        with mock.patch.dict(os.environ, {}, clear=True):
-            self.assertTrue(v.is_live("renovate-wolfi"))
-
-    def test_dry_run_switches_everything_off(self):
-        with mock.patch.dict(os.environ, {"AUTO_APPROVE_MODE": "dry-run"}, clear=True):
-            self.assertFalse(v.is_live("renovate-wolfi"))
-
-    def test_disabled_category_only_switches_that_one_off(self):
-        env = {"AUTO_APPROVE_DISABLED_CATEGORIES": "dependency-bump, release-config-bump"}
-        with mock.patch.dict(os.environ, env, clear=True):
-            self.assertFalse(v.is_live("dependency-bump"))
-            self.assertFalse(v.is_live("release-config-bump"))
-            self.assertTrue(v.is_live("renovate-wolfi"))
-
-
 class TestCi(unittest.TestCase):
     CONTEXTS = ["CLA", "buildkite/connectors"]
 
@@ -359,27 +342,20 @@ class TestEvaluate(Base):
         pull.update(overrides)
         return pull
 
-    def evaluate(self, pull, mode="live", green=True):
-        env = {"ALLOWED_TEAMS": "team", "AUTO_APPROVE_MODE": mode}
-        with mock.patch.dict(os.environ, env, clear=True), mock.patch.object(
+    def evaluate(self, pull, green=True):
+        with mock.patch.dict(os.environ, {"ALLOWED_TEAMS": "team"}, clear=True), mock.patch.object(
             v, "_get", lambda url, token: wolfi_files()
         ), mock.patch.object(v, "_request") as request, mock.patch.object(
             v, "ci_is_green", lambda *a: (green, "CI")
         ):
             return v.evaluate(pull, self.config, "o/r", "t", "t"), request
 
-    def test_dry_run_never_approves_but_labels(self):
-        result, request = self.evaluate(self.pull(), mode="dry-run")
-        self.assertFalse(result.approved)
-        self.assertTrue(result.qualifies)
-        self.assertTrue(result.comment)
-        self.assertEqual(result.category, "renovate-wolfi")
-        request.assert_called_once()
-
-    def test_approves_by_default_when_green(self):
-        result, _ = self.evaluate(self.pull())
+    def test_approves_and_labels_when_green(self):
+        result, request = self.evaluate(self.pull())
         self.assertTrue(result.approved)
         self.assertTrue(result.qualifies)
+        self.assertEqual(result.category, "renovate-wolfi")
+        request.assert_called_once()
         self.assertEqual(result.head_sha, "abc")
 
     def test_red_ci_does_not_approve_but_still_qualifies(self):
@@ -398,7 +374,6 @@ class TestEvaluate(Base):
             result, _ = self.evaluate(self.pull(**override))
             self.assertFalse(result.approved, override)
             self.assertFalse(result.qualifies, override)
-            self.assertFalse(result.comment, override)
 
     def test_label_not_added_twice(self):
         result, request = self.evaluate(self.pull(labels=[{"name": "mechanical-pr"}]))

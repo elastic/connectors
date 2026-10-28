@@ -58,7 +58,6 @@ class Result:
     category: str = ""
     approved: bool = False
     qualifies: bool = False  # diff and author match a category (CI not considered)
-    comment: bool = False
     reason: str = ""
     head_sha: str = ""
 
@@ -121,13 +120,6 @@ def load_config() -> dict[str, Any]:
     if not isinstance(data, dict) or not isinstance(data.get("categories"), dict):
         raise RuntimeError(f"Invalid config: {path}")
     return data
-
-
-def is_live(category: str) -> bool:
-    """Live by default. AUTO_APPROVE_MODE=dry-run or a disabled category switches it off."""
-    if os.environ.get("AUTO_APPROVE_MODE", "live").strip().lower() == "dry-run":
-        return False
-    return category not in parse_teams(os.environ.get("AUTO_APPROVE_DISABLED_CATEGORIES", ""))
 
 
 # --------------------------------------------------------------------------
@@ -412,7 +404,6 @@ def evaluate(pull: dict, config: dict[str, Any], repo: str, token: str, team_tok
 
     result.category = category
     result.qualifies = True
-    result.comment = True
     label = config.get("label")
     if label and label not in [item["name"] for item in pull.get("labels", [])]:
         _request("POST", f"{API}/repos/{repo}/issues/{number}/labels", token, {"labels": [label]})
@@ -422,22 +413,9 @@ def evaluate(pull: dict, config: dict[str, Any], repo: str, token: str, team_tok
         result.reason = ci_reason
         return result
 
-    if is_live(category):
-        result.approved = True
-        result.reason = f"Validated as `{category}`; approving."
-    else:
-        result.reason = f"Would approve as `{category}` (dry-run or category disabled)."
+    result.approved = True
+    result.reason = f"Validated as `{category}`; approving."
     return result
-
-
-def upsert_comment(repo: str, number: int, token: str, marker: str, text: str) -> None:
-    body = f"{marker}\n{text}"
-    comments = _get(f"{API}/repos/{repo}/issues/{number}/comments?per_page=100", token) or []
-    existing = next((c for c in comments if marker in (c.get("body") or "")), None)
-    if existing:
-        _request("PATCH", f"{API}/repos/{repo}/issues/comments/{existing['id']}", token, {"body": body})
-    else:
-        _request("POST", f"{API}/repos/{repo}/issues/{number}/comments", token, {"body": body})
 
 
 def _output(**fields: str) -> None:
@@ -462,16 +440,6 @@ def main() -> int:
     try:
         pull = _get(f"{API}/repos/{repo}/pulls/{number}", token)
         result = evaluate(pull, config, repo, token, team_token)
-        if result.comment:
-            mode = os.environ.get("AUTO_APPROVE_MODE", "live")
-            upsert_comment(
-                repo,
-                int(number),
-                token,
-                config["comment_marker"],
-                f"**Mechanical auto-approve** ({mode}): {result.reason}\n\n"
-                f"Category: `{result.category}`. Commit: `{result.head_sha[:7]}`.",
-            )
     except urllib.error.HTTPError as exc:
         # Fail closed: no output means no approval step runs.
         print(f"GitHub API error {exc.code} for {exc.url}", file=sys.stderr)

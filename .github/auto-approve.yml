@@ -17,9 +17,6 @@ required_status_contexts:
 # Label put on every PR that matches a category (informational, not a gate).
 label: mechanical-pr
 
-# Hidden marker used to update a single bot comment per PR.
-comment_marker: "<!-- mechanical-auto-approve -->"
-
 # authors: a list of GitHub logins (REST API form, bots end in "[bot]"),
 # or "team" = any active member of the teams in ALLOWED_TEAMS.
 categories:
