@@ -644,3 +644,14 @@ async def test_yield_docs_custom_query_requires_id_columns_in_query(
         ]
 
         assert [doc["_id"] for doc in docs] == expected_ids
+
+
+def test_table_last_update_time_query_reads_the_current_database_only():
+    # sys.dm_db_index_usage_stats is server-wide and has one row per index, and
+    # an object_id is only unique within a database
+    query = MSSQLQueries().table_last_update_time(schema="dbo", table="emp_table")
+
+    assert query == (
+        "SELECT MAX(last_user_update) FROM sys.dm_db_index_usage_stats "
+        "WHERE database_id=DB_ID() AND object_id=object_id('dbo.emp_table')"
+    )

@@ -65,7 +65,7 @@ class MSSQLQueries(Queries):
 
     def table_last_update_time(self, **kwargs):
         """Query to get the last update time of the table"""
-        return f"SELECT last_user_update FROM sys.dm_db_index_usage_stats WHERE object_id=object_id('{kwargs['schema']}.{kwargs['table']}')"
+        return f"SELECT MAX(last_user_update) FROM sys.dm_db_index_usage_stats WHERE database_id=DB_ID() AND object_id=object_id('{kwargs['schema']}.{kwargs['table']}')"
 
     def table_data_count(self, **kwargs):
         """Query to get the number of rows in the table"""
