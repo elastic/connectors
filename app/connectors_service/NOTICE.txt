@@ -8382,7 +8382,7 @@ Apache Software License
 UNKNOWN
 
 tzdata
-2026.5
+2026.6
 Apache-2.0
 Apache Software License 2.0
 
