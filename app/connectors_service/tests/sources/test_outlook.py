@@ -2682,8 +2682,3 @@ async def test_get_docs_logs_deprecation_warning_and_still_syncs(data_source):
 @pytest.mark.parametrize("document", EXPECTED_RESPONSE)
 def test_expected_documents_match_golden_contract(document):
     assert_conforms(document)
-
-
-@pytest.mark.parametrize("document", EXPECTED_RESPONSE)
-def test_expected_documents_match_golden_contract(document):
-    assert_conforms(document)

@@ -6,6 +6,7 @@
 
 import asyncio
 from collections import Counter
+from collections.abc import AsyncIterator
 from functools import cached_property
 
 import aiohttp
@@ -352,7 +353,7 @@ class OutlookCloudClient:
         default_ids,
         synced_ids,
         pruned_ids,
-    ):
+    ) -> AsyncIterator[dict]:
         folder_id = folder.get("id")
         if self._should_prune_folder(folder, excluded_ids, pruned_ids):
             if folder_id:
@@ -413,7 +414,7 @@ class OutlookCloudClient:
         default_ids,
         synced_ids,
         pruned_ids,
-    ):
+    ) -> AsyncIterator[dict]:
         url = (
             f"{GRAPH_BASE_URL}/users/{user_id}/mailFolders/{url_encode(folder_id)}"
             f"/childFolders?$select={FOLDER_FIELDS}&includeHiddenFolders=true"
@@ -437,9 +438,11 @@ class OutlookCloudClient:
             ):
                 yield folder
 
-    async def get_additional_mail_folders(self, user_id):
+    async def get_additional_mail_folders(self, user_id) -> AsyncIterator[dict]:
         """Yield extra mail folders when sync_all_mail_folders is enabled."""
-        excluded_ids, default_ids = await self._folder_exclusion_and_default_ids(user_id)
+        excluded_ids, default_ids = await self._folder_exclusion_and_default_ids(
+            user_id
+        )
         synced_ids = set(default_ids)
         pruned_ids = set()
 

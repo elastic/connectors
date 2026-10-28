@@ -107,9 +107,9 @@ def mail_attachment_base64(message, include_full_raw_message, raw_mime_bytes, lo
         if raw_mime_bytes:
             return base64.b64encode(raw_mime_bytes).decode("ascii")
         try:
-            return base64.b64encode(build_minimal_eml_from_graph_message(message)).decode(
-                "ascii"
-            )
+            return base64.b64encode(
+                build_minimal_eml_from_graph_message(message)
+            ).decode("ascii")
         except Exception:
             logger.warning(
                 "Failed to build minimal EML for %s; using empty body fallback.",

@@ -25,7 +25,9 @@ class OutlookCloudDocFormatter:
     def mail_doc_formatter(self, message, mail_type):
         document = {
             "_id": message["id"],
-            "_timestamp": graph_datetime_to_iso_utc(message.get("lastModifiedDateTime")),
+            "_timestamp": graph_datetime_to_iso_utc(
+                message.get("lastModifiedDateTime")
+            ),
             "title": message.get("subject"),
             "type": mail_type["constant"],
             "sender": self._document_sender(message),
