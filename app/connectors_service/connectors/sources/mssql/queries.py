@@ -30,8 +30,13 @@ class MSSQLQueries(Queries):
         return f'SELECT * FROM {kwargs["schema"]}."{kwargs["table"]}"'
 
     def table_last_update_time(self, **kwargs):
-        """Query to get the last update time of the table"""
-        return f"SELECT last_user_update FROM sys.dm_db_index_usage_stats WHERE object_id=object_id('{kwargs['schema']}.{kwargs['table']}')"
+        """Query to get the last update time of the table
+
+        The view has a row for every index of every database on the server, and
+        an object_id is only unique within its database, so restrict it to the
+        current database and take the latest update across the table's indexes.
+        """
+        return f"SELECT MAX(last_user_update) FROM sys.dm_db_index_usage_stats WHERE database_id=DB_ID() AND object_id=object_id('{kwargs['schema']}.{kwargs['table']}')"
 
     def table_data_count(self, **kwargs):
         """Query to get the number of rows in the table"""
