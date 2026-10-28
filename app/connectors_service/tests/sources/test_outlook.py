@@ -98,6 +98,7 @@ from connectors.sources.outlook.constants import (
 )
 from connectors.utils import get_pem_format
 from tests.commons import AsyncIterator
+from tests.sources.outlook_contract import assert_conforms
 from tests.sources.support import create_source
 
 RESPONSE_CONTENT = bytes("# This is the dummy file", "utf-8")
@@ -194,7 +195,7 @@ EXPECTED_RESPONSE = [
         "categories": ["Outlook"],
         "importance": "High",
         "content": "This is a dummy task",
-        "status": "completed",
+        "status": "Completed",
         "attachments": [EXPECTED_ATTACHMENT_REF],
     },
     {
@@ -217,7 +218,7 @@ EXPECTED_RESPONSE = [
         "_timestamp": "2023-12-12T01:01:01Z",
         "name": "Dummy User",
         "email_addresses": ["dummy.user@gmail.com"],
-        "contact_numbers": [99887776655],
+        "contact_numbers": ["99887776655"],
         "company_name": "ABC",
         "birthday": "2023-12-12T01:01:01Z",
     },
@@ -310,7 +311,7 @@ def build_task_document():
     task.complete_date = "2023-12-12T01:01:01Z"
     task.importance = "High"
     task.text_body = "This is a dummy task"
-    task.status = "completed"
+    task.status = "Completed"
     task.categories = ["Outlook"]
     task.has_attachments = True
     task.attachments = [MOCK_ATTACHMENT]
@@ -322,7 +323,7 @@ def ContactDocument():
     # to the contact formatter (spec mock keeps isinstance(..., Contact) True).
     contact = MagicMock()
     contact.email = "dummy.user@gmail.com"
-    contact.phone_number = 99887776655
+    contact.phone_number = "99887776655"
 
     document = MagicMock(spec=Contact)
     document.id = "contact_1"
@@ -2676,3 +2677,13 @@ async def test_get_docs_logs_deprecation_warning_and_still_syncs(data_source):
         source._logger.warning.assert_called_once_with(
             DEPRECATION_WARNINGS[data_source]
         )
+
+
+@pytest.mark.parametrize("document", EXPECTED_RESPONSE)
+def test_expected_documents_match_golden_contract(document):
+    assert_conforms(document)
+
+
+@pytest.mark.parametrize("document", EXPECTED_RESPONSE)
+def test_expected_documents_match_golden_contract(document):
+    assert_conforms(document)

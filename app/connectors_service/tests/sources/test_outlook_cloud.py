@@ -22,6 +22,7 @@ from aiohttp.client_exceptions import (
 from aioresponses.core import normalize_url
 from connectors_sdk.source import DataSourceConfiguration
 
+from connectors.config import _default_config
 from connectors.sources import outlook_cloud
 from connectors.sources.outlook_cloud import OutlookCloudDataSource
 from connectors.sources.outlook_cloud import client as outlook_cloud_client
@@ -29,9 +30,11 @@ from connectors.sources.outlook_cloud.client import NoAccessibleMailboxes
 from connectors.sources.outlook_cloud.constants import (
     DEFAULT_RETRY_SECONDS,
     GRAPH_BASE_URL,
+    INBOX_MAIL_OBJECT,
     MAILBOX_ACCESSIBLE,
     MAILBOX_MISSING,
     MAILBOX_OUT_OF_SCOPE,
+    MESSAGE_FIELDS,
     NETWORK_RETRY_SECONDS,
     RETRIES,
 )
@@ -39,6 +42,7 @@ from connectors.sources.shared.microsoft.graph import (
     PermissionsMissing,
     TokenFetchFailed,
 )
+from tests.sources.outlook_contract import assert_conforms
 from tests.sources.support import create_source
 
 TENANT_ID = "tenant-id"
@@ -56,12 +60,13 @@ def user(user_id, mail="user@example.com"):
     return {"id": user_id, "displayName": user_id, "mail": mail, "jobTitle": None}
 
 
-def create_outlook_cloud_source():
+def create_outlook_cloud_source(**extras):
     return create_source(
         OutlookCloudDataSource,
         tenant_id=TENANT_ID,
         client_id="client-id",
         client_secret="client-secret",
+        **extras,
     )
 
 
@@ -88,8 +93,18 @@ def requests_to(mock_responses, url):
 def test_get_configuration():
     config = DataSourceConfiguration(OutlookCloudDataSource.get_default_configuration())
 
-    assert list(config.to_dict()) == ["tenant_id", "client_id", "client_secret"]
+    assert list(config.to_dict()) == [
+        "tenant_id",
+        "client_id",
+        "client_secret",
+        "sync_all_mail_folders",
+        "include_full_raw_message",
+    ]
     assert config.to_dict()["client_secret"]["sensitive"] is True
+
+
+def test_outlook_cloud_is_not_registered_in_config():
+    assert "outlook_cloud" not in _default_config()["sources"]
 
 
 def test_outlook_cloud_does_not_use_ews():
@@ -447,9 +462,143 @@ async def test_close_does_not_create_a_client():
         assert "client" not in source.__dict__
 
 
+def messages_url(user_id, folder_segment):
+    return (
+        f"{GRAPH_BASE_URL}/users/{user_id}/mailFolders/{folder_segment}/messages"
+        f"?$select={MESSAGE_FIELDS}&$top=100"
+    )
+
+
+def graph_message(**overrides):
+    message = {
+        "id": "msg-1",
+        "subject": "Dummy Subject",
+        "from": {"emailAddress": {"address": "from@example.com"}},
+        "sender": {"emailAddress": {"address": "sender@example.com"}},
+        "replyTo": [],
+        "toRecipients": [{"emailAddress": {"address": "to@example.com"}}],
+        "ccRecipients": [],
+        "bccRecipients": [],
+        "sentDateTime": "2023-12-12T01:01:01Z",
+        "lastModifiedDateTime": "2023-12-12T01:01:01Z",
+        "internetMessageId": "<id@example.com>",
+        "importance": "high",
+        "categories": ["Outlook"],
+        "body": {"contentType": "html", "content": "<p>This is a dummy mail</p>"},
+    }
+    message.update(overrides)
+    return message
+
+
+def register_accessible_user(graph, user_id="user-1", mail="user@example.com"):
+    graph.get(USERS_URL, payload={"value": [user(user_id, mail=mail)]})
+    graph.get(mailbox_url(user_id), payload={"id": "inbox-id"})
+
+
+def register_default_folders_empty(graph, user_id="user-1"):
+    for folder in ("inbox", "sentitems", "junkemail", "archive"):
+        graph.get(messages_url(user_id, folder), payload={"value": []})
+
+
 @pytest.mark.asyncio
-async def test_get_docs_is_not_implemented_yet():
+async def test_get_docs_yields_inbox_mail_document(graph):
+    register_accessible_user(graph)
+    for folder in ("sentitems", "junkemail", "archive"):
+        graph.get(messages_url("user-1", folder), payload={"value": []})
+    graph.get(
+        messages_url("user-1", "inbox"),
+        payload={"value": [graph_message()]},
+    )
+
     async with create_outlook_cloud_source() as source:
-        with pytest.raises(NotImplementedError, match="does not sync content yet"):
-            async for _ in source.get_docs():
-                pass
+        documents = [document async for document, _ in source.get_docs()]
+
+    assert len(documents) == 1
+    assert documents[0]["type"] == INBOX_MAIL_OBJECT
+    assert documents[0]["sender"] == "sender@example.com"
+    assert documents[0]["importance"] == "High"
+    assert documents[0]["message"] == "This is a dummy mail"
+    assert isinstance(documents[0]["_attachment"], str)
+    assert_conforms(documents[0])
+
+
+@pytest.mark.asyncio
+async def test_get_docs_skips_junk_when_folder_missing(graph):
+    register_accessible_user(graph)
+    graph.get(messages_url("user-1", "inbox"), payload={"value": []})
+    graph.get(messages_url("user-1", "sentitems"), payload={"value": []})
+    graph.get(messages_url("user-1", "junkemail"), status=404)
+    graph.get(messages_url("user-1", "archive"), payload={"value": []})
+
+    async with create_outlook_cloud_source() as source:
+        source.client.set_logger(MagicMock())
+        documents = [document async for document, _ in source.get_docs()]
+
+    assert documents == []
+    source.client._logger.warning.assert_any_call(
+        "Could not read mail folder 'Junk Mails' for user user-1, skipping: ClientResponseError."
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_docs_include_full_raw_message_fetches_value(graph):
+    register_accessible_user(graph)
+    for folder in ("sentitems", "junkemail", "archive"):
+        graph.get(messages_url("user-1", folder), payload={"value": []})
+    graph.get(messages_url("user-1", "inbox"), payload={"value": [graph_message()]})
+    raw_url = f"{GRAPH_BASE_URL}/users/user-1/messages/msg-1/$value"
+    graph.get(raw_url, body=b"Subject: test\r\n\r\nbody")
+
+    async with create_outlook_cloud_source(
+        include_full_raw_message=True,
+    ) as source:
+        documents = [document async for document, _ in source.get_docs()]
+
+    assert len(documents) == 1
+    assert requests_to(graph, raw_url)
+    headers = requests_to(graph, raw_url)[0].kwargs["headers"]
+    assert headers["Prefer"] == 'IdType="ImmutableId"'
+
+
+@pytest.mark.asyncio
+async def test_get_docs_raw_message_404_falls_back_to_minimal_eml(graph):
+    register_accessible_user(graph)
+    for folder in ("sentitems", "junkemail", "archive"):
+        graph.get(messages_url("user-1", folder), payload={"value": []})
+    graph.get(messages_url("user-1", "inbox"), payload={"value": [graph_message()]})
+    raw_url = f"{GRAPH_BASE_URL}/users/user-1/messages/msg-1/$value"
+    graph.get(raw_url, status=404)
+
+    async with create_outlook_cloud_source(
+        include_full_raw_message=True,
+    ) as source:
+        documents = [document async for document, _ in source.get_docs()]
+
+    assert len(documents) == 1
+    assert documents[0]["_attachment"]
+
+
+@pytest.mark.asyncio
+async def test_get_docs_raw_message_500_raises(graph):
+    register_accessible_user(graph)
+    for folder in ("sentitems", "junkemail", "archive"):
+        graph.get(messages_url("user-1", folder), payload={"value": []})
+    graph.get(messages_url("user-1", "inbox"), payload={"value": [graph_message()]})
+    raw_url = f"{GRAPH_BASE_URL}/users/user-1/messages/msg-1/$value"
+    graph.get(raw_url, status=500)
+
+    async with create_outlook_cloud_source(
+        include_full_raw_message=True,
+    ) as source:
+        with pytest.raises(ClientResponseError):
+            [document async for document, _ in source.get_docs()]
+
+
+@pytest.mark.asyncio
+async def test_graph_datetime_to_iso_utc_handles_fractional_seconds():
+    from connectors.sources.outlook_cloud.utils import graph_datetime_to_iso_utc
+
+    assert (
+        graph_datetime_to_iso_utc("2023-12-12T01:01:01.1234567Z")
+        == "2023-12-12T01:01:01Z"
+    )
