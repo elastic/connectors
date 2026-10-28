@@ -1,15 +1,19 @@
 #!/usr/bin/env python3
 
+import io
 import os
 import tempfile
 import unittest
+import urllib.error
 from unittest import mock
 
 import validate_manual_backport
 
 from validate_manual_backport import (
     _label_names,
+    is_team_member,
     parse_backported_from_pr,
+    parse_teams,
     patch_label_re,
 )
 
@@ -54,11 +58,55 @@ class TestPatchLabelRe(unittest.TestCase):
             self.assertIsNone(patch_label_re(base))
 
 
+class TestTeams(unittest.TestCase):
+    def test_parse_teams(self):
+        self.assertEqual(parse_teams("a, b ,,c"), ["a", "b", "c"])
+        self.assertEqual(parse_teams(""), [])
+        self.assertEqual(parse_teams(None), [])
+
+    def test_is_team_member_states(self):
+        with mock.patch.object(validate_manual_backport, "_api_get", lambda u, t: {"state": "active"}):
+            self.assertTrue(is_team_member("elastic", "team", "u", "t"))
+        with mock.patch.object(validate_manual_backport, "_api_get", lambda u, t: {"state": "pending"}):
+            self.assertFalse(is_team_member("elastic", "team", "u", "t"))
+
+    def test_not_found_means_not_a_member(self):
+        def fake_get(url, token):
+            raise _http_error(404)
+
+        with mock.patch.object(validate_manual_backport, "_api_get", fake_get):
+            self.assertFalse(is_team_member("elastic", "team", "u", "t"))
+
+    def test_other_errors_propagate(self):
+        def fake_get(url, token):
+            raise _http_error(403)
+
+        with mock.patch.object(validate_manual_backport, "_api_get", fake_get):
+            with self.assertRaises(urllib.error.HTTPError):
+                is_team_member("elastic", "team", "u", "t")
+
+
+def _http_error(code):
+    return urllib.error.HTTPError("https://api.github.com", code, "err", {}, io.BytesIO())
+
+
 class TestMain(unittest.TestCase):
     """Exercise the approval decision end to end with a stubbed GitHub API."""
 
-    def run_main(self, base, title, source_labels, source_merged=True, source_base="main"):
-        backport_pr = {"labels": [{"name": "backport"}], "head": {"repo": {"fork": False}}}
+    def run_main(
+        self,
+        base,
+        title,
+        source_labels,
+        source_merged=True,
+        source_base="main",
+        head_repo={"fork": False},
+        author="dev",
+        teams="team-a,team-b",
+        member_of=("team-b",),
+        membership_error=None,
+    ):
+        backport_pr = {"labels": [{"name": "backport"}], "head": {"repo": head_repo}}
         source_pr = {
             "merged": source_merged,
             "base": {"ref": source_base},
@@ -66,6 +114,13 @@ class TestMain(unittest.TestCase):
         }
 
         def fake_get(url, token):
+            if "/memberships/" in url:
+                if membership_error:
+                    raise _http_error(membership_error)
+                team = url.split("/teams/")[1].split("/")[0]
+                if team in member_of:
+                    return {"state": "active"}
+                raise _http_error(404)
             return backport_pr if url.endswith("/pulls/10") else source_pr
 
         with tempfile.NamedTemporaryFile("r+") as out:
@@ -77,15 +132,19 @@ class TestMain(unittest.TestCase):
                 "BASE_BRANCH": base,
                 "PR_TITLE": title,
                 "PR_BODY": "Backported from #99",
+                "PR_AUTHOR": author,
+                "ALLOWED_TEAMS": teams,
             }
             with mock.patch.dict(os.environ, env), mock.patch.object(
                 validate_manual_backport, "_api_get", fake_get
             ):
-                self.assertEqual(validate_manual_backport.main(), 0)
+                exit_code = validate_manual_backport.main()
+            self.exit_code = exit_code
             return "approved=true" in out.read()
 
     def test_approves_matching_branch_and_label(self):
         self.assertTrue(self.run_main("9.5", "[9.5] fix (#99)", ["v9.5.6"]))
+        self.assertEqual(self.exit_code, 0)
 
     def test_rejects_label_of_other_branch(self):
         self.assertFalse(self.run_main("9.5", "[9.5] fix (#99)", ["v9.4.9"]))
@@ -99,6 +158,25 @@ class TestMain(unittest.TestCase):
 
     def test_rejects_non_maintenance_base(self):
         self.assertFalse(self.run_main("main", "[main] x", ["v9.6.0"]))
+
+    def test_rejects_author_outside_allowed_teams(self):
+        self.assertFalse(self.run_main("9.5", "[9.5] fix", ["v9.5.6"], member_of=()))
+        self.assertEqual(self.exit_code, 0)
+
+    def test_approves_member_of_any_allowed_team(self):
+        self.assertTrue(self.run_main("9.5", "[9.5] fix", ["v9.5.6"], member_of=("team-a",)))
+
+    def test_rejects_when_head_repo_is_gone_or_fork(self):
+        self.assertFalse(self.run_main("9.5", "[9.5] fix", ["v9.5.6"], head_repo={"fork": True}))
+        self.assertFalse(self.run_main("9.5", "[9.5] fix", ["v9.5.6"], head_repo=None))
+
+    def test_fails_closed_without_teams_or_author(self):
+        self.assertFalse(self.run_main("9.5", "[9.5] fix", ["v9.5.6"], teams=""))
+        self.assertFalse(self.run_main("9.5", "[9.5] fix", ["v9.5.6"], author=""))
+
+    def test_fails_closed_when_membership_cannot_be_verified(self):
+        self.assertFalse(self.run_main("9.5", "[9.5] fix", ["v9.5.6"], membership_error=403))
+        self.assertEqual(self.exit_code, 1)
 
 
 if __name__ == "__main__":
