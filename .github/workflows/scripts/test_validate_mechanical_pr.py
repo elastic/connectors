@@ -122,6 +122,15 @@ class TestDependencyBump(unittest.TestCase):
         head = BASE_TOML.replace('"loose>=1",', '"loose>=1",\n    "urllib3==2.7.0",')
         self.assertEqual(self.run_case(head, title), "dependency-bump")
 
+    def test_rejects_extras_on_a_new_pin(self):
+        title = "fix(deps): pin urllib3 to 2.7.0 for CVE-2026-9375"
+        head = BASE_TOML.replace('"loose>=1",', '"loose>=1",\n    "urllib3[socks]==2.7.0",')
+        self.assertIsNone(self.run_case(head, title))
+
+    def test_title_must_name_the_whole_package(self):
+        head = BASE_TOML.replace("loose>=1", "loose==1.5")
+        self.assertIsNone(self.run_case(head, "fix(deps): bump loosely to 1.5 for CVE-2026-1234"))
+
     def test_rejects_package_that_is_not_installed(self):
         title = "fix(deps): pin evil to 1.0 for CVE-2026-9375"
         head = BASE_TOML.replace('"loose>=1",', '"loose>=1",\n    "evil==1.0",')
@@ -203,14 +212,16 @@ class TestMain(unittest.TestCase):
 
     GREEN = {"statuses": [{"context": c, "state": "success"} for c in v.REQUIRED_STATUSES]}
 
-    def run_main(self, category="renovate-wolfi", statuses=GREEN, heads=("h1", "h1"), reviews=()):
+    def run_main(self, category="renovate-wolfi", statuses=GREEN, heads=("h1", "h1"), reviews=(), base="main"):
         calls = []
-        pulls = iter({"number": 7, "head": {"sha": h}} for h in heads)
+        pulls = iter({"number": 7, "base": {"ref": base}, "head": {"sha": h}} for h in heads)
 
         def api(method, path, token, payload=None, raw=False):
             calls.append((method, path))
             if path == "pulls/7":
                 return next(pulls)
+            if path.startswith("commits/") and path.endswith("/pulls"):
+                return [{"number": 7, "state": "open", "base": {"ref": "main"}, "head": {"sha": "h1"}}]
             if path.startswith("pulls/7/reviews?"):
                 return list(reviews)
             if path.endswith("/status"):
@@ -241,6 +252,22 @@ class TestMain(unittest.TestCase):
     def test_stops_qualifying_withdraws_bot_approval(self):
         self.assertEqual(self.run_main(category=None, reviews=[self.bot_review()]), [("PUT", "pulls/7/reviews/5/dismissals")])
 
+    def test_backport_prs_are_never_touched(self):
+        # approve-manual-backport.yml owns approvals on maintenance branches
+        self.assertEqual(self.run_main(category=None, reviews=[self.bot_review()], base="9.5"), [])
+
+    def test_finds_every_review_page(self):
+        pages = [[{**self.bot_review(), "user": {"login": "human"}}] * 100, [self.bot_review()]]
+        calls = []
+
+        def api(method, path, token, payload=None, raw=False):
+            calls.append(path)
+            return pages[int(path.rsplit("=", 1)[1]) - 1]
+
+        with mock.patch.object(v, "api", api):
+            self.assertEqual(len(v.bot_approvals(7, "t")), 1)
+        self.assertEqual(len(calls), 2)
+
     def test_other_reviewers_are_left_alone(self):
         other = {**self.bot_review(), "user": {"login": "human"}}
         self.assertEqual(self.run_main(category=None, reviews=[other]), [])
@@ -261,7 +288,7 @@ class TestQualifyingCategory(unittest.TestCase):
     def run_case(self, pull, files=None):
         files = TestWolfi().files() if files is None else files
         with mock.patch.dict(os.environ, {"GITHUB_REPOSITORY": "o/r"}, clear=True), mock.patch.object(
-            v, "api", lambda *a, **k: files
+            v, "api", lambda m, path, *a, **k: {"merge_base_commit": {"sha": "mb"}} if path.startswith("compare/") else files
         ):
             return v.qualifying_category(pull, "t", "p")
 

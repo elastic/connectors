@@ -139,7 +139,7 @@ For manual backports to any maintenance branch (`X.Y`, e.g. `9.5`, `9.4`, `8.19`
 | Category | Opened by | Only this may change |
 | --- | --- | --- |
 | `renovate-wolfi` | Renovate | The Wolfi digest in `Dockerfile.wolfi` and versions in `NOTICE.txt` |
-| `dependency-bump` | A member of `BACKPORT_APPROVER_TEAMS` (default `search-extract-and-transform`) | `==` pins in `pyproject.toml`, plus `NOTICE.txt` versions. The package is named in the title, with a CVE or GHSA id in the title or body. A package may get a new version, a loose spec may become a pin, or an installed but unlisted package (named in `NOTICE.txt` on `main`) may be pinned. Extras, markers and other settings must not change. |
+| `dependency-bump` | A member of `BACKPORT_APPROVER_TEAMS` (default `search-extract-and-transform`) | `==` pins in `pyproject.toml`, plus `NOTICE.txt` versions. The package is named in the title, with a CVE or GHSA id in the title or body. A package may get a new version, a loose spec may become a pin, or an installed but unlisted package (named in `NOTICE.txt` on `main`) may be pinned, without extras. Extras, markers and other settings must not change. |
 | `release-version-bump` | The version-bump bot | The `VERSION` files and the project's own version in `NOTICE.txt` |
 
 Every PR must also be from a branch in this repository, not a draft, modify existing files only, and have the `CLA` and `buildkite/connectors` statuses green. The approval is tied to the checked commit. If a new commit makes the PR match no category, the approval is withdrawn. Red or flaky CI never withdraws it. Merging stays manual. Turn the workflow off with a PR that removes it. List what it approved with `gh pr list --search "reviewed-by:entsearchmachine base:main" --state merged`.
