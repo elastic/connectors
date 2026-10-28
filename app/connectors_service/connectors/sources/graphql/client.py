@@ -62,7 +62,24 @@ def selected_fields(selection_sets, fragments):
                     pending.append(fragments[name].selection_set.selections)
 
 
-def fields_at_path(ast, path):
+def child_fields(fields, fragments):
+    """Yield the fields selected inside the given selections of one field."""
+    return selected_fields(
+        [field.selection_set.selections for field in fields if field.selection_set],
+        fragments,
+    )
+
+
+def fragment_definitions(ast):
+    """Map the name of every fragment defined in the query to its definition."""
+    return {
+        definition.name.value: definition
+        for definition in ast.definitions
+        if isinstance(definition, FragmentDefinitionNode)
+    }
+
+
+def fields_at_path(ast, path, fragments):
     """Return every selection of the field at a response path of the query.
 
     Response keys are only unique within their parent object, so the path is
@@ -70,11 +87,6 @@ def fields_at_path(ast, path):
     selected more than once (for example in two fragments); all of its
     selections are returned, as the response merges them.
     """
-    fragments = {
-        definition.name.value: definition
-        for definition in ast.definitions
-        if isinstance(definition, FragmentDefinitionNode)
-    }
     for definition in ast.definitions:
         if (
             isinstance(definition, OperationDefinitionNode)
@@ -93,8 +105,8 @@ def fields_at_path(ast, path):
                     for field in matches
                     if field.selection_set
                 ]
-            return matches, fragments
-    return [], fragments
+            return matches
+    return []
 
 
 class UnauthorizedException(Exception):
@@ -217,7 +229,8 @@ class GraphQLClient:
         """Return the variable that carries the cursor of the paginated field."""
         graphql_object = self.pagination_key.split(".")[-1]
         self._logger.debug(f"Finding pageInfo field in {graphql_object}.")
-        fields, fragments = fields_at_path(ast, self.pagination_key.split("."))
+        fragments = fragment_definitions(ast)
+        fields = fields_at_path(ast, self.pagination_key.split("."), fragments)
         # A field selected more than once (for example in `... on User` and
         # `... on Organization`) yields one cursor variable per selection; None
         # when that selection has no `after: $variable`.
@@ -235,14 +248,7 @@ class GraphQLClient:
         ]
         page_info_present = any(
             response_key(field) == "pageInfo"
-            for field in selected_fields(
-                [
-                    field.selection_set.selections
-                    for field in fields
-                    if field.selection_set
-                ],
-                fragments,
-            )
+            for field in child_fields(fields, fragments)
         )
         if not (any(cursor_variables) and page_info_present):
             msg = f"Pagination is enabled but 'pageInfo' not found. Please include 'pageInfo' field inside '{graphql_object}' and 'after' argument in '{graphql_object}'."

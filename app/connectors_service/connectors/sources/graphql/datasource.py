@@ -17,9 +17,10 @@ from graphql.language import parse
 
 from connectors.sources.graphql.client import (
     GraphQLClient,
+    child_fields,
     fields_at_path,
+    fragment_definitions,
     response_key,
-    selected_fields,
 )
 from connectors.sources.graphql.constants import (
     BASIC,
@@ -180,19 +181,12 @@ class GraphQLDataSource(BaseDataSource):
         return False
 
     def check_field_existence(
-        self, ast, field_path, graphql_field_id=None, check_id=False
+        self, ast, fragments, field_path, graphql_field_id=None, check_id=False
     ):
-        fields, fragments = fields_at_path(ast, field_path.split("."))
+        fields = fields_at_path(ast, field_path.split("."), fragments)
         id_present = check_id and any(
             response_key(field) == graphql_field_id
-            for field in selected_fields(
-                [
-                    field.selection_set.selections
-                    for field in fields
-                    if field.selection_set
-                ],
-                fragments,
-            )
+            for field in child_fields(fields, fragments)
         )
         return bool(fields), id_present
 
@@ -253,12 +247,14 @@ class GraphQLDataSource(BaseDataSource):
             msg = "GraphQL Objects to ID mapping field is not configured."
             raise ConfigurableFieldValueError(msg)
 
+        fragments = fragment_definitions(ast)
         for (
             graphql_object,
             graphql_field_id,
         ) in self.graphql_client.graphql_object_to_id_map.items():
             object_present, id_present = self.check_field_existence(
                 ast=ast,
+                fragments=fragments,
                 field_path=graphql_object,
                 graphql_field_id=graphql_field_id,
                 check_id=True,
@@ -272,7 +268,9 @@ class GraphQLDataSource(BaseDataSource):
 
         if self.graphql_client.pagination_model == CURSOR_PAGINATION:
             object_present, _ = self.check_field_existence(
-                ast=ast, field_path=self.graphql_client.pagination_key
+                ast=ast,
+                fragments=fragments,
+                field_path=self.graphql_client.pagination_key,
             )
             if not object_present:
                 msg = (
