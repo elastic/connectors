@@ -13,6 +13,7 @@ import urllib.request
 BRANCH_RE = re.compile(r"^(\d+)\.(\d+)$")
 BACKPORTED_FROM_RE = re.compile(r"Backported from #(\d+)", re.IGNORECASE)
 BACKPORT_LABEL = "backport"
+ACTIVE_MEMBERSHIP = "active"
 
 
 def patch_label_re(base_branch: str) -> re.Pattern[str] | None:
@@ -43,6 +44,30 @@ def _api_get(url: str, token: str) -> dict | list | None:
     with urllib.request.urlopen(request) as response:
         body = response.read().decode()
         return json.loads(body) if body else None
+
+
+def parse_teams(raw: str) -> list[str]:
+    """Split a comma separated team slug list, ignoring blanks."""
+    return [team.strip() for team in (raw or "").split(",") if team.strip()]
+
+
+def is_team_member(org: str, team: str, user: str, token: str) -> bool:
+    """True if `user` is an active member of `org/team`.
+
+    A 404 means "not a member". Any other API failure (for example a token
+    without org read access) propagates so the caller fails closed instead of
+    guessing.
+    """
+    try:
+        membership = _api_get(
+            f"https://api.github.com/orgs/{org}/teams/{team}/memberships/{user}",
+            token,
+        )
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            return False
+        raise
+    return bool(membership) and membership.get("state") == ACTIVE_MEMBERSHIP
 
 
 def _deny(message: str) -> None:
@@ -93,8 +118,28 @@ def main() -> int:
         return 0
 
     head_repo = backport_pr.get("head", {}).get("repo")
-    if head_repo and head_repo.get("fork"):
-        _deny("Fork PRs are not auto-approved.")
+    if not head_repo or head_repo.get("fork"):
+        _deny("Fork PRs (or PRs whose head repository is gone) are not auto-approved.")
+        return 0
+
+    author = os.environ.get("PR_AUTHOR", "").strip()
+    teams = parse_teams(os.environ.get("ALLOWED_TEAMS", ""))
+    if not author or not teams:
+        _deny("PR author and ALLOWED_TEAMS must be set; refusing to auto-approve.")
+        return 0
+    org = repo.split("/", 1)[0]
+    team_token = os.environ.get("TEAM_TOKEN") or token
+    try:
+        is_member = any(is_team_member(org, team, author, team_token) for team in teams)
+    except urllib.error.HTTPError as exc:
+        print(
+            f"Cannot verify team membership of {author} ({exc.code}); "
+            "refusing to auto-approve.",
+            file=sys.stderr,
+        )
+        return 1
+    if not is_member:
+        _deny(f"Author {author} is not a member of: {', '.join(teams)}.")
         return 0
 
     source_number = parse_backported_from_pr(body)
