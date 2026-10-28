@@ -1,0 +1,69 @@
+# Policy for auto-approving mechanical PRs to main.
+# Read from the default branch by .github/workflows/auto-approve-mechanical.yml.
+# A PR is approved only if it matches exactly one category below AND passes that
+# category's built-in diff check in validate_mechanical_pr.py.
+
+# Any PR touching one of these paths is never auto-approved.
+forbidden_path_prefixes:
+  - .github/
+  - .buildkite/publish
+  - Dockerfile.fips
+
+# Commit statuses that must be "success" on the PR head commit.
+required_status_contexts:
+  - CLA
+  - buildkite/connectors
+
+# Hidden marker used to update a single bot comment per PR.
+comment_marker: "<!-- mechanical-auto-approve -->"
+
+# authors: a list of GitHub logins (REST API form, bots end in "[bot]"),
+# or "team" = any active member of the teams in ALLOWED_TEAMS.
+categories:
+  renovate-wolfi:
+    label: renovate-wolfi
+    authors:
+      - elastic-renovate-prod[bot]
+    title_regex: '^chore\(deps\): update docker\.elastic\.co/wolfi/python:3\.11-dev docker digest'
+    allowed_files:
+      - Dockerfile.wolfi
+      - app/connectors_service/NOTICE.txt
+      - libs/connectors_sdk/NOTICE.txt
+
+  dependency-bump:
+    label: dependency-bump
+    authors: team
+    title_regex: '^fix\(deps\): (bump|pin) '
+    require_advisory: true
+    allowed_files:
+      - app/connectors_service/pyproject.toml
+      - app/connectors_service/NOTICE.txt
+      - libs/connectors_sdk/pyproject.toml
+      - libs/connectors_sdk/NOTICE.txt
+
+  release-version-bump:
+    label: release-bump
+    authors:
+      - elastic-vault-github-plugin-prod[bot]
+    title_regex: '^Bump version to \d+\.\d+\.\d+$'
+    allowed_files:
+      - app/connectors_service/connectors/VERSION
+      - app/connectors_service/NOTICE.txt
+      - libs/connectors_sdk/connectors_sdk/VERSION
+      - libs/connectors_sdk/NOTICE.txt
+
+  release-config-bump:
+    label: release-bump
+    authors: team
+    title_regex: '^chore: post-FF config '
+    allowed_files:
+      - .backportrc.json
+      - renovate.json
+      - catalog-info.yaml
+
+  release-dra-branch:
+    label: release-bump
+    authors: team
+    title_regex: '^Add \d+\.\d+ to DRA branch list$'
+    allowed_files:
+      - .buildkite/pipeline.yml

@@ -1,0 +1,128 @@
+name: Auto-approve mechanical PRs
+
+# Approves a narrow set of mechanical PRs to main (Renovate Wolfi digests, CVE
+# pin bumps, release/version bumps). The policy lives in .github/auto-approve.yml
+# and the validator in .github/workflows/scripts; both are always read from the
+# default branch, never from the PR branch (pull_request_target / status events).
+#
+# Repository variables:
+#   AUTO_APPROVE_MODE            dry-run (default: comment only) or live
+#   AUTO_APPROVE_LIVE_CATEGORIES comma separated category ids that may be approved
+#   BACKPORT_APPROVER_TEAMS      team slugs allowed to author team categories
+#
+# It re-runs when a required commit status (CLA, Buildkite) turns green, because
+# approval needs green CI. A PR that stops qualifying loses the bot approval.
+on:
+  pull_request_target:
+    branches:
+      - main
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+    paths:
+      - Dockerfile.wolfi
+      - app/connectors_service/pyproject.toml
+      - app/connectors_service/NOTICE.txt
+      - app/connectors_service/connectors/VERSION
+      - libs/connectors_sdk/pyproject.toml
+      - libs/connectors_sdk/NOTICE.txt
+      - libs/connectors_sdk/connectors_sdk/VERSION
+      - .backportrc.json
+      - renovate.json
+      - catalog-info.yaml
+      - .buildkite/pipeline.yml
+  status:
+
+permissions:
+  pull-requests: write
+  issues: write
+  contents: read
+  statuses: read
+  checks: read
+
+concurrency:
+  group: auto-approve-mechanical-${{ github.event.pull_request.number || github.event.sha }}
+
+jobs:
+  evaluate:
+    name: Mechanical auto-approve
+    if: >-
+      (github.event_name == 'pull_request_target'
+        && github.event.pull_request.head.repo.full_name == github.repository)
+      || (github.event_name == 'status'
+        && github.event.state == 'success'
+        && (github.event.context == 'CLA' || github.event.context == 'buildkite/connectors'))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          sparse-checkout: .github
+
+      - name: Resolve PR number
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          PR_FROM_EVENT: ${{ github.event.pull_request.number }}
+          STATUS_SHA: ${{ github.event.sha }}
+        run: |
+          set -euo pipefail
+          if [ "${EVENT_NAME}" = "status" ]; then
+            PR=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${STATUS_SHA}/pulls" \
+              --jq '[.[] | select(.base.ref == "main" and .state == "open" and .head.sha == "'"${STATUS_SHA}"'")][0].number // empty')
+          else
+            PR="${PR_FROM_EVENT}"
+          fi
+          echo "number=${PR}" >> "$GITHUB_OUTPUT"
+
+      - name: Validate mechanical PR
+        id: validate
+        if: steps.pr.outputs.number != ''
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+          ALLOWED_TEAMS: ${{ vars.BACKPORT_APPROVER_TEAMS || 'search-extract-and-transform' }}
+          TEAM_TOKEN: ${{ secrets.REPO_SCOPED_TOKEN }}
+          AUTO_APPROVE_MODE: ${{ vars.AUTO_APPROVE_MODE || 'dry-run' }}
+          AUTO_APPROVE_LIVE_CATEGORIES: ${{ vars.AUTO_APPROVE_LIVE_CATEGORIES }}
+        run: |
+          python3 -c 'import yaml' 2>/dev/null || pip install --quiet pyyaml
+          python3 .github/workflows/scripts/validate_mechanical_pr.py
+
+      - name: Approve
+        if: steps.validate.outputs.approved == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.REPO_SCOPED_TOKEN }}
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+          HEAD_SHA: ${{ steps.validate.outputs.head_sha }}
+        run: |
+          set -euo pipefail
+          APPROVED=$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/reviews" --paginate \
+            --jq '[.[] | select(.user.login == "entsearchmachine" and .state == "APPROVED" and .commit_id == "'"${HEAD_SHA}"'")] | length' \
+            | awk '{ total += $1 } END { print total + 0 }')
+          if [ "${APPROVED}" != "0" ]; then
+            echo "Already approved at ${HEAD_SHA}; skipping."
+            exit 0
+          fi
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/reviews" \
+            -f event=APPROVE -f commit_id="${HEAD_SHA}"
+
+      - name: Withdraw stale approval
+        if: ${{ !cancelled() && steps.pr.outputs.number != '' && steps.validate.outputs.approved != 'true' }}
+        env:
+          GH_TOKEN: ${{ secrets.REPO_SCOPED_TOKEN }}
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+        run: |
+          set -euo pipefail
+          # The PR no longer qualifies (new commit, failing CI, other files):
+          # remove any earlier bot approval so it cannot be merged on it.
+          gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/reviews" --paginate \
+            --jq '.[] | select(.user.login == "entsearchmachine" and .state == "APPROVED") | .id' |
+          while read -r REVIEW_ID; do
+            gh api --method PUT \
+              "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/reviews/${REVIEW_ID}/dismissals" \
+              -f message="PR no longer qualifies for mechanical auto-approval."
+          done
