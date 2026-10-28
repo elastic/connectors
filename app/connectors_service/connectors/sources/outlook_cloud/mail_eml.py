@@ -48,43 +48,54 @@ def _body_plain_text(body):
     return html_to_text(html=content) or ""
 
 
-def build_minimal_eml_from_graph_message(message):
+def _set_header(eml, name, value, logger=None):
+    """Set a header; one bad value (CR/LF is folded to a space) must not lose the whole EML."""
+    if not isinstance(value, str) or not value:
+        return
+    value = " ".join(value.splitlines()).strip()
+    if not value:
+        return
+    try:
+        eml[name] = value
+    except Exception:
+        if logger:
+            logger.warning(f"Dropping unusable {name} header from Graph message.")
+
+
+def build_minimal_eml_from_graph_message(message, logger=None):
     """Build a header-light .eml from Graph message JSON."""
     eml = EmailMessage(policy=_DEFAULT_POLICY)
 
-    subject = message.get("subject")
-    if isinstance(subject, str) and subject:
-        eml["Subject"] = subject
-
-    from_address = _smtp_address(message.get("from"))
-    if from_address:
-        eml["From"] = from_address
-
-    reply_to = _reply_to_header(message.get("replyTo"))
-    if reply_to:
-        eml["Reply-To"] = reply_to
-
+    _set_header(eml, "Subject", message.get("subject"), logger)
+    # `from` is the author; `sender` only differs for delegated sends and is the
+    # fallback when `from` is absent.
+    _set_header(
+        eml,
+        "From",
+        _smtp_address(message.get("from")) or _smtp_address(message.get("sender")),
+        logger,
+    )
+    _set_header(eml, "Reply-To", _reply_to_header(message.get("replyTo")), logger)
     for header, key in (
         ("To", "toRecipients"),
         ("Cc", "ccRecipients"),
         ("Bcc", "bccRecipients"),
     ):
-        addresses = _recipient_header(message.get(key))
-        if addresses:
-            eml[header] = addresses
+        _set_header(eml, header, _recipient_header(message.get(key)), logger)
 
     sent = message.get("sentDateTime")
     if isinstance(sent, str) and sent:
-        iso = graph_datetime_to_iso_utc(sent)
-        if iso:
+        try:
+            iso = graph_datetime_to_iso_utc(sent)
             parsed = datetime.strptime(iso, "%Y-%m-%dT%H:%M:%SZ").replace(
                 tzinfo=timezone.utc
             )
-            eml["Date"] = format_datetime(parsed)
+            _set_header(eml, "Date", format_datetime(parsed), logger)
+        except ValueError:
+            if logger:
+                logger.warning("Dropping unparsable sentDateTime from Graph message.")
 
-    message_id = message.get("internetMessageId")
-    if isinstance(message_id, str) and message_id:
-        eml["Message-ID"] = message_id
+    _set_header(eml, "Message-ID", message.get("internetMessageId"), logger)
 
     eml.set_content(
         _body_plain_text(message.get("body")),
@@ -101,31 +112,19 @@ def _empty_minimal_eml_bytes():
 
 
 def mail_attachment_base64(message, include_full_raw_message, raw_mime_bytes, logger):
-    """Return base64 ``_attachment`` payload for a Graph message."""
-    message_id = message.get("id", "unknown")
-    if include_full_raw_message:
-        if raw_mime_bytes:
-            return base64.b64encode(raw_mime_bytes).decode("ascii")
-        try:
-            return base64.b64encode(
-                build_minimal_eml_from_graph_message(message)
-            ).decode("ascii")
-        except Exception:
-            logger.warning(
-                "Failed to build minimal EML for %s; using empty body fallback.",
-                message_id,
-                exc_info=True,
-            )
-            return base64.b64encode(_empty_minimal_eml_bytes()).decode("ascii")
+    """Return the base64 ``_attachment`` payload for a Graph message.
 
+    The raw MIME is used when requested and available; otherwise an .eml is rebuilt
+    from the JSON, and as a last resort an empty one.
+    """
+    if include_full_raw_message and raw_mime_bytes:
+        return base64.b64encode(raw_mime_bytes).decode("ascii")
     try:
-        return base64.b64encode(build_minimal_eml_from_graph_message(message)).decode(
-            "ascii"
-        )
+        eml = build_minimal_eml_from_graph_message(message, logger)
     except Exception:
         logger.warning(
-            "Failed to build minimal EML for %s; using empty body fallback.",
-            message_id,
+            f"Failed to build minimal EML for {message.get('id', 'unknown')}; using empty body fallback.",
             exc_info=True,
         )
-        return base64.b64encode(_empty_minimal_eml_bytes()).decode("ascii")
+        eml = _empty_minimal_eml_bytes()
+    return base64.b64encode(eml).decode("ascii")

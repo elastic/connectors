@@ -5,12 +5,6 @@
 #
 """Golden Elasticsearch document contract for Outlook-family connectors (#4346 §4)."""
 
-import re
-
-_ISO8601_FRACTION = re.compile(
-    r"^(?P<head>.+?)(?P<fraction>\.\d+)(?P<tz>Z|[+-]\d{2}:?\d{2})$"
-)
-
 MAIL_DOC_TYPES = frozenset(
     {
         "Inbox Mails",
@@ -150,12 +144,6 @@ def _is_str_list(value):
     return isinstance(value, list) and all(isinstance(item, str) for item in value)
 
 
-def _is_str_or_number_list(value):
-    return isinstance(value, list) and all(
-        isinstance(item, (str, int, float)) for item in value
-    )
-
-
 def _assert_timestamp(value):
     assert _is_str_or_none(value)
     if value is not None:
@@ -192,11 +180,10 @@ def assert_mail_document(document):
 def assert_calendar_document(document):
     assert document["type"] == CALENDAR_DOC_TYPE
     if "date" in document:
-        assert set(document.keys()) == CALENDAR_BIRTHDAY_KEYS | {"attachments"}
+        assert CALENDAR_BIRTHDAY_KEYS <= set(document.keys())
+        assert set(document.keys()) <= CALENDAR_BIRTHDAY_KEYS | {"attachments"}
         _assert_timestamp(document["_timestamp"])
-        assert _is_str_or_none(document["date"]) or (
-            isinstance(document["date"], str) and len(document["date"]) == 10
-        )
+        assert _is_str_or_none(document["date"])
     else:
         allowed = CALENDAR_REGULAR_KEYS | {"attachments"}
         assert set(document.keys()) <= allowed
@@ -212,7 +199,7 @@ def assert_contact_document(document):
     assert document["type"] == CONTACT_DOC_TYPE
     _assert_timestamp(document["_timestamp"])
     assert _is_str_list(document["email_addresses"])
-    assert _is_str_or_number_list(document["contact_numbers"])
+    assert _is_str_list(document["contact_numbers"])
 
 
 def assert_distribution_list_document(document):

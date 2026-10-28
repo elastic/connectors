@@ -20,7 +20,7 @@ MESSAGE_FIELDS = (
     "sentDateTime,lastModifiedDateTime,internetMessageId,importance,categories,body"
 )
 MESSAGES_PAGE_SIZE = 100
-FOLDER_FIELDS = "id,displayName,parentFolderId"
+FOLDER_FIELDS = "id,displayName,childFolderCount"
 
 REQUEST_TIMEOUT = 300  # seconds
 RETRIES = 5
@@ -69,8 +69,4 @@ EXCLUDED_WELL_KNOWN_FOLDERS = frozenset(
     }
 )
 
-DEFAULT_WELL_KNOWN_FOLDER_NAMES = frozenset(
-    entry["well_known"] for entry in DEFAULT_MAIL_FOLDERS
-)
-
-MAIL_SEARCH_FOLDER_ODATA_TYPE = "#microsoft.graph.mailSearchFolder"
+MAIL_SEARCH_FOLDER_TYPE_NAME = "mailSearchFolder"

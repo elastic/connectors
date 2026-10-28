@@ -3,39 +3,48 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+"""Small helpers for Outlook Cloud Graph formatting."""
+
 import re
 from datetime import datetime, timezone
 
-_ISO8601_FRACTION = re.compile(
-    r"^(?P<head>.+?)(?P<fraction>\.\d+)(?P<tz>Z|[+-]\d{2}:?\d{2})$"
+# Seconds, optional fraction of any length, then `Z` or an offset.
+_GRAPH_DATETIME = re.compile(
+    r"^(?P<base>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})"
+    r"(?:\.(?P<fraction>\d+))?"
+    r"(?P<tz>Z|[+-]\d{2}:?\d{2})?$"
 )
+
+LEGACY_IMPORTANCE = {"low": "Low", "normal": "Normal", "high": "High"}
 
 
 def graph_datetime_to_iso_utc(value):
-    """Parse Graph ISO-8601 timestamps to ``YYYY-MM-DDTHH:MM:SSZ``."""
-    if not value or not isinstance(value, str):
+    """Convert a Graph timestamp to ``YYYY-MM-DDTHH:MM:SSZ`` (UTC).
+
+    Python 3.10's ``datetime.fromisoformat`` rejects ``Z`` and fractions that are not 3
+    or 6 digits long (Graph can send 7), so the string is normalized first.
+    Empty values are returned unchanged. A string that is not a timestamp raises
+    ValueError.
+    """
+    if not value:
         return value
-    text = value.strip()
-    match = _ISO8601_FRACTION.match(text)
-    if match:
-        tz = match.group("tz")
-        tz = "+00:00" if tz == "Z" else tz
-        if len(tz) == 5 and tz[3] != ":":
-            tz = f"{tz[:3]}:{tz[3:]}"
-        fraction = match.group("fraction")[:7]
-        text = f"{match.group('head')}{fraction}{tz}"
-    elif text.endswith("Z"):
-        text = f"{text[:-1]}+00:00"
-    parsed = datetime.fromisoformat(text)
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    else:
-        parsed = parsed.astimezone(timezone.utc)
-    return parsed.strftime("%Y-%m-%dT%H:%M:%SZ")
+    match = _GRAPH_DATETIME.match(value.strip())
+    if match is None:
+        msg = f"Not a Microsoft Graph timestamp: {value!r}"
+        raise ValueError(msg)
+    tz = match["tz"] or "Z"
+    if tz == "Z":
+        tz = "+00:00"
+    elif ":" not in tz:
+        tz = f"{tz[:3]}:{tz[3:]}"
+    # Sub-second precision is dropped, so the fraction only has to parse.
+    fraction = (match["fraction"] or "0")[:6].ljust(6, "0")
+    parsed = datetime.fromisoformat(f"{match['base']}.{fraction}{tz}")
+    return parsed.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def graph_importance_to_legacy(importance):
-    if not importance or not isinstance(importance, str):
+    """`high` becomes `High`, as legacy Outlook indexes it. Unknown values pass through."""
+    if not isinstance(importance, str):
         return importance
-    mapping = {"low": "Low", "normal": "Normal", "high": "High"}
-    return mapping.get(importance.lower(), importance)
+    return LEGACY_IMPORTANCE.get(importance.lower(), importance)

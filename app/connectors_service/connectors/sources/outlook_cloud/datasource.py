@@ -9,7 +9,10 @@ from functools import cached_property
 from aiohttp.client_exceptions import ClientResponseError
 from connectors_sdk.source import BaseDataSource
 
-from connectors.sources.outlook_cloud.client import OutlookCloudClient
+from connectors.sources.outlook_cloud.client import (
+    NoAccessibleMailboxes,
+    OutlookCloudClient,
+)
 from connectors.sources.outlook_cloud.constants import DEFAULT_MAIL_FOLDERS
 from connectors.sources.outlook_cloud.formatter import OutlookCloudDocFormatter
 from connectors.sources.outlook_cloud.mail_eml import mail_attachment_base64
@@ -25,7 +28,6 @@ class OutlookCloudDataSource(BaseDataSource):
 
     name = "Outlook Cloud"
     service_type = "outlook_cloud"
-    incremental_sync_enabled = True
 
     def __init__(self, configuration):
         super().__init__(configuration=configuration)
@@ -139,6 +141,18 @@ class OutlookCloudDataSource(BaseDataSource):
                 yield document, lazy_download
 
     async def get_docs(self, filtering=None):
+        self.client.mail_folder_stats.clear()
         async for user in self.client.get_accessible_mailboxes():
             async for document, lazy_download in self._yield_user_mail(user):
                 yield document, lazy_download
+
+        stats = self.client.mail_folder_stats
+        self._logger.info(
+            f"Mail folders: {stats['read']} read, {stats['skipped']} skipped."
+        )
+        if not stats["read"]:
+            # Every mailbox passed the access probe, yet no folder could be read (for
+            # example the permission was removed during the sync). Failing here keeps
+            # an empty result from wiping the index.
+            msg = "No mail folder could be read from the accessible mailboxes. Check that Mail.Read is still granted and the Exchange scope has not changed."
+            raise NoAccessibleMailboxes(msg)

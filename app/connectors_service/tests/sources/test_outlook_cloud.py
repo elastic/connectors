@@ -28,7 +28,10 @@ from connectors.sources.outlook_cloud import OutlookCloudDataSource
 from connectors.sources.outlook_cloud import client as outlook_cloud_client
 from connectors.sources.outlook_cloud.client import NoAccessibleMailboxes
 from connectors.sources.outlook_cloud.constants import (
+    DEFAULT_MAIL_FOLDERS,
     DEFAULT_RETRY_SECONDS,
+    EXCLUDED_WELL_KNOWN_FOLDERS,
+    FOLDER_FIELDS,
     GRAPH_BASE_URL,
     INBOX_MAIL_OBJECT,
     MAILBOX_ACCESSIBLE,
@@ -536,7 +539,7 @@ async def test_get_docs_skips_junk_when_folder_missing(graph):
 
     assert documents == []
     source.client._logger.warning.assert_any_call(
-        "Could not read mail folder 'Junk Mails' for user user-1, skipping: ClientResponseError."
+        "Could not read mail folder 'Junk Mails' for user user-1, skipping: ClientResponseError (404)."
     )
 
 
@@ -602,3 +605,322 @@ async def test_graph_datetime_to_iso_utc_handles_fractional_seconds():
         graph_datetime_to_iso_utc("2023-12-12T01:01:01.1234567Z")
         == "2023-12-12T01:01:01Z"
     )
+
+
+@pytest.mark.parametrize(
+    "value, expected",
+    [
+        ("2023-12-12T01:01:01.1Z", "2023-12-12T01:01:01Z"),
+        ("2023-12-12T01:01:01.12Z", "2023-12-12T01:01:01Z"),
+        ("2023-12-12T01:01:01.123Z", "2023-12-12T01:01:01Z"),
+        ("2023-12-12T01:01:01Z", "2023-12-12T01:01:01Z"),
+        ("2023-12-12T03:01:01+02:00", "2023-12-12T01:01:01Z"),
+        ("2023-12-12T03:01:01.5+0200", "2023-12-12T01:01:01Z"),
+        ("", ""),
+        (None, None),
+    ],
+)
+def test_graph_datetime_to_iso_utc_accepts_graph_shapes(value, expected):
+    from connectors.sources.outlook_cloud.utils import graph_datetime_to_iso_utc
+
+    assert graph_datetime_to_iso_utc(value) == expected
+
+
+def test_graph_datetime_to_iso_utc_rejects_garbage():
+    from connectors.sources.outlook_cloud.utils import graph_datetime_to_iso_utc
+
+    with pytest.raises(ValueError):
+        graph_datetime_to_iso_utc("yesterday")
+
+
+def test_minimal_eml_survives_newlines_and_bad_values():
+    from email import message_from_bytes
+
+    from connectors.sources.outlook_cloud.mail_eml import (
+        build_minimal_eml_from_graph_message,
+    )
+
+    eml = build_minimal_eml_from_graph_message(
+        graph_message(
+            subject="line one\r\nBcc: evil@example.com",
+            sentDateTime="not a date",
+            **{"from": None},
+        )
+    )
+    parsed = message_from_bytes(eml)
+
+    assert parsed["Subject"] == "line one Bcc: evil@example.com"
+    assert parsed["Bcc"] is None
+    assert parsed["From"] == "sender@example.com"
+    assert parsed["Date"] is None
+
+
+@pytest.mark.asyncio
+async def test_get_docs_handles_null_fields(graph):
+    register_accessible_user(graph)
+    for folder in ("sentitems", "junkemail", "archive"):
+        graph.get(messages_url("user-1", folder), payload={"value": []})
+    graph.get(
+        messages_url("user-1", "inbox"),
+        payload={
+            "value": [
+                graph_message(
+                    subject=None,
+                    importance=None,
+                    categories=None,
+                    body=None,
+                    toRecipients=None,
+                    **{"from": None, "sender": None},
+                )
+            ]
+        },
+    )
+
+    async with create_outlook_cloud_source() as source:
+        documents = [document async for document, _ in source.get_docs()]
+
+    assert len(documents) == 1
+    assert_conforms(documents[0])
+
+
+@pytest.mark.asyncio
+async def test_get_docs_follows_message_pages_with_headers(graph):
+    register_accessible_user(graph)
+    for folder in ("sentitems", "junkemail", "archive"):
+        graph.get(messages_url("user-1", folder), payload={"value": []})
+    next_url = f"{GRAPH_BASE_URL}/users/user-1/mailFolders/inbox/messages?$skiptoken=2"
+    graph.get(
+        messages_url("user-1", "inbox"),
+        payload={"value": [graph_message()], "@odata.nextLink": next_url},
+    )
+    graph.get(next_url, payload={"value": [graph_message(id="msg-2")]})
+
+    async with create_outlook_cloud_source() as source:
+        documents = [document async for document, _ in source.get_docs()]
+
+    assert [document["_id"] for document in documents] == ["msg-1", "msg-2"]
+    for call in requests_to(graph, next_url):
+        assert call.kwargs["headers"]["Prefer"] == 'IdType="ImmutableId"'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", [403, 404])
+async def test_get_docs_keeps_pages_read_when_a_later_page_is_refused(graph, status):
+    register_accessible_user(graph)
+    for folder in ("sentitems", "junkemail", "archive"):
+        graph.get(messages_url("user-1", folder), payload={"value": []})
+    next_url = f"{GRAPH_BASE_URL}/users/user-1/mailFolders/inbox/messages?$skiptoken=2"
+    graph.get(
+        messages_url("user-1", "inbox"),
+        payload={"value": [graph_message()], "@odata.nextLink": next_url},
+    )
+    graph.get(next_url, status=status)
+
+    async with create_outlook_cloud_source() as source:
+        source.client.set_logger(MagicMock())
+        documents = [document async for document, _ in source.get_docs()]
+
+    assert [document["_id"] for document in documents] == ["msg-1"]
+    source.client._logger.warning.assert_any_call(
+        f"Could not read mail folder 'Inbox Mails' for user user-1, skipping: ClientResponseError ({status})."
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_docs_fails_when_no_folder_can_be_read(graph):
+    register_accessible_user(graph)
+    for folder in ("inbox", "sentitems", "junkemail", "archive"):
+        graph.get(messages_url("user-1", folder), status=403)
+
+    async with create_outlook_cloud_source() as source:
+        source.client.set_logger(MagicMock())
+        with pytest.raises(NoAccessibleMailboxes):
+            [document async for document, _ in source.get_docs()]
+
+
+@pytest.mark.asyncio
+async def test_get_docs_does_not_list_folders_by_default(graph):
+    register_accessible_user(graph)
+    register_default_folders_empty(graph)
+
+    async with create_outlook_cloud_source() as source:
+        [document async for document, _ in source.get_docs()]
+
+    assert not [url for (_, url) in graph.requests if "childFolders" in str(url)]
+
+
+# --- sync_all_mail_folders ---
+
+ROOTS_URL = (
+    f"{GRAPH_BASE_URL}/users/user-1/mailFolders?$select={FOLDER_FIELDS}&$top=100"
+)
+
+
+def children_url(folder_id):
+    return (
+        f"{GRAPH_BASE_URL}/users/user-1/mailFolders/{folder_id}"
+        f"/childFolders?$select={FOLDER_FIELDS}&$top=100"
+    )
+
+
+def folder(folder_id, name=None, children=1, **extra):
+    return {
+        "id": folder_id,
+        "displayName": name or folder_id,
+        "childFolderCount": children,
+        **extra,
+    }
+
+
+def register_well_known_ids(graph, overrides=None):
+    """Every well-known folder resolves to `id-<name>`, unless overridden by a status."""
+    overrides = overrides or {}
+    names = [e["well_known"] for e in DEFAULT_MAIL_FOLDERS] + list(
+        EXCLUDED_WELL_KNOWN_FOLDERS
+    )
+    for name in names:
+        url = f"{GRAPH_BASE_URL}/users/user-1/mailFolders/{name}?$select=id"
+        if name in overrides:
+            graph.get(url, status=overrides[name])
+        else:
+            graph.get(url, payload={"id": f"id-{name}"})
+
+
+@pytest.mark.asyncio
+async def test_sync_all_mail_folders_indexes_only_user_folders(graph):
+    register_accessible_user(graph)
+    register_default_folders_empty(graph)
+    register_well_known_ids(graph)
+    graph.get(
+        ROOTS_URL,
+        payload={
+            "value": [
+                folder("id-inbox"),
+                folder("id-deleteditems", children=0),
+                folder("id-drafts", children=1),
+                folder("id-searchfolders", children=1),
+                folder("proj", "Projects"),
+                folder(
+                    "saved",
+                    "Saved",
+                    children=0,
+                    **{"@odata.type": "#microsoft.graph.mailSearchFolder"},
+                ),
+            ]
+        },
+    )
+    # Subfolder of a default folder is user mail; the default itself is not repeated.
+    graph.get(children_url("id-inbox"), payload={"value": [folder("sub", "Sub", 0)]})
+    graph.get(children_url("proj"), payload={"value": [folder("deep", "Deep", 0)]})
+    for folder_id in ("sub", "proj", "deep"):
+        graph.get(
+            messages_url("user-1", folder_id),
+            payload={"value": [graph_message(id=f"msg-{folder_id}")]},
+        )
+
+    async with create_outlook_cloud_source(sync_all_mail_folders=True) as source:
+        documents = [document async for document, _ in source.get_docs()]
+
+    assert {d["_id"]: d["folder_name"] for d in documents} == {
+        "msg-sub": "Sub",
+        "msg-proj": "Projects",
+        "msg-deep": "Deep",
+    }
+    assert {d["type"] for d in documents} == {"Mail"}
+    for document in documents:
+        assert_conforms(document)
+    # Excluded subtrees are never entered, and folders without children are not listed.
+    for skipped in ("id-drafts", "id-searchfolders", "id-deleteditems", "sub", "deep"):
+        assert not requests_to(graph, children_url(skipped))
+
+
+@pytest.mark.asyncio
+async def test_sync_all_mail_folders_follows_folder_pages(graph):
+    register_accessible_user(graph)
+    register_default_folders_empty(graph)
+    register_well_known_ids(graph)
+    next_url = f"{GRAPH_BASE_URL}/users/user-1/mailFolders?$skiptoken=2"
+    graph.get(
+        ROOTS_URL,
+        payload={"value": [folder("a", children=0)], "@odata.nextLink": next_url},
+    )
+    graph.get(next_url, payload={"value": [folder("b", children=0)]})
+    for folder_id in ("a", "b"):
+        graph.get(
+            messages_url("user-1", folder_id),
+            payload={"value": [graph_message(id=f"msg-{folder_id}")]},
+        )
+
+    async with create_outlook_cloud_source(sync_all_mail_folders=True) as source:
+        documents = [document async for document, _ in source.get_docs()]
+
+    assert [d["_id"] for d in documents] == ["msg-a", "msg-b"]
+
+
+@pytest.mark.asyncio
+async def test_sync_all_mail_folders_skips_unreadable_folder(graph):
+    register_accessible_user(graph)
+    register_default_folders_empty(graph)
+    register_well_known_ids(graph)
+    graph.get(
+        ROOTS_URL,
+        payload={"value": [folder("bad", children=0), folder("good", children=0)]},
+    )
+    graph.get(messages_url("user-1", "bad"), status=403)
+    graph.get(messages_url("user-1", "good"), payload={"value": [graph_message()]})
+
+    async with create_outlook_cloud_source(sync_all_mail_folders=True) as source:
+        source.client.set_logger(MagicMock())
+        documents = [document async for document, _ in source.get_docs()]
+
+    assert len(documents) == 1
+    source.client._logger.warning.assert_any_call(
+        "Could not read mail folder 'bad' for user user-1, skipping: ClientResponseError (403)."
+    )
+
+
+@pytest.mark.asyncio
+async def test_sync_all_mail_folders_tolerates_missing_system_folder(graph):
+    register_accessible_user(graph)
+    register_default_folders_empty(graph)
+    register_well_known_ids(graph, overrides={"archive": 404, "outbox": 404})
+    graph.get(ROOTS_URL, payload={"value": [folder("a", children=0)]})
+    graph.get(messages_url("user-1", "a"), payload={"value": [graph_message()]})
+
+    async with create_outlook_cloud_source(sync_all_mail_folders=True) as source:
+        documents = [document async for document, _ in source.get_docs()]
+
+    assert len(documents) == 1
+
+
+@pytest.mark.asyncio
+async def test_sync_all_mail_folders_skips_extras_when_system_folders_are_unknown(
+    graph,
+):
+    """A refused lookup must not turn Deleted Items or Drafts into indexed mail."""
+    register_accessible_user(graph)
+    for folder_name in ("inbox", "sentitems", "junkemail"):
+        graph.get(
+            messages_url("user-1", folder_name), payload={"value": [graph_message()]}
+        )
+    graph.get(messages_url("user-1", "archive"), payload={"value": []})
+    register_well_known_ids(graph, overrides={"deleteditems": 403})
+
+    async with create_outlook_cloud_source(sync_all_mail_folders=True) as source:
+        source.client.set_logger(MagicMock())
+        documents = [document async for document, _ in source.get_docs()]
+
+    assert len(documents) == 3  # the default folders are still synced
+    assert not requests_to(graph, ROOTS_URL)
+
+
+@pytest.mark.asyncio
+async def test_sync_all_mail_folders_raises_on_server_errors(graph):
+    register_accessible_user(graph)
+    register_default_folders_empty(graph)
+    register_well_known_ids(graph)
+    graph.get(ROOTS_URL, status=500)
+
+    async with create_outlook_cloud_source(sync_all_mail_folders=True) as source:
+        with pytest.raises(ClientResponseError):
+            [document async for document, _ in source.get_docs()]

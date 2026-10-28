@@ -26,7 +26,7 @@ from connectors.sources.outlook_cloud.constants import (
     GRAPH_HOST_URL,
     GRAPH_REQUEST_HEADERS,
     MAIL_OBJECT,
-    MAIL_SEARCH_FOLDER_ODATA_TYPE,
+    MAIL_SEARCH_FOLDER_TYPE_NAME,
     MAILBOX_ACCESSIBLE,
     MAILBOX_MISSING,
     MAILBOX_OUT_OF_SCOPE,
@@ -60,6 +60,8 @@ class OutlookCloudClient:
         self.configuration = configuration
         self._sleeps = CancellableSleeps()
         self._logger = logger
+        # Mail folders read or skipped (403/404) since the last reset.
+        self.mail_folder_stats = Counter()
 
     def set_logger(self, logger_):
         self._logger = logger_
@@ -256,215 +258,158 @@ class OutlookCloudClient:
         )
 
     async def _resolve_well_known_folder_id(self, user_id, well_known_name):
+        """Id of a well-known folder, or None when the mailbox has no such folder (404).
+
+        Any other error is raised: a folder that cannot be identified must not be
+        guessed to be a user folder.
+        """
         url = (
-            f"{GRAPH_BASE_URL}/users/{user_id}/mailFolders/{well_known_name}"
-            f"?$select=id"
+            f"{GRAPH_BASE_URL}/users/{user_id}/mailFolders/{well_known_name}?$select=id"
         )
         try:
             payload = await self._get_json(url)
         except ClientResponseError as error:
-            if error.status in (403, 404):
+            if error.status == 404:
                 return None
             raise
         folder_id = payload.get("id")
         return folder_id if isinstance(folder_id, str) and folder_id else None
 
-    async def _folder_exclusion_and_default_ids(self, user_id):
-        excluded_ids = set()
-        for well_known in EXCLUDED_WELL_KNOWN_FOLDERS:
-            folder_id = await self._resolve_well_known_folder_id(user_id, well_known)
-            if folder_id:
-                excluded_ids.add(folder_id)
-
-        default_ids = set()
-        for entry in DEFAULT_MAIL_FOLDERS:
+    async def _resolve_well_known_folder_ids(self, user_id, well_known_names):
+        ids = set()
+        for well_known_name in sorted(well_known_names):
             folder_id = await self._resolve_well_known_folder_id(
-                user_id, entry["well_known"]
+                user_id, well_known_name
             )
             if folder_id:
-                default_ids.add(folder_id)
-        return excluded_ids, default_ids
+                ids.add(folder_id)
+        return ids
 
-    def _folder_skip_warning(self, user_id, folder_label, error):
+    def _skip_folder(self, user_id, folder_label, error):
+        self.mail_folder_stats["skipped"] += 1
         self._logger.warning(
             f"Could not read mail folder {folder_label!r} for user {user_id}, skipping: "
-            f"{error.__class__.__name__}."
+            f"{error.__class__.__name__} ({error.status})."
         )
 
-    async def get_messages(self, user_id, folder_segment, mail_type):
-        """Yield Graph message objects from a well-known folder name or folder id."""
-        segment = url_encode(folder_segment)
-        url = (
-            f"{GRAPH_BASE_URL}/users/{user_id}/mailFolders/{segment}/messages"
-            f"?$select={MESSAGE_FIELDS}&$top={MESSAGES_PAGE_SIZE}"
-        )
-        folder_label = mail_type.get("folder_name") or mail_type.get(
-            "constant", folder_segment
-        )
+    async def _get_page_or_skip(self, url, user_id, folder_label):
+        """GET one page of a folder listing. Return None if the folder is gone or denied (404, 403).
+
+        Applies to every page, not only the first: a folder can be removed between two pages.
+        Any other error is raised.
+        """
         try:
-            page = await self._get_json(url)
+            return await self._get_json(url)
         except ClientResponseError as error:
             if error.status in (403, 404):
-                self._folder_skip_warning(user_id, folder_label, error)
-                return
+                self._skip_folder(user_id, folder_label, error)
+                return None
             raise
 
-        while True:
+    async def get_messages(
+        self, user_id, folder_segment, mail_type
+    ) -> AsyncIterator[dict]:
+        """Yield the Graph messages of a folder, given as a well-known name or a folder id."""
+        folder_label = mail_type.get("folder_name") or mail_type["constant"]
+        url = (
+            f"{GRAPH_BASE_URL}/users/{user_id}/mailFolders/{url_encode(folder_segment)}/messages"
+            f"?$select={MESSAGE_FIELDS}&$top={MESSAGES_PAGE_SIZE}"
+        )
+        page = await self._get_page_or_skip(url, user_id, folder_label)
+        if page is not None:
+            self.mail_folder_stats["read"] += 1
+        while page is not None:
             for message in page.get("value") or []:
                 yield message
             url = page.get("@odata.nextLink")
             if not url:
-                break
-            page = await self._get_json(url)
+                return
+            page = await self._get_page_or_skip(url, user_id, folder_label)
 
     async def get_raw_message(self, user_id, message_id):
+        """The raw MIME of a message."""
         url = (
             f"{GRAPH_BASE_URL}/users/{user_id}/messages/{url_encode(message_id)}/$value"
         )
         return await self._get_bytes(url)
 
-    async def _list_folders(self, url):
+    async def _list_folders(self, url, user_id, folder_label):
+        """Every folder of a listing. A listing that fails with 403/404 ends there (logged)."""
         folders = []
         while url:
-            page = await self._get_json(url)
+            page = await self._get_page_or_skip(url, user_id, folder_label)
+            if page is None:
+                break
             folders.extend(page.get("value") or [])
             url = page.get("@odata.nextLink")
         return folders
 
-    def _should_prune_folder(self, folder, excluded_ids, pruned_ids):
-        folder_id = folder.get("id")
-        parent_id = folder.get("parentFolderId")
-        odata_type = folder.get("@odata.type") or ""
-        if parent_id and parent_id in pruned_ids:
-            return True
-        if MAIL_SEARCH_FOLDER_ODATA_TYPE in odata_type or odata_type.endswith(
-            ".mailSearchFolder"
-        ):
-            return True
-        if folder_id and folder_id in excluded_ids:
-            return True
-        return False
-
-    async def _walk_additional_folders(
-        self,
-        user_id,
-        folder,
-        excluded_ids,
-        default_ids,
-        synced_ids,
-        pruned_ids,
+    async def _walk_folders(
+        self, user_id, folders, excluded_ids, seen_ids
     ) -> AsyncIterator[dict]:
-        folder_id = folder.get("id")
-        if self._should_prune_folder(folder, excluded_ids, pruned_ids):
-            if folder_id:
-                pruned_ids.add(folder_id)
-            return
+        """Yield the user mail folders of a folder listing, depth first.
 
-        if folder_id and folder_id in default_ids:
-            async for child in self._enumerate_child_folders(
-                user_id,
-                folder_id,
-                excluded_ids,
-                default_ids,
-                synced_ids,
-                pruned_ids,
+        Excluded folders (system folders, search folders) are dropped with their whole
+        subtree. Folders in `seen_ids` (the default ones) are not yielded again, but
+        their subfolders are user mail and are visited.
+        """
+        for folder in folders:
+            folder_id = folder.get("id")
+            if (
+                not folder_id
+                or folder_id in excluded_ids
+                or MAIL_SEARCH_FOLDER_TYPE_NAME in (folder.get("@odata.type") or "")
             ):
-                yield child
-            return
-
-        if folder_id and folder_id in synced_ids:
-            async for child in self._enumerate_child_folders(
+                continue
+            if folder_id not in seen_ids:
+                seen_ids.add(folder_id)
+                yield {
+                    "folder_id": folder_id,
+                    "mail_type": {
+                        "constant": MAIL_OBJECT,
+                        "folder_name": folder.get("displayName") or "unknown",
+                    },
+                }
+            if folder.get("childFolderCount") == 0:
+                continue
+            children = await self._list_folders(
+                f"{GRAPH_BASE_URL}/users/{user_id}/mailFolders/{url_encode(folder_id)}"
+                f"/childFolders?$select={FOLDER_FIELDS}&$top=100",
                 user_id,
-                folder_id,
-                excluded_ids,
-                default_ids,
-                synced_ids,
-                pruned_ids,
-            ):
-                yield child
-            return
-
-        if folder_id:
-            synced_ids.add(folder_id)
-            display_name = folder.get("displayName") or "unknown"
-            yield {
-                "folder_id": folder_id,
-                "mail_type": {
-                    "constant": MAIL_OBJECT,
-                    "folder_name": display_name,
-                },
-            }
-
-        if folder_id:
-            async for child in self._enumerate_child_folders(
-                user_id,
-                folder_id,
-                excluded_ids,
-                default_ids,
-                synced_ids,
-                pruned_ids,
-            ):
-                yield child
-
-    async def _enumerate_child_folders(
-        self,
-        user_id,
-        folder_id,
-        excluded_ids,
-        default_ids,
-        synced_ids,
-        pruned_ids,
-    ) -> AsyncIterator[dict]:
-        url = (
-            f"{GRAPH_BASE_URL}/users/{user_id}/mailFolders/{url_encode(folder_id)}"
-            f"/childFolders?$select={FOLDER_FIELDS}&includeHiddenFolders=true"
-        )
-        try:
-            children = await self._list_folders(url)
-        except ClientResponseError as error:
-            if error.status in (403, 404):
-                self._folder_skip_warning(user_id, folder_id, error)
-                return
-            raise
-
-        for child in children:
-            async for folder in self._walk_additional_folders(
-                user_id,
-                child,
-                excluded_ids,
-                default_ids,
-                synced_ids,
-                pruned_ids,
-            ):
-                yield folder
-
-    async def get_additional_mail_folders(self, user_id) -> AsyncIterator[dict]:
-        """Yield extra mail folders when sync_all_mail_folders is enabled."""
-        excluded_ids, default_ids = await self._folder_exclusion_and_default_ids(
-            user_id
-        )
-        synced_ids = set(default_ids)
-        pruned_ids = set()
-
-        url = (
-            f"{GRAPH_BASE_URL}/users/{user_id}/mailFolders"
-            f"?$select={FOLDER_FIELDS}&includeHiddenFolders=true"
-        )
-        try:
-            root_folders = await self._list_folders(url)
-        except ClientResponseError as error:
-            if error.status in (403, 404):
-                self._folder_skip_warning(user_id, "mailFolders", error)
-                return
-            raise
-
-        for folder in root_folders:
-            async for entry in self._walk_additional_folders(
-                user_id,
-                folder,
-                excluded_ids,
-                default_ids,
-                synced_ids,
-                pruned_ids,
+                folder.get("displayName") or folder_id,
+            )
+            async for entry in self._walk_folders(
+                user_id, children, excluded_ids, seen_ids
             ):
                 yield entry
+
+    async def get_additional_mail_folders(self, user_id) -> AsyncIterator[dict]:
+        """Yield the user mail folders that are not Inbox, Sent, Junk or Archive.
+
+        Used by sync_all_mail_folders. Graph does not say which folder is a system
+        folder, so the well-known ones are resolved to ids first. If that is refused,
+        nothing is yielded: indexing Deleted Items or Drafts as mail would be worse
+        than missing the extra folders.
+        """
+        try:
+            excluded_ids = await self._resolve_well_known_folder_ids(
+                user_id, EXCLUDED_WELL_KNOWN_FOLDERS
+            )
+            default_ids = await self._resolve_well_known_folder_ids(
+                user_id, [entry["well_known"] for entry in DEFAULT_MAIL_FOLDERS]
+            )
+        except ClientResponseError as error:
+            if error.status == 403:
+                self._skip_folder(user_id, "additional mail folders", error)
+                return
+            raise
+
+        roots = await self._list_folders(
+            f"{GRAPH_BASE_URL}/users/{user_id}/mailFolders?$select={FOLDER_FIELDS}&$top=100",
+            user_id,
+            "mail folders",
+        )
+        async for entry in self._walk_folders(
+            user_id, roots, excluded_ids, set(default_ids)
+        ):
+            yield entry
