@@ -7,7 +7,9 @@
 
 import ast
 import asyncio
+import base64
 import re
+from email import message_from_bytes
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 from urllib.parse import unquote, unquote_plus
@@ -493,6 +495,13 @@ def graph_message(**overrides):
     return message
 
 
+RAW_MIME = b"Subject: raw\r\nReceived: from mx.example.com\r\n\r\nraw body"
+
+
+def decode_eml(document):
+    return message_from_bytes(base64.b64decode(document["_attachment"]))
+
+
 def register_accessible_user(graph, user_id="user-1", mail="user@example.com"):
     graph.get(USERS_URL, payload={"value": [user(user_id, mail=mail)]})
     graph.get(mailbox_url(user_id), payload={"id": "inbox-id"})
@@ -521,7 +530,12 @@ async def test_get_docs_yields_inbox_mail_document(graph):
     assert documents[0]["sender"] == "sender@example.com"
     assert documents[0]["importance"] == "High"
     assert documents[0]["message"] == "This is a dummy mail"
-    assert isinstance(documents[0]["_attachment"], str)
+    eml = decode_eml(documents[0])
+    assert eml["Subject"] == "Dummy Subject"
+    assert eml["From"] == "from@example.com"
+    assert eml["To"] == "to@example.com"
+    assert eml["Message-ID"] == "<id@example.com>"
+    assert eml.get_payload(decode=True).strip() == b"This is a dummy mail"
     assert_conforms(documents[0])
 
 
@@ -550,7 +564,7 @@ async def test_get_docs_include_full_raw_message_fetches_value(graph):
         graph.get(messages_url("user-1", folder), payload={"value": []})
     graph.get(messages_url("user-1", "inbox"), payload={"value": [graph_message()]})
     raw_url = f"{GRAPH_BASE_URL}/users/user-1/messages/msg-1/$value"
-    graph.get(raw_url, body=b"Subject: test\r\n\r\nbody")
+    graph.get(raw_url, body=RAW_MIME)
 
     async with create_outlook_cloud_source(
         include_full_raw_message=True,
@@ -558,6 +572,7 @@ async def test_get_docs_include_full_raw_message_fetches_value(graph):
         documents = [document async for document, _ in source.get_docs()]
 
     assert len(documents) == 1
+    assert base64.b64decode(documents[0]["_attachment"]) == RAW_MIME
     assert requests_to(graph, raw_url)
     headers = requests_to(graph, raw_url)[0].kwargs["headers"]
     assert headers["Prefer"] == 'IdType="ImmutableId"'
@@ -578,7 +593,10 @@ async def test_get_docs_raw_message_404_falls_back_to_minimal_eml(graph):
         documents = [document async for document, _ in source.get_docs()]
 
     assert len(documents) == 1
-    assert documents[0]["_attachment"]
+    eml = decode_eml(documents[0])
+    assert eml["Subject"] == "Dummy Subject"
+    assert eml["Received"] is None
+    assert eml.get_payload(decode=True).strip() == b"This is a dummy mail"
 
 
 @pytest.mark.asyncio
