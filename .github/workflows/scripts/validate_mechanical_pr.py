@@ -23,9 +23,11 @@ from validate_manual_backport import is_team_member, parse_teams
 
 API = "https://api.github.com"
 SELF_CHECK_NAME = "Mechanical auto-approve"
+ReadBase = Callable[[str], "str | None"]
 GOOD_CONCLUSIONS = ("success", "skipped", "neutral")
 
 ADVISORY_RE = re.compile(r"\b(CVE-\d{4}-\d{4,}|GHSA-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4})\b", re.I)
+REMOVED_DEP_RE = re.compile(r'^-\s+"([A-Za-z0-9_.\-\[\]]+)([^"]*)",?\s*$')
 PIN_LINE_RE = re.compile(r'^([+-])\s+"([A-Za-z0-9_.\-\[\]]+)==([^"\s]+)",?\s*$')
 NOTICE_LINE_RE = re.compile(r"^([+-])(\d+(?:\.\d+)*)\s*$")
 VERSION_LINE_RE = re.compile(r"^([+-])(\d+\.\d+\.\d+)\s*$")
@@ -55,6 +57,7 @@ DRA_BRANCH_RE = re.compile(r'build\.branch == \\"(\d+\.\d+)\\"')
 class Result:
     category: str = ""
     approved: bool = False
+    qualifies: bool = False  # diff and author match a category (CI not considered)
     comment: bool = False
     reason: str = ""
     head_sha: str = ""
@@ -86,6 +89,25 @@ def _get(url: str, token: str) -> Any:
     return _request("GET", url, token)
 
 
+def read_base_file(repo: str, path: str, token: str) -> str | None:
+    """Content of `path` on main, or None if it does not exist."""
+    request = urllib.request.Request(
+        f"{API}/repos/{repo}/contents/{path}?ref=main",
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/vnd.github.raw+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+        },
+    )
+    try:
+        with urllib.request.urlopen(request) as response:
+            return response.read().decode()
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            return None
+        raise
+
+
 # --------------------------------------------------------------------------
 # Config
 # --------------------------------------------------------------------------
@@ -102,9 +124,10 @@ def load_config() -> dict[str, Any]:
 
 
 def is_live(category: str) -> bool:
-    if os.environ.get("AUTO_APPROVE_MODE", "dry-run").strip().lower() != "live":
+    """Live by default. AUTO_APPROVE_MODE=dry-run or a disabled category switches it off."""
+    if os.environ.get("AUTO_APPROVE_MODE", "live").strip().lower() == "dry-run":
         return False
-    return category in parse_teams(os.environ.get("AUTO_APPROVE_LIVE_CATEGORIES", ""))
+    return category not in parse_teams(os.environ.get("AUTO_APPROVE_DISABLED_CATEGORIES", ""))
 
 
 # --------------------------------------------------------------------------
@@ -150,7 +173,7 @@ def _check_notice(files: list[dict]) -> str | None:
     return None
 
 
-def check_renovate_wolfi(files: list[dict], title: str) -> str | None:
+def check_renovate_wolfi(files: list[dict], title: str, read_base: ReadBase) -> str | None:
     dockerfile = _file(files, "Dockerfile.wolfi")
     if not dockerfile:
         return "Dockerfile.wolfi must change."
@@ -160,35 +183,52 @@ def check_renovate_wolfi(files: list[dict], title: str) -> str | None:
     return _check_notice(files)
 
 
-def check_dependency_bump(files: list[dict], title: str) -> str | None:
+def check_dependency_bump(files: list[dict], title: str, read_base: ReadBase) -> str | None:
+    """Pins may change version, tighten an existing spec to `==`, or pin a package
+    that is already installed (listed in the NOTICE.txt on main) but not yet pinned."""
     pyprojects = [item for item in files if item["filename"].endswith("pyproject.toml")]
     if not pyprojects:
         return "A pyproject.toml pin must change."
     normalized_title = re.sub(r"[-_.]+", "-", title).lower()
     for item in pyprojects:
+        filename = item["filename"]
         removed: dict[str, str] = {}
         added: dict[str, str] = {}
         lines = changed_lines(item.get("patch"))
+        if not lines:
+            return f"{filename}: no pin change found."
         for line in lines:
-            match = PIN_LINE_RE.match(line)
+            if line[0] == "+":
+                match, target = PIN_LINE_RE.match(line), added
+                name, value = (match.group(2), match.group(3)) if match else ("", "")
+            else:
+                match, target = REMOVED_DEP_RE.match(line), removed
+                name, value = (match.group(1), match.group(2)) if match else ("", "")
             if not match:
-                return f"{item['filename']}: only '\"pkg==version\"' lines may change."
-            target = added if match.group(1) == "+" else removed
-            name = _norm_name(match.group(2))
+                return f"{filename}: only dependency lines may change, and added ones must be '\"pkg==version\"'."
+            name = _norm_name(name)
             if name in target:
-                return f"{item['filename']}: package {name} appears twice."
-            target[name] = match.group(3)
-        if not lines or set(added) != set(removed):
-            return f"{item['filename']}: pins may only change version, not be added or removed."
-        for name in added:
-            if added[name] == removed[name]:
-                return f"{item['filename']}: {name} version is unchanged."
+                return f"{filename}: package {name} appears twice."
+            target[name] = value
+        if not set(removed) <= set(added):
+            return f"{filename}: a dependency may not be removed."
+        installed: set[str] | None = None
+        for name, version in added.items():
             if name not in normalized_title:
-                return f"{item['filename']}: {name} is not named in the PR title."
+                return f"{filename}: {name} is not named in the PR title."
+            if name in removed:
+                if removed[name] == f"=={version}":
+                    return f"{filename}: {name} version is unchanged."
+                continue
+            if installed is None:
+                notice = read_base(filename.rsplit("/", 1)[0] + "/NOTICE.txt") or ""
+                installed = {_norm_name(line.strip()) for line in notice.splitlines() if line.strip()}
+            if name not in installed:
+                return f"{filename}: {name} is not an installed package (not in NOTICE.txt on main)."
     return _check_notice(files)
 
 
-def check_release_version(files: list[dict], title: str) -> str | None:
+def check_release_version(files: list[dict], title: str, read_base: ReadBase) -> str | None:
     old_versions: set[str] = set()
     new_versions: set[str] = set()
     for item in files:
@@ -215,7 +255,7 @@ def check_release_version(files: list[dict], title: str) -> str | None:
     return None
 
 
-def check_release_config(files: list[dict], title: str) -> str | None:
+def check_release_config(files: list[dict], title: str, read_base: ReadBase) -> str | None:
     rules: dict[str, list[re.Pattern[str]]] = {
         "renovate.json": [RENOVATE_LABEL_RE],
         ".backportrc.json": BACKPORTRC_RES,
@@ -229,7 +269,7 @@ def check_release_config(files: list[dict], title: str) -> str | None:
     return None
 
 
-def check_release_dra(files: list[dict], title: str) -> str | None:
+def check_release_dra(files: list[dict], title: str, read_base: ReadBase) -> str | None:
     lines = changed_lines(files[0].get("patch")) if len(files) == 1 else []
     if len(lines) != 2 or not _balanced(lines):
         return "pipeline.yml: exactly one line may change."
@@ -251,7 +291,7 @@ def check_release_dra(files: list[dict], title: str) -> str | None:
     return None
 
 
-CHECKS: dict[str, Callable[[list[dict], str], str | None]] = {
+CHECKS: dict[str, Callable[[list[dict], str, ReadBase], str | None]] = {
     "renovate-wolfi": check_renovate_wolfi,
     "dependency-bump": check_dependency_bump,
     "release-version-bump": check_release_version,
@@ -273,6 +313,7 @@ def classify(
     author: str,
     is_member: Callable[[str], bool],
     files: list[dict],
+    read_base: ReadBase,
 ) -> tuple[str | None, str]:
     """Return (category, reason). category is None when a human must review."""
     for item in files:
@@ -300,7 +341,7 @@ def classify(
         if category.get("require_advisory") and not ADVISORY_RE.search(f"{title}\n{body}"):
             reasons.append(f"{name}: no CVE or GHSA id in the title or body.")
             continue
-        error = CHECKS[name](files, title)
+        error = CHECKS[name](files, title, read_base)
         if error:
             reasons.append(f"{name}: {error}")
             continue
@@ -363,14 +404,16 @@ def evaluate(pull: dict, config: dict[str, Any], repo: str, token: str, team_tok
         author=pull["user"]["login"],
         is_member=lambda user: any(is_team_member(org, team, user, team_token) for team in teams),
         files=files,
+        read_base=lambda path: read_base_file(repo, path, token),
     )
     result.reason = reason
     if not category:
         return result
 
     result.category = category
+    result.qualifies = True
     result.comment = True
-    label = config["categories"][category].get("label")
+    label = config.get("label")
     if label and label not in [item["name"] for item in pull.get("labels", [])]:
         _request("POST", f"{API}/repos/{repo}/issues/{number}/labels", token, {"labels": [label]})
 
@@ -383,7 +426,7 @@ def evaluate(pull: dict, config: dict[str, Any], repo: str, token: str, team_tok
         result.approved = True
         result.reason = f"Validated as `{category}`; approving."
     else:
-        result.reason = f"Would approve as `{category}` (not live yet: dry-run)."
+        result.reason = f"Would approve as `{category}` (dry-run or category disabled)."
     return result
 
 
@@ -420,7 +463,7 @@ def main() -> int:
         pull = _get(f"{API}/repos/{repo}/pulls/{number}", token)
         result = evaluate(pull, config, repo, token, team_token)
         if result.comment:
-            mode = os.environ.get("AUTO_APPROVE_MODE", "dry-run")
+            mode = os.environ.get("AUTO_APPROVE_MODE", "live")
             upsert_comment(
                 repo,
                 int(number),
@@ -437,6 +480,7 @@ def main() -> int:
     print(result.reason)
     _output(
         approved="true" if result.approved else "false",
+        qualifies="true" if result.qualifies else "false",
         category=result.category,
         head_sha=result.head_sha,
         reason=result.reason,

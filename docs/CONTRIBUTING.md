@@ -139,21 +139,21 @@ A small set of mechanical PRs to `main` can be approved by `entsearchmachine` wi
 | Category | Who opens it | What may change |
 | --- | --- | --- |
 | `renovate-wolfi` | Renovate | The Wolfi image digest in `Dockerfile.wolfi`, plus version lines in `NOTICE.txt` |
-| `dependency-bump` | A team member | `==` pins in `pyproject.toml` (same package, new version, named in the title, CVE or GHSA id in the title or body), plus `NOTICE.txt` versions |
+| `dependency-bump` | A team member | `==` pins in `pyproject.toml`: a new version of a pinned package, or a pin for a package that is already installed (listed in `NOTICE.txt` on `main`) but not pinned yet. The package must be named in the title, with a CVE or GHSA id in the title or body. Adding or removing a dependency is not allowed. `NOTICE.txt` may only change versions. |
 | `release-version-bump` | The version-bump bot | The `VERSION` files and the project's own version in `NOTICE.txt` |
 | `release-config-bump` | A team member | Version and branch lines in `.backportrc.json`, `renovate.json`, `catalog-info.yaml` |
 | `release-dra-branch` | A team member | One new branch in the DRA branch list of `.buildkite/pipeline.yml` |
 
-Every PR must also: target `main` from a branch in this repository, not be a draft, only modify existing files (no adds, deletes or renames), touch nothing under `.github/`, and have the `CLA` and `buildkite/connectors` statuses and all checks green. Team members means members of `BACKPORT_APPROVER_TEAMS` (default `search-extract-and-transform`). A PR that stops qualifying (new commit, failing CI) loses the bot approval. Matching PRs get a label (`renovate-wolfi`, `dependency-bump`, `release-bump`). Merging stays manual.
+Every PR must also: target `main` from a branch in this repository, not be a draft, only modify existing files (no adds, deletes or renames), touch nothing under `.github/`, and have the `CLA` and `buildkite/connectors` statuses and all checks green before it is approved. Team members means members of `BACKPORT_APPROVER_TEAMS` (default `search-extract-and-transform`). The approval is tied to the checked commit. If a new commit makes the PR match no category, the bot approval is withdrawn. A failing or flaky CI run never withdraws it: re-run the check and the PR is approved once it is green. Matching PRs get the `mechanical-pr` label (information only, it is not a gate). Merging stays manual.
 
-Repository variables control the rollout:
+It is on by default for all categories. Optional repository variables:
 
 | Variable | Meaning |
 | --- | --- |
-| `AUTO_APPROVE_MODE` | `dry-run` (default) only comments what it would do. `live` allows approvals. |
-| `AUTO_APPROVE_LIVE_CATEGORIES` | Comma separated categories allowed to be approved in `live` mode. |
+| `AUTO_APPROVE_MODE` | `live` (default), or `dry-run` to only comment what it would do. |
+| `AUTO_APPROVE_DISABLED_CATEGORIES` | Comma separated categories to switch off, for example `dependency-bump`. |
 
-Rollout: leave the variables unset for about two weeks and compare the bot comments with the human reviews. Then set `AUTO_APPROVE_MODE=live` and enable one category at a time, starting with `renovate-wolfi`. To roll back, set `AUTO_APPROVE_MODE=dry-run`. Before going live, confirm that `REPO_SCOPED_TOKEN` can read org team membership and that the `main` ruleset counts `entsearchmachine` approvals. The weekly workflow `mechanical-auto-approve-metrics.yml` writes merged and bot-approved counts to its run summary.
+The approver needs `REPO_SCOPED_TOKEN` with org read access (team lookup) and the `main` ruleset must count `entsearchmachine` approvals. The weekly workflow `mechanical-auto-approve-metrics.yml` writes merged, labelled and bot-approved counts to its run summary.
 
 
 ## Pull Request Etiquette

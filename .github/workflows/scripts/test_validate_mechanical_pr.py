@@ -48,7 +48,9 @@ class Base(unittest.TestCase):
     def setUpClass(cls):
         cls.config = v.load_config()
 
-    def classify(self, title, files, author="dev", body="", member=True):
+    NOTICE = "graphql-core\nMIT\nurllib3\nMIT\ncryptography\nApache\n"
+
+    def classify(self, title, files, author="dev", body="", member=True, notice=NOTICE):
         return v.classify(
             self.config,
             title=title,
@@ -56,6 +58,7 @@ class Base(unittest.TestCase):
             author=author,
             is_member=lambda user: member,
             files=files,
+            read_base=lambda path: notice,
         )
 
 
@@ -113,12 +116,36 @@ class TestDependencyBump(Base):
             self.classify(title, dep_files(), body="Fixes GHSA-6q48-6c7w-9gw2")[0], "dependency-bump"
         )
 
-    def test_rejects_new_package(self):
-        files = [
-            modified("app/connectors_service/pyproject.toml", '+    "evil==1.0",'),
-            modified("app/connectors_service/NOTICE.txt", "+1.0"),
-        ]
+    def test_accepts_pinning_an_installed_but_unpinned_package(self):
+        title = "fix(deps): pin urllib3 to 2.7.0 for CVE-2026-9375"
+        files = [modified("app/connectors_service/pyproject.toml", '+    "urllib3==2.7.0",')]
+        self.assertEqual(self.classify(title, files)[0], "dependency-bump")
+
+    def test_accepts_tightening_a_loose_spec_to_a_pin(self):
+        title = "fix(deps): pin urllib3 to 2.7.0 for CVE-2026-9375"
+        files = [modified("app/connectors_service/pyproject.toml", '-    "urllib3>=2",', '+    "urllib3==2.7.0",')]
+        self.assertEqual(self.classify(title, files)[0], "dependency-bump")
+
+    def test_rejects_package_that_is_not_installed(self):
+        title = "fix(deps): pin evil to 1.0 for CVE-2026-9375"
+        files = [modified("app/connectors_service/pyproject.toml", '+    "evil==1.0",')]
+        category, reason = self.classify(title, files)
+        self.assertIsNone(category)
+        self.assertIn("not an installed package", reason)
+
+    def test_rejects_when_base_notice_is_missing(self):
+        title = "fix(deps): pin urllib3 to 2.7.0 for CVE-2026-9375"
+        files = [modified("app/connectors_service/pyproject.toml", '+    "urllib3==2.7.0",')]
+        self.assertIsNone(self.classify(title, files, notice=None)[0])
+
+    def test_rejects_removed_dependency(self):
+        files = [modified("app/connectors_service/pyproject.toml", '-    "graphql-core==3.2.3",')]
         self.assertIsNone(self.classify(self.TITLE, files)[0])
+
+    def test_rejects_unpinned_added_line(self):
+        title = "fix(deps): pin urllib3 to 2 for CVE-2026-9375"
+        files = [modified("app/connectors_service/pyproject.toml", '+    "urllib3>=2",')]
+        self.assertIsNone(self.classify(title, files)[0])
 
     def test_rejects_package_swap(self):
         files = dep_files(new='"evil==3.2.12",')
@@ -261,19 +288,20 @@ class TestGlobalGates(Base):
 
 
 class TestMode(unittest.TestCase):
-    def test_default_is_dry_run(self):
-        with mock.patch.dict(os.environ, {"AUTO_APPROVE_LIVE_CATEGORIES": "renovate-wolfi"}, clear=True):
+    def test_live_by_default(self):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            self.assertTrue(v.is_live("renovate-wolfi"))
+
+    def test_dry_run_switches_everything_off(self):
+        with mock.patch.dict(os.environ, {"AUTO_APPROVE_MODE": "dry-run"}, clear=True):
             self.assertFalse(v.is_live("renovate-wolfi"))
 
-    def test_live_needs_mode_and_category(self):
-        env = {"AUTO_APPROVE_MODE": "live", "AUTO_APPROVE_LIVE_CATEGORIES": "renovate-wolfi, dependency-bump"}
+    def test_disabled_category_only_switches_that_one_off(self):
+        env = {"AUTO_APPROVE_DISABLED_CATEGORIES": "dependency-bump, release-config-bump"}
         with mock.patch.dict(os.environ, env, clear=True):
-            self.assertTrue(v.is_live("dependency-bump"))
+            self.assertFalse(v.is_live("dependency-bump"))
             self.assertFalse(v.is_live("release-config-bump"))
-
-    def test_live_with_no_categories_approves_nothing(self):
-        with mock.patch.dict(os.environ, {"AUTO_APPROVE_MODE": "live"}, clear=True):
-            self.assertFalse(v.is_live("renovate-wolfi"))
+            self.assertTrue(v.is_live("renovate-wolfi"))
 
 
 class TestCi(unittest.TestCase):
@@ -331,10 +359,8 @@ class TestEvaluate(Base):
         pull.update(overrides)
         return pull
 
-    def evaluate(self, pull, live=False, green=True):
-        env = {"ALLOWED_TEAMS": "team"}
-        if live:
-            env.update(AUTO_APPROVE_MODE="live", AUTO_APPROVE_LIVE_CATEGORIES="renovate-wolfi")
+    def evaluate(self, pull, mode="live", green=True):
+        env = {"ALLOWED_TEAMS": "team", "AUTO_APPROVE_MODE": mode}
         with mock.patch.dict(os.environ, env, clear=True), mock.patch.object(
             v, "_get", lambda url, token: wolfi_files()
         ), mock.patch.object(v, "_request") as request, mock.patch.object(
@@ -343,20 +369,24 @@ class TestEvaluate(Base):
             return v.evaluate(pull, self.config, "o/r", "t", "t"), request
 
     def test_dry_run_never_approves_but_labels(self):
-        result, request = self.evaluate(self.pull())
+        result, request = self.evaluate(self.pull(), mode="dry-run")
         self.assertFalse(result.approved)
+        self.assertTrue(result.qualifies)
         self.assertTrue(result.comment)
         self.assertEqual(result.category, "renovate-wolfi")
         request.assert_called_once()
 
-    def test_live_approves_when_green(self):
-        result, _ = self.evaluate(self.pull(), live=True)
+    def test_approves_by_default_when_green(self):
+        result, _ = self.evaluate(self.pull())
         self.assertTrue(result.approved)
+        self.assertTrue(result.qualifies)
         self.assertEqual(result.head_sha, "abc")
 
-    def test_live_does_not_approve_when_ci_not_green(self):
-        result, _ = self.evaluate(self.pull(), live=True, green=False)
+    def test_red_ci_does_not_approve_but_still_qualifies(self):
+        # qualifies stays true so a flaky failure never withdraws an approval
+        result, _ = self.evaluate(self.pull(), green=False)
         self.assertFalse(result.approved)
+        self.assertTrue(result.qualifies)
 
     def test_rejects_draft_fork_and_other_base(self):
         for override in (
@@ -365,12 +395,13 @@ class TestEvaluate(Base):
             {"head": {"sha": "abc", "repo": {"full_name": "fork/r"}}},
             {"head": {"sha": "abc", "repo": None}},
         ):
-            result, _ = self.evaluate(self.pull(**override), live=True)
+            result, _ = self.evaluate(self.pull(**override))
             self.assertFalse(result.approved, override)
+            self.assertFalse(result.qualifies, override)
             self.assertFalse(result.comment, override)
 
     def test_label_not_added_twice(self):
-        result, request = self.evaluate(self.pull(labels=[{"name": "renovate-wolfi"}]))
+        result, request = self.evaluate(self.pull(labels=[{"name": "mechanical-pr"}]))
         request.assert_not_called()
 
 

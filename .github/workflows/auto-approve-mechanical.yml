@@ -6,12 +6,13 @@ name: Auto-approve mechanical PRs
 # default branch, never from the PR branch (pull_request_target / status events).
 #
 # Repository variables:
-#   AUTO_APPROVE_MODE            dry-run (default: comment only) or live
-#   AUTO_APPROVE_LIVE_CATEGORIES comma separated category ids that may be approved
-#   BACKPORT_APPROVER_TEAMS      team slugs allowed to author team categories
+#   AUTO_APPROVE_MODE                live (default) or dry-run (comment only)
+#   AUTO_APPROVE_DISABLED_CATEGORIES comma separated category ids to switch off
+#   BACKPORT_APPROVER_TEAMS          team slugs allowed to author team categories
 #
 # It re-runs when a required commit status (CLA, Buildkite) turns green, because
-# approval needs green CI. A PR that stops qualifying loses the bot approval.
+# approval needs green CI. A red or flaky CI run never withdraws an approval;
+# only a change that no longer matches any category does.
 on:
   pull_request_target:
     branches:
@@ -86,8 +87,8 @@ jobs:
           PR_NUMBER: ${{ steps.pr.outputs.number }}
           ALLOWED_TEAMS: ${{ vars.BACKPORT_APPROVER_TEAMS || 'search-extract-and-transform' }}
           TEAM_TOKEN: ${{ secrets.REPO_SCOPED_TOKEN }}
-          AUTO_APPROVE_MODE: ${{ vars.AUTO_APPROVE_MODE || 'dry-run' }}
-          AUTO_APPROVE_LIVE_CATEGORIES: ${{ vars.AUTO_APPROVE_LIVE_CATEGORIES }}
+          AUTO_APPROVE_MODE: ${{ vars.AUTO_APPROVE_MODE || 'live' }}
+          AUTO_APPROVE_DISABLED_CATEGORIES: ${{ vars.AUTO_APPROVE_DISABLED_CATEGORIES }}
         run: |
           python3 -c 'import yaml' 2>/dev/null || pip install --quiet pyyaml
           python3 .github/workflows/scripts/validate_mechanical_pr.py
@@ -111,14 +112,14 @@ jobs:
             -f event=APPROVE -f commit_id="${HEAD_SHA}"
 
       - name: Withdraw stale approval
-        if: ${{ !cancelled() && steps.pr.outputs.number != '' && steps.validate.outputs.approved != 'true' }}
+        if: ${{ !cancelled() && steps.validate.outputs.qualifies == 'false' }}
         env:
           GH_TOKEN: ${{ secrets.REPO_SCOPED_TOKEN }}
           PR_NUMBER: ${{ steps.pr.outputs.number }}
         run: |
           set -euo pipefail
-          # The PR no longer qualifies (new commit, failing CI, other files):
-          # remove any earlier bot approval so it cannot be merged on it.
+          # The PR no longer matches any category (for example a new commit added
+          # other files): remove any earlier bot approval. CI results are ignored here.
           gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/reviews" --paginate \
             --jq '.[] | select(.user.login == "entsearchmachine" and .state == "APPROVED") | .id' |
           while read -r REVIEW_ID; do

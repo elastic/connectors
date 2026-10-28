@@ -14,6 +14,9 @@ required_status_contexts:
   - CLA
   - buildkite/connectors
 
+# Label put on every PR that matches a category (informational, not a gate).
+label: mechanical-pr
+
 # Hidden marker used to update a single bot comment per PR.
 comment_marker: "<!-- mechanical-auto-approve -->"
 
@@ -21,7 +24,6 @@ comment_marker: "<!-- mechanical-auto-approve -->"
 # or "team" = any active member of the teams in ALLOWED_TEAMS.
 categories:
   renovate-wolfi:
-    label: renovate-wolfi
     authors:
       - elastic-renovate-prod[bot]
     title_regex: '^chore\(deps\): update docker\.elastic\.co/wolfi/python:3\.11-dev docker digest'
@@ -31,7 +33,6 @@ categories:
       - libs/connectors_sdk/NOTICE.txt
 
   dependency-bump:
-    label: dependency-bump
     authors: team
     title_regex: '^fix\(deps\): (bump|pin) '
     require_advisory: true
@@ -42,7 +43,6 @@ categories:
       - libs/connectors_sdk/NOTICE.txt
 
   release-version-bump:
-    label: release-bump
     authors:
       - elastic-vault-github-plugin-prod[bot]
     title_regex: '^Bump version to \d+\.\d+\.\d+$'
@@ -53,7 +53,6 @@ categories:
       - libs/connectors_sdk/NOTICE.txt
 
   release-config-bump:
-    label: release-bump
     authors: team
     title_regex: '^chore: post-FF config '
     allowed_files:
@@ -62,7 +61,6 @@ categories:
       - catalog-info.yaml
 
   release-dra-branch:
-    label: release-bump
     authors: team
     title_regex: '^Add \d+\.\d+ to DRA branch list$'
     allowed_files:
