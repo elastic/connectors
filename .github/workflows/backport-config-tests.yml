@@ -5,7 +5,6 @@ on:
     paths:
       - .backportrc.json
       - renovate.json
-      - .github/auto-approve.yml
       - .github/workflows/**
   push:
     branches:
@@ -13,7 +12,6 @@ on:
     paths:
       - .backportrc.json
       - renovate.json
-      - .github/auto-approve.yml
       - .github/workflows/**
 
 jobs:
@@ -21,9 +19,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install test dependencies
-        run: pip install pyyaml
 
       - name: Run backport workflow script tests
         run: python3 -m unittest discover -s .github/workflows/scripts -p 'test_*.py' -v

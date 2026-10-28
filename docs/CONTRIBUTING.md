@@ -134,21 +134,17 @@ For manual backports to any maintenance branch (`X.Y`, e.g. `9.5`, `9.4`, `8.19`
 
 ### Mechanical PR auto-approval (main only)
 
-A small set of mechanical PRs to `main` can be approved by `entsearchmachine` without a human review. Everything else, including all connector and framework code, still needs a human. The policy is in [`.github/auto-approve.yml`](../.github/auto-approve.yml) and the checks are in `.github/workflows/scripts/validate_mechanical_pr.py`. Both are always read from the default branch, never from the PR.
+`auto-approve-mechanical.yml` lets `entsearchmachine` approve three kinds of mechanical PRs to `main`. Everything else needs a human. The checks live in `.github/workflows/scripts/validate_mechanical_pr.py` and always run from the default branch, never from the PR.
 
-| Category | Who opens it | What may change |
+| Category | Opened by | Only this may change |
 | --- | --- | --- |
-| `renovate-wolfi` | Renovate | The Wolfi image digest in `Dockerfile.wolfi`, plus version lines in `NOTICE.txt` |
-| `dependency-bump` | A team member | `==` pins in `pyproject.toml`: a new version of a pinned package, or a pin for a package that is already installed (listed in `NOTICE.txt` on `main`) but not pinned yet. The package must be named in the title, with a CVE or GHSA id in the title or body. Adding or removing a dependency is not allowed. `NOTICE.txt` may only change versions. |
+| `renovate-wolfi` | Renovate | The Wolfi digest in `Dockerfile.wolfi` and versions in `NOTICE.txt` |
+| `dependency-bump` | A member of `BACKPORT_APPROVER_TEAMS` (default `search-extract-and-transform`) | `==` pins in `pyproject.toml`, plus `NOTICE.txt` versions. The package is named in the title, with a CVE or GHSA id in the title or body. A package may get a new version, a loose spec may become a pin, or an installed but unlisted package (named in `NOTICE.txt` on `main`) may be pinned. Extras, markers and other settings must not change. |
 | `release-version-bump` | The version-bump bot | The `VERSION` files and the project's own version in `NOTICE.txt` |
-| `release-config-bump` | A team member | Version and branch lines in `.backportrc.json`, `renovate.json`, `catalog-info.yaml` |
-| `release-dra-branch` | A team member | One new branch in the DRA branch list of `.buildkite/pipeline.yml` |
 
-Every PR must also: target `main` from a branch in this repository, not be a draft, only modify existing files (no adds, deletes or renames), touch nothing under `.github/`, and have the `CLA` and `buildkite/connectors` statuses and all checks green before it is approved. Team members means members of `BACKPORT_APPROVER_TEAMS` (default `search-extract-and-transform`). The approval is tied to the checked commit. If a new commit makes the PR match no category, the bot approval is withdrawn. A failing or flaky CI run never withdraws it: re-run the check and the PR is approved once it is green. Matching PRs get the `mechanical-pr` label (information only, it is not a gate). Merging stays manual.
+Every PR must also be from a branch in this repository, not a draft, modify existing files only, and have the `CLA` and `buildkite/connectors` statuses green. The approval is tied to the checked commit. If a new commit makes the PR match no category, the approval is withdrawn. Red or flaky CI never withdraws it. Merging stays manual. Turn the workflow off with a PR that removes it. List what it approved with `gh pr list --search "reviewed-by:entsearchmachine base:main" --state merged`.
 
-It is always on. To turn it off, open a PR that edits or removes `auto-approve-mechanical.yml`. The repository variable `BACKPORT_APPROVER_TEAMS` is the only setting.
-
-The approver needs `REPO_SCOPED_TOKEN` with org read access (team lookup) and the `main` ruleset must count `entsearchmachine` approvals. The weekly workflow `mechanical-auto-approve-metrics.yml` writes merged, labelled and bot-approved counts to its run summary.
+Not covered on purpose: post-feature-freeze config and the DRA branch list (about one PR per release), and anything that touches code.
 
 
 ## Pull Request Etiquette
