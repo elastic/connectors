@@ -85,6 +85,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+kerberos = [
+    "requests-gssapi==1.4.0",
+]
 tests = [
     "aioresponses==0.7.6",
     "faker==18.11.2",
