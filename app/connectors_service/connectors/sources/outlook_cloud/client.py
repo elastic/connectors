@@ -18,8 +18,12 @@ from aiohttp.client_exceptions import (
 from connectors_sdk.logger import logger
 
 from connectors.sources.outlook_cloud.constants import (
+    CALENDAR_FIELDS,
+    CALENDARS_PAGE_SIZE,
     DEFAULT_MAIL_FOLDERS,
     DEFAULT_RETRY_SECONDS,
+    EVENT_FIELDS,
+    EVENTS_PAGE_SIZE,
     EXCLUDED_WELL_KNOWN_FOLDERS,
     FOLDER_FIELDS,
     GRAPH_BASE_URL,
@@ -62,6 +66,8 @@ class OutlookCloudClient:
         self._logger = logger
         # Mail folders read or skipped (403/404) since the last reset.
         self.mail_folder_stats = Counter()
+        # Calendar listings skipped (403/404) since the last reset.
+        self.calendar_stats = Counter()
 
     def set_logger(self, logger_):
         self._logger = logger_
@@ -413,3 +419,48 @@ class OutlookCloudClient:
             user_id, roots, excluded_ids, set(default_ids)
         ):
             yield entry
+
+    async def _get_calendar_pages(self, url, user_id, label):
+        """Yield listing pages. 403/404 is logged and ends the listing; other errors are raised."""
+        while url:
+            try:
+                page = await self._get_json(url)
+            except ClientResponseError as error:
+                if error.status not in (403, 404):
+                    raise
+                self.calendar_stats["skipped"] += 1
+                self._logger.warning(
+                    f"Could not read {label} for user {user_id}, skipping: "
+                    f"{error.__class__.__name__} ({error.status})."
+                )
+                return
+            yield page
+            url = page.get("@odata.nextLink")
+
+    async def get_events(self, user_id, calendar=None) -> AsyncIterator[dict]:
+        """Yield events of the default calendar, or of `calendar`. Series are not expanded."""
+        if calendar is None:
+            calendar_path, label = "calendar", "the default calendar"
+        else:
+            calendar_path = f"calendars/{url_encode(calendar['id'])}"
+            label = f"calendar {calendar.get('name')!r}"
+        url = (
+            f"{GRAPH_BASE_URL}/users/{user_id}/{calendar_path}/events"
+            f"?$select={EVENT_FIELDS}&$top={EVENTS_PAGE_SIZE}"
+        )
+        async for page in self._get_calendar_pages(url, user_id, label):
+            for event in page.get("value") or []:
+                yield event
+
+    async def get_child_calendars(self, user) -> AsyncIterator[dict]:
+        """Yield non-default calendars owned by the user. Shared-in calendars are skipped."""
+        mail = user["mail"].lower()
+        url = (
+            f"{GRAPH_BASE_URL}/users/{user['id']}/calendars"
+            f"?$select={CALENDAR_FIELDS}&$top={CALENDARS_PAGE_SIZE}"
+        )
+        async for page in self._get_calendar_pages(url, user["id"], "calendars"):
+            for calendar in page.get("value") or []:
+                owner = ((calendar.get("owner") or {}).get("address") or "").lower()
+                if not calendar.get("isDefaultCalendar") and owner == mail:
+                    yield calendar
