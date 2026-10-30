@@ -15,7 +15,13 @@ from connectors_sdk.utils import (
 )
 from graphql.language import parse
 
-from connectors.sources.graphql.client import GraphQLClient
+from connectors.sources.graphql.client import (
+    GraphQLClient,
+    child_fields,
+    fields_at_path,
+    fragment_definitions,
+    response_key,
+)
 from connectors.sources.graphql.constants import (
     BASIC,
     BEARER,
@@ -175,29 +181,14 @@ class GraphQLDataSource(BaseDataSource):
         return False
 
     def check_field_existence(
-        self, ast, field_path, graphql_field_id=None, check_id=False
+        self, ast, fragments, field_path, graphql_field_id=None, check_id=False
     ):
-        def traverse(selections, path):
-            for selection in selections:
-                if selection.name.value == path[0]:
-                    if len(path) == 1:
-                        if check_id and selection.selection_set:
-                            for selection_node in selection.selection_set.selections:
-                                if selection_node.name.value == graphql_field_id:
-                                    return True, True
-                        return True, False
-                    if selection.selection_set:
-                        return traverse(
-                            selections=selection.selection_set.selections, path=path[1:]
-                        )
-            return False, False
-
-        field_path = field_path.split(".")
-        for definition in ast.definitions:
-            if definition.operation.value == "query":
-                return traverse(definition.selection_set.selections, field_path)
-
-        return False, False
+        fields = fields_at_path(ast, field_path.split("."), fragments)
+        id_present = check_id and any(
+            response_key(field) == graphql_field_id
+            for field in child_fields(fields, fragments)
+        )
+        return bool(fields), id_present
 
     async def validate_config(self):
         """Validates whether user input is empty or not for configuration fields
@@ -256,12 +247,14 @@ class GraphQLDataSource(BaseDataSource):
             msg = "GraphQL Objects to ID mapping field is not configured."
             raise ConfigurableFieldValueError(msg)
 
+        fragments = fragment_definitions(ast)
         for (
             graphql_object,
             graphql_field_id,
         ) in self.graphql_client.graphql_object_to_id_map.items():
             object_present, id_present = self.check_field_existence(
                 ast=ast,
+                fragments=fragments,
                 field_path=graphql_object,
                 graphql_field_id=graphql_field_id,
                 check_id=True,
@@ -275,7 +268,9 @@ class GraphQLDataSource(BaseDataSource):
 
         if self.graphql_client.pagination_model == CURSOR_PAGINATION:
             object_present, _ = self.check_field_existence(
-                ast=ast, field_path=self.graphql_client.pagination_key
+                ast=ast,
+                fragments=fragments,
+                field_path=self.graphql_client.pagination_key,
             )
             if not object_present:
                 msg = (
