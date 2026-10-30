@@ -17,6 +17,43 @@ _GRAPH_DATETIME = re.compile(
 
 LEGACY_IMPORTANCE = {"low": "Low", "normal": "Normal", "high": "High"}
 
+LEGACY_EVENT_TYPE = {
+    "singleInstance": "Single",
+    "occurrence": "Occurrence",
+    "exception": "Exception",
+    "seriesMaster": "RecurringMaster",
+}
+
+_MONTHS = (
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+)
+_WEEKDAYS = (
+    "monday",
+    "tuesday",
+    "wednesday",
+    "thursday",
+    "friday",
+    "saturday",
+    "sunday",
+)
+# What exchangelib calls these groups of days in "first weekday of the month" patterns.
+_DAY_GROUPS = {
+    frozenset(_WEEKDAYS): "Day",
+    frozenset(_WEEKDAYS[:5]): "Weekday",
+    frozenset(_WEEKDAYS[5:]): "WeekendDay",
+}
+
 
 def graph_datetime_to_iso_utc(value):
     """Convert a Graph timestamp to ``YYYY-MM-DDTHH:MM:SSZ`` (UTC).
@@ -48,3 +85,56 @@ def graph_importance_to_legacy(importance):
     if not isinstance(importance, str):
         return importance
     return LEGACY_IMPORTANCE.get(importance.lower(), importance)
+
+
+def graph_event_type_to_legacy(event_type):
+    """`seriesMaster` becomes `RecurringMaster`, as legacy Outlook indexes it. Unknown values pass through."""
+    return LEGACY_EVENT_TYPE.get(event_type, event_type)
+
+
+def _day_names(days):
+    return [day.capitalize() for day in _WEEKDAYS if day in days]
+
+
+def _relative_day(days):
+    """One day, or a group of days, named the way exchangelib does."""
+    return _DAY_GROUPS.get(frozenset(days)) or ", ".join(_day_names(days))
+
+
+def graph_recurrence_to_legacy(pattern):
+    """Describe a Graph `recurrencePattern` in the words exchangelib uses for its patterns.
+
+    Returns None when the pattern is missing, of an unknown type, or incomplete: the
+    event is still indexed, only without the pattern text.
+    """
+    if not isinstance(pattern, dict):
+        return None
+    try:
+        interval = pattern["interval"]
+        match pattern["type"]:
+            case "daily":
+                return f"Occurs every {interval} day(s)"
+            case "weekly":
+                days = ", ".join(_day_names(pattern["daysOfWeek"]))
+                first_day = pattern["firstDayOfWeek"].capitalize()
+                return (
+                    f"Occurs on weekdays {days} of every {interval} week(s) "
+                    f"where the first day of the week is {first_day}"
+                )
+            case "absoluteMonthly":
+                return f"Occurs on day {pattern['dayOfMonth']} of every {interval} month(s)"
+            case "relativeMonthly":
+                return (
+                    f"Occurs on weekday {_relative_day(pattern['daysOfWeek'])} in the "
+                    f"{pattern['index'].capitalize()} week of every {interval} month(s)"
+                )
+            case "absoluteYearly":
+                return f"Occurs on day {pattern['dayOfMonth']} of {_MONTHS[pattern['month'] - 1]}"
+            case "relativeYearly":
+                return (
+                    f"Occurs on weekday {_relative_day(pattern['daysOfWeek'])} in the "
+                    f"{pattern['index'].capitalize()} week of {_MONTHS[pattern['month'] - 1]}"
+                )
+    except (KeyError, TypeError, AttributeError, IndexError):
+        pass
+    return None

@@ -18,8 +18,12 @@ from aiohttp.client_exceptions import (
 from connectors_sdk.logger import logger
 
 from connectors.sources.outlook_cloud.constants import (
+    CALENDAR_FIELDS,
+    CALENDARS_PAGE_SIZE,
     DEFAULT_MAIL_FOLDERS,
     DEFAULT_RETRY_SECONDS,
+    EVENT_FIELDS,
+    EVENTS_PAGE_SIZE,
     EXCLUDED_WELL_KNOWN_FOLDERS,
     FOLDER_FIELDS,
     GRAPH_BASE_URL,
@@ -39,6 +43,7 @@ from connectors.sources.outlook_cloud.constants import (
     RETRYABLE_STATUSES,
     USER_FIELDS,
     USERS_PAGE_SIZE,
+    UTC_TIME_PREFERENCE,
 )
 from connectors.sources.shared.microsoft.graph import GraphAPIToken, PermissionsMissing
 from connectors.utils import CancellableSleeps, url_encode
@@ -62,6 +67,8 @@ class OutlookCloudClient:
         self._logger = logger
         # Mail folders read or skipped (403/404) since the last reset.
         self.mail_folder_stats = Counter()
+        # Calendar listings refused (403/404) since the last reset.
+        self.calendar_stats = Counter()
 
     def set_logger(self, logger_):
         self._logger = logger_
@@ -107,14 +114,16 @@ class OutlookCloudClient:
         )
         return first * 2 ** (attempt - 1)
 
-    async def _get(self, url, *, as_json=True):
-        """GET a Graph URL with retries. Returns JSON or raw bytes."""
+    async def _get(self, url, *, as_json=True, utc=False):
+        """GET a Graph URL with retries. Returns JSON or raw bytes. `utc` asks for event times in UTC."""
         if not url.startswith(GRAPH_HOST_URL):
             msg = f"Refusing to send the Microsoft Graph access token to {url.split('?')[0]}"
             raise ValueError(msg)
         for attempt in range(1, RETRIES + 1):
             token = await self._token.get()
             headers = {"Authorization": f"Bearer {token}"} | GRAPH_REQUEST_HEADERS
+            if utc:
+                headers["Prefer"] += f", {UTC_TIME_PREFERENCE}"
             try:
                 async with self.session.get(url, headers=headers) as response:
                     if as_json:
@@ -137,14 +146,14 @@ class OutlookCloudClient:
             )
             await self._sleeps.sleep(delay)
 
-    async def _get_json(self, url):
+    async def _get_json(self, url, *, utc=False):
         """GET a Graph URL. Throttling, temporary server errors and network faults are retried, then raised.
 
         Raises:
             ValueError: the URL is not on Microsoft Graph. The access token is never sent elsewhere,
                 e.g. to a paging link (`@odata.nextLink`) that points to another host.
         """
-        return await self._get(url, as_json=True)
+        return await self._get(url, as_json=True, utc=utc)
 
     async def _get_bytes(self, url):
         return await self._get(url, as_json=False)
@@ -413,3 +422,60 @@ class OutlookCloudClient:
             user_id, roots, excluded_ids, set(default_ids)
         ):
             yield entry
+
+    async def _get_calendar_pages(self, url, user_id, label):
+        """Yield the pages of a calendar listing. A listing refused with 403/404 ends there (logged).
+
+        Any other error is raised.
+        """
+        while url:
+            try:
+                page = await self._get_json(url, utc=True)
+            except ClientResponseError as error:
+                if error.status not in (403, 404):
+                    raise
+                self.calendar_stats["skipped"] += 1
+                self._logger.warning(
+                    f"Could not read {label} for user {user_id}, skipping: "
+                    f"{error.__class__.__name__} ({error.status})."
+                )
+                return
+            yield page
+            url = page.get("@odata.nextLink")
+
+    async def get_events(self, user_id, calendar=None) -> AsyncIterator[dict]:
+        """Yield the Graph events of a calendar: the user's default one unless `calendar` is given.
+
+        Single events and series masters are listed, not the expanded occurrences of a
+        series, as legacy Outlook does.
+        """
+        if calendar is None:
+            calendar_path, label = "calendar", "the default calendar"
+        else:
+            calendar_path = f"calendars/{url_encode(calendar['id'])}"
+            label = f"calendar {calendar.get('name')!r}"
+        url = (
+            f"{GRAPH_BASE_URL}/users/{user_id}/{calendar_path}/events"
+            f"?$select={EVENT_FIELDS}&$top={EVENTS_PAGE_SIZE}"
+        )
+        async for page in self._get_calendar_pages(url, user_id, label):
+            for event in page.get("value") or []:
+                yield event
+
+    async def get_child_calendars(self, user) -> AsyncIterator[dict]:
+        """Yield the calendars of a user other than the default one, such as Birthdays.
+
+        Graph also lists the calendars other people shared with the user. Their events
+        would be indexed under the wrong owner, so only calendars owned by the user are
+        kept. Addresses are compared ignoring case.
+        """
+        mail = user["mail"].lower()
+        url = (
+            f"{GRAPH_BASE_URL}/users/{user['id']}/calendars"
+            f"?$select={CALENDAR_FIELDS}&$top={CALENDARS_PAGE_SIZE}"
+        )
+        async for page in self._get_calendar_pages(url, user["id"], "calendars"):
+            for calendar in page.get("value") or []:
+                owner = ((calendar.get("owner") or {}).get("address") or "").lower()
+                if not calendar.get("isDefaultCalendar") and owner == mail:
+                    yield calendar
