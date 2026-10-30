@@ -11,6 +11,7 @@ import pytest
 import pytest_asyncio
 from aiohttp.client_exceptions import ClientError
 from connectors_sdk.logger import logger
+from yarl import URL
 
 from connectors.sources.slack import SlackClient, SlackDataSource
 from tests.commons import AsyncIterator
@@ -132,6 +133,39 @@ async def test_slack_client_list_users(slack_client, mock_responses):
 
     assert len(users) == 1
     assert users[0]["id"] == "user1"
+
+
+@pytest.mark.parametrize(
+    "cursor",
+    ["dXNlcjpVMP+vvg==", "dXNlcjpVMPv/Pj8=", "abc"],
+)
+def test_slack_client_add_cursor_keeps_cursor_intact(slack_client, cursor):
+    # Cursors are base64: a server reads an unencoded "+" as a space
+    url = slack_client._add_cursor("https://slack.com/api/users.list?limit=200", cursor)
+
+    assert URL(url).query["cursor"] == cursor
+
+
+@pytest.mark.asyncio
+async def test_slack_client_list_users_follows_cursor_with_plus(
+    slack_client, mock_responses
+):
+    mock_responses.get(
+        "https://slack.com/api/users.list?limit=200",
+        payload={
+            "ok": True,
+            "members": [{"id": "user1"}],
+            "response_metadata": {"next_cursor": "dXNlcjpVMP+vvg=="},
+        },
+    )
+    mock_responses.get(
+        "https://slack.com/api/users.list?limit=200&cursor=dXNlcjpVMP%2Bvvg%3D%3D",
+        payload={"ok": True, "members": [{"id": "user2"}]},
+    )
+
+    users = [user async for user in slack_client.list_users()]
+
+    assert [user["id"] for user in users] == ["user1", "user2"]
 
 
 @pytest.mark.asyncio
