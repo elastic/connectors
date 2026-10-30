@@ -10,9 +10,8 @@ GRAPH_HOST_URL = (
 )
 
 # Graph returns stable ids that do not change when an item moves between folders.
-GRAPH_REQUEST_HEADERS = {"Prefer": 'IdType="ImmutableId"'}
-# Event start and end come back in UTC, so no time zone names have to be converted.
-UTC_TIME_PREFERENCE = 'outlook.timezone="UTC"'
+# Stable ids, and event times in UTC.
+GRAPH_REQUEST_HEADERS = {"Prefer": 'IdType="ImmutableId", outlook.timezone="UTC"'}
 
 USER_FIELDS = "id,displayName,mail,jobTitle"
 USERS_PAGE_SIZE = 999
@@ -74,7 +73,7 @@ EXCLUDED_WELL_KNOWN_FOLDERS = frozenset(
 MAIL_SEARCH_FOLDER_TYPE_NAME = "mailSearchFolder"
 
 CALENDAR_OBJECT = "Calendar"
-# Legacy Outlook looks for the child calendar by this (English) name too.
+# Legacy detects birthdays by this name.
 BIRTHDAYS_CALENDAR_NAME = "Birthdays"
 CALENDAR_FIELDS = "id,name,owner,isDefaultCalendar"
 CALENDARS_PAGE_SIZE = 100

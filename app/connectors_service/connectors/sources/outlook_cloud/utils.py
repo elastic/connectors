@@ -47,7 +47,7 @@ _WEEKDAYS = (
     "saturday",
     "sunday",
 )
-# What exchangelib calls these groups of days in "first weekday of the month" patterns.
+# exchangelib names for day groups.
 _DAY_GROUPS = {
     frozenset(_WEEKDAYS): "Day",
     frozenset(_WEEKDAYS[:5]): "Weekday",
@@ -88,7 +88,7 @@ def graph_importance_to_legacy(importance):
 
 
 def graph_event_type_to_legacy(event_type):
-    """`seriesMaster` becomes `RecurringMaster`, as legacy Outlook indexes it. Unknown values pass through."""
+    """Map to the legacy event type. Unknown values pass through."""
     return LEGACY_EVENT_TYPE.get(event_type, event_type)
 
 
@@ -97,16 +97,12 @@ def _day_names(days):
 
 
 def _relative_day(days):
-    """One day, or a group of days, named the way exchangelib does."""
+    """A day or day group, named as exchangelib does."""
     return _DAY_GROUPS.get(frozenset(days)) or ", ".join(_day_names(days))
 
 
 def graph_recurrence_to_legacy(pattern):
-    """Describe a Graph `recurrencePattern` in the words exchangelib uses for its patterns.
-
-    Returns None when the pattern is missing, of an unknown type, or incomplete: the
-    event is still indexed, only without the pattern text.
-    """
+    """Describe a Graph `recurrencePattern` in exchangelib wording. None if missing, unknown or incomplete."""
     if not isinstance(pattern, dict):
         return None
     try:

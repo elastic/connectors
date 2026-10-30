@@ -146,7 +146,7 @@ async def test_ping(graph):
 
     headers = requests_to(graph, PING_URL)[0].kwargs["headers"]
     assert headers["Authorization"] == "Bearer fake-token"
-    assert headers["Prefer"] == 'IdType="ImmutableId"'
+    assert headers["Prefer"] == 'IdType="ImmutableId", outlook.timezone="UTC"'
 
 
 @pytest.mark.asyncio
@@ -603,7 +603,7 @@ async def test_get_docs_include_full_raw_message_fetches_value(graph):
     assert base64.b64decode(documents[0]["_attachment"]) == RAW_MIME
     assert requests_to(graph, raw_url)
     headers = requests_to(graph, raw_url)[0].kwargs["headers"]
-    assert headers["Prefer"] == 'IdType="ImmutableId"'
+    assert headers["Prefer"] == 'IdType="ImmutableId", outlook.timezone="UTC"'
 
 
 @pytest.mark.asyncio
@@ -746,7 +746,10 @@ async def test_get_docs_follows_message_pages_with_headers(graph):
 
     assert [document["_id"] for document in documents] == ["msg-1", "msg-2"]
     for call in requests_to(graph, next_url):
-        assert call.kwargs["headers"]["Prefer"] == 'IdType="ImmutableId"'
+        assert (
+            call.kwargs["headers"]["Prefer"]
+            == 'IdType="ImmutableId", outlook.timezone="UTC"'
+        )
 
 
 @pytest.mark.asyncio
@@ -1034,11 +1037,6 @@ async def test_get_docs_yields_root_calendar_event(graph):
         }
     ]
     assert_conforms(documents[0])
-    [call] = requests_to(graph, events_url("user-1"))
-    assert (
-        call.kwargs["headers"]["Prefer"]
-        == 'IdType="ImmutableId", outlook.timezone="UTC"'
-    )
 
 
 @pytest.mark.asyncio
@@ -1056,8 +1054,6 @@ async def test_get_docs_follows_event_pages(graph):
     documents = await get_documents()
 
     assert [document["_id"] for document in documents] == ["event-1", "event-2"]
-    for call in requests_to(graph, next_url):
-        assert "outlook.timezone" in call.kwargs["headers"]["Prefer"]
 
 
 @pytest.mark.asyncio

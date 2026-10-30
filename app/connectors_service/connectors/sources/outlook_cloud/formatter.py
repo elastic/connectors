@@ -47,7 +47,7 @@ class OutlookCloudDocFormatter:
         return document
 
     def calendar_doc_formatter(self, event, birthday=False):
-        """Format a Graph event. `birthday` events only carry the day they fall on."""
+        """Format a Graph event. Birthdays carry only `date`."""
         document = {
             "_id": event["id"],
             "_timestamp": graph_datetime_to_iso_utc(event.get("lastModifiedDateTime")),
@@ -73,7 +73,7 @@ class OutlookCloudDocFormatter:
 
 
 def _meeting_type(event):
-    """`Single`, `Recurring <pattern text>`, or the legacy event type when there is no pattern."""
+    """`Single`, `Recurring <pattern>`, or the legacy type without a pattern."""
     event_type = graph_event_type_to_legacy(event.get("type"))
     if event_type == "Single":
         return event_type
@@ -82,7 +82,7 @@ def _meeting_type(event):
 
 
 def _event_time(date_time_zone):
-    """A Graph `dateTimeTimeZone`, already in UTC through the Prefer header, as ``YYYY-MM-DDTHH:MM:SSZ``."""
+    """A Graph `dateTimeTimeZone` (UTC via the Prefer header) as ISO UTC."""
     return graph_datetime_to_iso_utc((date_time_zone or {}).get("dateTime"))
 
 
