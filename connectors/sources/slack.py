@@ -8,6 +8,7 @@ import re
 import time
 from contextlib import asynccontextmanager
 from datetime import datetime
+from urllib.parse import quote
 
 import aiohttp
 from aiohttp.client_exceptions import ClientResponseError
@@ -149,7 +150,10 @@ class SlackClient:
                 break
 
     def _add_cursor(self, url, cursor):
-        return f"{url}&{CURSOR}={cursor}"
+        # Cursors are base64 strings, so they can contain "+", "/" and "=".
+        # Slack asks for them to be URL-encoded: an unencoded "+" is read as a
+        # space, and the next page would be requested with a different cursor.
+        return f"{url}&{CURSOR}={quote(cursor, safe='')}"
 
     def _get_next_cursor(self, response):
         return response.get(RESPONSE_METADATA, {}).get(NEXT_CURSOR)
