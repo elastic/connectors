@@ -47,6 +47,7 @@ _WEEKDAYS = (
     "saturday",
     "sunday",
 )
+_WEEK_INDEXES = ("first", "second", "third", "fourth", "last")
 # exchangelib names for day groups.
 _DAY_GROUPS = {
     frozenset(_WEEKDAYS): "Day",
@@ -101,36 +102,58 @@ def _relative_day(days):
     return _DAY_GROUPS.get(frozenset(days)) or ", ".join(_day_names(days))
 
 
+def _number(value, low, high):
+    if type(value) is not int or not low <= value <= high:
+        raise ValueError(value)
+    return value
+
+
+def _choice(value, options):
+    if value not in options:
+        raise ValueError(value)
+    return value
+
+
+def _days(value):
+    if not isinstance(value, list) or not value:
+        raise ValueError(value)
+    for day in value:
+        _choice(day, _WEEKDAYS)
+    return value
+
+
 def graph_recurrence_to_legacy(pattern):
-    """Describe a Graph `recurrencePattern` in exchangelib wording. None if missing, unknown or incomplete."""
+    """Describe a Graph `recurrencePattern` in exchangelib wording. None if missing, unknown or invalid."""
     if not isinstance(pattern, dict):
         return None
     try:
-        interval = pattern["interval"]
+        interval = _number(pattern["interval"], 1, 999)
         match pattern["type"]:
             case "daily":
                 return f"Occurs every {interval} day(s)"
             case "weekly":
-                days = ", ".join(_day_names(pattern["daysOfWeek"]))
-                first_day = pattern["firstDayOfWeek"].capitalize()
+                days = ", ".join(_day_names(_days(pattern["daysOfWeek"])))
+                first_day = _choice(pattern["firstDayOfWeek"], _WEEKDAYS).capitalize()
                 return (
                     f"Occurs on weekdays {days} of every {interval} week(s) "
                     f"where the first day of the week is {first_day}"
                 )
             case "absoluteMonthly":
-                return f"Occurs on day {pattern['dayOfMonth']} of every {interval} month(s)"
+                day = _number(pattern["dayOfMonth"], 1, 31)
+                return f"Occurs on day {day} of every {interval} month(s)"
             case "relativeMonthly":
-                return (
-                    f"Occurs on weekday {_relative_day(pattern['daysOfWeek'])} in the "
-                    f"{pattern['index'].capitalize()} week of every {interval} month(s)"
-                )
+                day = _relative_day(_days(pattern["daysOfWeek"]))
+                week = _choice(pattern["index"], _WEEK_INDEXES).capitalize()
+                return f"Occurs on weekday {day} in the {week} week of every {interval} month(s)"
             case "absoluteYearly":
-                return f"Occurs on day {pattern['dayOfMonth']} of {_MONTHS[pattern['month'] - 1]}"
+                day = _number(pattern["dayOfMonth"], 1, 31)
+                month = _MONTHS[_number(pattern["month"], 1, 12) - 1]
+                return f"Occurs on day {day} of {month}"
             case "relativeYearly":
-                return (
-                    f"Occurs on weekday {_relative_day(pattern['daysOfWeek'])} in the "
-                    f"{pattern['index'].capitalize()} week of {_MONTHS[pattern['month'] - 1]}"
-                )
-    except (KeyError, TypeError, AttributeError, IndexError):
+                day = _relative_day(_days(pattern["daysOfWeek"]))
+                week = _choice(pattern["index"], _WEEK_INDEXES).capitalize()
+                month = _MONTHS[_number(pattern["month"], 1, 12) - 1]
+                return f"Occurs on weekday {day} in the {week} week of {month}"
+    except (KeyError, TypeError, ValueError):
         pass
     return None

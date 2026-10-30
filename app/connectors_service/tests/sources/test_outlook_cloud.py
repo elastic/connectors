@@ -1357,3 +1357,49 @@ RECURRENCE_PARITY = [
 @pytest.mark.parametrize(("graph_pattern", "ews_pattern"), RECURRENCE_PARITY)
 def test_recurrence_text_matches_legacy_wording(graph_pattern, ews_pattern):
     assert graph_recurrence_to_legacy(graph_pattern) == str(ews_pattern)
+
+
+@pytest.mark.parametrize(
+    "pattern",
+    [
+        {"type": "daily", "interval": None},
+        {"type": "daily", "interval": 0},
+        {"type": "daily", "interval": True},
+        {"type": "daily", "interval": "2"},
+        {"type": "weekly", "interval": 1, "daysOfWeek": [], "firstDayOfWeek": "sunday"},
+        {
+            "type": "weekly",
+            "interval": 1,
+            "daysOfWeek": ["funday"],
+            "firstDayOfWeek": "sunday",
+        },
+        {
+            "type": "weekly",
+            "interval": 1,
+            "daysOfWeek": ["monday"],
+            "firstDayOfWeek": "x",
+        },
+        {"type": "absoluteMonthly", "interval": 1, "dayOfMonth": 0},
+        {
+            "type": "relativeMonthly",
+            "interval": 1,
+            "daysOfWeek": ["friday"],
+            "index": "x",
+        },
+        {"type": "absoluteYearly", "interval": 1, "dayOfMonth": 1, "month": 0},
+        {"type": "absoluteYearly", "interval": 1, "dayOfMonth": 1, "month": 13},
+        {
+            "type": "relativeYearly",
+            "interval": 1,
+            "daysOfWeek": "friday",
+            "index": "first",
+            "month": 1,
+        },
+    ],
+)
+def test_invalid_recurrence_falls_back_to_event_type(pattern):
+    document = OutlookCloudDocFormatter().calendar_doc_formatter(
+        {"id": "1", "type": "seriesMaster", "recurrence": {"pattern": pattern}}
+    )
+
+    assert document["meeting_type"] == "RecurringMaster"
