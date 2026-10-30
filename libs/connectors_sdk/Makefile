@@ -5,7 +5,7 @@ SLOW_TEST_THRESHOLD = 1
 .venv/bin/python:
 	$(PYTHON) -m venv .venv
 	$(VENV_DIR)/pip install --upgrade pip
-	$(VENV_DIR)/pip install setuptools==83.0.0
+	$(VENV_DIR)/pip install setuptools==84.1.0
 	$(VENV_DIR)/python -m pip install build
 	$(VENV_DIR)/pip install -e .
 
@@ -14,7 +14,7 @@ install: .venv/bin/python
 install-package:
 	$(PYTHON) -m venv .venv
 	$(VENV_DIR)/pip install --upgrade pip
-	$(VENV_DIR)/pip install setuptools==83.0.0
+	$(VENV_DIR)/pip install setuptools==84.1.0
 	$(VENV_DIR)/python -m pip install build
 	$(VENV_DIR)/python -m build
 	$(VENV_DIR)/pip install dist/*.whl
