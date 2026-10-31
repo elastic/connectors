@@ -7,6 +7,7 @@ import re
 
 import aiomysql
 from connectors_sdk.utils import iso_utc
+from pymysql.constants import SERVER_STATUS
 
 from connectors.sources.mysql.common import (
     DEFAULT_FETCH_SIZE,
@@ -28,30 +29,42 @@ def strip_trailing_semicolons(query):
     return re.sub(r"[\s;]+$", "", query)
 
 
-# Tokens that matter when looking for the ORDER BY of the query itself: string
-# literals, quoted identifiers and comments (skipped), parentheses and ORDER BY.
-_ORDER_BY_SCAN = re.compile(
-    r"'(?:[^'\\]|\\.|'')*'"
-    r'|"(?:[^"\\]|\\.|"")*"'
-    r"|`(?:[^`]|``)*`"
-    r"|(?:--(?=\s)|\#)[^\n]*"
-    r"|/\*.*?\*/"
-    r"|(?P<open>\()"
-    r"|(?P<close>\))"
-    r"|(?P<order_by>\bORDER\s+BY\b)",
-    flags=re.IGNORECASE | re.DOTALL,
-)
+def _order_by_scan(backslash_escapes):
+    """Tokens that matter when looking for the ORDER BY of the query itself:
+    string literals, quoted identifiers and comments (skipped), parentheses and
+    ORDER BY. A backslash escapes a quote unless the server runs with the
+    NO_BACKSLASH_ESCAPES SQL mode. The content of an executable comment
+    (`/*! ... */`, `/*!80000 ... */`) is SQL, so only its delimiters are skipped."""
+    escape = r"|\\." if backslash_escapes else ""
+    single = r"\\'" if backslash_escapes else "'"
+    double = r'\\"' if backslash_escapes else '"'
+    return re.compile(
+        rf"'(?:[^{single}]{escape}|'')*'"
+        rf'|"(?:[^{double}]{escape}|"")*"'
+        r"|`(?:[^`]|``)*`"
+        r"|(?:--(?=\s)|\#)[^\n]*"
+        r"|/\*(?!!).*?\*/"
+        r"|(?P<open>\()"
+        r"|(?P<close>\))"
+        r"|(?P<order_by>\bORDER\s+BY\b)",
+        flags=re.IGNORECASE | re.DOTALL,
+    )
 
 
-def has_top_level_order_by(query):
+_ORDER_BY_SCAN = _order_by_scan(backslash_escapes=True)
+_ORDER_BY_SCAN_NO_BACKSLASH_ESCAPES = _order_by_scan(backslash_escapes=False)
+
+
+def has_top_level_order_by(query, backslash_escapes=True):
     """Whether the query orders its own result.
 
     An ORDER BY inside parentheses belongs to a subquery, a derived table or a
     window definition (`ROW_NUMBER() OVER (ORDER BY ...)`) and doesn't order the
     rows the query returns. One inside a string literal or a comment isn't SQL.
     """
+    scan = _ORDER_BY_SCAN if backslash_escapes else _ORDER_BY_SCAN_NO_BACKSLASH_ESCAPES
     depth = 0
-    for match in _ORDER_BY_SCAN.finditer(query):
+    for match in scan.finditer(query):
         if match.group("open"):
             depth += 1
         elif match.group("close"):
@@ -259,13 +272,22 @@ class MySQLClient:
             table_row_count = await cursor.fetchone()
             return int(table_row_count[0])
 
+    def _backslash_escapes(self):
+        """Whether a backslash escapes a quote in string literals. The server
+        reports the NO_BACKSLASH_ESCAPES SQL mode in the status of every reply,
+        which is also what pymysql escapes parameters by."""
+        server_status = getattr(self.connection, "server_status", None) or 0
+        return not server_status & SERVER_STATUS.SERVER_STATUS_NO_BACKSLASH_ESCAPES
+
     def _update_query_with_pagination_attributes(
         self, query, offset, primary_key_columns
     ):
         updated_query = ""
         # Paging with LIMIT/OFFSET needs a stable order, so add one unless the
         # query already orders its result.
-        has_orderby = has_top_level_order_by(query)
+        has_orderby = has_top_level_order_by(
+            query, backslash_escapes=self._backslash_escapes()
+        )
         query = strip_trailing_semicolons(query)
         # The newline keeps a trailing `-- comment` from swallowing the generated suffix
         if has_orderby:

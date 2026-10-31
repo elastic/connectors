@@ -13,6 +13,7 @@ from connectors_sdk.filtering.validation import Filter, SyncRuleValidationResult
 from connectors_sdk.logger import logger
 from connectors_sdk.source import ConfigurableFieldValueError
 from freezegun import freeze_time
+from pymysql.constants import SERVER_STATUS
 
 from connectors.sources.mysql import (
     MySQLAdvancedRulesValidator,
@@ -1374,6 +1375,25 @@ def test_row2doc(
             "SELECT id, name FROM a UNION SELECT id, name FROM b ORDER BY name",
             "SELECT id, name FROM a UNION SELECT id, name FROM b ORDER BY name\nLIMIT 5000 OFFSET 0;",
         ),
+        # MySQL executes the content of an executable comment
+        (
+            "SELECT id, name FROM table_name /*! ORDER BY marks */",
+            "SELECT id, name FROM table_name /*! ORDER BY marks */\nLIMIT 5000 OFFSET 0;",
+        ),
+        (
+            "SELECT id, name FROM table_name /*!80000 ORDER BY marks */",
+            "SELECT id, name FROM table_name /*!80000 ORDER BY marks */\nLIMIT 5000 OFFSET 0;",
+        ),
+        # ... but not of an optimizer hint
+        (
+            "SELECT /*+ ORDER_INDEX(table_name idx) */ id, name FROM table_name",
+            "SELECT /*+ ORDER_INDEX(table_name idx) */ id, name FROM table_name\nORDER BY id LIMIT 5000 OFFSET 0;",
+        ),
+        # A backslash-escaped quote doesn't end the literal
+        (
+            "SELECT id, name FROM table_name WHERE note = 'it\\'s ( order by date'",
+            "SELECT id, name FROM table_name WHERE note = 'it\\'s ( order by date'\nORDER BY id LIMIT 5000 OFFSET 0;",
+        ),
     ],
 )
 async def test_update_query_with_pagination_attributes(query, updated_query):
@@ -1382,6 +1402,38 @@ async def test_update_query_with_pagination_attributes(query, updated_query):
         query=query, offset=0, primary_key_columns=["id"]
     )
     assert expected_updated_query == updated_query
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "query, updated_query",
+    [
+        # With NO_BACKSLASH_ESCAPES the backslash is a plain character, so the
+        # literal ends at the next quote and the query's ORDER BY is found
+        (
+            "SELECT id FROM t WHERE note = '\\' AND label = '(' ORDER BY id DESC",
+            "SELECT id FROM t WHERE note = '\\' AND label = '(' ORDER BY id DESC\nLIMIT 5000 OFFSET 0;",
+        ),
+        (
+            "SELECT id FROM t WHERE note = 'a\\' OR b = 'order by x'",
+            "SELECT id FROM t WHERE note = 'a\\' OR b = 'order by x'\nORDER BY id LIMIT 5000 OFFSET 0;",
+        ),
+    ],
+)
+async def test_update_query_with_pagination_attributes_no_backslash_escapes(
+    query, updated_query
+):
+    client = await setup_mysql_client()
+    client.connection = Mock(
+        server_status=SERVER_STATUS.SERVER_STATUS_AUTOCOMMIT
+        | SERVER_STATUS.SERVER_STATUS_NO_BACKSLASH_ESCAPES
+    )
+    assert (
+        client._update_query_with_pagination_attributes(
+            query=query, offset=0, primary_key_columns=["id"]
+        )
+        == updated_query
+    )
 
 
 @pytest.mark.asyncio
