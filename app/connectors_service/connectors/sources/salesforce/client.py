@@ -131,26 +131,51 @@ class SalesforceClient:
 
         return query
 
-    def _add_last_modified_date(self, query):
-        lowered_query = query.lower()
-        if (
-            not ("fields(all)" in lowered_query or "fields(standard)" in lowered_query)
-            and "lastmodifieddate" not in lowered_query
-        ):
-            query = re.sub(
-                r"(?i)SELECT (.*) FROM", r"SELECT \1, LastModifiedDate FROM", query
-            )
+    def _split_select_clause(self, query):
+        """Split the field list of the outer SELECT clause of a SOQL query.
 
-        return query
+        Commas and FROM keywords inside parentheses (subqueries, functions)
+        are skipped. Returns the selected fields and the position of the
+        outer FROM keyword, or (None, None) if the query has no SELECT ... FROM.
+        """
+        select = re.match(r"(?i)\s*SELECT\s", query)
+        if not select:
+            return None, None
+
+        fields = []
+        depth = 0
+        field_start = select.end()
+        for token in re.finditer(r"(?i)[(),]|\bFROM\b", query[select.end() :]):
+            position = select.end() + token.start()
+            if token.group() == "(":
+                depth += 1
+            elif token.group() == ")":
+                depth -= 1
+            elif depth == 0:
+                fields.append(query[field_start:position].strip())
+                if token.group() != ",":
+                    return fields, position
+                field_start = position + 1
+
+        return None, None
+
+    def _add_selected_field(self, query, field):
+        """Add a field to the outer SELECT clause unless it is already selected"""
+        lowered_query = query.lower()
+        if "fields(all)" in lowered_query or "fields(standard)" in lowered_query:
+            return query
+
+        fields, from_position = self._split_select_clause(query)
+        if fields is None or field.lower() in (name.lower() for name in fields):
+            return query
+
+        return f"{query[:from_position].rstrip()}, {field} {query[from_position:]}"
+
+    def _add_last_modified_date(self, query):
+        return self._add_selected_field(query=query, field="LastModifiedDate")
 
     def _add_id(self, query):
-        lowered_query = query.lower()
-        if not (
-            "fields(all)" in lowered_query or "fields(standard)" in lowered_query
-        ) and not re.search(r"\bid\b", lowered_query):
-            query = re.sub(r"(?i)SELECT (.*) FROM", r"SELECT \1, Id FROM", query)
-
-        return query
+        return self._add_selected_field(query=query, field="Id")
 
     async def get_sync_rules_results(self, rule):
         if rule["language"] == "SOQL":

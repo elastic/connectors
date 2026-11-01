@@ -1734,6 +1734,26 @@ async def test_modify_query(soql_query, modified_query):
             "SELECT FIELDS(CUSTOM), LastModifiedDate FROM Account LIMIT 200",
             "SELECT FIELDS(CUSTOM), LastModifiedDate FROM Account LIMIT 200",
         ),
+        (
+            "SELECT Id, lastmodifieddate FROM Account",
+            "SELECT Id, lastmodifieddate FROM Account",
+        ),
+        (
+            "SELECT FIELDS(ALL) FROM Account LIMIT 200",
+            "SELECT FIELDS(ALL) FROM Account LIMIT 200",
+        ),
+        (
+            "SELECT Id, Name FROM Account WHERE LastModifiedDate > LAST_N_DAYS:7",
+            "SELECT Id, Name, LastModifiedDate FROM Account WHERE LastModifiedDate > LAST_N_DAYS:7",
+        ),
+        (
+            "SELECT Id, LastModifiedDate__c FROM Account",
+            "SELECT Id, LastModifiedDate__c, LastModifiedDate FROM Account",
+        ),
+        (
+            "SELECT Id, Owner.LastModifiedDate FROM Account",
+            "SELECT Id, Owner.LastModifiedDate, LastModifiedDate FROM Account",
+        ),
     ],
 )
 async def test_add_last_modified_date(soql_query, modified_query):
@@ -1750,6 +1770,19 @@ async def test_add_last_modified_date(soql_query, modified_query):
         (
             "SELECT FIELDS(CUSTOM), LastModifiedDate FROM Account LIMIT 200",
             "SELECT FIELDS(CUSTOM), LastModifiedDate, Id FROM Account LIMIT 200",
+        ),
+        ("SELECT id, Name FROM Account", "SELECT id, Name FROM Account"),
+        (
+            "SELECT Name, Owner.Id FROM Account",
+            "SELECT Name, Owner.Id, Id FROM Account",
+        ),
+        (
+            "SELECT Name, (SELECT Id FROM Contacts) FROM Account",
+            "SELECT Name, (SELECT Id FROM Contacts), Id FROM Account",
+        ),
+        (
+            "SELECT Name FROM Account WHERE Id IN (SELECT AccountId FROM Contact)",
+            "SELECT Name, Id FROM Account WHERE Id IN (SELECT AccountId FROM Contact)",
         ),
     ],
 )
