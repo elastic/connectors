@@ -3,6 +3,7 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+import re
 from copy import deepcopy
 from enum import Enum
 
@@ -341,6 +342,29 @@ class BasicRuleNoMatchAllRegexValidator(BasicRuleValidator):
                 is_valid=False,
                 validation_message=f"{format(basic_rule, Format.SHORT.value)} uses a match all regexps {BasicRuleNoMatchAllRegexValidator.MATCH_ALL_REGEXPS}, which are not allowed.",
             )
+
+        return SyncRuleValidationResult.valid_result(rule_id=basic_rule.id_)
+
+
+class BasicRuleValidRegexValidator(BasicRuleValidator):
+    """BasicRuleValidRegexValidator can be used to check that a regex basic rule uses a valid regular expression.
+
+    The regex is compiled when documents are matched against the rule, so an invalid one would fail the sync.
+    """
+
+    @classmethod
+    def validate(cls, basic_rule_json):
+        basic_rule = BasicRule.from_json(basic_rule_json)
+
+        if basic_rule.rule == Rule.REGEX:
+            try:
+                re.compile(basic_rule.value)
+            except (re.error, TypeError) as e:
+                return SyncRuleValidationResult(
+                    rule_id=basic_rule.id_,
+                    is_valid=False,
+                    validation_message=f"{format(basic_rule, Format.SHORT.value)} uses an invalid regular expression: {e}.",
+                )
 
         return SyncRuleValidationResult.valid_result(rule_id=basic_rule.id_)
 
