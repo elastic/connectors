@@ -826,6 +826,57 @@ async def test_get_content_with_extraction_service():
 
 
 @pytest.mark.asyncio
+async def test_get_docs_keys_recordings_by_meeting_instance_uuid():
+    # Zoom returns the meeting number as the `id` of a meeting and of each of
+    # its recordings. Two recordings of a recurring meeting share it as well.
+    meeting = {
+        "id": 6840331990,
+        "uuid": "BOKXuumlTAGXuqwr3bLyuQ==",
+        "created_at": "2023-03-01T00:00:00Z",
+    }
+    recordings = [
+        {
+            "id": 6840331990,
+            "uuid": "BOKXuumlTAGXuqwr3bLyuQ==",
+            "start_time": "2023-03-01T00:00:00Z",
+        },
+        {
+            "id": 6840331990,
+            "uuid": "4444AAAiAAAAAiAiAiiAii==",
+            "start_time": "2023-03-08T00:00:00Z",
+        },
+    ]
+
+    async def async_items(items):
+        for item in items:
+            yield item
+
+    async def get_meetings(user_id, meeting_type):
+        if meeting_type == "previous_meetings":
+            yield meeting
+
+    async def empty_chats(**_):
+        if False:
+            yield None
+
+    async with create_zoom_source() as source:
+        source.client.get_users = Mock(return_value=async_items([{"id": "user1"}]))
+        source.client.get_meetings = Mock(side_effect=get_meetings)
+        source.client.get_recordings = Mock(return_value=async_items(recordings))
+        source.client.get_channels = Mock(return_value=async_items([]))
+        source.client.get_chats = Mock(side_effect=empty_chats)
+
+        doc_ids = [doc["_id"] async for doc, _ in source.get_docs()]
+
+    assert doc_ids == [
+        "user1",
+        6840331990,
+        "BOKXuumlTAGXuqwr3bLyuQ==",
+        "4444AAAiAAAAAiAiAiiAii==",
+    ]
+
+
+@pytest.mark.asyncio
 @freeze_time("2023-03-09T00:00:00")
 async def test_get_docs():
     document_without_attachment = []
