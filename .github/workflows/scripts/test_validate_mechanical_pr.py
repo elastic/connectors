@@ -89,6 +89,9 @@ class TestVersionBump(unittest.TestCase):
         # as in #4889: regenerated NOTICE.txt also moved google-auth 2.62.0 -> 2.62.1
         files = self.files("9.5.7", old="9.5.6") + [modified("libs/connectors_sdk/NOTICE.txt", "-2.62.0", "+2.62.1")]
         self.assertEqual(classify("Bump version to 9.5.7", files, self.BOT, base="9.5")[0], "release-version-bump")
+        for bad in ("-Apache", "+Elastic"), ("-2.62.0", "+2evil"), ("-2.62.0", "+2.62.1evil"), ("-2.62.0", "+3"):
+            files = self.files("9.5.7", old="9.5.6") + [modified("libs/connectors_sdk/NOTICE.txt", *bad)]
+            self.assertIsNone(classify("Bump version to 9.5.7", files, self.BOT, base="9.5")[0], bad)
         text = [modified("libs/connectors_sdk/NOTICE.txt", "-Apache", "+Elastic")]
         self.assertIsNone(classify("Bump version to 9.5.7", self.files("9.5.7", old="9.5.6") + text, self.BOT, base="9.5")[0])
 
