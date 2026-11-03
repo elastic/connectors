@@ -810,6 +810,7 @@ class GoogleDriveDataSource(BaseDataSource):
 
         # Filter out files that have been already processed
         new_files = [file for file in files if file.get("id") not in seen_ids]
+        seen_ids.update(file.get("id") for file in new_files)
 
         prepared_files = await self._process_items_concurrently(
             new_files,
