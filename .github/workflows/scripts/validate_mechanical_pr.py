@@ -27,7 +27,7 @@ MAINTENANCE_RE = re.compile(r"\d+\.\d+")  # release branch, e.g. 9.5
 TEAM = "team"  # author must be an active member of ALLOWED_TEAMS
 
 ADVISORY_RE = re.compile(r"\b(CVE-\d{4}-\d{4,}|GHSA(-[0-9a-z]{4}){3})\b", re.I)
-VERSION_LINE_RE = re.compile(r"^[+-]\d+(?:\.\d+)+(?:[-+.]?[A-Za-z]*\d+)*\s*$")
+VERSION_LINE_RE = re.compile(r"^[+-]\d+(?:\.\d+)+(?:[-+.][A-Za-z]*\d+|[A-Za-z]+\d+)*\s*$")
 WOLFI_LINE_RE = re.compile(r"^[+-]FROM docker\.elastic\.co/wolfi/python:3\.11-dev@sha256:[0-9a-f]{64}\s*$")
 NOTICE_NAME_RE = re.compile(r"^(\S+)\n\d[^\n]*$", re.M)  # a package line is followed by its version
 REQ_RE = re.compile(r"^\s*([A-Za-z0-9][A-Za-z0-9._-]*)\s*(\[[^\]]*\])?\s*([^;]*?)\s*(;.*)?$")
