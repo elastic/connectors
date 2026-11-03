@@ -29,13 +29,14 @@ permissions:
   pull-requests: read
   statuses: read
 
-concurrency:
-  group: mechanical-${{ github.event.sha || github.event.pull_request.head.sha }}
-  cancel-in-progress: true
-
 jobs:
   evaluate:
     name: Mechanical auto-approve
+    # Job level, so events skipped by the `if` below never join the group. Queue,
+    # never cancel: a run killed mid-way would leave nothing to replace it.
+    concurrency:
+      group: mechanical-${{ github.event.sha || github.event.pull_request.head.sha }}
+      cancel-in-progress: false
     if: >-
       (github.event_name == 'pull_request_target'
         && github.event.pull_request.head.repo.full_name == github.repository)
