@@ -1,15 +1,12 @@
 name: Auto-approve mechanical PRs
 
-# Approves Renovate Wolfi digest bumps and CVE pin bumps to main, and release
-# version bumps to main or a maintenance branch (X.Y). Rules and checks:
+# Approves Renovate Wolfi digest bumps, CVE pin bumps and release version bumps
+# to main (version bumps also to X.Y). Rules and checks:
 # .github/workflows/scripts/validate_mechanical_pr.py, always read from the
 # default branch, never from the PR. Details: docs/CONTRIBUTING.md.
 #
-# PRs to main are checked when opened or pushed (pull_request_target reads this
-# file from the PR's base branch, and X.Y branches hold no copy of it). Every PR,
-# including those to X.Y, is also re-checked on any CLA or Buildkite status
-# change from the default branch: green CI lets it approve, and a new commit that
-# no longer qualifies withdraws the approval.
+# Re-runs on every CLA or Buildkite status change (also for PRs to X.Y), because
+# approval needs green CI and a commit that stops qualifying loses the approval.
 # To turn this off, open a PR that removes this workflow.
 # Repository variable BACKPORT_APPROVER_TEAMS (comma separated team slugs, default
 # search-extract-and-transform) lists who may author the team categories.
@@ -32,8 +29,7 @@ permissions:
 jobs:
   evaluate:
     name: Mechanical auto-approve
-    # Job level, so events skipped by the `if` below never join the group. Queue,
-    # never cancel: a run killed mid-way would leave nothing to replace it.
+    # Job level, so events skipped by `if` never join the group; queue, never cancel.
     concurrency:
       group: mechanical-${{ github.event.sha || github.event.pull_request.head.sha }}
       cancel-in-progress: false
