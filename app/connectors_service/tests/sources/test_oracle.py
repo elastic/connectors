@@ -178,3 +178,22 @@ async def test_fetch_documents_keeps_zero_primary_key_values_in_id(
             docs = [doc async for doc in source.fetch_documents(table="emp_table")]
 
     assert [doc["_id"] for doc in docs] == expected_ids
+
+
+@pytest.mark.parametrize(
+    "table, dictionary_name",
+    [
+        # Oracle stores a nonquoted identifier in uppercase, so a table configured
+        # in lowercase or mixed case must still find its primary key.
+        ("employees", "EMPLOYEES"),
+        ("Emp_Table", "EMP_TABLE"),
+        ("EMPLOYEES", "EMPLOYEES"),
+        # A quoted identifier is stored exactly as written.
+        ('"MyTable"', "MyTable"),
+    ],
+)
+def test_table_primary_key_looks_up_the_dictionary_name(table, dictionary_name):
+    query = OracleQueries().table_primary_key(user="admin", table=table)
+
+    assert f"cols.table_name = '{dictionary_name}'" in query
+    assert "cons.owner = UPPER('admin')" in query
