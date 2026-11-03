@@ -313,6 +313,166 @@ async def test_fetch_data_with_pagination():
 
 
 @pytest.mark.asyncio
+async def test_fetch_data_with_pagination_when_a_nested_alias_reuses_the_key():
+    # `issues: title` reuses the response key of the paginated field one level
+    # down; it must not hide the arguments of `repository.issues`.
+    actual_response = []
+    async with create_graphql_source() as source:
+        source.graphql_client.pagination_model = "cursor_pagination"
+        source.graphql_client.graphql_object_to_id_map = {
+            "repository.issues.nodes": "id"
+        }
+        source.graphql_client.pagination_key = "repository.issues"
+        source.graphql_client.post = AsyncMock(
+            side_effect=[
+                {
+                    "repository": {
+                        "issues": {
+                            "nodes": [{"id": "1", "issues": "first"}],
+                            "pageInfo": {"hasNextPage": True, "endCursor": "c1"},
+                        }
+                    }
+                },
+                {
+                    "repository": {
+                        "issues": {
+                            "nodes": [{"id": "2", "issues": "second"}],
+                            "pageInfo": {"hasNextPage": False, "endCursor": "c2"},
+                        }
+                    }
+                },
+            ]
+        )
+        async for doc in source.fetch_data(
+            "query($cursor: String) {repository {issues(first: 5, after: $cursor) "
+            "{nodes {id issues: title} pageInfo {hasNextPage endCursor}}}}"
+        ):
+            actual_response.append(doc["_id"])
+        assert source.graphql_client.variables == {"cursor": "c1"}
+    assert actual_response == ["1", "2"]
+
+
+@pytest.mark.asyncio
+async def test_fetch_data_with_pagination_requires_page_info_under_the_key():
+    async with create_graphql_source() as source:
+        source.graphql_client.pagination_model = "cursor_pagination"
+        source.graphql_client.pagination_key = "repository.issues"
+        source.graphql_client.post = AsyncMock()
+        with pytest.raises(ConfigurableFieldValueError):
+            async for _ in source.fetch_data(
+                "query($cursor: String) {repository {issues(first: 5, after: $cursor) "
+                "{nodes {id}}} pageInfo {hasNextPage endCursor}}"
+            ):
+                pass
+        source.graphql_client.post.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_fetch_data_with_pagination_on_aliased_field():
+    actual_response = []
+    async with create_graphql_source() as source:
+        source.graphql_client.pagination_model = "cursor_pagination"
+        source.graphql_client.graphql_object_to_id_map = {"people": "id"}
+        source.graphql_client.pagination_key = "people"
+        source.graphql_client.post = AsyncMock(
+            side_effect=[
+                {
+                    "people": {
+                        "id": "1",
+                        "pageInfo": {"hasNextPage": True, "endCursor": "xyz#123"},
+                    }
+                },
+                {
+                    "people": {
+                        "id": "2",
+                        "pageInfo": {"hasNextPage": False, "endCursor": "pqr#123"},
+                    }
+                },
+            ]
+        )
+        async for doc in source.fetch_data(
+            "query($afterCursor: String!) {people: users(first:5, after:$afterCursor) {id pageInfo}}"
+        ):
+            actual_response.append(doc["_id"])
+        assert source.graphql_client.variables == {"afterCursor": "xyz#123"}
+    assert actual_response == ["1", "2"]
+
+
+def owner_repos_query(user_cursor, org_cursor):
+    # `node` is a User or an Organization; both branches alias their
+    # repositories to `repos`, so the response path is the same.
+    declarations = ", ".join(
+        f"${name}: String" for name in dict.fromkeys([user_cursor, org_cursor])
+    )
+    return (
+        f'query({declarations}) {{node(id: "1") {{'
+        f"... on User {{repos: repositories(first: 5, after: ${user_cursor}) "
+        "{nodes {id} pageInfo {hasNextPage endCursor}}} "
+        f"... on Organization {{repos: repositories(first: 5, after: ${org_cursor}) "
+        "{nodes {id} pageInfo {hasNextPage endCursor}}}}}"
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "query",
+    [
+        owner_repos_query("userCursor", "orgCursor"),
+        # the Organization branch has no cursor at all
+        owner_repos_query("cursor", "cursor").replace(
+            "repositories(first: 5, after: $cursor) {nodes {id} pageInfo {hasNextPage endCursor}}}}}",
+            "repositories(first: 5) {nodes {id} pageInfo {hasNextPage endCursor}}}}}",
+        ),
+    ],
+)
+async def test_fetch_data_with_pagination_rejects_different_cursors_for_one_key(
+    query,
+):
+    async with create_graphql_source() as source:
+        source.graphql_client.pagination_model = "cursor_pagination"
+        source.graphql_client.graphql_object_to_id_map = {"node.repos.nodes": "id"}
+        source.graphql_client.pagination_key = "node.repos"
+        source.graphql_client.post = AsyncMock()
+        with pytest.raises(ConfigurableFieldValueError, match="same variable"):
+            async for _ in source.fetch_data(query):
+                pass
+        source.graphql_client.post.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_fetch_data_with_pagination_shares_one_cursor_across_fragments():
+    actual_response = []
+    async with create_graphql_source() as source:
+        source.graphql_client.pagination_model = "cursor_pagination"
+        source.graphql_client.graphql_object_to_id_map = {"node.repos.nodes": "id"}
+        source.graphql_client.pagination_key = "node.repos"
+        source.graphql_client.post = AsyncMock(
+            side_effect=[
+                {
+                    "node": {
+                        "repos": {
+                            "nodes": [{"id": "1"}],
+                            "pageInfo": {"hasNextPage": True, "endCursor": "c1"},
+                        }
+                    }
+                },
+                {
+                    "node": {
+                        "repos": {
+                            "nodes": [{"id": "2"}],
+                            "pageInfo": {"hasNextPage": False, "endCursor": "c2"},
+                        }
+                    }
+                },
+            ]
+        )
+        async for doc in source.fetch_data(owner_repos_query("cursor", "cursor")):
+            actual_response.append(doc["_id"])
+        assert source.graphql_client.variables == {"cursor": "c1"}
+    assert actual_response == ["1", "2"]
+
+
+@pytest.mark.asyncio
 async def test_get_sends_variables():
     async with create_graphql_source() as source:
         source.graphql_client.variables = {"id": "123"}
@@ -518,6 +678,35 @@ async def test_validate_config_with_invalid_pagination_key():
             await source.validate_config()
 
 
+def fragment_chain(depth, leaf):
+    # Each fragment spreads the next one twice, so the query grows linearly with
+    # the depth while a naive expansion visits 2 ** depth copies of the leaf.
+    chain = "".join(
+        f"fragment F{i} on Query {{...F{i + 1} ...F{i + 1}}} " for i in range(depth)
+    )
+    return f"query {{...F0}} {chain}fragment F{depth} on Query {{{leaf}}}"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "leaf, valid",
+    [
+        ('search(query: "is:issue", type: ISSUE, first: 10) {nodes {id}}', True),
+        ('search(query: "is:issue", type: ISSUE, first: 10) {nodes {title}}', False),
+    ],
+)
+async def test_validate_config_expands_each_fragment_once(leaf, valid):
+    async with create_graphql_source(
+        graphql_query=fragment_chain(40, leaf),
+        graphql_object_to_id_map='{"search.nodes": "id"}',
+    ) as source:
+        if valid:
+            await source.validate_config()
+        else:
+            with pytest.raises(ConfigurableFieldValueError):
+                await source.validate_config()
+
+
 @pytest.mark.asyncio
 async def test_validate_config_with_missing_config_field():
     async with create_graphql_source(
@@ -538,5 +727,78 @@ async def test_validate_config_with_invalid_json():
         source.graphql_client.graphql_query = (
             "query {organization {repository { issues {name}}}}"
         )
+        with pytest.raises(ConfigurableFieldValueError):
+            await source.validate_config()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "graphql_query, graphql_object_to_id_map",
+    [
+        (
+            # inline fragment under the mapped object
+            'query {search(query: "is:issue", type: ISSUE, first: 10) {nodes {... on Issue {id title}}}}',
+            '{"search.nodes": "id"}',
+        ),
+        (
+            # named fragment spread under the mapped object
+            'query {search(query: "is:issue", type: ISSUE, first: 10) {nodes {...IssueFields}}} fragment IssueFields on Issue {id title}',
+            '{"search.nodes": "id"}',
+        ),
+        (
+            # fragment definition before the query
+            'fragment IssueFields on Issue {id title} query {search(query: "is:issue", type: ISSUE, first: 10) {nodes {...IssueFields}}}',
+            '{"search.nodes": "id"}',
+        ),
+        (
+            # aliased field on the path; the response is keyed by the alias
+            'query {repo: repository(owner: "elastic", name: "connectors") {issues(first: 10) {nodes {id}}}}',
+            '{"repo.issues.nodes": "id"}',
+        ),
+        (
+            # the id comes from a second selection of the same field
+            'query {search(query: "is:issue", type: ISSUE, first: 10) {nodes {title}} ...SearchIds} fragment SearchIds on Query {search(query: "is:issue", type: ISSUE, first: 10) {nodes {id}}}',
+            '{"search.nodes": "id"}',
+        ),
+    ],
+)
+async def test_validate_config_with_fragments_and_aliases(
+    graphql_query, graphql_object_to_id_map
+):
+    async with create_graphql_source(
+        graphql_query=graphql_query,
+        graphql_object_to_id_map=graphql_object_to_id_map,
+    ) as source:
+        await source.validate_config()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "graphql_query, graphql_object_to_id_map",
+    [
+        (
+            # the inline fragment does not select the id
+            'query {search(query: "is:issue", type: ISSUE, first: 10) {nodes {... on Issue {title}}}}',
+            '{"search.nodes": "id"}',
+        ),
+        (
+            # the path uses the field name, but the response is keyed by the alias
+            'query {repo: repository(owner: "elastic", name: "connectors") {issues(first: 10) {nodes {id}}}}',
+            '{"repository.issues.nodes": "id"}',
+        ),
+        (
+            # a fragment that spreads itself is not followed forever
+            'query {search(query: "is:issue", type: ISSUE, first: 10) {nodes {...Loop}}} fragment Loop on Issue {title ...Loop}',
+            '{"search.nodes": "id"}',
+        ),
+    ],
+)
+async def test_validate_config_with_fragments_and_aliases_missing_id(
+    graphql_query, graphql_object_to_id_map
+):
+    async with create_graphql_source(
+        graphql_query=graphql_query,
+        graphql_object_to_id_map=graphql_object_to_id_map,
+    ) as source:
         with pytest.raises(ConfigurableFieldValueError):
             await source.validate_config()

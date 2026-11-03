@@ -19,7 +19,6 @@ emit_dra_pair() {
     agents:
       provider: "gcp"
       image: family/core-ubuntu-2204
-      machineType: "n1-standard-4"
     plugins:
       - elastic/dra-prep#v0.1.5:
           product_id: "connectors"

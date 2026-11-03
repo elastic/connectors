@@ -6,6 +6,7 @@
 
 import asyncio
 from collections import Counter
+from collections.abc import AsyncIterator
 from functools import cached_property
 
 import aiohttp
@@ -17,14 +18,21 @@ from aiohttp.client_exceptions import (
 from connectors_sdk.logger import logger
 
 from connectors.sources.outlook_cloud.constants import (
+    DEFAULT_MAIL_FOLDERS,
     DEFAULT_RETRY_SECONDS,
+    EXCLUDED_WELL_KNOWN_FOLDERS,
+    FOLDER_FIELDS,
     GRAPH_BASE_URL,
     GRAPH_HOST_URL,
     GRAPH_REQUEST_HEADERS,
+    MAIL_OBJECT,
+    MAIL_SEARCH_FOLDER_TYPE_NAME,
     MAILBOX_ACCESSIBLE,
     MAILBOX_MISSING,
     MAILBOX_OUT_OF_SCOPE,
     MAX_CONCURRENT_MAILBOXES,
+    MESSAGE_FIELDS,
+    MESSAGES_PAGE_SIZE,
     NETWORK_RETRY_SECONDS,
     REQUEST_TIMEOUT,
     RETRIES,
@@ -52,6 +60,8 @@ class OutlookCloudClient:
         self.configuration = configuration
         self._sleeps = CancellableSleeps()
         self._logger = logger
+        # Mail folders read or skipped (403/404) since the last reset.
+        self.mail_folder_stats = Counter()
 
     def set_logger(self, logger_):
         self._logger = logger_
@@ -97,13 +107,8 @@ class OutlookCloudClient:
         )
         return first * 2 ** (attempt - 1)
 
-    async def _get_json(self, url):
-        """GET a Graph URL. Throttling, temporary server errors and network faults are retried, then raised.
-
-        Raises:
-            ValueError: the URL is not on Microsoft Graph. The access token is never sent elsewhere,
-                e.g. to a paging link (`@odata.nextLink`) that points to another host.
-        """
+    async def _get(self, url, *, as_json=True):
+        """GET a Graph URL with retries. Returns JSON or raw bytes."""
         if not url.startswith(GRAPH_HOST_URL):
             msg = f"Refusing to send the Microsoft Graph access token to {url.split('?')[0]}"
             raise ValueError(msg)
@@ -112,7 +117,9 @@ class OutlookCloudClient:
             headers = {"Authorization": f"Bearer {token}"} | GRAPH_REQUEST_HEADERS
             try:
                 async with self.session.get(url, headers=headers) as response:
-                    return await response.json()
+                    if as_json:
+                        return await response.json()
+                    return await response.read()
             except ClientResponseError as error:
                 if error.status == 401:
                     msg = "Microsoft Graph rejected the credentials (401). Check the tenant ID, client ID and client secret, and that admin consent is given."
@@ -129,6 +136,18 @@ class OutlookCloudClient:
                 f"Request to Microsoft Graph failed ({reason}). Retrying in {delay} seconds (attempt {attempt} of {RETRIES})."
             )
             await self._sleeps.sleep(delay)
+
+    async def _get_json(self, url):
+        """GET a Graph URL. Throttling, temporary server errors and network faults are retried, then raised.
+
+        Raises:
+            ValueError: the URL is not on Microsoft Graph. The access token is never sent elsewhere,
+                e.g. to a paging link (`@odata.nextLink`) that points to another host.
+        """
+        return await self._get(url, as_json=True)
+
+    async def _get_bytes(self, url):
+        return await self._get(url, as_json=False)
 
     async def _get_users_page(self, url):
         try:
@@ -237,3 +256,160 @@ class OutlookCloudClient:
             message
             + "Check that the users have an email address and an Exchange Online mailbox."
         )
+
+    async def _resolve_well_known_folder_id(self, user_id, well_known_name):
+        """Id of a well-known folder, or None when the mailbox has no such folder (404).
+
+        Any other error is raised: a folder that cannot be identified must not be
+        guessed to be a user folder.
+        """
+        url = (
+            f"{GRAPH_BASE_URL}/users/{user_id}/mailFolders/{well_known_name}?$select=id"
+        )
+        try:
+            payload = await self._get_json(url)
+        except ClientResponseError as error:
+            if error.status == 404:
+                return None
+            raise
+        folder_id = payload.get("id")
+        return folder_id if isinstance(folder_id, str) and folder_id else None
+
+    async def _resolve_well_known_folder_ids(self, user_id, well_known_names):
+        ids = set()
+        for well_known_name in sorted(well_known_names):
+            folder_id = await self._resolve_well_known_folder_id(
+                user_id, well_known_name
+            )
+            if folder_id:
+                ids.add(folder_id)
+        return ids
+
+    def _skip_folder(self, user_id, folder_label, error):
+        self.mail_folder_stats["skipped"] += 1
+        self._logger.warning(
+            f"Could not read mail folder {folder_label!r} for user {user_id}, skipping: "
+            f"{error.__class__.__name__} ({error.status})."
+        )
+
+    async def _get_page_or_skip(self, url, user_id, folder_label):
+        """GET one page of a folder listing. Return None if the folder is gone or denied (404, 403).
+
+        Applies to every page, not only the first: a folder can be removed between two pages.
+        Any other error is raised.
+        """
+        try:
+            return await self._get_json(url)
+        except ClientResponseError as error:
+            if error.status in (403, 404):
+                self._skip_folder(user_id, folder_label, error)
+                return None
+            raise
+
+    async def get_messages(
+        self, user_id, folder_segment, mail_type
+    ) -> AsyncIterator[dict]:
+        """Yield the Graph messages of a folder, given as a well-known name or a folder id."""
+        folder_label = mail_type.get("folder_name") or mail_type["constant"]
+        url = (
+            f"{GRAPH_BASE_URL}/users/{user_id}/mailFolders/{url_encode(folder_segment)}/messages"
+            f"?$select={MESSAGE_FIELDS}&$top={MESSAGES_PAGE_SIZE}"
+        )
+        page = await self._get_page_or_skip(url, user_id, folder_label)
+        if page is not None:
+            self.mail_folder_stats["read"] += 1
+        while page is not None:
+            for message in page.get("value") or []:
+                yield message
+            url = page.get("@odata.nextLink")
+            if not url:
+                return
+            page = await self._get_page_or_skip(url, user_id, folder_label)
+
+    async def get_raw_message(self, user_id, message_id):
+        """The raw MIME of a message."""
+        url = (
+            f"{GRAPH_BASE_URL}/users/{user_id}/messages/{url_encode(message_id)}/$value"
+        )
+        return await self._get_bytes(url)
+
+    async def _list_folders(self, url, user_id, folder_label):
+        """Every folder of a listing. A listing that fails with 403/404 ends there (logged)."""
+        folders = []
+        while url:
+            page = await self._get_page_or_skip(url, user_id, folder_label)
+            if page is None:
+                break
+            folders.extend(page.get("value") or [])
+            url = page.get("@odata.nextLink")
+        return folders
+
+    async def _walk_folders(
+        self, user_id, folders, excluded_ids, seen_ids
+    ) -> AsyncIterator[dict]:
+        """Yield the user mail folders of a folder listing, depth first.
+
+        Excluded folders (system folders, search folders) are dropped with their whole
+        subtree. Folders in `seen_ids` (the default ones) are not yielded again, but
+        their subfolders are user mail and are visited.
+        """
+        for folder in folders:
+            folder_id = folder.get("id")
+            if (
+                not folder_id
+                or folder_id in excluded_ids
+                or MAIL_SEARCH_FOLDER_TYPE_NAME in (folder.get("@odata.type") or "")
+            ):
+                continue
+            if folder_id not in seen_ids:
+                seen_ids.add(folder_id)
+                yield {
+                    "folder_id": folder_id,
+                    "mail_type": {
+                        "constant": MAIL_OBJECT,
+                        "folder_name": folder.get("displayName") or "unknown",
+                    },
+                }
+            if folder.get("childFolderCount") == 0:
+                continue
+            children = await self._list_folders(
+                f"{GRAPH_BASE_URL}/users/{user_id}/mailFolders/{url_encode(folder_id)}"
+                f"/childFolders?$select={FOLDER_FIELDS}&$top=100",
+                user_id,
+                folder.get("displayName") or folder_id,
+            )
+            async for entry in self._walk_folders(
+                user_id, children, excluded_ids, seen_ids
+            ):
+                yield entry
+
+    async def get_additional_mail_folders(self, user_id) -> AsyncIterator[dict]:
+        """Yield the user mail folders that are not Inbox, Sent, Junk or Archive.
+
+        Used by sync_all_mail_folders. Graph does not say which folder is a system
+        folder, so the well-known ones are resolved to ids first. If that is refused,
+        nothing is yielded: indexing Deleted Items or Drafts as mail would be worse
+        than missing the extra folders.
+        """
+        try:
+            excluded_ids = await self._resolve_well_known_folder_ids(
+                user_id, EXCLUDED_WELL_KNOWN_FOLDERS
+            )
+            default_ids = await self._resolve_well_known_folder_ids(
+                user_id, [entry["well_known"] for entry in DEFAULT_MAIL_FOLDERS]
+            )
+        except ClientResponseError as error:
+            if error.status == 403:
+                self._skip_folder(user_id, "additional mail folders", error)
+                return
+            raise
+
+        roots = await self._list_folders(
+            f"{GRAPH_BASE_URL}/users/{user_id}/mailFolders?$select={FOLDER_FIELDS}&$top=100",
+            user_id,
+            "mail folders",
+        )
+        async for entry in self._walk_folders(
+            user_id, roots, excluded_ids, set(default_ids)
+        ):
+            yield entry
