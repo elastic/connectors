@@ -23,6 +23,14 @@ from aiohttp.client_exceptions import (
 )
 from aioresponses.core import normalize_url
 from connectors_sdk.source import DataSourceConfiguration
+from exchangelib.recurrence import (
+    AbsoluteMonthlyPattern,
+    AbsoluteYearlyPattern,
+    DailyPattern,
+    RelativeMonthlyPattern,
+    RelativeYearlyPattern,
+    WeeklyPattern,
+)
 
 from connectors.config import _default_config
 from connectors.sources import outlook_cloud
@@ -30,8 +38,10 @@ from connectors.sources.outlook_cloud import OutlookCloudDataSource
 from connectors.sources.outlook_cloud import client as outlook_cloud_client
 from connectors.sources.outlook_cloud.client import NoAccessibleMailboxes
 from connectors.sources.outlook_cloud.constants import (
+    CALENDAR_FIELDS,
     DEFAULT_MAIL_FOLDERS,
     DEFAULT_RETRY_SECONDS,
+    EVENT_FIELDS,
     EXCLUDED_WELL_KNOWN_FOLDERS,
     FOLDER_FIELDS,
     GRAPH_BASE_URL,
@@ -43,6 +53,8 @@ from connectors.sources.outlook_cloud.constants import (
     NETWORK_RETRY_SECONDS,
     RETRIES,
 )
+from connectors.sources.outlook_cloud.formatter import OutlookCloudDocFormatter
+from connectors.sources.outlook_cloud.utils import graph_recurrence_to_legacy
 from connectors.sources.shared.microsoft.graph import (
     PermissionsMissing,
     TokenFetchFailed,
@@ -134,7 +146,7 @@ async def test_ping(graph):
 
     headers = requests_to(graph, PING_URL)[0].kwargs["headers"]
     assert headers["Authorization"] == "Bearer fake-token"
-    assert headers["Prefer"] == 'IdType="ImmutableId"'
+    assert headers["Prefer"] == 'IdType="ImmutableId", outlook.timezone="UTC"'
 
 
 @pytest.mark.asyncio
@@ -474,6 +486,17 @@ def messages_url(user_id, folder_segment):
     )
 
 
+def events_url(user_id, calendar_id=None):
+    path = "calendar" if calendar_id is None else f"calendars/{calendar_id}"
+    return f"{GRAPH_BASE_URL}/users/{user_id}/{path}/events?$select={EVENT_FIELDS}&$top=100"
+
+
+def calendars_url(user_id):
+    return (
+        f"{GRAPH_BASE_URL}/users/{user_id}/calendars?$select={CALENDAR_FIELDS}&$top=100"
+    )
+
+
 def graph_message(**overrides):
     message = {
         "id": "msg-1",
@@ -502,9 +525,14 @@ def decode_eml(document):
     return message_from_bytes(base64.b64decode(document["_attachment"]))
 
 
-def register_accessible_user(graph, user_id="user-1", mail="user@example.com"):
+def register_accessible_user(
+    graph, user_id="user-1", mail="user@example.com", empty_calendars=True
+):
     graph.get(USERS_URL, payload={"value": [user(user_id, mail=mail)]})
     graph.get(mailbox_url(user_id), payload={"id": "inbox-id"})
+    if empty_calendars:
+        graph.get(events_url(user_id), payload={"value": []})
+        graph.get(calendars_url(user_id), payload={"value": []})
 
 
 def register_default_folders_empty(graph, user_id="user-1"):
@@ -575,7 +603,7 @@ async def test_get_docs_include_full_raw_message_fetches_value(graph):
     assert base64.b64decode(documents[0]["_attachment"]) == RAW_MIME
     assert requests_to(graph, raw_url)
     headers = requests_to(graph, raw_url)[0].kwargs["headers"]
-    assert headers["Prefer"] == 'IdType="ImmutableId"'
+    assert headers["Prefer"] == 'IdType="ImmutableId", outlook.timezone="UTC"'
 
 
 @pytest.mark.asyncio
@@ -718,7 +746,10 @@ async def test_get_docs_follows_message_pages_with_headers(graph):
 
     assert [document["_id"] for document in documents] == ["msg-1", "msg-2"]
     for call in requests_to(graph, next_url):
-        assert call.kwargs["headers"]["Prefer"] == 'IdType="ImmutableId"'
+        assert (
+            call.kwargs["headers"]["Prefer"]
+            == 'IdType="ImmutableId", outlook.timezone="UTC"'
+        )
 
 
 @pytest.mark.asyncio
@@ -942,3 +973,433 @@ async def test_sync_all_mail_folders_raises_on_server_errors(graph):
     async with create_outlook_cloud_source(sync_all_mail_folders=True) as source:
         with pytest.raises(ClientResponseError):
             [document async for document, _ in source.get_docs()]
+
+
+def graph_event(**overrides):
+    event = {
+        "id": "event-1",
+        "subject": "Planning",
+        "type": "singleInstance",
+        "recurrence": None,
+        "organizer": {"emailAddress": {"address": "boss@example.com"}},
+        "attendees": [
+            {"type": "required", "emailAddress": {"address": "a@example.com"}},
+            {"type": "optional", "emailAddress": {"address": "b@example.com"}},
+            {"type": "resource", "emailAddress": {"address": "room@example.com"}},
+            {"type": "required", "emailAddress": {"address": None}},
+        ],
+        "start": {"dateTime": "2023-12-12T09:00:00.0000000", "timeZone": "UTC"},
+        "end": {"dateTime": "2023-12-12T10:30:00.0000000", "timeZone": "UTC"},
+        "location": {"displayName": "Room 1"},
+        "body": {"contentType": "html", "content": "<p>Agenda</p>"},
+        "lastModifiedDateTime": "2023-12-10T08:00:00.1234567Z",
+    }
+    event.update(overrides)
+    return event
+
+
+def graph_calendar(calendar_id, name, owner="user@example.com", **extra):
+    return {
+        "id": calendar_id,
+        "name": name,
+        "owner": {"address": owner},
+        "isDefaultCalendar": False,
+    } | extra
+
+
+async def get_documents(**config):
+    async with create_outlook_cloud_source(**config) as source:
+        return [document async for document, _ in source.get_docs()]
+
+
+@pytest.mark.asyncio
+async def test_get_docs_yields_root_calendar_event(graph):
+    register_accessible_user(graph, empty_calendars=False)
+    register_default_folders_empty(graph)
+    graph.get(events_url("user-1"), payload={"value": [graph_event()]})
+    graph.get(calendars_url("user-1"), payload={"value": []})
+
+    documents = await get_documents()
+
+    assert documents == [
+        {
+            "_id": "event-1",
+            "_timestamp": "2023-12-10T08:00:00Z",
+            "type": "Calendar",
+            "title": "Planning",
+            "meeting_type": "Single",
+            "organizer": "boss@example.com",
+            "attendees": ["a@example.com"],
+            "start_date": "2023-12-12T09:00:00Z",
+            "end_date": "2023-12-12T10:30:00Z",
+            "location": "Room 1",
+            "content": "Agenda",
+        }
+    ]
+    assert_conforms(documents[0])
+
+
+@pytest.mark.asyncio
+async def test_get_docs_follows_event_pages(graph):
+    register_accessible_user(graph, empty_calendars=False)
+    register_default_folders_empty(graph)
+    next_url = f"{GRAPH_BASE_URL}/users/user-1/calendar/events?$skiptoken=2"
+    graph.get(
+        events_url("user-1"),
+        payload={"value": [graph_event()], "@odata.nextLink": next_url},
+    )
+    graph.get(next_url, payload={"value": [graph_event(id="event-2")]})
+    graph.get(calendars_url("user-1"), payload={"value": []})
+
+    documents = await get_documents()
+
+    assert [document["_id"] for document in documents] == ["event-1", "event-2"]
+
+
+@pytest.mark.asyncio
+async def test_get_docs_syncs_only_calendars_owned_by_the_user(graph):
+    register_accessible_user(graph, empty_calendars=False)
+    register_default_folders_empty(graph)
+    graph.get(events_url("user-1"), payload={"value": []})
+    graph.get(
+        calendars_url("user-1"),
+        payload={
+            "value": [
+                graph_calendar("default", "Calendar", isDefaultCalendar=True),
+                graph_calendar("team", "Team", owner="User@Example.com"),
+                graph_calendar("shared", "Shared", owner="other@example.com"),
+                graph_calendar("ownerless", "Ownerless", owner=None),
+            ]
+        },
+    )
+    graph.get(events_url("user-1", "team"), payload={"value": [graph_event()]})
+
+    documents = await get_documents()
+
+    assert [document["_id"] for document in documents] == ["event-1"]
+    assert documents[0]["meeting_type"] == "Single"
+    assert_conforms(documents[0])
+    for calendar_id in ("default", "shared", "ownerless"):
+        assert not requests_to(graph, events_url("user-1", calendar_id))
+
+
+@pytest.mark.asyncio
+async def test_get_docs_formats_birthdays_with_the_date_only(graph):
+    register_accessible_user(graph, empty_calendars=False)
+    register_default_folders_empty(graph)
+    graph.get(events_url("user-1"), payload={"value": []})
+    graph.get(
+        calendars_url("user-1"),
+        payload={"value": [graph_calendar("bday", "Birthdays")]},
+    )
+    graph.get(
+        events_url("user-1", "bday"),
+        payload={
+            "value": [
+                graph_event(
+                    id="bday-1",
+                    subject="Ann's birthday",
+                    type="seriesMaster",
+                    recurrence={
+                        "pattern": {
+                            "type": "absoluteYearly",
+                            "interval": 1,
+                            "dayOfMonth": 14,
+                            "month": 3,
+                        }
+                    },
+                    isAllDay=True,
+                    start={
+                        "dateTime": "2024-03-14T00:00:00.0000000",
+                        "timeZone": "UTC",
+                    },
+                ),
+                graph_event(id="bday-2", start=None),
+            ]
+        },
+    )
+
+    documents = await get_documents()
+
+    assert documents[0] == {
+        "_id": "bday-1",
+        "_timestamp": "2023-12-10T08:00:00Z",
+        "type": "Calendar",
+        "title": "Ann's birthday",
+        "meeting_type": "Recurring Occurs on day 14 of March",
+        "organizer": "boss@example.com",
+        "date": "2024-03-14",
+    }
+    assert documents[1]["date"] is None
+    for document in documents:
+        assert_conforms(document)
+
+
+@pytest.mark.asyncio
+async def test_get_docs_handles_null_event_fields(graph):
+    register_accessible_user(graph, empty_calendars=False)
+    register_default_folders_empty(graph)
+    graph.get(
+        events_url("user-1"),
+        payload={
+            "value": [
+                {
+                    "id": "event-1",
+                    "attendees": None,
+                    "location": None,
+                    "organizer": None,
+                    "start": None,
+                    "end": None,
+                    "body": None,
+                }
+            ]
+        },
+    )
+    graph.get(calendars_url("user-1"), payload={"value": []})
+
+    [document] = await get_documents()
+
+    assert document["title"] is None
+    assert document["meeting_type"] is None
+    assert document["organizer"] is None
+    assert document["attendees"] == []
+    assert document["start_date"] is None
+    assert document["location"] is None
+    assert document["content"] is None
+    assert_conforms(document)
+
+
+def test_calendar_attendees_ignore_malformed_entries():
+    event = {
+        "id": "1",
+        "attendees": [None, "a@example.com", *graph_event()["attendees"]],
+    }
+
+    document = OutlookCloudDocFormatter().calendar_doc_formatter(event)
+
+    assert document["attendees"] == ["a@example.com"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", [403, 404])
+async def test_get_docs_skips_calendars_that_are_refused(graph, status):
+    register_accessible_user(graph, empty_calendars=False)
+    for folder in ("sentitems", "junkemail", "archive"):
+        graph.get(messages_url("user-1", folder), payload={"value": []})
+    graph.get(messages_url("user-1", "inbox"), payload={"value": [graph_message()]})
+    graph.get(events_url("user-1"), status=status)
+    graph.get(
+        calendars_url("user-1"),
+        payload={"value": [graph_calendar("team", "Team")]},
+    )
+    graph.get(events_url("user-1", "team"), status=status)
+
+    async with create_outlook_cloud_source() as source:
+        source.set_logger(MagicMock())
+        documents = [document async for document, _ in source.get_docs()]
+
+    assert [document["type"] for document in documents] == ["Inbox Mails"]
+    assert source.client.calendar_stats["skipped"] == 2
+    source._logger.warning.assert_any_call(
+        f"Could not read calendar 'Team' for user user-1, skipping: ClientResponseError ({status})."
+    )
+    source._logger.info.assert_any_call("Calendars: 2 skipped.")
+
+
+@pytest.mark.asyncio
+async def test_get_docs_skips_child_calendars_when_listing_is_refused(graph):
+    register_accessible_user(graph, empty_calendars=False)
+    register_default_folders_empty(graph)
+    graph.get(events_url("user-1"), payload={"value": [graph_event()]})
+    graph.get(calendars_url("user-1"), status=403)
+
+    async with create_outlook_cloud_source() as source:
+        source.client.set_logger(MagicMock())
+        documents = [document async for document, _ in source.get_docs()]
+
+    assert len(documents) == 1
+    source.client._logger.warning.assert_any_call(
+        "Could not read calendars for user user-1, skipping: ClientResponseError (403)."
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_docs_raises_on_calendar_server_errors(graph):
+    register_accessible_user(graph, empty_calendars=False)
+    register_default_folders_empty(graph)
+    graph.get(events_url("user-1"), status=500)
+
+    async with create_outlook_cloud_source() as source:
+        with pytest.raises(ClientResponseError):
+            [document async for document, _ in source.get_docs()]
+
+
+@pytest.mark.parametrize(
+    ("event", "expected"),
+    [
+        ({"type": "singleInstance"}, "Single"),
+        # Single events never carry a pattern text, whatever else is sent.
+        (
+            {"type": "singleInstance", "recurrence": {"pattern": {"type": "daily"}}},
+            "Single",
+        ),
+        ({"type": "occurrence"}, "Occurrence"),
+        ({"type": "exception"}, "Exception"),
+        ({"type": "seriesMaster"}, "RecurringMaster"),
+        ({"type": "seriesMaster", "recurrence": None}, "RecurringMaster"),
+        ({"type": "seriesMaster", "recurrence": {"pattern": None}}, "RecurringMaster"),
+        (
+            {"type": "seriesMaster", "recurrence": {"pattern": {"type": "unknown"}}},
+            "RecurringMaster",
+        ),
+        # An incomplete pattern must not drop the event.
+        (
+            {"type": "seriesMaster", "recurrence": {"pattern": {"type": "weekly"}}},
+            "RecurringMaster",
+        ),
+        (
+            {
+                "type": "seriesMaster",
+                "recurrence": {"pattern": {"type": "daily", "interval": 2}},
+            },
+            "Recurring Occurs every 2 day(s)",
+        ),
+        ({"type": "futureType"}, "futureType"),
+        ({}, None),
+    ],
+)
+def test_calendar_meeting_type(event, expected):
+    document = OutlookCloudDocFormatter().calendar_doc_formatter({"id": "1"} | event)
+
+    assert document["meeting_type"] == expected
+
+
+def _relative_days(days):
+    return {"daysOfWeek": days, "index": "second"}
+
+
+# Each Graph pattern is paired with the exchangelib pattern legacy Outlook indexed, so
+# the wording cannot drift from the legacy text (design #4346 §4.4).
+RECURRENCE_PARITY = [
+    (
+        {"type": "daily", "interval": 3},
+        DailyPattern(interval=3),
+    ),
+    (
+        {
+            "type": "weekly",
+            "interval": 2,
+            "daysOfWeek": ["wednesday", "monday"],
+            "firstDayOfWeek": "sunday",
+        },
+        WeeklyPattern(interval=2, weekdays=[1, 3], first_day_of_week=7),
+    ),
+    (
+        {"type": "absoluteMonthly", "interval": 2, "dayOfMonth": 15},
+        AbsoluteMonthlyPattern(interval=2, day_of_month=15),
+    ),
+    (
+        {"type": "relativeMonthly", "interval": 1, **_relative_days(["friday"])},
+        RelativeMonthlyPattern(interval=1, weekday=5, week_number=2),
+    ),
+    (
+        {
+            "type": "relativeMonthly",
+            "interval": 3,
+            "daysOfWeek": ["monday", "tuesday", "wednesday", "thursday", "friday"],
+            "index": "last",
+        },
+        RelativeMonthlyPattern(interval=3, weekday=9, week_number=5),
+    ),
+    (
+        {
+            "type": "relativeMonthly",
+            "interval": 1,
+            "daysOfWeek": ["saturday", "sunday"],
+            "index": "first",
+        },
+        RelativeMonthlyPattern(interval=1, weekday=10, week_number=1),
+    ),
+    (
+        {
+            "type": "relativeMonthly",
+            "interval": 1,
+            "daysOfWeek": [
+                "sunday",
+                "monday",
+                "tuesday",
+                "wednesday",
+                "thursday",
+                "friday",
+                "saturday",
+            ],
+            "index": "fourth",
+        },
+        RelativeMonthlyPattern(interval=1, weekday=8, week_number=4),
+    ),
+    (
+        {"type": "absoluteYearly", "interval": 1, "dayOfMonth": 29, "month": 2},
+        AbsoluteYearlyPattern(day_of_month=29, month=2),
+    ),
+    (
+        {
+            "type": "relativeYearly",
+            "interval": 1,
+            "month": 11,
+            "daysOfWeek": ["thursday"],
+            "index": "fourth",
+        },
+        RelativeYearlyPattern(weekday=4, week_number=4, month=11),
+    ),
+]
+
+
+@pytest.mark.parametrize(("graph_pattern", "ews_pattern"), RECURRENCE_PARITY)
+def test_recurrence_text_matches_legacy_wording(graph_pattern, ews_pattern):
+    assert graph_recurrence_to_legacy(graph_pattern) == str(ews_pattern)
+
+
+@pytest.mark.parametrize(
+    "pattern",
+    [
+        {"type": "daily", "interval": None},
+        {"type": "daily", "interval": 0},
+        {"type": "daily", "interval": True},
+        {"type": "daily", "interval": "2"},
+        {"type": "weekly", "interval": 1, "daysOfWeek": [], "firstDayOfWeek": "sunday"},
+        {
+            "type": "weekly",
+            "interval": 1,
+            "daysOfWeek": ["funday"],
+            "firstDayOfWeek": "sunday",
+        },
+        {
+            "type": "weekly",
+            "interval": 1,
+            "daysOfWeek": ["monday"],
+            "firstDayOfWeek": "x",
+        },
+        {"type": "absoluteMonthly", "interval": 1, "dayOfMonth": 0},
+        {
+            "type": "relativeMonthly",
+            "interval": 1,
+            "daysOfWeek": ["friday"],
+            "index": "x",
+        },
+        {"type": "absoluteYearly", "interval": 1, "dayOfMonth": 1, "month": 0},
+        {"type": "absoluteYearly", "interval": 1, "dayOfMonth": 1, "month": 13},
+        {
+            "type": "relativeYearly",
+            "interval": 1,
+            "daysOfWeek": "friday",
+            "index": "first",
+            "month": 1,
+        },
+    ],
+)
+def test_invalid_recurrence_falls_back_to_event_type(pattern):
+    document = OutlookCloudDocFormatter().calendar_doc_formatter(
+        {"id": "1", "type": "seriesMaster", "recurrence": {"pattern": pattern}}
+    )
+
+    assert document["meeting_type"] == "RecurringMaster"
