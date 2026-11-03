@@ -40,13 +40,13 @@ def toml(*replacements, extra_dep=None):
     return text.replace("    \"loose>=1\",\n", f"    \"loose>=1\",\n{extra_dep}" if extra_dep else "    \"loose>=1\",\n")
 
 
-def classify(title, files, author="dev", body="", member=True, head_toml=BASE_TOML, notice=BASE_NOTICE):
+def classify(title, files, author="dev", body="", member=True, head_toml=BASE_TOML, notice=BASE_NOTICE, base="main"):
     def read(path, ref):
         if path.endswith("pyproject.toml"):
             return head_toml if ref == "head" else BASE_TOML
         return notice
 
-    return v.classify(title=title, body=body, author=author, is_member=lambda u: member, files=files, read=read)
+    return v.classify(title=title, body=body, author=author, is_member=lambda u: member, files=files, read=read, base=base)
 
 
 class TestWolfi(unittest.TestCase):
@@ -76,19 +76,35 @@ class TestWolfi(unittest.TestCase):
 class TestVersionBump(unittest.TestCase):
     BOT = "elastic-vault-github-plugin-prod[bot]"
 
-    def files(self, new="9.7.0", notice_new="9.7.0"):
+    def files(self, new="9.7.0", notice_new=None, old="9.6.0"):
         return [
-            modified("app/connectors_service/connectors/VERSION", "-9.6.0", f"+{new}"),
-            modified(NOTICE, "-9.6.0", f"+{notice_new}"),
+            modified("app/connectors_service/connectors/VERSION", f"-{old}", f"+{new}"),
+            modified(NOTICE, f"-{old}", f"+{notice_new or new}"),
         ]
 
     def test_accepts(self):
         self.assertEqual(classify("Bump version to 9.7.0", self.files(), self.BOT)[0], "release-version-bump")
 
-    def test_rejects_title_author_and_foreign_notice_version(self):
+    def test_notice_may_also_swap_third_party_versions(self):
+        # as in #4889: regenerated NOTICE.txt also moved google-auth 2.62.0 -> 2.62.1
+        files = self.files("9.5.7", old="9.5.6") + [modified("libs/connectors_sdk/NOTICE.txt", "-2.62.0", "+2.62.1")]
+        self.assertEqual(classify("Bump version to 9.5.7", files, self.BOT, base="9.5")[0], "release-version-bump")
+        text = [modified("libs/connectors_sdk/NOTICE.txt", "-Apache", "+Elastic")]
+        self.assertIsNone(classify("Bump version to 9.5.7", self.files("9.5.7", old="9.5.6") + text, self.BOT, base="9.5")[0])
+
+    def test_maintenance_branch_rules(self):
+        patch = [modified("connectors/VERSION", "-8.19.23", "+8.19.24")]
+        self.assertEqual(classify("Bump version to 8.19.24", patch, self.BOT, base="8.19")[0], "release-version-bump")
+        self.assertEqual(classify("Bump version to 9.5.7", self.files("9.5.7", old="9.5.6"), self.BOT, base="9.5")[0], "release-version-bump")
+        # wrong branch for the version, and downgrades or repeats, never qualify
+        self.assertIsNone(classify("Bump version to 9.5.7", self.files("9.5.7", old="9.5.6"), self.BOT, base="9.4")[0])
+        self.assertIsNone(classify("Bump version to 9.5.7", self.files("9.5.7", old="9.5.6"), self.BOT, base="8.19")[0])
+        self.assertIsNone(classify("Bump version to 9.5.0", self.files("9.5.0", old="9.5.6"), self.BOT, base="9.5")[0])
+        self.assertIsNone(classify("Bump version to 9.5.7", self.files("9.5.7", old="9.5.6"), "dev", base="9.5")[0])
+
+    def test_rejects_title_and_author(self):
         self.assertIsNone(classify("Bump version to 9.8.0", self.files(), self.BOT)[0])
         self.assertIsNone(classify("Bump version to 9.7.0", self.files(), "dev")[0])
-        self.assertIsNone(classify("Bump version to 9.7.0", self.files(notice_new="6.6.6"), self.BOT)[0])
 
 
 class TestDependencyBump(unittest.TestCase):
@@ -212,16 +228,16 @@ class TestMain(unittest.TestCase):
 
     GREEN = {"statuses": [{"context": c, "state": "success"} for c in v.REQUIRED_STATUSES]}
 
-    def run_main(self, category="renovate-wolfi", statuses=GREEN, heads=("h1", "h1"), reviews=(), base="main"):
+    def run_main(self, category="renovate-wolfi", statuses=GREEN, heads=("h1", "h1"), reviews=(), base="main", author="someone"):
         calls = []
-        pulls = iter({"number": 7, "base": {"ref": base}, "head": {"sha": h}} for h in heads)
+        pulls = iter({"number": 7, "base": {"ref": base}, "head": {"sha": h}, "user": {"login": author}} for h in heads)
 
         def api(method, path, token, payload=None, raw=False):
             calls.append((method, path))
             if path == "pulls/7":
                 return next(pulls)
             if path.startswith("commits/") and path.endswith("/pulls"):
-                return [{"number": 7, "state": "open", "base": {"ref": "main"}, "head": {"sha": "h1"}}]
+                return [{"number": 7, "state": "open", "base": {"ref": base}, "head": {"sha": "h1"}}]
             if path.startswith("pulls/7/reviews?"):
                 return list(reviews)
             if path.endswith("/status"):
@@ -252,9 +268,38 @@ class TestMain(unittest.TestCase):
     def test_stops_qualifying_withdraws_bot_approval(self):
         self.assertEqual(self.run_main(category=None, reviews=[self.bot_review()]), [("PUT", "pulls/7/reviews/5/dismissals")])
 
+    def test_non_release_branches_are_ignored(self):
+        self.assertEqual(self.run_main(category="release-version-bump", base="feature-x"), [])
+
     def test_backport_prs_are_never_touched(self):
         # approve-manual-backport.yml owns approvals on maintenance branches
         self.assertEqual(self.run_main(category=None, reviews=[self.bot_review()], base="9.5"), [])
+
+    def test_maintenance_branch_version_bump_is_approved(self):
+        self.assertEqual(self.run_main(category="release-version-bump", base="9.5"), [("POST", "pulls/7/reviews")])
+
+    def test_version_bot_pr_on_maintenance_branch_is_withdrawn(self):
+        self.assertEqual(
+            self.run_main(category=None, reviews=[self.bot_review()], base="9.5", author=v.CATEGORIES["release-version-bump"]["authors"][0]),
+            [("PUT", "pulls/7/reviews/5/dismissals")],
+        )
+
+    def test_unexpected_data_fails_closed(self):
+        env = {"GITHUB_TOKEN": "t", "TEAM_TOKEN": "p", "PR_NUMBER": "7", "GITHUB_REPOSITORY": "o/r"}
+        with mock.patch.dict(os.environ, env, clear=True), mock.patch.object(v, "api", lambda *a, **k: {}):
+            self.assertEqual(v.main(), 1)
+
+    def test_status_event_checks_every_pr_with_that_head(self):
+        seen = []
+        env = {"GITHUB_TOKEN": "t", "TEAM_TOKEN": "p", "STATUS_SHA": "h1", "GITHUB_REPOSITORY": "o/r"}
+        pulls = [{"number": n, "state": "open", "head": {"sha": "h1"}} for n in (7, 8)] + [
+            {"number": 9, "state": "closed", "head": {"sha": "h1"}}
+        ]
+        with mock.patch.dict(os.environ, env, clear=True), mock.patch.object(
+            v, "api", lambda m, path, *a, **k: pulls
+        ), mock.patch.object(v, "evaluate", lambda n, *a: seen.append(n)):
+            self.assertEqual(v.main(), 0)
+        self.assertEqual(seen, ["7", "8"])
 
     def test_finds_every_review_page(self):
         pages = [[{**self.bot_review(), "user": {"login": "human"}}] * 100, [self.bot_review()]]
@@ -295,10 +340,16 @@ class TestQualifyingCategory(unittest.TestCase):
     def test_matches(self):
         self.assertEqual(self.run_case(self.pull()), "renovate-wolfi")
 
+    def test_maintenance_branch_only_takes_version_bumps(self):
+        self.assertIsNone(self.run_case(self.pull(base={"ref": "9.5", "sha": "b"})))
+        bump = TestVersionBump()
+        pull = self.pull(title="Bump version to 9.5.7", user={"login": bump.BOT}, base={"ref": "9.5", "sha": "b"})
+        self.assertEqual(self.run_case(pull, files=bump.files("9.5.7", old="9.5.6")), "release-version-bump")
+
     def test_rejects_draft_fork_other_base_and_huge_prs(self):
         for override in (
             {"draft": True},
-            {"base": {"ref": "9.5", "sha": "b"}},
+            {"base": {"ref": "feature-x", "sha": "b"}},
             {"head": {"sha": "h", "repo": {"full_name": "fork/r"}}},
             {"head": {"sha": "h", "repo": None}},
         ):

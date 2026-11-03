@@ -132,9 +132,9 @@ For manual backports to any maintenance branch (`X.Y`, e.g. `9.5`, `9.4`, `8.19`
 
 `approve-manual-backport.yml` is triggered from the default branch, and the validator it uses is always read from it, so a change on `main` applies to every maintenance branch. The files are also kept on each branch for consistency.
 
-### Mechanical PR auto-approval (main only)
+### Mechanical PR auto-approval
 
-`auto-approve-mechanical.yml` lets `entsearchmachine` approve three kinds of mechanical PRs to `main`. Everything else needs a human. The checks live in `.github/workflows/scripts/validate_mechanical_pr.py` and always run from the default branch, never from the PR.
+`auto-approve-mechanical.yml` lets `entsearchmachine` approve three kinds of mechanical PRs. All three can target `main`; only `release-version-bump` is also accepted on maintenance branches (`X.Y`, e.g. `9.5`), because the version-bump pipeline opens those PRs without the `[X.Y]` title and `Backported from` body that `approve-manual-backport.yml` requires. Version bumps must raise the version (on `main` too) and, on a maintenance branch, the new version must belong to that branch (`9.5.7` on `9.5`). The single `connectors/VERSION` of 8.x is accepted, and `NOTICE.txt` may carry any version swap, since CI regenerates it. Every CLA or Buildkite status change re-runs the check from `main`, so maintenance branches need no copy of the workflow. On a maintenance branch, a new commit that stops qualifying withdraws the approval only for version-bump bot PRs; human backports keep the `approve-manual-backport.yml` flow. Everything else needs a human. The checks live in `.github/workflows/scripts/validate_mechanical_pr.py` and always run from the default branch, never from the PR.
 
 | Category | Opened by | Only this may change |
 | --- | --- | --- |

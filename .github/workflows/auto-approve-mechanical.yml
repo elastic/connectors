@@ -1,10 +1,15 @@
 name: Auto-approve mechanical PRs
 
-# Approves Renovate Wolfi digest bumps, CVE pin bumps and release version bumps
-# to main. Rules and checks: .github/workflows/scripts/validate_mechanical_pr.py,
-# always read from the default branch, never from the PR. Details: docs/CONTRIBUTING.md.
+# Approves Renovate Wolfi digest bumps and CVE pin bumps to main, and release
+# version bumps to main or a maintenance branch (X.Y). Rules and checks:
+# .github/workflows/scripts/validate_mechanical_pr.py, always read from the
+# default branch, never from the PR. Details: docs/CONTRIBUTING.md.
 #
-# Re-runs when CLA or Buildkite turns green, because approval needs green CI.
+# PRs to main are checked when opened or pushed (pull_request_target reads this
+# file from the PR's base branch, and X.Y branches hold no copy of it). Every PR,
+# including those to X.Y, is also re-checked on any CLA or Buildkite status
+# change from the default branch: green CI lets it approve, and a new commit that
+# no longer qualifies withdraws the approval.
 # To turn this off, open a PR that removes this workflow.
 # Repository variable BACKPORT_APPROVER_TEAMS (comma separated team slugs, default
 # search-extract-and-transform) lists who may author the team categories.
@@ -24,6 +29,10 @@ permissions:
   pull-requests: read
   statuses: read
 
+concurrency:
+  group: mechanical-${{ github.event.sha || github.event.pull_request.head.sha }}
+  cancel-in-progress: true
+
 jobs:
   evaluate:
     name: Mechanical auto-approve
@@ -31,7 +40,6 @@ jobs:
       (github.event_name == 'pull_request_target'
         && github.event.pull_request.head.repo.full_name == github.repository)
       || (github.event_name == 'status'
-        && github.event.state == 'success'
         && (github.event.context == 'CLA' || github.event.context == 'buildkite/connectors'))
     runs-on: ubuntu-latest
     steps:
