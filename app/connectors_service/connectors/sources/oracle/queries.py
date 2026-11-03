@@ -7,6 +7,17 @@
 from connectors.sources.shared.database.generic_database import Queries
 
 
+def _dictionary_name(identifier):
+    """Return the name under which Oracle's data dictionary stores ``identifier``.
+
+    Oracle stores a nonquoted identifier in uppercase and a quoted one as written,
+    so ``employees`` is looked up as ``EMPLOYEES`` and ``"MyTable"`` as ``MyTable``.
+    """
+    if len(identifier) >= 2 and identifier[0] == '"' and identifier[-1] == '"':
+        return identifier[1:-1]
+    return identifier.upper()
+
+
 class OracleQueries(Queries):
     """Class contains methods which return query"""
 
@@ -22,7 +33,9 @@ class OracleQueries(Queries):
 
     def table_primary_key(self, **kwargs):
         """Query to get the primary key"""
-        return f"SELECT cols.column_name FROM all_constraints cons, all_cons_columns cols WHERE cols.table_name = '{kwargs['table']}' AND cons.constraint_type = 'P' AND cons.constraint_name = cols.constraint_name AND cons.owner = UPPER('{kwargs['user']}') AND cons.owner = cols.owner ORDER BY cols.table_name, cols.position"
+        # The data queries use the configured name as written, so look the table
+        # up under the name Oracle resolves that identifier to.
+        return f"SELECT cols.column_name FROM all_constraints cons, all_cons_columns cols WHERE cols.table_name = '{_dictionary_name(kwargs['table'])}' AND cons.constraint_type = 'P' AND cons.constraint_name = cols.constraint_name AND cons.owner = UPPER('{kwargs['user']}') AND cons.owner = cols.owner ORDER BY cols.table_name, cols.position"
 
     def table_data(self, **kwargs):
         """Query to get the table data"""
