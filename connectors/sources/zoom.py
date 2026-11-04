@@ -379,11 +379,11 @@ class ZoomDataSource(BaseDataSource):
     async def close(self):
         await self.client.close()
 
-    def _format_doc(self, doc, doc_time):
+    def _format_doc(self, doc, doc_time, doc_id=None):
         doc = self.serialize(doc=doc)
         doc.update(
             {
-                "_id": doc["id"],
+                "_id": doc_id or doc["id"],
                 "_timestamp": doc_time,
             }
         )
@@ -492,9 +492,14 @@ class ZoomDataSource(BaseDataSource):
                     )
 
             async for recording in self.client.get_recordings(user_id=user.get("id")):
+                # A recording's id is the meeting number, which the meeting document
+                # and every recording of a recurring meeting share. Its uuid is
+                # unique to the meeting instance that was recorded.
                 yield (
                     self._format_doc(
-                        doc=recording, doc_time=recording.get("start_time")
+                        doc=recording,
+                        doc_time=recording.get("start_time"),
+                        doc_id=recording.get("uuid"),
                     ),
                     None,
                 )
