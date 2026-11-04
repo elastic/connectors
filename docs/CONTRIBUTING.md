@@ -132,9 +132,9 @@ For manual backports to any maintenance branch (`X.Y`, e.g. `9.5`, `9.4`, `8.19`
 
 `approve-manual-backport.yml` is triggered from the default branch, and the validator it uses is always read from it, so a change on `main` applies to every maintenance branch. The files are also kept on each branch for consistency.
 
-### Mechanical PR auto-approval (main only)
+### Mechanical PR auto-approval
 
-`auto-approve-mechanical.yml` lets `entsearchmachine` approve three kinds of mechanical PRs to `main`. Everything else needs a human. The checks live in `.github/workflows/scripts/validate_mechanical_pr.py` and always run from the default branch, never from the PR.
+`auto-approve-mechanical.yml` lets `entsearchmachine` approve three kinds of mechanical PRs. Only `release-version-bump` is also accepted on maintenance branches (`X.Y`), where the version must be higher and belong to the branch (`9.5.7` on `9.5`). `NOTICE.txt` may carry any version swap. Everything else needs a human. The checks live in `.github/workflows/scripts/validate_mechanical_pr.py` and always run from the default branch, never from the PR.
 
 | Category | Opened by | Only this may change |
 | --- | --- | --- |
