@@ -359,7 +359,9 @@ class BasicRuleValidRegexValidator(BasicRuleValidator):
         if basic_rule.rule == Rule.REGEX:
             try:
                 re.compile(basic_rule.value)
-            except (re.error, TypeError) as e:
+            # Besides re.error, re.compile raises OverflowError for oversized
+            # repetition counts and RecursionError for deeply nested groups.
+            except (re.error, TypeError, OverflowError, RecursionError) as e:
                 return SyncRuleValidationResult(
                     rule_id=basic_rule.id_,
                     is_valid=False,

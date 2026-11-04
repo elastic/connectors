@@ -908,6 +908,19 @@ def test_basic_rule_validate_no_match_all_regex(basic_rule, should_be_valid):
         (basic_rule_json(merge_with={"rule": "regex", "value": "*.pdf"}), False),
         (basic_rule_json(merge_with={"rule": "regex", "value": "report[0-9"}), False),
         (basic_rule_json(merge_with={"rule": "regex", "value": "(draft"}), False),
+        # re.compile raises OverflowError / RecursionError instead of re.error
+        (
+            basic_rule_json(
+                merge_with={"rule": "regex", "value": "a{" + "9" * 40 + "}"}
+            ),
+            False,
+        ),
+        (
+            basic_rule_json(
+                merge_with={"rule": "regex", "value": "(" * 5000 + ")" * 5000}
+            ),
+            False,
+        ),
     ],
 )
 def test_basic_rule_validate_valid_regex(basic_rule, should_be_valid):
