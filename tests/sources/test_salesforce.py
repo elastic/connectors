@@ -1664,6 +1664,22 @@ async def test_get_all_with_content_docs_and_extraction_service(mock_responses):
             "SELECT FIELDS(ALL) FROM Account LIMIT 200 OFFSET 0",
             "SELECT FIELDS(ALL) FROM Account LIMIT 200 OFFSET 0",
         ),
+        (
+            "SELECT Id, Fields_Count__c FROM Account",
+            "SELECT Id, Fields_Count__c FROM Account",
+        ),
+        (
+            "SELECT FIELDS(ALL) FROM Account WHERE Credit_Limit__c > 5",
+            "SELECT FIELDS(ALL) FROM Account WHERE Credit_Limit__c > 5 LIMIT 200 OFFSET 0",
+        ),
+        (
+            "select fields(all) from account limit 200",
+            "select fields(all) from account limit 200 OFFSET 0",
+        ),
+        (
+            "SELECT FIELDS(ALL) FROM Account WHERE Name = 'offset 0' LIMIT 200",
+            "SELECT FIELDS(ALL) FROM Account WHERE Name = 'offset 0' LIMIT 200 OFFSET 0",
+        ),
     ],
 )
 async def test_modify_query(soql_query, modified_query):
@@ -1707,6 +1723,87 @@ async def test_add_id(soql_query, modified_query):
     async with create_salesforce_source() as source:
         query = source.salesforce_client._add_id(soql_query)
         assert query == modified_query
+
+
+@pytest.mark.asyncio
+async def test_soql_rule_naming_a_fields_column_follows_next_records_url():
+    async with create_salesforce_source() as source:
+        sent_queries = []
+
+        async def get_json(url, params=None):
+            if params is None:
+                assert url == f"{TEST_BASE_URL}/next"
+                return {"done": True, "records": [{"Id": "2"}]}
+            sent_queries.append(params["q"])
+            return {"done": False, "nextRecordsUrl": "/next", "records": [{"Id": "1"}]}
+
+        source.salesforce_client._get_json = get_json
+        rule = {
+            "query": "SELECT Id, Fields_Count__c FROM Account",
+            "language": "SOQL",
+        }
+
+        records = [
+            record
+            async for record in source.salesforce_client.get_sync_rules_results(rule)
+        ]
+
+        assert [record["Id"] for record in records] == ["1", "2"]
+        assert sent_queries == [
+            "SELECT Id, Fields_Count__c, LastModifiedDate FROM Account"
+        ]
+
+
+@pytest.mark.asyncio
+async def test_soql_rule_with_lowercase_offset_advances_the_offset():
+    async with create_salesforce_source() as source:
+
+        async def get_json(url, params=None):
+            offset = int(re.search(r"(?i)offset (\d+)", params["q"]).group(1))
+            if offset > 200:
+                return {"done": True, "records": []}
+            return {"done": True, "records": [{"Id": str(offset)}]}
+
+        source.salesforce_client._get_json = get_json
+        rule = {
+            "query": "select fields(all) from account limit 200 offset 0",
+            "language": "SOQL",
+        }
+
+        records = [
+            record
+            async for record in source.salesforce_client.get_sync_rules_results(rule)
+        ]
+
+        assert [record["Id"] for record in records] == ["0", "200"]
+
+
+@pytest.mark.asyncio
+async def test_soql_rule_keeps_offset_text_inside_quoted_literal():
+    async with create_salesforce_source() as source:
+        sent_queries = []
+
+        async def get_json(url, params=None):
+            sent_queries.append(params["q"])
+            offset = int(re.findall(r"OFFSET (\d+)", params["q"])[-1])
+            if offset > 0:
+                return {"done": True, "records": []}
+            return {"done": True, "records": [{"Id": "1"}]}
+
+        source.salesforce_client._get_json = get_json
+        rule = {
+            "query": "SELECT FIELDS(ALL) FROM Account WHERE Name = 'offset 0' LIMIT 200",
+            "language": "SOQL",
+        }
+
+        _ = [
+            record
+            async for record in source.salesforce_client.get_sync_rules_results(rule)
+        ]
+
+        assert sent_queries[-1] == (
+            "SELECT FIELDS(ALL) FROM Account WHERE Name = 'offset 0' LIMIT 200 OFFSET 200"
+        )
 
 
 @pytest.mark.parametrize(
