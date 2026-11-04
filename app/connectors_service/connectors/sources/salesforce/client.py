@@ -37,6 +37,20 @@ from connectors.utils import (
     retryable,
 )
 
+# Keywords that can follow the object name in a SOQL FROM clause, so they are
+# not an alias
+SOQL_CLAUSE_KEYWORDS = {
+    "WHERE",
+    "WITH",
+    "GROUP",
+    "ORDER",
+    "LIMIT",
+    "OFFSET",
+    "FOR",
+    "UPDATE",
+    "USING",
+}
+
 
 class RateLimitedException(Exception):
     """Notifies that Salesforce has begun rate limiting the current account"""
@@ -135,8 +149,9 @@ class SalesforceClient:
         """Split the field list of the outer SELECT clause of a SOQL query.
 
         Commas and FROM keywords inside parentheses (subqueries, functions)
-        are skipped. Returns the selected fields and the position of the
-        outer FROM keyword, or (None, None) if the query has no SELECT ... FROM.
+        or single-quoted string literals are skipped. Returns the selected
+        fields and the position of the outer FROM keyword, or (None, None) if
+        the query has no SELECT ... FROM.
         """
         select = re.match(r"(?i)\s*SELECT\s", query)
         if not select:
@@ -145,8 +160,12 @@ class SalesforceClient:
         fields = []
         depth = 0
         field_start = select.end()
-        for token in re.finditer(r"(?i)[(),]|\bFROM\b", query[select.end() :]):
+        for token in re.finditer(
+            r"(?i)'(?:\\.|[^'\\])*'|[(),]|\bFROM\b", query[select.end() :]
+        ):
             position = select.end() + token.start()
+            if token.group().startswith("'"):
+                continue
             if token.group() == "(":
                 depth += 1
             elif token.group() == ")":
@@ -159,6 +178,18 @@ class SalesforceClient:
 
         return None, None
 
+    def _outer_object_qualifiers(self, query, from_position):
+        """Return the lowercased object name and alias of the outer FROM clause"""
+        match = re.match(r"(?i)FROM\s+(\w+)(?:\s+(\w+))?", query[from_position:])
+        if not match:
+            return set()
+
+        qualifiers = {match.group(1).lower()}
+        alias = match.group(2)
+        if alias and alias.upper() not in SOQL_CLAUSE_KEYWORDS:
+            qualifiers.add(alias.lower())
+        return qualifiers
+
     def _add_selected_field(self, query, field):
         """Add a field to the outer SELECT clause unless it is already selected"""
         lowered_query = query.lower()
@@ -166,8 +197,18 @@ class SalesforceClient:
             return query
 
         fields, from_position = self._split_select_clause(query)
-        if fields is None or field.lower() in (name.lower() for name in fields):
+        if fields is None:
             return query
+
+        # `a.Id` in `SELECT a.Id FROM Account a` is the outer object's own
+        # field, unlike a relationship field such as `Owner.Id`.
+        qualifiers = self._outer_object_qualifiers(query, from_position)
+        for name in fields:
+            qualifier, _, unqualified = name.lower().rpartition(".")
+            if unqualified == field.lower() and (
+                not qualifier or qualifier in qualifiers
+            ):
+                return query
 
         return f"{query[:from_position].rstrip()}, {field} {query[from_position:]}"
 
