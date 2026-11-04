@@ -20,13 +20,18 @@ from exchangelib.errors import (
     TransportError,
 )
 from exchangelib.items import CalendarItem, Contact, Message, Task
+from exchangelib.protocol import NoVerifyHTTPAdapter
+from exchangelib.transport import GSSAPI as EWS_GSSAPI
+from ldap3 import GSSAPI, SASL
 
 from connectors.access_control import ACCESS_CONTROL
 from connectors.config import _default_config
+from connectors.fips import FIPSConfig, FIPSModeError
 from connectors.sources.exchange_server import (
     ExchangeServerClient,
     ExchangeServerDataSource,
 )
+from connectors.sources.exchange_server.auth import AUTH_METHOD_KERBEROS
 from connectors.sources.exchange_server.client import (
     ExchangeUsers,
     UsersFetchFailed,
@@ -43,6 +48,15 @@ from tests.sources.support import create_source
 
 TIMESTAMP = "2023-12-12T01:01:01Z"
 MAILBOX = "dummy@es.local"
+
+
+@pytest.fixture(autouse=True)
+def reset_fips_config():
+    FIPSConfig.reset()
+    yield
+    FIPSConfig.reset()
+
+
 LDAP_USER = {
     "attributes": {"mail": [MAILBOX]},
     "dn": "CN=Dummy,CN=Users,DC=es,DC=local",
@@ -64,6 +78,7 @@ async def create_exchange_server_source(
     username="fee",
     password="fuu",
     domain="es.local",
+    auth_method="ntlm",
     ssl_enabled=False,
     ssl_ca="",
     use_text_extraction_service=False,
@@ -76,6 +91,7 @@ async def create_exchange_server_source(
         username=username,
         password=password,
         domain=domain,
+        auth_method=auth_method,
         ssl_enabled=ssl_enabled,
         ssl_ca=ssl_ca,
         use_text_extraction_service=use_text_extraction_service,
@@ -195,9 +211,9 @@ def test_default_configuration_is_server_only():
     assert configuration["ssl_ca"]["depends_on"] == [
         {"field": "ssl_enabled", "value": True}
     ]
-    assert [key for key, field in configuration.items() if "depends_on" in field] == [
-        "ssl_ca"
-    ]
+    assert sorted(
+        key for key, field in configuration.items() if "depends_on" in field
+    ) == sorted(["username", "password", "ssl_ca"])
     orders = [field["order"] for field in configuration.values()]
     assert len(orders) == len(set(orders))
 
@@ -210,6 +226,16 @@ def test_default_configuration_keys_match_legacy_server_fields():
     assert set(ExchangeServerDataSource.get_default_configuration()) <= set(
         legacy_configuration
     )
+
+
+@pytest.mark.parametrize("source_class", [ExchangeServerDataSource, OutlookDataSource])
+def test_auth_method_is_hidden_from_native_ui(source_class):
+    # Kerberos needs a ticket on the connector host, which Elastic-managed
+    # (native) connectors cannot provide, so the field is "advanced" only.
+    auth_method = source_class.get_default_configuration()["auth_method"]
+
+    assert auth_method["ui_restrictions"] == ["advanced"]
+    assert auth_method["value"] == "ntlm"
 
 
 @pytest.mark.asyncio
@@ -270,6 +296,164 @@ async def test_validate_config_passes_when_ssl_enabled_with_valid_certificate():
         ssl_enabled=True, ssl_ca=VALID_SSL_CERTIFICATE
     ) as source:
         await source.validate_config()
+
+
+@pytest.mark.asyncio
+async def test_validate_config_rejects_ntlm_when_fips_enabled():
+    FIPSConfig.set_fips_mode(True)
+    async with create_exchange_server_source() as source:
+        with pytest.raises(ConfigurableFieldValueError) as exc_info:
+            await source.validate_config()
+        assert "kerberos" in str(exc_info.value).lower()
+
+
+@pytest.mark.asyncio
+@patch(
+    "connectors.sources.exchange_server.datasource.ensure_kerberos_dependencies_available"
+)
+async def test_validate_config_kerberos_does_not_require_username_password(
+    _mock_kerberos_deps,
+):
+    async with create_exchange_server_source(
+        auth_method=AUTH_METHOD_KERBEROS,
+        username="",
+        password="",
+    ) as source:
+        await source.validate_config()
+
+
+@pytest.mark.asyncio
+@patch(
+    "connectors.sources.exchange_server.auth.kerberos_dependencies_missing",
+    return_value=["requests-gssapi", "gssapi"],
+)
+async def test_validate_config_kerberos_requires_optional_dependencies(_mock_missing):
+    async with create_exchange_server_source(
+        auth_method=AUTH_METHOD_KERBEROS
+    ) as source:
+        with pytest.raises(ConfigurableFieldValueError) as exc_info:
+            await source.validate_config()
+        assert "elasticsearch-connectors[kerberos]" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_validate_config_rejects_ntlm_for_outlook_server_when_fips_enabled():
+    FIPSConfig.set_fips_mode(True)
+    async with create_source(
+        OutlookDataSource,
+        data_source="outlook_server",
+        exchange_server="127.0.0.1",
+        active_directory_server="127.0.0.1",
+        username="fee",
+        password="fuu",
+        domain="es.local",
+        ssl_enabled=False,
+        ssl_ca="",
+    ) as source:
+        with pytest.raises(ConfigurableFieldValueError) as exc_info:
+            await source.validate_config()
+        assert "kerberos" in str(exc_info.value).lower()
+
+
+@pytest.mark.asyncio
+async def test_validate_config_outlook_cloud_is_not_affected_by_fips():
+    FIPSConfig.set_fips_mode(True)
+    async with create_source(
+        OutlookDataSource,
+        data_source="outlook_cloud",
+        tenant_id="foo",
+        client_id="bar",
+        client_secret="faa",
+    ) as source:
+        await source.validate_config()
+
+
+def test_ldap_connection_rejects_ntlm_when_fips_enabled():
+    FIPSConfig.set_fips_mode(True)
+    users = ExchangeUsers(
+        ad_server="127.0.0.1",
+        domain="es.local",
+        exchange_server="127.0.0.1",
+        user="fee",
+        password="fuu",
+        ssl_enabled=False,
+        ssl_ca="",
+    )
+    with pytest.raises(FIPSModeError):
+        users._create_ldap_connection()
+
+
+def test_exchange_users_defaults_auth_method_to_ntlm():
+    users = ExchangeUsers(
+        ad_server="127.0.0.1",
+        domain="es.local",
+        exchange_server="127.0.0.1",
+        user="fee",
+        password="fuu",
+        ssl_enabled=False,
+        ssl_ca="",
+    )
+    assert users.auth_method == "ntlm"
+
+
+@patch(
+    "connectors.sources.exchange_server.client.ensure_kerberos_dependencies_available"
+)
+def test_kerberos_ldap_connection_uses_gssapi(_mock_kerberos_deps):
+    users = ExchangeUsers(
+        ad_server="127.0.0.1",
+        domain="es.local",
+        exchange_server="127.0.0.1",
+        user="fee",
+        password="fuu",
+        ssl_enabled=False,
+        ssl_ca="",
+        auth_method=AUTH_METHOD_KERBEROS,
+    )
+    with patch(
+        "connectors.sources.exchange_server.client.Connection"
+    ) as mock_connection:
+        users._create_ldap_connection()
+        mock_connection.assert_called_once()
+        assert mock_connection.call_args.kwargs["authentication"] == SASL
+        assert mock_connection.call_args.kwargs["sasl_mechanism"] == GSSAPI
+
+
+@pytest.mark.asyncio
+@patch(
+    "connectors.sources.exchange_server.client.ensure_kerberos_dependencies_available"
+)
+@patch("connectors.sources.exchange_server.client.Account", return_value="account")
+@patch("connectors.sources.exchange_server.client.Configuration")
+async def test_kerberos_ews_configuration_uses_gssapi(
+    mock_configuration, _mock_account, _mock_kerberos_deps
+):
+    users = ExchangeUsers(
+        ad_server="127.0.0.1",
+        domain="es.local",
+        exchange_server="127.0.0.1",
+        user=None,
+        password=None,
+        ssl_enabled=False,
+        ssl_ca="",
+        auth_method=AUTH_METHOD_KERBEROS,
+    )
+
+    async def get_users():
+        yield LDAP_USER
+
+    users.get_users = get_users
+
+    with patch(
+        "connectors.sources.exchange_server.client.BaseProtocol.HTTP_ADAPTER_CLS",
+        NoVerifyHTTPAdapter,
+    ):
+        async for _ in users.get_user_accounts():
+            break
+
+    mock_configuration.assert_called_once()
+    assert mock_configuration.call_args.kwargs["auth_type"] == EWS_GSSAPI
+    assert mock_configuration.call_args.kwargs["credentials"] is None
 
 
 @pytest.mark.asyncio

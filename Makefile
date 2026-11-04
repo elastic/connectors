@@ -23,6 +23,10 @@ install-package:
 	cd $(connectors_sdk_dir); make install-package
 	cd $(app_dir); make install-package
 
+install-package-kerberos:
+	cd $(connectors_sdk_dir); make install-package
+	cd $(app_dir); make install-package-kerberos
+
 test: install
 	cd $(connectors_sdk_dir); make test
 	cd $(app_dir); make test

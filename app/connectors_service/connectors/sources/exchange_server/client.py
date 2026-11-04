@@ -77,8 +77,16 @@ from exchangelib.folders import (
 )
 from exchangelib.items import Item, Message
 from exchangelib.protocol import BaseProtocol, NoVerifyHTTPAdapter
-from ldap3 import SAFE_SYNC, Connection, Server
+from exchangelib.transport import GSSAPI as EWS_GSSAPI
+from ldap3 import GSSAPI, SAFE_SYNC, SASL, Connection, Server
 
+from connectors.sources.exchange_server.auth import (
+    AUTH_METHOD_KERBEROS,
+    AUTH_METHOD_NTLM,
+    ensure_fips_compatible_auth,
+    ensure_kerberos_dependencies_available,
+    get_auth_method,
+)
 from connectors.sources.exchange_server.constants import (
     CALENDAR_FIELDS,
     CONTACT_FOLDER_FIELDS,
@@ -294,7 +302,15 @@ class ExchangeUsers:
     """Fetch users from Exchange Active Directory"""
 
     def __init__(
-        self, ad_server, domain, exchange_server, user, password, ssl_enabled, ssl_ca
+        self,
+        ad_server,
+        domain,
+        exchange_server,
+        user,
+        password,
+        ssl_enabled,
+        ssl_ca,
+        auth_method=AUTH_METHOD_NTLM,
     ):
         self.ad_server = Server(host=ad_server)
         self.domain = domain
@@ -303,8 +319,19 @@ class ExchangeUsers:
         self.password = password
         self.ssl_enabled = ssl_enabled
         self.ssl_ca = ssl_ca
+        self.auth_method = auth_method
 
     def _create_ldap_connection(self):
+        ensure_fips_compatible_auth(self.auth_method)
+        if self.auth_method == AUTH_METHOD_KERBEROS:
+            ensure_kerberos_dependencies_available()
+            return Connection(
+                server=self.ad_server,
+                authentication=SASL,
+                sasl_mechanism=GSSAPI,
+                client_strategy=SAFE_SYNC,
+                auto_bind=True,  # pyright: ignore
+            )
         return Connection(
             server=self.ad_server,
             user=self.user,
@@ -400,15 +427,25 @@ class ExchangeUsers:
         else:
             BaseProtocol.HTTP_ADAPTER_CLS = NoVerifyHTTPAdapter
 
-        credentials = Credentials(
-            username=self.user,
-            password=self.password,
-        )
-        configuration = Configuration(
-            credentials=credentials,
-            server=self.exchange_server,
-            retry_policy=FaultTolerance(max_wait=120),
-        )
+        ensure_fips_compatible_auth(self.auth_method)
+        if self.auth_method == AUTH_METHOD_KERBEROS:
+            ensure_kerberos_dependencies_available()
+            configuration = Configuration(
+                credentials=None,
+                auth_type=EWS_GSSAPI,
+                server=self.exchange_server,
+                retry_policy=FaultTolerance(max_wait=120),
+            )
+        else:
+            credentials = Credentials(
+                username=self.user,
+                password=self.password,
+            )
+            configuration = Configuration(
+                credentials=credentials,
+                server=self.exchange_server,
+                retry_policy=FaultTolerance(max_wait=120),
+            )
 
         async for user in self.get_users():
             if "searchResRef" in user.get("type", ""):
@@ -460,10 +497,11 @@ class ExchangeServerClient:
             ad_server=self.configuration["active_directory_server"],
             domain=self.configuration["domain"],
             exchange_server=self.configuration["exchange_server"],
-            user=self.configuration["username"],
-            password=self.configuration["password"],
+            user=self.configuration.get("username"),
+            password=self.configuration.get("password"),
             ssl_enabled=self.ssl_enabled,
             ssl_ca=self.ssl_ca,
+            auth_method=get_auth_method(self.configuration),
         )
 
     async def _fetch_all_users(self):
