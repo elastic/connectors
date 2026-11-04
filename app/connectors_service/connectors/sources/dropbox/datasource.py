@@ -438,7 +438,7 @@ class DropboxDataSource(BaseDataSource):
             not shared_folder_id
             or shared_folder_id == self.dropbox_client.root_namespace_id
         ):
-            return [account_id]
+            return [_prefix_user_id(account_id)]
 
         async for permission in self.dropbox_client.list_folder_permission(
             shared_folder_id=shared_folder_id
