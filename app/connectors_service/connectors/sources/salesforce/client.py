@@ -43,6 +43,12 @@ from connectors.utils import (
 FIELDS_FUNCTION_PATTERN = re.compile(r"\bFIELDS\s*\(", re.IGNORECASE)
 LIMIT_CLAUSE_PATTERN = re.compile(r"\bLIMIT\s+\d+", re.IGNORECASE)
 OFFSET_CLAUSE_PATTERN = re.compile(r"\bOFFSET\s+\d+", re.IGNORECASE)
+QUOTED_LITERAL_PATTERN = re.compile(r"'(?:\\.|[^'\\])*'")
+
+
+def mask_literals(query):
+    """Blanks out quoted literals, keeping positions, so keyword checks skip them."""
+    return QUOTED_LITERAL_PATTERN.sub(lambda match: " " * len(match.group()), query)
 
 
 class RateLimitedException(Exception):
@@ -123,13 +129,14 @@ class SalesforceClient:
         del self.session
 
     def modify_soql_query(self, query):
-        if not FIELDS_FUNCTION_PATTERN.search(query):
+        masked_query = mask_literals(query)
+        if not FIELDS_FUNCTION_PATTERN.search(masked_query):
             return query
 
-        if not LIMIT_CLAUSE_PATTERN.search(query):
+        if not LIMIT_CLAUSE_PATTERN.search(masked_query):
             return query + " LIMIT 200 OFFSET 0"
 
-        if not OFFSET_CLAUSE_PATTERN.search(query):
+        if not OFFSET_CLAUSE_PATTERN.search(masked_query):
             return query + " OFFSET 0"
 
         return query
@@ -160,7 +167,7 @@ class SalesforceClient:
             query_with_id = self._add_id(query=rule["query"])
             query = self._add_last_modified_date(query=query_with_id)
 
-            if not FIELDS_FUNCTION_PATTERN.search(query):
+            if not FIELDS_FUNCTION_PATTERN.search(mask_literals(query)):
                 async for records in self._yield_non_bulk_query_pages(soql_query=query):
                     for record in records:
                         yield record
@@ -480,9 +487,9 @@ class SalesforceClient:
         """loops through SOQL query response pages and yields lists of records"""
 
         def modify_offset(query, new_offset):
-            # Only the last match is the real clause; earlier ones may be in quoted values.
-            *_, last = OFFSET_CLAUSE_PATTERN.finditer(query)
-            return f"{query[: last.start()]}OFFSET {new_offset}{query[last.end() :]}"
+            offset_clause = OFFSET_CLAUSE_PATTERN.search(mask_literals(query))
+            start, end = offset_clause.span()
+            return f"{query[:start]}OFFSET {new_offset}{query[end:]}"
 
         url = f"{self.base_url}{QUERY_ENDPOINT}"
         offset = OFFSET

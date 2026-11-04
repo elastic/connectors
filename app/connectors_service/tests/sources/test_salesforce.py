@@ -1726,6 +1726,10 @@ async def test_get_all_with_content_docs_and_extraction_service(mock_responses):
             "select fields(all) from account limit 200",
             "select fields(all) from account limit 200 OFFSET 0",
         ),
+        (
+            "SELECT FIELDS(ALL) FROM Account WHERE Name = 'offset 0' LIMIT 200",
+            "SELECT FIELDS(ALL) FROM Account WHERE Name = 'offset 0' LIMIT 200 OFFSET 0",
+        ),
     ],
 )
 async def test_modify_query(soql_query, modified_query):
@@ -1838,7 +1842,7 @@ async def test_soql_rule_keeps_offset_text_inside_quoted_literal():
 
         source.salesforce_client._get_json = get_json
         rule = {
-            "query": "SELECT FIELDS(ALL) FROM Account WHERE Name = 'offset 0' LIMIT 200 OFFSET 0",
+            "query": "SELECT FIELDS(ALL) FROM Account WHERE Name = 'offset 0' LIMIT 200",
             "language": "SOQL",
         }
 
