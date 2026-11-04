@@ -1824,6 +1824,34 @@ async def test_soql_rule_with_lowercase_offset_advances_the_offset():
         assert [record["Id"] for record in records] == ["0", "200"]
 
 
+@pytest.mark.asyncio
+async def test_soql_rule_keeps_offset_text_inside_quoted_literal():
+    async with create_salesforce_source() as source:
+        sent_queries = []
+
+        async def get_json(url, params=None):
+            sent_queries.append(params["q"])
+            offset = int(re.findall(r"OFFSET (\d+)", params["q"])[-1])
+            if offset > 0:
+                return {"done": True, "records": []}
+            return {"done": True, "records": [{"Id": "1"}]}
+
+        source.salesforce_client._get_json = get_json
+        rule = {
+            "query": "SELECT FIELDS(ALL) FROM Account WHERE Name = 'offset 0' LIMIT 200 OFFSET 0",
+            "language": "SOQL",
+        }
+
+        _ = [
+            record
+            async for record in source.salesforce_client.get_sync_rules_results(rule)
+        ]
+
+        assert sent_queries[-1] == (
+            "SELECT FIELDS(ALL) FROM Account WHERE Name = 'offset 0' LIMIT 200 OFFSET 200"
+        )
+
+
 @pytest.mark.parametrize(
     "filtering, expected_docs",
     [

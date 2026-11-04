@@ -480,7 +480,9 @@ class SalesforceClient:
         """loops through SOQL query response pages and yields lists of records"""
 
         def modify_offset(query, new_offset):
-            return OFFSET_CLAUSE_PATTERN.sub(f"OFFSET {new_offset}", query)
+            # Only the last match is the real clause; earlier ones may be in quoted values.
+            *_, last = OFFSET_CLAUSE_PATTERN.finditer(query)
+            return f"{query[: last.start()]}OFFSET {new_offset}{query[last.end() :]}"
 
         url = f"{self.base_url}{QUERY_ENDPOINT}"
         offset = OFFSET
