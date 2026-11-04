@@ -77,7 +77,7 @@ to `config.yml` in the directory.
 If you configured a new connector, you will need to go into Kibana to start or schedule a sync.
 Running the scripts, you can log in at http://localhost:5601/ with the username `elastic` and your password (`changeme` is the default, unless you specified a different `ELASTIC_PASSWORD` earlier).
 Then, to complete this in Kibana:
-* From the main menu, click _Search_ > _Content_ > _Connectors_
+* From the main menu, find _Content crawlers_ (formerly _Connectors_) using the global search field
 * Click on your connector
 * Optionally, change the name or add a description
 * Click on the "Configuration" tab
@@ -105,7 +105,7 @@ use those instead. To do this and still use the `run-stack.sh` script:
     8. Copy the resulting connector_id, service_type, and api_key into a new entry in the `app/connectors_service/scripts/stack/connectors-config/config.yml` file
     9. Repeat as necessary for all the connectors you wish to create
 3. run `./app/connectors_service/scripts/stack/run-stack.sh --no-configuration --connectors-only` again to run the Connectors service without prompting for configuration. Once running:
-    1. From the main menu of Kibana, click _Search_ > _Content_ > _Connectors_
+    1. From the main menu of Kibana, find _Content crawlers_ (formerly _Connectors_) using the global search field
     2. Click on your connector
     3. Click on the "Configuration" tab
     4. Complete the configuration and optionally start your sync
