@@ -156,6 +156,10 @@ class OneDriveClient:
             },
         )
 
+    async def sleep(self, seconds):
+        """Wait, unless the session is closed first."""
+        await self._sleeps.sleep(seconds)
+
     async def close_session(self):
         self._sleeps.cancel()
         await self.session.close()

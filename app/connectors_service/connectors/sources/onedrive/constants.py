@@ -12,6 +12,8 @@ from connectors_sdk.logger import logger
 RETRIES = 3
 RETRY_INTERVAL = 2
 DEFAULT_RETRY_SECONDS = 30
+# OneDrive and SharePoint throttle with 503 as well as 429, both with Retry-After
+THROTTLED_STATUSES = (429, 503)
 FETCH_SIZE = 999
 DEFAULT_PARALLEL_CONNECTION_COUNT = 15
 REQUEST_TIMEOUT = 300
