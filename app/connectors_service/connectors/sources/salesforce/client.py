@@ -51,6 +51,19 @@ SOQL_CLAUSE_KEYWORDS = {
     "USING",
 }
 
+# SOQL keywords are case-insensitive. Matching them as whole words keeps field
+# names such as Fields__c or Credit_Limit__c from being read as a FIELDS()
+# function or a LIMIT clause.
+FIELDS_FUNCTION_PATTERN = re.compile(r"\bFIELDS\s*\(", re.IGNORECASE)
+LIMIT_CLAUSE_PATTERN = re.compile(r"\bLIMIT\s+\d+", re.IGNORECASE)
+OFFSET_CLAUSE_PATTERN = re.compile(r"\bOFFSET\s+\d+", re.IGNORECASE)
+QUOTED_LITERAL_PATTERN = re.compile(r"'(?:\\.|[^'\\])*'")
+
+
+def mask_literals(query):
+    """Blanks out quoted literals, keeping positions, so keyword checks skip them."""
+    return QUOTED_LITERAL_PATTERN.sub(lambda match: " " * len(match.group()), query)
+
 
 class RateLimitedException(Exception):
     """Notifies that Salesforce has begun rate limiting the current account"""
@@ -130,18 +143,15 @@ class SalesforceClient:
         del self.session
 
     def modify_soql_query(self, query):
-        lowered_query = query.lower()
-        match_limit = re.search(r"(?i)(.*)FROM\s+(.*?)(?:LIMIT)(.*)", lowered_query)
-        match_offset = re.search(r"(?i)(.*)FROM\s+(.*?)(?:OFFSET)(.*)", lowered_query)
-
-        if "fields" in lowered_query and not match_limit:
-            query += " LIMIT 200 OFFSET 0"
-
-        elif "fields" in lowered_query and match_limit and not match_offset:
-            query += " OFFSET 0"
-
-        elif "fields" in lowered_query and match_limit and match_offset:
+        masked_query = mask_literals(query)
+        if not FIELDS_FUNCTION_PATTERN.search(masked_query):
             return query
+
+        if not LIMIT_CLAUSE_PATTERN.search(masked_query):
+            return query + " LIMIT 200 OFFSET 0"
+
+        if not OFFSET_CLAUSE_PATTERN.search(masked_query):
+            return query + " OFFSET 0"
 
         return query
 
@@ -223,7 +233,7 @@ class SalesforceClient:
             query_with_id = self._add_id(query=rule["query"])
             query = self._add_last_modified_date(query=query_with_id)
 
-            if "fields" not in query.lower():
+            if not FIELDS_FUNCTION_PATTERN.search(mask_literals(query)):
                 async for records in self._yield_non_bulk_query_pages(soql_query=query):
                     for record in records:
                         yield record
@@ -543,10 +553,9 @@ class SalesforceClient:
         """loops through SOQL query response pages and yields lists of records"""
 
         def modify_offset(query, new_offset):
-            offset_pattern = r"OFFSET (\d+)"
-            new_query = re.sub(offset_pattern, f"OFFSET {new_offset}", query)
-
-            return new_query
+            offset_clause = OFFSET_CLAUSE_PATTERN.search(mask_literals(query))
+            start, end = offset_clause.span()
+            return f"{query[:start]}OFFSET {new_offset}{query[end:]}"
 
         url = f"{self.base_url}{QUERY_ENDPOINT}"
         offset = OFFSET
