@@ -684,7 +684,8 @@ def test_formatter_channel_message():
     assert doc["subject"] == "Channel subject"
     assert doc["message"] == "Hello channel"
     assert doc["reply_to_id"] == ""
-    assert doc["_id"] == "message-1"
+    assert doc["_id"] == "channel-1-message-1"
+    assert doc["message_id"] == "message-1"
     assert doc["attachments"] == []
 
 
@@ -721,6 +722,48 @@ def test_formatter_chat_message_falls_back_to_members():
         members="Alice,Bob",
     )
     assert doc["chat_title"] == "Alice,Bob"
+
+
+@pytest.mark.asyncio
+async def test_get_docs_message_ids_are_unique_across_channels_and_chats():
+    # Graph message ids are the creation time in epoch milliseconds and are only
+    # unique within one channel or chat, so messages posted in the same
+    # millisecond elsewhere share an id. Each must still be its own document.
+    message_id = "1616989510408"
+    second_channel = dict(CHANNELS[0], id="channel-2", displayName="Random")
+    channel_message = dict(CHANNEL_MESSAGES[0], id=message_id)
+    chat_message = dict(CHAT_MESSAGES[0], id=message_id, attachments=[])
+
+    async with create_teams_source(fetch_attachment_content=False) as source:
+        _mock_client_for_get_docs(source)
+        source.client.get_team_channels = MagicMock(
+            side_effect=lambda *a, **k: AsyncIterator([[CHANNELS[0], second_channel]])
+        )
+        source.client.get_channel_messages = MagicMock(
+            side_effect=lambda *a, **k: AsyncIterator([[channel_message]])
+        )
+        source.client.get_channel_message_replies = MagicMock(
+            side_effect=lambda *a, **k: AsyncIterator([])
+        )
+        source.client.get_chat_messages = MagicMock(
+            return_value=AsyncIterator([[chat_message]])
+        )
+
+        docs = [doc async for doc, _download in source.get_docs()]
+
+    messages = [
+        doc
+        for doc in docs
+        if doc["type"]
+        in (TeamsObjectType.CHANNEL_MESSAGE.value, TeamsObjectType.CHAT_MESSAGE.value)
+    ]
+    assert len(messages) == 3
+    assert {doc["_id"] for doc in messages} == {
+        f"channel-1-{message_id}",
+        f"channel-2-{message_id}",
+        f"chat-1-{message_id}",
+    }
+    assert {doc["message_id"] for doc in messages} == {message_id}
 
 
 # -- DLS ---------------------------------------------------------------------
@@ -1239,9 +1282,9 @@ async def test_get_docs_skips_deleted_channel_messages():
             if doc["type"] == TeamsObjectType.CHANNEL_MESSAGE.value:
                 message_ids.append(doc["_id"])
 
-        assert "message-1" in message_ids
-        assert "reply-1" in message_ids
-        assert "message-2-deleted" not in message_ids
+        assert "channel-1-message-1" in message_ids
+        assert "channel-1-reply-1" in message_ids
+        assert "channel-1-message-2-deleted" not in message_ids
 
 
 @pytest.mark.asyncio
@@ -1584,7 +1627,7 @@ async def test_process_channel_message_indexes_attachment_only_message():
         message = next(
             d for d in docs if d["type"] == TeamsObjectType.CHANNEL_MESSAGE.value
         )
-        assert message["_id"] == "msg-empty"
+        assert message["_id"] == "channel-1-msg-empty"
         assert message["attachments"] == [{"id": "drive-f", "title": "f.txt"}]
         file_doc = next(d for d in docs if d["type"] == TeamsObjectType.FILE.value)
         assert file_doc["channel_id"] == "channel-1"
@@ -1625,7 +1668,7 @@ async def test_process_chat_message_indexes_attachment_only_message():
         message = next(
             d for d in docs if d["type"] == TeamsObjectType.CHAT_MESSAGE.value
         )
-        assert message["_id"] == "msg-empty"
+        assert message["_id"] == "chat-1-msg-empty"
         assert message["attachments"] == [{"id": "drive-f", "title": "f.txt"}]
         file_doc = next(d for d in docs if d["type"] == TeamsObjectType.FILE.value)
         assert file_doc["chat_id"] == "chat-1"
