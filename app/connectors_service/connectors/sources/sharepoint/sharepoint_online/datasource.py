@@ -827,6 +827,13 @@ class SharepointOnlineDataSource(BaseDataSource):
             drive_id, upsert_drive_items_ids
         ):
             drive_item_id = permissions_response.get("id")
+            if permissions_response.get("status") == 404:
+                # Deleted since the delta page was fetched
+                self._logger.debug(
+                    f"Skipping drive item {drive_item_id}: it no longer exists"
+                )
+                continue
+
             drive_item = upsert_ids_to_items.get(drive_item_id)
             permissions = nested_get_from_dict(
                 permissions_response, ["body", "value"], []
