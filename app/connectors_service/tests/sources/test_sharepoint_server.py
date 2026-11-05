@@ -1266,6 +1266,52 @@ async def test_get_list_items_with_no_extension():
 
 
 @pytest.mark.asyncio
+async def test_get_list_items_doubles_apostrophe_in_attachment_url():
+    # The attachment URL is put inside a quoted OData string literal
+    # (getfilebyserverrelativeurl('...')), where an apostrophe must be doubled.
+    api_response = [
+        {
+            "AttachmentFiles": [
+                {
+                    "FileName": "Bob's notes.txt",
+                    "ServerRelativeUrl": "/sites/collection1/ctest/Lists/ctestlist/Attachments/1/Bob's notes.txt",
+                }
+            ],
+            "Title": "HelloWorld",
+            "Id": 1,
+            "FileRef": "/site",
+            "ContentTypeId": "12345",
+            "Attachments": True,
+            "GUID": "111111122222222-adfa-4e4f-93c4-bfedddda8510",
+        },
+    ]
+    escaped_url = (
+        "/sites/collection1/ctest/Lists/ctestlist/Attachments/1/Bob%27%27s%20notes.txt"
+    )
+    async with create_sps_source() as source:
+        source.sharepoint_client._fetch_data_with_next_url = AsyncIterator(
+            [api_response]
+        )
+        source.sharepoint_client._api_call = Mock(
+            return_value=async_native_coroutine_generator({"UniqueId": "1"})
+        )
+        file_relative_urls = []
+        async for _, file_relative_url in source.sharepoint_client.get_list_items(
+            list_id="620070a1-ee50-4585-b6a7-0f6210b1a69d",
+            site_url=f"{HOST_URL}/sites/collection1/ctest",
+            server_relative_url="/sites/collection1/ctest",
+            list_relative_url="/Lists/ctestlist",
+        ):
+            file_relative_urls.append(file_relative_url)
+
+        assert (
+            source.sharepoint_client._api_call.call_args.kwargs["file_relative_url"]
+            == escaped_url
+        )
+        assert file_relative_urls == [escaped_url]
+
+
+@pytest.mark.asyncio
 async def test_get_list_items_with_extension_only():
     api_response = [
         {
