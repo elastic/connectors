@@ -746,6 +746,68 @@ async def test_get_docs_with_domain_wide_delegation_yields_shared_file_once():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("incremental", [False, True])
+async def test_get_docs_with_domain_wide_delegation_keeps_path_of_file_listed_twice(
+    incremental,
+):
+    """A file in a user's drive that the shared drives listing also finds is synced once, with its path."""
+
+    async with create_gdrive_source(
+        google_workspace_admin_email_for_data_sync="admin@email.com",
+        google_workspace_email_for_shared_drives_sync="admin@email.com",
+    ) as source:
+        source._get_google_workspace_admin_email = mock.MagicMock(
+            return_value="admin@email.com"
+        )
+        source.google_admin_directory_client.users = mock.MagicMock(
+            return_value=AsyncIterator([{"primaryEmail": "user@email.com"}])
+        )
+        source._domain_wide_delegation_sync_enabled = mock.MagicMock(return_value=True)
+
+        file = {
+            "kind": "drive#file",
+            "mimeType": "text/plain",
+            "id": "file_id",
+            "name": "file.txt",
+            "parents": ["folder_id"],
+            "size": "28",
+            "modifiedTime": "2023-06-28T07:46:28.000Z",
+            "trashed": False,
+        }
+
+        def gdrive_client(impersonate_email=None):
+            client = mock.MagicMock()
+            client.list_files_from_my_drive = mock.MagicMock(
+                return_value=AsyncIterator([{"files": [file]}])
+            )
+            # corpora="allDrives" also lists the files of My Drive
+            client.list_files = mock.MagicMock(
+                return_value=AsyncIterator([{"files": [file]}])
+            )
+            client.get_all_folders = mock.AsyncMock(
+                return_value={"folder_id": {"name": "Folder", "parents": []}}
+            )
+            client.get_all_drives = mock.AsyncMock(return_value={})
+            return client
+
+        source.google_drive_client = mock.MagicMock(side_effect=gdrive_client)
+
+        if incremental:
+            docs = [
+                doc
+                async for doc, _, _ in source.get_docs_incrementally(
+                    sync_cursor={CURSOR_SYNC_TIMESTAMP: "2023-06-28T05:46:28Z"}
+                )
+            ]
+        else:
+            docs = [doc async for doc, _ in source.get_docs()]
+
+        assert [(doc["_id"], doc.get("path")) for doc in docs] == [
+            ("file_id", "Folder/file.txt")
+        ]
+
+
+@pytest.mark.asyncio
 async def test_get_docs():
     """Tests the module responsible to fetch and yield files documents from Google Drive."""
 
