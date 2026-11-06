@@ -7,6 +7,7 @@
 
 This repository contains the source code for all Elastic connectors, developed by the Search team at Elastic.
 Use connectors to sync data from popular data sources to Elasticsearch.
+Kibana 9.7 and later shows the page for managing connectors as Content crawlers.
 
 These connectors are available to be self-managed on your own infrastructure.
 
