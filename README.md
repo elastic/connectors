@@ -1,77 +1,56 @@
 [![Build status](https://badge.buildkite.com/a1319036cb613e63515320f44b187cd233771715c811d3dc7a.svg?branch=main)](https://buildkite.com/elastic/connectors)
-# Elastic connectors
+# Elastic connectors (aka crawlers)
 
 <img width="250" alt="search-icon" src="https://github.com/elastic/connectors/assets/32779855/2f594d89-7369-4c49-994a-1d67eefce436">
 
-## Connectors
-
-This repository contains the source code for all Elastic connectors, developed by the Search team at Elastic.
 Use connectors to sync data from popular data sources to Elasticsearch.
-Kibana 9.7 and later shows the page for managing connectors as Content crawlers.
 
-These connectors are available to be self-managed on your own infrastructure.
+This repository contains the source code for all Elastic connectors, also known as crawlers.
+Kibana 9.7 and later shows the UI page for managing connectors as Content crawlers.
+
+For an overview of the deployment steps, refer to [Self-managed connectors](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-build-connector.html) in the official Elastic documentation.
+
+To get started quickly using Docker Compose, check out this [README file](./app/connectors_service/scripts/stack/README.md).
 
 > [!NOTE]
-> Managed connectors on Elastic Cloud Hosted are no longer available as of version 9.0.
+> Self-managed connectors run on your own infrastructure. Since version 9.0 using the Search Solution View and in Elasticsearch Serverless, Elastic managed connectors are not available. 
 
-ℹ️ For an overview of the steps involved in deploying connectors refer to [**Self-managed connectors**](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-build-connector.html) in the official Elastic documentation.
+### Documentation
 
-To get started quickly with self-managed connectors using Docker Compose, check out this [README file](./app/connectors_service/scripts/stack/README.md).
+The main documentation lives in the [Elastic docs](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-connectors.html).
+You'll find the individual data source references there.
 
-### Connector documentation
-
-The main documentation for using connectors lives in the [Elastic docs](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-connectors.html).
-You'll find the individual references for each connector there.
-
-For everything to do with _developing_ connectors, you'll find that here in this repo.
-
-#### API documentation
+For everything to do with _developing_ connectors, you'll find here in this repo.
 
 Since 8.12.0, you can manage connectors and sync jobs programmatically using APIs.
 Refer to the [Connector API documentation](https://www.elastic.co/docs/api/doc/elasticsearch/v8/group/endpoint-connector).
 
-#### Command-line interface
+### Command-line interface
 
 Learn about our CLI tool in [`docs/CLI.md`](./docs/CLI.md).
 
-## Connector project structure
+### Project structure
 
-There are two directories that contain the relevant code for running a connector:
+There are two main directories; the service code lives in the `app/` directory and the SDK and framework in `libs/`.
 
-- `app/`
-- `libs/`
+The Connectors SDK is a dependency of the connectors application. You can use the Connectors SDK in and of itself to create your own data source implementations without needing to ingest data into Elasticsearch.
 
-The `app/` directory contains the primary connector service, as well as the individual data source implementations.
-The `libs/` directory is the home of the Connectors SDK, which is where the connectors framework is defined.
+#### Service code `app/`
 
-The Connectors SDK is a dependency of the connectors application. You can use the Connectors SDK in and of itself to create your own data source connectors without needing to ingest data into Elasticsearch.
-
-> [!NOTE]
-> For those who are familiar with the [monolithic project structure](https://github.com/elastic/connectors/tree/1efa53e1ce47db2ae28d1390e5721932c58ce816) that preceded the current structure:
->
-> **Functionality has not been affected in any way.**
-> The top-level project Makefile provides the same general commands as were previously present, and they will behave the same as before.
->
-> `make run` will run the Connectors code directly from source by calling the `make run` command defined under the `app/` directory.
->
-> Furthermore, `make docker-build` and `make docker-run` commands will still build and run local Docker images.
-
-## Connector service code
-
-As mentioned in the section above, the connector service code lives under the `app/` directory. The code here defines tasks such as running connectors and managing scheduling, syncs, and cleanup.
+This service defines tasks such as running connectors and managing scheduling, syncs, and cleanup.
 This is shared code that is not used by individual connectors, but helps to coordinate and run a deployed instance/process.
 
-## Connectors SDK and framework
+#### SDK and framework `libs/`
 
-The `libs/` directory is home to the Elastic connector SDK. This SDK provides a framework that enables developers to build self-managed connectors.
+The Connector SDK provides a framework that enables developers to build self-managed connectors.
 The framework implements common functionalities out of the box, so developers can focus on the logic specific to integrating their chosen data source.
 
-The framework ensures compatibility, makes it easier for our team to review PRs, and help out in the development process. When you build using our framework, we provide a pathway for the connector to be officially supported by Elastic.
+The framework ensures compatibility, makes it easier for our team to review PRs, and helps out in the development process. When you build using our framework, we provide a pathway for the connector to be officially supported by Elastic.
 
-## Running a self-managed stack
+### Running a self-managed stack
 
 This repo provides a [set of scripts](./app/connectors_service/scripts/stack) to allow a user to set up a full Elasticsearch, Kibana, and Connectors service stack using Docker.
-This is useful to get up and running with the Connectors framework with minimal effort, and provides a guided set of prompts for setup and configuration.
+This is useful to get up and running with minimal effort, and provides a guided set of prompts for setup and configuration.
 For more information, instructions, and options, see the [README file](./app/connectors_service/scripts/stack/README.md) in the stack folder.
 
 ### Framework use cases
@@ -105,11 +84,11 @@ The connector service compares its version to the configured Elasticsearch serve
 If the versions are incompatible, the service exits and logs the mismatch.
 If the versions differ but are compatible, the service logs a warning and continues.
 
-We recommend running the connector service on the same stack version as Elasticsearch.
+We strongly recommend running the connector service on the same stack version as Elasticsearch.
 Use this table to decide whether a deliberate version skew is supported.
 
-Do **not downgrade** the connector service to an older release than the one used when connectors were created.
-If you downgrade anyway, connector configuration stored in Elasticsearch may no longer match what the older service expects — you may need to **recreate** affected connectors.
+Do **not downgrade** the connector service to an older release.
+If downgraded, connector configuration stored in Elasticsearch may no longer match what the older service expects and affected connectors will need to be **recreated**.
 
 | Situation | Example connector version | Example ES version | Outcome |
 |-----------|---------------------------|--------------------|---------|
