@@ -88,7 +88,7 @@ We strongly recommend running the connector service on the same stack version as
 Use this table to decide whether a deliberate version skew is supported.
 
 Do **not downgrade** the connector service to an older release.
-If you do, connector configuration stored in Elasticsearch may no longer match what the older service expects and you will need to **recreate** affected connectors.
+If downgraded, connector configuration stored in Elasticsearch may no longer match what the older service expects and affected connectors will need to be **recreated**.
 
 | Situation | Example connector version | Example ES version | Outcome |
 |-----------|---------------------------|--------------------|---------|
