@@ -13,7 +13,7 @@ For an overview of the deployment steps, refer to [Self-managed connectors](http
 To get started quickly using Docker Compose, check out this [README file](./app/connectors_service/scripts/stack/README.md).
 
 > [!NOTE]
-> Connectors are available to be self-managed on your own infrastructure. Since version 9.0, managed connectors on Elastic Cloud Hosted are no longer available. 
+> Self-managed connectors run on your own infrastructure. Since version 9.0 using the Search Solution View and in Elasticsearch Serverless, Elastic managed connectors are not available. 
 
 ### Documentation
 
