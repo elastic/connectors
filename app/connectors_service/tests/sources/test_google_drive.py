@@ -1026,6 +1026,59 @@ async def test_get_google_workspace_content_size_limit():
 
 
 @pytest.mark.asyncio
+async def test_download_content_returns_size_of_downloaded_file():
+    async with create_gdrive_source() as source:
+
+        async def download_func(pipe_to):
+            await pipe_to.write(b"exported content")
+
+        source.handle_file_content_extraction = mock.AsyncMock(
+            return_value={"_attachment": "ZXhwb3J0ZWQgY29udGVudA=="}
+        )
+
+        _, _, file_size = await source._download_content(
+            file={"name": "test.txt"},
+            file_extension=".txt",
+            download_func=download_func,
+        )
+
+        assert file_size == len(b"exported content")
+
+
+@pytest.mark.asyncio
+async def test_get_google_workspace_content_discards_export_above_size_limit():
+    """An export has no size in the file metadata, so the limit applies to the downloaded file."""
+
+    async with create_gdrive_source() as source:
+        source.framework_config.max_file_size = 10
+        file_document = {
+            "id": "id1",
+            "name": "test.txt",
+            "size": 0,
+            "_timestamp": "2023-06-28T07:46:28.000Z",
+            "mime_type": "application/vnd.google-apps.document",
+            "file_extension": None,
+        }
+
+        async def export(pipe_to, **_kwargs):
+            await pipe_to.write(b"more than ten bytes of exported content")
+
+        client = mock.MagicMock()
+        client.api_call = export
+        source.handle_file_content_extraction = mock.AsyncMock(
+            return_value={"_attachment": "bW9yZSB0aGFuIHRlbiBieXRlcw=="}
+        )
+
+        content = await source.get_content(
+            client=client,
+            file=file_document,
+            doit=True,
+        )
+
+        assert content is None
+
+
+@pytest.mark.asyncio
 async def test_get_generic_file_content():
     """Test the module responsible for fetching the content of the file if it is extractable."""
 

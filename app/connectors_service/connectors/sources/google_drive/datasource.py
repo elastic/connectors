@@ -6,6 +6,7 @@
 import asyncio
 from functools import cached_property, partial
 
+from aiofiles.os import stat
 from aiogoogle import HTTPError
 from connectors_sdk.source import (
     CURSOR_SYNC_TIMESTAMP,
@@ -524,6 +525,9 @@ class GoogleDriveDataSource(BaseDataSource):
                 pipe_to=async_buffer,
             )
             await async_buffer.close()
+            # Exported Google Workspace files report no size in their metadata,
+            # so the caller checks the size limit against the downloaded file.
+            file_size = (await stat(async_buffer.name)).st_size
 
             doc = await self.handle_file_content_extraction(
                 {}, file_name, async_buffer.name
