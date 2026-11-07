@@ -162,11 +162,11 @@ def get_json_mock(mock_response, status):
 
 def client_get_mock_func(url, headers, params):
     if params is not None:
-        if params.get("offset") == 0 and "/2.0/folders/220376481442/items" in url:
+        if params.get("marker") is None and "/2.0/folders/220376481442/items" in url:
             return JSONAsyncMock(json=FOLDER_ITEMS, status=200)
-        if params.get("offset") == 0:
+        if params.get("marker") is None:
             return JSONAsyncMock(json=MOCK_RESPONSE, status=200)
-        elif params.get("offset") == 1000:
+        elif params.get("marker") == "next":
             return JSONAsyncMock(json=EMPTY_RESPONSE, status=200)
     return StreamReaderAsyncMock()
 
@@ -371,34 +371,53 @@ async def test_fetch():
         assert actual_response == expected_response
 
 
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "total_count, expected_offsets",
-    [
-        (0, [0]),
-        (2, [0]),
-        (1000, [0]),
-        (1001, [0, 1000]),
-        (2500, [0, 1000, 2000]),
-    ],
-)
-async def test_paginated_call_stops_after_last_page(total_count, expected_offsets):
-    requested_offsets = []
+def box_list_endpoint(total_count, requests):
+    """Serves `total_count` entries the way Box does: by marker when `usemarker`
+    is set, and by offset otherwise, rejecting offsets above 10000."""
 
     def get_page(url, headers, params):
-        offset = params["offset"]
-        requested_offsets.append(offset)
-        entries = [
-            {"id": str(index)}
-            for index in range(offset, min(offset + params["limit"], total_count))
-        ]
-        return JSONAsyncMock(
-            json={"total_count": total_count, "entries": entries}, status=200
-        )
+        requests.append(dict(params))
+        limit = params["limit"]
+        if params.get("usemarker") == "true":
+            start = int(params.get("marker", 0))
+            end = min(start + limit, total_count)
+            page = {
+                "limit": limit,
+                "next_marker": str(end) if end < total_count else None,
+            }
+        else:
+            start = params.get("offset", 0)
+            if start > 10000:
+                raise ClientResponseError(
+                    request_info=Mock(real_url=url), history=(), status=400
+                )
+            end = min(start + limit, total_count)
+            page = {"total_count": total_count, "offset": start, "limit": limit}
+        page["entries"] = [{"id": str(index)} for index in range(start, end)]
+        return JSONAsyncMock(json=page, status=200)
+
+    return get_page
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "total_count, expected_markers",
+    [
+        (0, [None]),
+        (2, [None]),
+        (1000, [None]),
+        (1001, [None, "1000"]),
+        (2500, [None, "1000", "2000"]),
+    ],
+)
+async def test_paginated_call_stops_after_last_page(total_count, expected_markers):
+    requests = []
 
     async with create_source(BoxDataSource) as source:
         source.client.token.get = AsyncMock()
-        source.client._http_session.get = AsyncMock(side_effect=get_page)
+        source.client._http_session.get = AsyncMock(
+            side_effect=box_list_endpoint(total_count, requests)
+        )
 
         items = [
             item
@@ -408,7 +427,30 @@ async def test_paginated_call_stops_after_last_page(total_count, expected_offset
         ]
 
     assert len(items) == total_count
-    assert requested_offsets == expected_offsets
+    assert [request.get("marker") for request in requests] == expected_markers
+    assert all(request["usemarker"] == "true" for request in requests)
+
+
+@pytest.mark.asyncio
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_paginated_call_fetches_entries_past_box_offset_limit():
+    requests = []
+
+    async with create_source(BoxDataSource) as source:
+        source.client.token.get = AsyncMock()
+        source.client._http_session.get = AsyncMock(
+            side_effect=box_list_endpoint(12500, requests)
+        )
+
+        items = [
+            item
+            async for item in source.client.paginated_call(
+                url="/2.0/folders/0/items", params={"fields": "name"}, headers={}
+            )
+        ]
+
+    assert [item["id"] for item in items] == [str(index) for index in range(12500)]
+    assert all(request["fields"] == "name" for request in requests)
 
 
 @pytest.mark.asyncio
