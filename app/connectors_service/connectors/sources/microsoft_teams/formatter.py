@@ -84,6 +84,7 @@ class MicrosoftTeamsFormatter:
         self.map_document_with_schema(
             document=document, item=item, document_type=self.schema.channel_message
         )
+        _scope_message_id(document, channel_id)
         return document
 
     def format_chat_message(
@@ -111,8 +112,23 @@ class MicrosoftTeamsFormatter:
         )
         if not document.get("url"):
             document["url"] = chat.get("webUrl")
+        _scope_message_id(document, chat.get("id"))
         return document
 
     def _sender_fields(self, message):
         user = (message.get("from") or {}).get("user") or {}
         return (user.get("displayName") or "").strip(), user.get("id") or ""
+
+
+def _scope_message_id(document, container_id):
+    """Prefix a message ``_id`` with the id of its channel or chat.
+
+    Graph message ids are the creation time in epoch milliseconds and are only
+    unique within one channel or chat, so messages posted in the same
+    millisecond elsewhere in the tenant share an id and would overwrite each
+    other. The Graph id stays in ``message_id``, which ``reply_to_id`` refers to.
+    """
+    message_id = document.get("_id")
+    document["message_id"] = message_id
+    if container_id and message_id:
+        document["_id"] = f"{container_id}-{message_id}"
