@@ -378,6 +378,13 @@ class MicrosoftAPISession:
         responses = body.get("responses", [])
         for response in responses:
             status = response.get("status", 200)
+            if status == 404:
+                # The resource of this one request is gone (e.g. a drive item
+                # deleted since it was listed). Raising would discard the
+                # responses of every other request in the batch, so leave it to
+                # the caller.
+                self._logger.debug(f"Batch request item not found: {response}")
+                continue
             if status != 200:
                 self._logger.warning(f"Batch request item failed with: {response}")
                 headers = response.get("headers", {})

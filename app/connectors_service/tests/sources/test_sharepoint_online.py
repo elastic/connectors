@@ -673,6 +673,31 @@ class TestMicrosoftAPISession:
         assert response == second_response
 
     @pytest.mark.asyncio
+    async def test_post_with_batch_item_not_found(
+        self, microsoft_api_session, mock_responses
+    ):
+        url = "https://graph.microsoft.com/v1.0/$batch"
+        payload = {"key": "value"}
+        # One drive item was deleted after it was listed
+        batch_response = {
+            "responses": [
+                {"id": "1", "status": 200, "body": {"value": []}},
+                {
+                    "id": "2",
+                    "status": 404,
+                    "body": {"error": {"code": "itemNotFound"}},
+                },
+                {"id": "3", "status": 200, "body": {"value": []}},
+            ]
+        }
+
+        mock_responses.post(url, payload=batch_response)
+
+        response = await microsoft_api_session.post(url, payload)
+
+        assert response == batch_response
+
+    @pytest.mark.asyncio
     async def test_post_with_consecutive_batch_failures(
         self, microsoft_api_session, mock_responses, patch_cancellable_sleeps
     ):
@@ -3333,6 +3358,40 @@ class TestSharepointOnlineDataSource:
                 drive_items_with_permissions.append(drive_item_with_permission)
 
             assert len(drive_items_with_permissions) == len(drive_item_ids)
+            assert all(
+                ACCESS_CONTROL in drive_item
+                for drive_item in drive_items_with_permissions
+            )
+
+    @pytest.mark.asyncio
+    async def test_drive_items_batch_with_permissions_skips_drive_item_not_found(
+        self, patch_sharepoint_client
+    ):
+        async with create_spo_source(use_document_level_security=True) as source:
+            drive_items_batch = [{"id": "1"}, {"id": "2"}, {"id": "3"}]
+            permission = {"grantedToV2": {"user": {"id": "some user id"}}}
+
+            # Drive item "2" was deleted after the delta page was fetched
+            patch_sharepoint_client.drive_items_permissions_batch = AsyncIterator(
+                [
+                    {"id": "1", "status": 200, "body": {"value": [permission]}},
+                    {
+                        "id": "2",
+                        "status": 404,
+                        "body": {"error": {"code": "itemNotFound"}},
+                    },
+                    {"id": "3", "status": 200, "body": {"value": [permission]}},
+                ]
+            )
+
+            drive_items_with_permissions = [
+                drive_item
+                async for drive_item in source._drive_items_batch_with_permissions(
+                    1, drive_items_batch, "dummy_site_web_url"
+                )
+            ]
+
+            assert [item["id"] for item in drive_items_with_permissions] == ["1", "3"]
             assert all(
                 ACCESS_CONTROL in drive_item
                 for drive_item in drive_items_with_permissions
