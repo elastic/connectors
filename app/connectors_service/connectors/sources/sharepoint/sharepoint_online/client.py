@@ -8,7 +8,7 @@ import os
 import re
 from collections.abc import Iterable, Sized
 from datetime import datetime, timedelta
-from urllib.parse import quote, urlparse
+from urllib.parse import quote, unquote, urlparse
 
 import aiohttp
 from connectors_sdk.logger import logger
@@ -118,6 +118,10 @@ class DriveItemsPage(Iterable, Sized):
 
     def delta_link(self):
         return self._delta_link
+
+
+def _escape_odata_string(value):
+    return quote(str(value).replace("'", "''"), safe="' ")
 
 
 class SharepointOnlineClient:
@@ -603,7 +607,7 @@ class SharepointOnlineClient:
         """
         self._validate_sharepoint_rest_url(site_web_url)
 
-        url = f"{site_web_url}/_api/lists/GetByTitle('{site_list_name}')/items({list_item_id})/FirstUniqueAncestorSecurableObject"
+        url = f"{site_web_url}/_api/lists/GetByTitle('{_escape_odata_string(site_list_name)}')/items({list_item_id})/FirstUniqueAncestorSecurableObject"
 
         try:
             response = await self._rest_api_client.fetch(url)
@@ -631,7 +635,7 @@ class SharepointOnlineClient:
 
         expand = "Member/users,RoleDefinitionBindings"
 
-        url = f"{site_web_url}/_api/lists/GetByTitle('{site_list_name}')/items({list_item_id})/FirstUniqueAncestorSecurableObject/roleassignments?$expand={expand}"
+        url = f"{site_web_url}/_api/lists/GetByTitle('{_escape_odata_string(site_list_name)}')/items({list_item_id})/FirstUniqueAncestorSecurableObject/roleassignments?$expand={expand}"
 
         try:
             async for page in self._rest_api_client.scroll(url):
@@ -675,8 +679,10 @@ class SharepointOnlineClient:
     @staticmethod
     def _site_pages_list_path(site_web_url):
         # The Site Pages library title is localized (e.g. "Pages du site"), but its URL is always /SitePages
-        web_path = quote(urlparse(site_web_url).path.rstrip("/"), safe="/")
-        return f"{site_web_url}/_api/web/GetList('{web_path}/SitePages')"
+        # site_web_url may already be percent-encoded (Graph webUrl), so decode before encoding once
+        web_path = unquote(urlparse(site_web_url).path.rstrip("/")).replace("'", "''")
+        web_path = quote(web_path, safe="/'")
+        return f"{site_web_url.rstrip('/')}/_api/web/GetList('{web_path}/SitePages')"
 
     async def site_pages_list_title(self, site_web_url):
         self._validate_sharepoint_rest_url(site_web_url)
@@ -687,6 +693,9 @@ class SharepointOnlineClient:
             )
             return response.get("Title") or SITE_PAGES_LIST_NAME
         except NotFound:
+            logger.warning(
+                f"Could not resolve Site Pages library title at '{site_web_url}'; assuming '{SITE_PAGES_LIST_NAME}'"
+            )
             return SITE_PAGES_LIST_NAME
 
     async def site_pages(self, site_web_url):

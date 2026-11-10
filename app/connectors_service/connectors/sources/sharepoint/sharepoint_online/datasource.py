@@ -1574,6 +1574,7 @@ class SharepointOnlineDataSource(BaseDataSource):
     ):
         site_id = site["id"]
         url = site["webUrl"]
+        site_pages_list_title = None  # localized, resolved once per site when needed
         async for site_page in self.client.site_pages(url):
             if not check_timestamp or (
                 check_timestamp and site_page["Modified"] >= self.last_sync_time()
@@ -1640,12 +1641,16 @@ class SharepointOnlineDataSource(BaseDataSource):
                         self._dls_enabled()
                         and self.configuration["fetch_unique_page_permissions"]
                     ):
+                        if site_pages_list_title is None:
+                            site_pages_list_title = (
+                                await self.client.site_pages_list_title(url)
+                            )
                         # Page may inherit from a parent folder or list with unique permissions
                         inherited_access_control = (
                             await self._inherited_list_item_access_control(
                                 site_id,
                                 url,
-                                await self.client.site_pages_list_title(url),
+                                site_pages_list_title,
                                 site_page["Id"],
                                 require_edit_access=not published,
                             )

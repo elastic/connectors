@@ -735,6 +735,13 @@ def get_list_item_attachments(site_name, list_title, list_item_id):
 
 
 @app.route(
+    "/sites/<string:site_name>/_api/web/GetList('/sites/<string:_site>/SitePages')"
+)
+def get_site_pages_list(site_name, _site):
+    return {"Title": "Site Pages"}
+
+
+@app.route(
     "/sites/<string:site_name>/_api/web/GetList('/sites/<string:_site>/SitePages')/items"
 )
 def get_site_pages(site_name, _site):

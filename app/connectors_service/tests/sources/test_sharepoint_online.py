@@ -1659,16 +1659,57 @@ class TestSharepointOnlineClient:
         assert [{"Id": i["Id"]} for i in returned_items] == actual_items
 
     @pytest.mark.asyncio
-    async def test_site_pages_uses_language_independent_url(self, client, patch_scroll):
-        site_url = f"https://{self.tenant_name}.sharepoint.com/sites/my site"
+    @pytest.mark.parametrize(
+        "site_path, expected_path",
+        [
+            ("", "/SitePages"),
+            ("/sites/site/", "/sites/site/SitePages"),
+            ("/sites/my%20site", "/sites/my%20site/SitePages"),
+            ("/sites/my site", "/sites/my%20site/SitePages"),
+            ("/sites/caf%C3%A9", "/sites/caf%C3%A9/SitePages"),
+            ("/sites/o'x", "/sites/o''x/SitePages"),
+            ("/sites/a/b", "/sites/a/b/SitePages"),
+        ],
+    )
+    async def test_site_pages_urls_are_language_independent(
+        self, client, patch_scroll, patch_fetch, site_path, expected_path
+    ):
+        site_url = f"https://{self.tenant_name}.sharepoint.com{site_path}"
+        list_url = f"{site_url.rstrip('/')}/_api/web/GetList('{expected_path}')"
         patch_scroll.side_effect = NotFound()
+        patch_fetch.return_value = {"value": True}
 
         async for _ in client.site_pages(site_url):
             pass
+        assert patch_scroll.call_args.args[0].startswith(f"{list_url}/items")
 
-        assert patch_scroll.call_args.args[0].startswith(
-            f"{site_url}/_api/web/GetList('/sites/my%20site/SitePages')/items"
+        await client.site_page_has_unique_role_assignments(site_url, 1)
+        assert patch_fetch.call_args.args[0] == (
+            f"{list_url}/items('1')/HasUniqueRoleAssignments"
         )
+
+        async for _ in client.site_page_role_assignments(site_url, 1):
+            pass
+        assert patch_scroll.call_args.args[0].startswith(
+            f"{list_url}/items('1')/roleassignments"
+        )
+
+    @pytest.mark.asyncio
+    async def test_site_list_item_first_unique_ancestor_escapes_title(
+        self, client, patch_fetch, patch_scroll
+    ):
+        site_url = f"https://{self.tenant_name}.sharepoint.com"
+        patch_fetch.return_value = {"odata.type": "SP.Web"}
+        patch_scroll.side_effect = NotFound()
+
+        await client.site_list_item_first_unique_ancestor_type(site_url, "L'a#b", 5)
+        assert "GetByTitle('L''a%23b')" in patch_fetch.call_args.args[0]
+
+        async for _ in client.site_list_item_first_unique_ancestor_role_assignments(
+            site_url, "L'a#b", 5
+        ):
+            pass
+        assert "GetByTitle('L''a%23b')" in patch_scroll.call_args.args[0]
 
     @pytest.mark.asyncio
     async def test_site_pages_list_title(self, client, patch_fetch):
@@ -1681,8 +1722,8 @@ class TestSharepointOnlineClient:
         )
 
     @pytest.mark.asyncio
-    async def test_site_pages_list_title_not_found(self, client, patch_fetch):
-        patch_fetch.side_effect = NotFound()
+    async def test_site_pages_list_title_missing_title(self, client, patch_fetch):
+        patch_fetch.return_value = {}
 
         assert (
             await client.site_pages_list_title(
@@ -1692,16 +1733,34 @@ class TestSharepointOnlineClient:
         )
 
     @pytest.mark.asyncio
+    async def test_site_pages_list_title_not_found(self, client, patch_fetch):
+        patch_fetch.side_effect = NotFound()
+
+        with patch(
+            "connectors.sources.sharepoint.sharepoint_online.client.logger"
+        ) as mock_logger:
+            title = await client.site_pages_list_title(
+                f"https://{self.tenant_name}.sharepoint.com"
+            )
+
+        assert title == "Site Pages"
+        mock_logger.warning.assert_called_once()
+
+    @pytest.mark.asyncio
     async def test_site_pages_not_found(self, client, patch_scroll):
         page_url_path = f"https://{self.tenant_name}.sharepoint.com/random/totally/made/up/page.aspx"
 
         patch_scroll.side_effect = NotFound()
 
         returned_items = []
-        async for site_page in client.site_pages(page_url_path):
-            returned_items.append(site_page)
+        with patch(
+            "connectors.sources.sharepoint.sharepoint_online.client.logger"
+        ) as mock_logger:
+            async for site_page in client.site_pages(page_url_path):
+                returned_items.append(site_page)
 
         assert len(returned_items) == 0
+        mock_logger.warning.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_site_page_has_unique_role_assignments(self, client, patch_fetch):
@@ -5462,6 +5521,7 @@ class TestSharepointOnlineDataSource:
             ]
 
             assert len(pages) == 1
+            source.client.site_pages_list_title.assert_awaited_once()
             assert pages[0]["published"] is published
             access_control = pages[0][ALLOW_ACCESS_CONTROL_PATCHED]
             for email in expected_in:
@@ -5474,6 +5534,55 @@ class TestSharepointOnlineDataSource:
             source.client.site_list_item_first_unique_ancestor_type.assert_awaited_once_with(
                 "http://fakesharepoint.com/site", "Pages du site", "4"
             )
+
+    @pytest.mark.asyncio
+    @patch(
+        "connectors.sources.sharepoint.sharepoint_online.datasource.ACCESS_CONTROL",
+        ALLOW_ACCESS_CONTROL_PATCHED,
+    )
+    async def test_site_pages_list_title_resolved_once_per_site(
+        self, patch_sharepoint_client
+    ):
+        async with create_spo_source(use_document_level_security=True) as source:
+            source.client.site_pages = AsyncIterator(
+                [
+                    {
+                        "Id": "4",
+                        "Modified": self.day_ago,
+                        "OData__UIVersionString": "2.0",
+                    },
+                    {
+                        "Id": "5",
+                        "Modified": self.day_ago,
+                        "OData__UIVersionString": "2.0",
+                    },
+                ]
+            )
+            source.client.site_pages_list_title = AsyncMock(
+                return_value="Pages du site"
+            )
+            source.client.site_page_has_unique_role_assignments = AsyncMock(
+                return_value=False
+            )
+            source.client.site_list_item_first_unique_ancestor_type = AsyncMock(
+                return_value="SP.Web"
+            )
+
+            pages = [
+                page
+                async for page in source.site_pages(
+                    {"id": "1", "webUrl": "http://fakesharepoint.com/site"},
+                    site_access_control=[],
+                    site_editors_access_control=[],
+                )
+            ]
+
+            assert len(pages) == 2
+            source.client.site_pages_list_title.assert_awaited_once()
+            assert [
+                c.args[1]
+                for c in source.client.site_list_item_first_unique_ancestor_type.await_args_list
+            ] == ["Pages du site", "Pages du site"]
 
     @pytest.mark.asyncio
     @patch(

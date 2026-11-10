@@ -17,6 +17,7 @@ from connectors_sdk.source import ConfigurableFieldValueError
 from httpx import ByteStream
 
 from connectors.sources.sharepoint.sharepoint_server import SharepointServerDataSource
+from connectors.sources.sharepoint.sharepoint_server.constants import SELECTED_FIELDS
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
 
@@ -684,6 +685,59 @@ async def test_get_docs_drive_items_for_web_pages():
         async for document, _ in source.get_docs():
             actual_response.append(document)
         assert len(actual_response) == 3
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "title, root_folder, is_site_pages",
+    [
+        ("Site Pages", "/sites/enterprise/ctest/SitePages", True),
+        ("Pages du site", "/sites/enterprise/ctest/SitePages", True),
+        ("Pages du site", "/sites/enterprise/ctest/sitepages/", True),
+        ("Site Pages", "/sites/enterprise/ctest/Shared Documents", False),
+        ("Documents", "/sites/enterprise/ctest/MySitePages", False),
+    ],
+)
+async def test_site_pages_library_detected_by_url_not_title(
+    title, root_folder, is_site_pages
+):
+    site = {
+        "Title": "ctest",
+        "Id": "f764b597-ed44-49be-8867-f8e9ca5d0a6e",
+        "Url": f"{HOST_URL}/sites/enterprise/ctest",
+        "ServerRelativeUrl": "/sites/enterprise/ctest",
+        "LastItemModifiedDate": "2023-03-19T05:02:52Z",
+        "Created": "2023-03-19T05:02:52Z",
+    }
+    library = {
+        "RootFolder": {"ServerRelativeUrl": root_folder},
+        "Created": "2023-03-19T05:02:52Z",
+        "BaseType": 1,
+        "Id": "f764b597-ed44-49be-8867-f8e9ca5d0a6e",
+        "LastItemModifiedDate": "2023-03-19T05:02:52Z",
+        "ParentWebUrl": "/sites/enterprise/ctest",
+        "Title": title,
+    }
+    used_fields = []
+
+    async def get_drive_items(**kwargs):
+        used_fields.append(kwargs["selected_field"])
+        return
+        yield
+
+    async with create_sps_source() as source:
+        source.sharepoint_client._fetch_data_with_query = AsyncIterator([])
+        source.sharepoint_client.get_site = AsyncIterator([site])
+        source.sharepoint_client.get_lists = AsyncIterator([library])
+        source.sharepoint_client.get_drive_items = get_drive_items
+        async for _ in source.get_docs():
+            pass
+
+    assert used_fields == [
+        SELECTED_FIELDS
+        if is_site_pages
+        else "*,Author/Name,Editor/Name,Author/Id,Editor/Id"
+    ]
 
 
 @pytest.mark.asyncio
