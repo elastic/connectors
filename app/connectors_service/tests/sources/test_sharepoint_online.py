@@ -1659,6 +1659,39 @@ class TestSharepointOnlineClient:
         assert [{"Id": i["Id"]} for i in returned_items] == actual_items
 
     @pytest.mark.asyncio
+    async def test_site_pages_uses_language_independent_url(self, client, patch_scroll):
+        site_url = f"https://{self.tenant_name}.sharepoint.com/sites/my site"
+        patch_scroll.side_effect = NotFound()
+
+        async for _ in client.site_pages(site_url):
+            pass
+
+        assert patch_scroll.call_args.args[0].startswith(
+            f"{site_url}/_api/web/GetList('/sites/my%20site/SitePages')/items"
+        )
+
+    @pytest.mark.asyncio
+    async def test_site_pages_list_title(self, client, patch_fetch):
+        site_url = f"https://{self.tenant_name}.sharepoint.com/sites/site"
+        patch_fetch.return_value = {"Title": "Pages du site"}
+
+        assert await client.site_pages_list_title(site_url) == "Pages du site"
+        patch_fetch.assert_called_once_with(
+            f"{site_url}/_api/web/GetList('/sites/site/SitePages')?$select=Title"
+        )
+
+    @pytest.mark.asyncio
+    async def test_site_pages_list_title_not_found(self, client, patch_fetch):
+        patch_fetch.side_effect = NotFound()
+
+        assert (
+            await client.site_pages_list_title(
+                f"https://{self.tenant_name}.sharepoint.com"
+            )
+            == "Site Pages"
+        )
+
+    @pytest.mark.asyncio
     async def test_site_pages_not_found(self, client, patch_scroll):
         page_url_path = f"https://{self.tenant_name}.sharepoint.com/random/totally/made/up/page.aspx"
 
@@ -5409,6 +5442,9 @@ class TestSharepointOnlineDataSource:
             source.client.site_page_has_unique_role_assignments = AsyncMock(
                 return_value=False
             )
+            source.client.site_pages_list_title = AsyncMock(
+                return_value="Pages du site"
+            )
             source.client.site_list_item_first_unique_ancestor_type = AsyncMock(
                 return_value="SP.Data.Site_x0020_PagesItem"
             )
@@ -5436,7 +5472,7 @@ class TestSharepointOnlineDataSource:
             assert _prefix_user("site_user") not in access_control
             assert _prefix_user("site_editor") not in access_control
             source.client.site_list_item_first_unique_ancestor_type.assert_awaited_once_with(
-                "http://fakesharepoint.com/site", "Site Pages", "4"
+                "http://fakesharepoint.com/site", "Pages du site", "4"
             )
 
     @pytest.mark.asyncio

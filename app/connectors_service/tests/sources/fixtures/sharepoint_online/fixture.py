@@ -734,8 +734,10 @@ def get_list_item_attachments(site_name, list_title, list_item_id):
         raise Exception(msg)
 
 
-@app.route("/sites/<string:site_name>/_api/web/lists/GetByTitle('Site Pages')/items")
-def get_site_pages(site_name):
+@app.route(
+    "/sites/<string:site_name>/_api/web/GetList('/sites/<string:_site>/SitePages')/items"
+)
+def get_site_pages(site_name, _site):
     skip = int(request.args.get("$skip", 0))
     take = int(request.args.get("$take", 100))
 
@@ -746,7 +748,7 @@ def get_site_pages(site_name):
     }
     if len(site_pages) == take:
         response["odata.nextLink"] = (
-            f"{ROOT}/sites/{site_name}/_api/web/lists/GetByTitle('Site Pages')/items?$skip={skip + take}&$take={take}"
+            f"{ROOT}/sites/{site_name}/_api/web/GetList('/sites/{site_name}/SitePages')/items?$skip={skip + take}&$take={take}"
         )
 
     return response

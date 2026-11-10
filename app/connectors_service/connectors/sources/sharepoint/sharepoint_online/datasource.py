@@ -38,7 +38,6 @@ from connectors.sources.sharepoint.sharepoint_online.constants import (
     EXCLUDED_SHAREPOINT_LIST_NAMES,
     MAX_DOCUMENT_SIZE,
     SHAREPOINT_WEB_ODATA_TYPE,
-    SITE_PAGES_LIST_NAME,
     SPO_API_MAX_BATCH_SIZE,
     SPO_MAX_EXPAND_SIZE,
     TIMESTAMP_FORMAT,
@@ -1646,7 +1645,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                             await self._inherited_list_item_access_control(
                                 site_id,
                                 url,
-                                SITE_PAGES_LIST_NAME,
+                                await self.client.site_pages_list_title(url),
                                 site_page["Id"],
                                 require_edit_access=not published,
                             )
