@@ -2685,7 +2685,7 @@ Apache Software License
 
 
 bracex
-3.2
+3.2.2
 MIT
 MIT License
 
@@ -2957,7 +2957,7 @@ Agreement.
 
 
 dnspython
-2.9.1
+2.9.2
 ISC
 ISC License
 
@@ -3591,7 +3591,7 @@ Apache-2.0
 
 
 elasticsearch-connectors
-8.19.24
+8.19.25
 Apache Software License
 Elastic License 2.0
 
@@ -3689,7 +3689,7 @@ these terms.
 
 
 elasticsearch-connectors
-8.19.24
+8.19.25
 Apache Software License
 Elastic License 2.0
 
@@ -7760,7 +7760,7 @@ made under the terms of *both* these licenses.
 
 
 soupsieve
-3.0.4
+4.1
 MIT
 MIT License
 
