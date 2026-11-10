@@ -6774,7 +6774,7 @@ Apache Software License
 
 
 pyasn1
-0.6.4
+0.6.5
 BSD-2-Clause
 Copyright (c) 2005-2020, Ilya Etingof <etingof@gmail.com>
 All rights reserved.

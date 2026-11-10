@@ -45,7 +45,7 @@ graphql-core==3.2.12
 notion-client==2.2.1
 certifi==2026.10.19
 aioboto3==12.4.0
-pyasn1==0.6.4
+pyasn1==0.6.5
 azure-identity==1.19.0
 requests==2.33.0
 oauthlib==4.0.0
