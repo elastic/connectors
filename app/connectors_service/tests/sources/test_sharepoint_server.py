@@ -648,14 +648,14 @@ async def test_get_docs_drive_items_for_web_pages():
     }
     item_content_response = {
         "RootFolder": {
-            "ServerRelativeUrl": "/sites/enterprise/ctest/_api",
+            "ServerRelativeUrl": "/sites/enterprise/ctest/SitePages",
         },
         "Created": "2023-03-19T05:02:52Z",
         "BaseType": 1,
         "Id": "f764b597-ed44-49be-8867-f8e9ca5d0a6e",
         "LastItemModifiedDate": "2023-03-19T05:02:52Z",
         "ParentWebUrl": "/sites/enterprise/ctest/_api",
-        "Title": "Site Pages",
+        "Title": "Pages du site",
     }
 
     drive_content_response = {
