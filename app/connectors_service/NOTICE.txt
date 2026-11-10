@@ -2711,7 +2711,7 @@ Apache Software License
 
 
 bracex
-3.2.1
+3.2.2
 MIT
 MIT License
 
@@ -7804,7 +7804,7 @@ made under the terms of *both* these licenses.
 
 
 soupsieve
-4.0.1
+4.1
 MIT
 MIT License
 
