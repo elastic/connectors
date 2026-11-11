@@ -8,12 +8,9 @@ Use connectors to sync data from popular data sources to Elasticsearch.
 This repository contains the source code for all Elastic connectors, also known as crawlers.
 Kibana 9.7 and later shows the UI page for managing connectors as Content crawlers.
 
-For an overview of the deployment steps, refer to [Self-managed connectors](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-build-connector.html) in the official Elastic documentation.
+Self-managed connectors run on your own infrastructure. For an overview of the deployment steps, refer to [Self-managed connectors](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-build-connector.html) in the official Elastic documentation.
 
 To get started quickly using Docker Compose, check out this [README file](./app/connectors_service/scripts/stack/README.md).
-
-> [!NOTE]
-> Self-managed connectors run on your own infrastructure. Since version 9.0 using the Search Solution View and in Elasticsearch Serverless, Elastic managed connectors are not available. 
 
 ### Documentation
 
