@@ -14,13 +14,12 @@ To get started quickly using Docker Compose, check out this [README file](./app/
 
 ### Documentation
 
-The main documentation lives in the [Elastic docs](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-connectors.html).
-You'll find the individual data source references there.
-
-For everything to do with _developing_ connectors, you'll find here in this repo.
+The main documentation lives in the [Elastic docs](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-connectors.html). Check here for individual data source references and deployment information.
 
 Since 8.12.0, you can manage connectors and sync jobs programmatically using APIs.
 Refer to the [Connector API documentation](https://www.elastic.co/docs/api/doc/elasticsearch/v8/group/endpoint-connector).
+
+Everything else concerning _developing_ connectors is located in this repo.
 
 ### Command-line interface
 
