@@ -733,7 +733,13 @@ class SharepointServerDataSource(BaseDataSource):
                 )
                 # if BaseType value is 1 then it's document library else it's a list
                 if result.get("BaseType") == 1:
-                    if result.get("Title") == "Site Pages":
+                    # The library title is localized, but its URL is always /SitePages
+                    if (
+                        result["RootFolder"]["ServerRelativeUrl"]
+                        .rstrip("/")
+                        .lower()
+                        .endswith("/sitepages")
+                    ):
                         is_site_page = True
                         selected_field = SELECTED_FIELDS
                     yield (
