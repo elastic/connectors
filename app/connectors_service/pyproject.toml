@@ -61,7 +61,7 @@ dependencies = [
     "motor==3.7.1",
     "cryptography==50.0.0",
     "pyOpenSSL==26.4.0",
-    "pyasn1==0.6.4",
+    "pyasn1==0.6.5",
     "pydantic==2.10.6",
     "PyJWT==2.15.1",
     "PyMySQL==1.1.1",
