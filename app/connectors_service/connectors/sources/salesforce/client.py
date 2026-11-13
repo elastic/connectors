@@ -37,6 +37,20 @@ from connectors.utils import (
     retryable,
 )
 
+# Keywords that can follow the object name in a SOQL FROM clause, so they are
+# not an alias
+SOQL_CLAUSE_KEYWORDS = {
+    "WHERE",
+    "WITH",
+    "GROUP",
+    "ORDER",
+    "LIMIT",
+    "OFFSET",
+    "FOR",
+    "UPDATE",
+    "USING",
+}
+
 # SOQL keywords are case-insensitive. Matching them as whole words keeps field
 # names such as Fields__c or Credit_Limit__c from being read as a FIELDS()
 # function or a LIMIT clause.
@@ -141,26 +155,78 @@ class SalesforceClient:
 
         return query
 
-    def _add_last_modified_date(self, query):
-        lowered_query = query.lower()
-        if (
-            not ("fields(all)" in lowered_query or "fields(standard)" in lowered_query)
-            and "lastmodifieddate" not in lowered_query
-        ):
-            query = re.sub(
-                r"(?i)SELECT (.*) FROM", r"SELECT \1, LastModifiedDate FROM", query
-            )
+    def _split_select_clause(self, query):
+        """Split the field list of the outer SELECT clause of a SOQL query.
 
-        return query
+        Commas and FROM keywords inside parentheses (subqueries, functions)
+        or single-quoted string literals are skipped. Returns the selected
+        fields and the position of the outer FROM keyword, or (None, None) if
+        the query has no SELECT ... FROM.
+        """
+        select = re.match(r"(?i)\s*SELECT\s", query)
+        if not select:
+            return None, None
+
+        fields = []
+        depth = 0
+        field_start = select.end()
+        for token in re.finditer(
+            r"(?i)'(?:\\.|[^'\\])*'|[(),]|\bFROM\b", query[select.end() :]
+        ):
+            position = select.end() + token.start()
+            if token.group().startswith("'"):
+                continue
+            if token.group() == "(":
+                depth += 1
+            elif token.group() == ")":
+                depth -= 1
+            elif depth == 0:
+                fields.append(query[field_start:position].strip())
+                if token.group() != ",":
+                    return fields, position
+                field_start = position + 1
+
+        return None, None
+
+    def _outer_object_qualifiers(self, query, from_position):
+        """Return the lowercased object name and alias of the outer FROM clause"""
+        match = re.match(r"(?i)FROM\s+(\w+)(?:\s+(\w+))?", query[from_position:])
+        if not match:
+            return set()
+
+        qualifiers = {match.group(1).lower()}
+        alias = match.group(2)
+        if alias and alias.upper() not in SOQL_CLAUSE_KEYWORDS:
+            qualifiers.add(alias.lower())
+        return qualifiers
+
+    def _add_selected_field(self, query, field):
+        """Add a field to the outer SELECT clause unless it is already selected"""
+        lowered_query = query.lower()
+        if "fields(all)" in lowered_query or "fields(standard)" in lowered_query:
+            return query
+
+        fields, from_position = self._split_select_clause(query)
+        if fields is None:
+            return query
+
+        # `a.Id` in `SELECT a.Id FROM Account a` is the outer object's own
+        # field, unlike a relationship field such as `Owner.Id`.
+        qualifiers = self._outer_object_qualifiers(query, from_position)
+        for name in fields:
+            qualifier, _, unqualified = name.lower().rpartition(".")
+            if unqualified == field.lower() and (
+                not qualifier or qualifier in qualifiers
+            ):
+                return query
+
+        return f"{query[:from_position].rstrip()}, {field} {query[from_position:]}"
+
+    def _add_last_modified_date(self, query):
+        return self._add_selected_field(query=query, field="LastModifiedDate")
 
     def _add_id(self, query):
-        lowered_query = query.lower()
-        if not (
-            "fields(all)" in lowered_query or "fields(standard)" in lowered_query
-        ) and not re.search(r"\bid\b", lowered_query):
-            query = re.sub(r"(?i)SELECT (.*) FROM", r"SELECT \1, Id FROM", query)
-
-        return query
+        return self._add_selected_field(query=query, field="Id")
 
     async def get_sync_rules_results(self, rule):
         if rule["language"] == "SOQL":
