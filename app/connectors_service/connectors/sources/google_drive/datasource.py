@@ -810,6 +810,7 @@ class GoogleDriveDataSource(BaseDataSource):
 
         # Filter out files that have been already processed
         new_files = [file for file in files if file.get("id") not in seen_ids]
+        seen_ids.update(file.get("id") for file in new_files)
 
         prepared_files = await self._process_items_concurrently(
             new_files,
@@ -842,6 +843,22 @@ class GoogleDriveDataSource(BaseDataSource):
         self.init_sync_cursor()
 
         if self._domain_wide_delegation_sync_enabled():
+            email_for_shared_drives_sync = (
+                self._google_google_workspace_email_for_shared_drives_sync()
+            )
+
+            shared_drives_client = self.google_drive_client(
+                impersonate_email=email_for_shared_drives_sync
+            )
+
+            # Build a path lookup, parentId -> parent path. It is resolved before
+            # the personal drives are synced: a file is synced only from the first
+            # listing it is found in, which may be a personal drive, and it should
+            # get its path also when the shared drives listing would have found it.
+            resolved_paths = await self.resolve_paths(
+                google_drive_client=shared_drives_client
+            )
+
             # sync personal drives first
             async for user in self.google_admin_directory_client.users():
                 email = user.get(UserFields.EMAIL.value)
@@ -853,23 +870,10 @@ class GoogleDriveDataSource(BaseDataSource):
                     async for file, _ in self.prepare_files(
                         client=google_drive_client,
                         files_page=files_page,
-                        paths={},
+                        paths=resolved_paths,
                         seen_ids=seen_ids,
                     ):
                         yield file, partial(self.get_content, google_drive_client, file)
-
-            email_for_shared_drives_sync = (
-                self._google_google_workspace_email_for_shared_drives_sync()
-            )
-
-            shared_drives_client = self.google_drive_client(
-                impersonate_email=email_for_shared_drives_sync
-            )
-
-            # Build a path lookup, parentId -> parent path
-            resolved_paths = await self.resolve_paths(
-                google_drive_client=shared_drives_client
-            )
 
             # sync shared drives
             self._logger.debug(
@@ -926,6 +930,22 @@ class GoogleDriveDataSource(BaseDataSource):
         seen_ids = set()
 
         if self._domain_wide_delegation_sync_enabled():
+            email_for_shared_drives_sync = (
+                self._google_google_workspace_email_for_shared_drives_sync()
+            )
+
+            shared_drives_client = self.google_drive_client(
+                impersonate_email=email_for_shared_drives_sync
+            )
+
+            # Build a path lookup, parentId -> parent path. It is resolved before
+            # the personal drives are synced: a file is synced only from the first
+            # listing it is found in, which may be a personal drive, and it should
+            # get its path also when the shared drives listing would have found it.
+            resolved_paths = await self.resolve_paths(
+                google_drive_client=shared_drives_client
+            )
+
             # sync personal drives first
             async for user in self.google_admin_directory_client.users():
                 email = user.get(UserFields.EMAIL.value)
@@ -939,7 +959,7 @@ class GoogleDriveDataSource(BaseDataSource):
                     async for file, _ in self.prepare_files(
                         client=google_drive_client,
                         files_page=files_page,
-                        paths={},
+                        paths=resolved_paths,
                         seen_ids=seen_ids,
                     ):
                         if file.get("trashed") is True:
@@ -954,19 +974,6 @@ class GoogleDriveDataSource(BaseDataSource):
                                 partial(self.get_content, google_drive_client, file),
                                 OP_INDEX,
                             )
-
-            email_for_shared_drives_sync = (
-                self._google_google_workspace_email_for_shared_drives_sync()
-            )
-
-            shared_drives_client = self.google_drive_client(
-                impersonate_email=email_for_shared_drives_sync
-            )
-
-            # Build a path lookup, parentId -> parent path
-            resolved_paths = await self.resolve_paths(
-                google_drive_client=shared_drives_client
-            )
 
             # sync shared drives
             self._logger.debug(
