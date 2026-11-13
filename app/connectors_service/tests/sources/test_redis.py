@@ -386,3 +386,28 @@ async def test_ping_when_mutual_ssl_enabled():
         ):
             await source.ping()
             source.client._redis_client.ping.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("ssl_enabled", [False, True])
+@pytest.mark.parametrize(
+    "username, password",
+    [
+        ("user", "pa/ss#wo?rd"),
+        ("us%er", "p%41ss@word"),
+    ],
+)
+async def test_client_with_special_characters_in_credentials(
+    ssl_enabled, username, password
+):
+    async with create_redis_source() as source:
+        source.client.ssl_enabled = ssl_enabled
+        source.client.username = username
+        source.client.password = password
+
+        connection_kwargs = source.client._client.connection_pool.connection_kwargs
+
+        assert connection_kwargs["username"] == username
+        assert connection_kwargs["password"] == password
+        assert connection_kwargs["host"] == "localhost"
+        assert connection_kwargs["port"] == 6379
