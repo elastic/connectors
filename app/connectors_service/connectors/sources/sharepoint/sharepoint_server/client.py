@@ -376,11 +376,12 @@ class SharepointServerClient:
                     continue
 
                 for attachment_file in result.get("AttachmentFiles"):
+                    # The URL goes inside a quoted OData string literal, so an
+                    # apostrophe has to be doubled. quote() turns it into "%27",
+                    # so double it after quoting, as get_drive_items does.
                     file_relative_url = quote(
-                        attachment_file.get("ServerRelativeUrl").replace(
-                            "%27", "%27%27"
-                        )
-                    )
+                        attachment_file.get("ServerRelativeUrl")
+                    ).replace("%27", "%27%27")
 
                     attachment_data = await self.get_attachment(
                         site_url, file_relative_url
