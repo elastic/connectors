@@ -5,6 +5,7 @@
 #
 """Tests the OneDrive source class methods"""
 
+import json
 from contextlib import asynccontextmanager
 from unittest.mock import ANY, AsyncMock, MagicMock, Mock, patch
 
@@ -1058,6 +1059,82 @@ async def test_json_batching():
                     result.append(file[0].get("id"))
 
     assert result == expected_result
+
+
+def _batch_post(batch_responses, sent_batches):
+    responses = iter(batch_responses)
+
+    async def post(url, payload=None):
+        sent_batches.append(json.loads(payload)["requests"])
+        yield JSONAsyncMock(next(responses))
+
+    return post
+
+
+def _file_page(request_id, file_id):
+    return {"id": request_id, "status": 200, "body": {"value": [{"id": file_id}]}}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", [429, 503])
+async def test_json_batching_retries_throttled_request_after_retry_after(status):
+    # OneDrive answers a throttled request in a batch with 429 or 503 and a
+    # Retry-After header; the request has to be sent again after that delay.
+    throttled = {"id": "231", "status": status, "headers": {"Retry-After": "7"}}
+    sent_batches = []
+    async with create_onedrive_source() as source:
+        source.client.post = _batch_post(
+            [
+                {"responses": [_file_page("123", "file-1"), throttled]},
+                {"responses": [_file_page("231", "file-2")]},
+            ],
+            sent_batches,
+        )
+        with patch.object(source.client._sleeps, "sleep", AsyncMock()) as sleep:
+            files = [
+                response["body"]["value"][0]["id"]
+                async for response in source.json_batching(
+                    batched_apis=[
+                        source._prepare_batch("123", "users/123/drive/root/delta"),
+                        source._prepare_batch("231", "users/231/drive/root/delta"),
+                    ]
+                )
+            ]
+
+    assert files == ["file-1", "file-2"]
+    assert [[request["id"] for request in batch] for batch in sent_batches] == [
+        ["123", "231"],
+        ["231"],
+    ]
+    sleep.assert_awaited_once_with(7)
+
+
+@pytest.mark.asyncio
+async def test_json_batching_does_not_retry_failed_request():
+    not_found = {
+        "id": "231",
+        "status": 404,
+        "body": {"error": {"code": "ResourceNotFound"}},
+    }
+    sent_batches = []
+    async with create_onedrive_source() as source:
+        source.client.post = _batch_post(
+            [{"responses": [_file_page("123", "file-1"), not_found]}], sent_batches
+        )
+        with patch.object(source.client._sleeps, "sleep", AsyncMock()) as sleep:
+            files = [
+                response["body"]["value"][0]["id"]
+                async for response in source.json_batching(
+                    batched_apis=[
+                        source._prepare_batch("123", "users/123/drive/root/delta"),
+                        source._prepare_batch("231", "users/231/drive/root/delta"),
+                    ]
+                )
+            ]
+
+    assert files == ["file-1"]
+    assert len(sent_batches) == 1
+    sleep.assert_not_awaited()
 
 
 @patch.object(OneDriveClient, "list_users", return_value=AsyncIterator(EXPECTED_USERS))
