@@ -171,17 +171,19 @@ class BoxClient:
 
     async def paginated_call(self, url, params, headers):
         try:
-            offset = 0
+            # Box rejects offsets above 10000, so offset paging can't get past
+            # the first 10000 entries of a folder or user list. Marker paging
+            # has no such limit.
+            params = {**params, "usemarker": "true", "limit": FETCH_LIMIT}
             while True:
-                params.update({"offset": offset, "limit": FETCH_LIMIT})
                 response = await self.get(url=url, headers=headers, params=params)
                 json_response = await response.json()
-                total_count = json_response.get("total_count")
-                for doc in json_response.get("entries"):
+                for doc in json_response.get("entries", []):
                     yield doc
-                offset += FETCH_LIMIT
-                if offset >= total_count:
+                next_marker = json_response.get("next_marker")
+                if not next_marker:
                     break
+                params["marker"] = next_marker
         except Exception:
             raise
 
