@@ -62,6 +62,8 @@ dependencies = [
     "cryptography==50.0.0",
     "pyOpenSSL==26.4.0",
     "pyasn1==0.6.5",
+    # transitive pin for CVE fix; fixed release requires Python >=3.11
+    "dnspython==2.9.2; python_version>='3.11'",
     "pydantic==2.10.6",
     "PyJWT==2.15.1",
     "PyMySQL==1.1.1",
