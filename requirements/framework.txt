@@ -46,6 +46,8 @@ notion-client==2.2.1
 certifi==2026.10.19
 aioboto3==12.4.0
 pyasn1==0.6.5
+# transitive pin for CVE fix; fixed release requires Python >=3.11
+soupsieve==4.1.1; python_version>='3.11'
 azure-identity==1.19.0
 requests==2.33.0
 oauthlib==4.0.0
