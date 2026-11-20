@@ -188,7 +188,18 @@ def _open_folder_items(folder, fields):
 
 
 def _next_folder_items(items, batch_size):
-    return list(islice(items, batch_size))
+    """Read up to batch_size items. Return (batch, error).
+
+    An error raised midway is returned, not raised, so the items read before
+    it are not lost.
+    """
+    batch = []
+    try:
+        for item in islice(items, batch_size):
+            batch.append(item)
+    except Exception as error:
+        return batch, error
+    return batch, None
 
 
 async def _iter_folder_items(folder, fields, batch_size=FOLDER_ITEMS_BATCH_SIZE):
@@ -197,8 +208,9 @@ async def _iter_folder_items(folder, fields, batch_size=FOLDER_ITEMS_BATCH_SIZE)
     Only one batch is held in memory: listing a whole folder keeps every
     item, MIME content included, alive until the folder is done.
 
+    Items read before an error are yielded first, then the error is raised.
     ErrorMailboxStoreUnavailable restarts the folder read after a backoff.
-    Items yielded before the error are yielded again; the sink upserts them
+    Items yielded before the restart are yielded again; the sink upserts them
     by id.
     """
     retry = 1
@@ -207,32 +219,41 @@ async def _iter_folder_items(folder, fields, batch_size=FOLDER_ITEMS_BATCH_SIZE)
         try:
             if items is None:
                 items = await asyncio.to_thread(_open_folder_items, folder, fields)
-            batch = await asyncio.to_thread(_next_folder_items, items, batch_size)
-        except ErrorMailboxStoreUnavailable:
-            if retry >= RETRIES:
-                raise
-            logger.warning(
-                "Mailbox store unavailable while reading folder %s; "
-                "retrying (%s of %s).",
-                getattr(folder, "name", "unknown"),
-                retry,
-                RETRIES,
+            batch, error = await asyncio.to_thread(
+                _next_folder_items, items, batch_size
             )
-            await asyncio.sleep(
-                time_to_sleep_between_retries(
-                    RetryStrategy.EXPONENTIAL_BACKOFF, RETRY_INTERVAL, retry
-                )
-            )
-            retry += 1
-            items = None
-            continue
+        except ErrorMailboxStoreUnavailable as store_error:
+            batch, error = [], store_error
 
-        if not batch:
-            return
+        finished = not batch and error is None
+        item = None
         for item in batch:
             yield item
         # Drop the batch before reading the next one, or both stay alive.
         batch = item = None
+
+        if finished:
+            return
+        if error is None:
+            continue
+        if not isinstance(error, ErrorMailboxStoreUnavailable):
+            raise error
+        if retry >= RETRIES:
+            raise error
+        logger.warning(
+            "Mailbox store unavailable while reading folder %s; "
+            "retrying (%s of %s).",
+            getattr(folder, "name", "unknown"),
+            retry,
+            RETRIES,
+        )
+        await asyncio.sleep(
+            time_to_sleep_between_retries(
+                RetryStrategy.EXPONENTIAL_BACKOFF, RETRY_INTERVAL, retry
+            )
+        )
+        retry += 1
+        items = None
 
 
 def _is_mail_folder(folder):

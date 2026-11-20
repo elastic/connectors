@@ -1837,7 +1837,7 @@ async def test_get_mails_skips_additional_folder_that_cannot_be_fetched():
 @pytest.mark.asyncio
 async def test_get_mails_keeps_items_read_before_additional_folder_fails():
     def failing_items():
-        for _ in range(FOLDER_ITEMS_BATCH_SIZE):
+        for _ in range(FOLDER_ITEMS_BATCH_SIZE + 3):
             yield build_mail_document()
         access_denied_message = "access revoked mid-read"
         raise ErrorAccessDenied(access_denied_message)
@@ -1856,7 +1856,7 @@ async def test_get_mails_keeps_items_read_before_additional_folder_fails():
 
         assert (
             results.count({"constant": MAIL_OBJECT, "folder_name": "Projects"})
-            == FOLDER_ITEMS_BATCH_SIZE
+            == FOLDER_ITEMS_BATCH_SIZE + 3
         )
         assert {"constant": MAIL_OBJECT, "folder_name": "PRTG Done"} in results
 
@@ -2359,6 +2359,49 @@ async def test_iter_folder_items_reads_one_batch_at_a_time():
     rest = [item async for item in items]
     assert rest == list(range(1, 10))
     assert pulled == 10
+
+
+@pytest.mark.asyncio
+async def test_iter_folder_items_yields_partial_batch_before_raising():
+    # The error is raised between batch boundaries: items 4 and 5 sit in the
+    # second, incomplete batch and must still be yielded.
+    def failing_items():
+        yield from range(1, 6)
+        access_denied_message = "access revoked mid-read"
+        raise ErrorAccessDenied(access_denied_message)
+
+    folder = MagicMock()
+    folder.all.return_value.only.return_value = failing_items()
+
+    seen = []
+    with pytest.raises(ErrorAccessDenied):
+        async for item in _iter_folder_items(folder, MAIL_FIELDS, batch_size=3):
+            seen.append(item)
+
+    assert seen == [1, 2, 3, 4, 5]
+
+
+@pytest.mark.asyncio
+async def test_iter_folder_items_yields_partial_batch_before_restart():
+    def failing_items():
+        yield "first"
+        yield "second"
+        store_unavailable_message = "mailbox store unavailable"
+        raise ErrorMailboxStoreUnavailable(store_unavailable_message)
+
+    folder = MagicMock()
+    folder.name = "Inbox"
+    folder.all.return_value.only.side_effect = [
+        failing_items(),
+        iter(["first", "second", "third"]),
+    ]
+
+    with patch("connectors.sources.exchange_server.client.asyncio.sleep", AsyncMock()):
+        items = [
+            item async for item in _iter_folder_items(folder, MAIL_FIELDS, batch_size=3)
+        ]
+
+    assert items == ["first", "second", "first", "second", "third"]
 
 
 @pytest.mark.asyncio
