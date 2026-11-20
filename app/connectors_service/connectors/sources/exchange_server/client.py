@@ -91,6 +91,7 @@ from connectors.sources.exchange_server.constants import (
     CALENDAR_FIELDS,
     CONTACT_FOLDER_FIELDS,
     MAIL_FIELDS,
+    MAIL_FIELDS_WITH_MIME_CONTENT,
     MAIL_OBJECT,
     MAIL_TYPES,
     RETRIES,
@@ -532,10 +533,14 @@ class ExchangeServerClient:
         return await asyncio.to_thread(getattr, account, mail_type["folder"])
 
     async def _fetch_folder_mails(self, folder_object):
-        # Materialize in the thread; lazy iteration would block the event loop.
-        return await asyncio.to_thread(
-            _materialize_folder_items, folder_object, MAIL_FIELDS
+        # Request the raw message only when it is indexed as is.
+        fields = (
+            MAIL_FIELDS_WITH_MIME_CONTENT
+            if self.configuration.get("include_full_raw_message", False)
+            else MAIL_FIELDS
         )
+        # Materialize in the thread; lazy iteration would block the event loop.
+        return await asyncio.to_thread(_materialize_folder_items, folder_object, fields)
 
     async def get_mails(self, account):
         synced_folder_ids = set()
