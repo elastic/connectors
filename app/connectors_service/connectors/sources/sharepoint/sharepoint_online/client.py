@@ -693,7 +693,7 @@ class SharepointOnlineClient:
             )
             return response.get("Title") or SITE_PAGES_LIST_NAME
         except NotFound:
-            logger.warning(
+            self._logger.warning(
                 f"Could not resolve Site Pages library title at '{site_web_url}'; assuming '{SITE_PAGES_LIST_NAME}'"
             )
             return SITE_PAGES_LIST_NAME
@@ -728,7 +728,7 @@ class SharepointOnlineClient:
         except NotFound:
             # I'm not sure if site can have no pages, but given how weird API is I put this here
             # Just to be on a safe side
-            logger.warning(f"Site Pages library not found at '{site_web_url}'")
+            self._logger.warning(f"Site Pages library not found at '{site_web_url}'")
             return
 
     async def site_page_has_unique_role_assignments(self, site_web_url, site_page_id):

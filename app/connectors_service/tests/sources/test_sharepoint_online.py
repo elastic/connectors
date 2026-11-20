@@ -1736,9 +1736,7 @@ class TestSharepointOnlineClient:
     async def test_site_pages_list_title_not_found(self, client, patch_fetch):
         patch_fetch.side_effect = NotFound()
 
-        with patch(
-            "connectors.sources.sharepoint.sharepoint_online.client.logger"
-        ) as mock_logger:
+        with patch.object(client, "_logger") as mock_logger:
             title = await client.site_pages_list_title(
                 f"https://{self.tenant_name}.sharepoint.com"
             )
@@ -1753,9 +1751,7 @@ class TestSharepointOnlineClient:
         patch_scroll.side_effect = NotFound()
 
         returned_items = []
-        with patch(
-            "connectors.sources.sharepoint.sharepoint_online.client.logger"
-        ) as mock_logger:
+        with patch.object(client, "_logger") as mock_logger:
             async for site_page in client.site_pages(page_url_path):
                 returned_items.append(site_page)
 
