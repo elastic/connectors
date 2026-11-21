@@ -1495,6 +1495,28 @@ async def test_get_permission_list_for_folder():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "item",
+    [
+        {},
+        {"parent_shared_folder_id": "root-namespace-id"},
+    ],
+)
+async def test_get_permission_list_for_private_or_team_root_folder(item):
+    async with create_source(DropboxDataSource) as source:
+        setup_dropbox(source)
+        source.dropbox_client.root_namespace_id = "root-namespace-id"
+        source.dropbox_client.api_call = Mock()
+
+        actual_response = await source.get_permission_list(
+            item_type="Folder", item=item, account_id="dbid:123"
+        )
+
+        assert actual_response == ["user_id:dbid:123"]
+        source.dropbox_client.api_call.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_get_account_details():
     async with create_source(DropboxDataSource) as source:
         setup_dropbox(source)
