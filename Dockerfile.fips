@@ -164,6 +164,9 @@ RUN apk add --no-cache \
   ca-certificates \
   git \
   make \
+  build-base \
+  krb5 \
+  krb5-dev \
   libffi \
   bzip2 \
   xz \
@@ -205,12 +208,12 @@ COPY --chown=nonroot:nonroot . /app
 # Install application
 USER nonroot
 WORKDIR /app
-RUN make clean install-package freeze
+RUN make clean install-package-kerberos freeze
 RUN ln -s app/connectors_service/.venv/bin /app/bin
 
 # Clean up build tools
 USER root
-RUN apk del git make
+RUN apk del git make build-base krb5-dev
 
 USER nonroot
 ENTRYPOINT []
