@@ -869,17 +869,22 @@ class GitLabDataSource(BaseDataSource):
             parent_id = self.gitlab_client._extract_id(project.id) or project.id
             parent_path = project.full_path
             parent_type = "project"
+            id_scope = parent_id
         elif group_path:
             parent_id = group_path.replace("/", "_")
             parent_path = group_path
             parent_type = "group"
+            # GitLab paths may contain "_", so "a/b_c" and "a_b/c" have the same
+            # parent_id. Key the document by the unambiguous full path instead.
+            id_scope = group_path
         else:
             parent_id = "unknown"
             parent_path = "unknown"
             parent_type = "unknown"
+            id_scope = parent_id
 
         kwargs = {
-            "_id": f"{work_item.type_name.lower().replace(' ', '_')}_{parent_id}_{work_item.iid}",
+            "_id": f"{work_item.type_name.lower().replace(' ', '_')}_{id_scope}_{work_item.iid}",
             "_timestamp": work_item.updated_at,
             "type": work_item.type_name,
             "iid": work_item.iid,

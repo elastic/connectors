@@ -501,6 +501,57 @@ class TestGitLabDataSource:
         assert doc["assignees"] == ["assignee1"]
         assert doc["labels"] == ["bug"]
 
+    def test_format_work_item_doc_group_level_ids_do_not_collide(
+        self, mock_configuration
+    ):
+        """Epics of groups "acme/web_app" and "acme_web/app" get different _ids.
+
+        GitLab paths may contain "_", so replacing "/" with "_" maps both groups
+        to "acme_web_app" and one epic would overwrite the other.
+        """
+        from connectors.sources.gitlab.models import (
+            GitLabLabel,
+            GitLabUser,
+            PaginatedList,
+        )
+
+        source = GitLabDataSource(configuration=mock_configuration)
+        epic = GitLabWorkItem.model_validate(
+            {
+                "id": "gid://gitlab/WorkItem/900",
+                "iid": 1,
+                "title": "Epic",
+                "state": "opened",
+                "createdAt": "2023-01-01T00:00:00Z",
+                "updatedAt": "2023-12-01T00:00:00Z",
+                "webUrl": "https://gitlab.com/groups/acme/web_app/-/epics/1",
+                "workItemType": {"name": "Epic"},
+                "widgets": [],
+            }
+        )
+
+        docs = [
+            source._format_work_item_doc(
+                epic,
+                assignees_data=PaginatedList[GitLabUser](nodes=[]),
+                labels_data=PaginatedList[GitLabLabel](nodes=[]),
+                notes=[],
+                group_path=group_path,
+            )
+            for group_path in ("acme/web_app", "acme_web/app", "acme")
+        ]
+
+        assert [doc["_id"] for doc in docs] == [
+            "epic_acme/web_app_1",
+            "epic_acme_web/app_1",
+            "epic_acme_1",
+        ]
+        assert [doc["group_path"] for doc in docs] == [
+            "acme/web_app",
+            "acme_web/app",
+            "acme",
+        ]
+
     def test_format_merge_request_doc(
         self, mock_configuration, mock_gitlab_merge_request, mock_gitlab_project
     ):
