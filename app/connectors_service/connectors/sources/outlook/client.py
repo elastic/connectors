@@ -89,6 +89,7 @@ from connectors.sources.outlook.constants import (
     CONTACT_FOLDER_FIELDS,
     EWS_ENDPOINT,
     MAIL_FIELDS,
+    MAIL_FIELDS_WITH_MIME_CONTENT,
     MAIL_OBJECT,
     MAIL_TYPES,
     OUTLOOK_CLOUD,
@@ -685,7 +686,13 @@ class OutlookClient:
 
         return await asyncio.to_thread(getattr, account, mail_type["folder"])
 
+    def _mail_fields(self):
+        if self.configuration.get("include_full_raw_message", False):
+            return MAIL_FIELDS_WITH_MIME_CONTENT
+        return MAIL_FIELDS
+
     async def get_mails(self, account):
+        mail_fields = self._mail_fields()
         synced_folder_ids = set()
         for mail_type in MAIL_TYPES:
             self._logger.debug(
@@ -709,7 +716,7 @@ class OutlookClient:
             if sync_id is not None:
                 synced_folder_ids.add(sync_id)
 
-            async for mail in _iter_folder_items(folder_object, MAIL_FIELDS):
+            async for mail in _iter_folder_items(folder_object, mail_fields):
                 yield mail, mail_type
 
         if not self.sync_all_mail_folders:
@@ -736,7 +743,7 @@ class OutlookClient:
                 f"{account.primary_smtp_address}"
             )
             async with aclosing(
-                _iter_folder_items(folder_object, MAIL_FIELDS)
+                _iter_folder_items(folder_object, mail_fields)
             ) as mails:
                 while True:
                     # Guard the fetch, not the yield, which would also swallow
