@@ -7,10 +7,11 @@
 
 import asyncio
 import ssl
-import time
+from contextlib import aclosing
 from copy import copy
 from datetime import date
 from functools import cached_property, partial
+from itertools import islice
 
 import aiohttp
 import exchangelib
@@ -230,6 +231,9 @@ FOLDER_SKIP_ERRORS = (ErrorFolderNotFound, ErrorManagedFolderNotFound)
 # them. TransportError is the base class of those faults.
 EXTRA_MAIL_FOLDER_ERRORS = (TransportError,)
 
+# Items read per worker-thread call; matches exchangelib's GetItem chunk size.
+FOLDER_ITEMS_BATCH_SIZE = 100
+
 # Already synced with their own document type. Matched by class, not id: a
 # folder the mailbox denies GetFolder on resolves with id=None, and re-indexing
 # it here would overwrite those documents with the generic `Mail` type.
@@ -296,28 +300,77 @@ def _is_non_user_mail_folder(folder):
     return isinstance(folder, NON_USER_MAIL_FOLDERS)
 
 
-def _materialize_folder_items(folder, fields):
-    """List folder items with retries on transient mailbox store errors."""
+def _open_folder_items(folder, fields):
+    return iter(folder.all().only(*fields))
+
+
+def _next_folder_items(items, batch_size):
+    """Read up to batch_size items. Return (batch, error).
+
+    An error raised midway is returned, not raised, so the items read before
+    it are not lost.
+    """
+    batch = []
+    try:
+        for item in islice(items, batch_size):
+            batch.append(item)
+    except Exception as error:
+        return batch, error
+    return batch, None
+
+
+async def _iter_folder_items(folder, fields, batch_size=FOLDER_ITEMS_BATCH_SIZE):
+    """Yield folder items a batch at a time, reading each batch off the event loop.
+
+    Only one batch is held in memory: listing a whole folder keeps every
+    item, MIME content included, alive until the folder is done.
+
+    Items read before an error are yielded first, then the error is raised.
+    ErrorMailboxStoreUnavailable restarts the folder read after a backoff.
+    Items yielded before the restart are yielded again; the sink upserts them
+    by id.
+    """
     retry = 1
+    items = None
     while True:
         try:
-            return list(folder.all().only(*fields))
-        except ErrorMailboxStoreUnavailable:
-            if retry >= RETRIES:
-                raise
-            logger.warning(
-                "Mailbox store unavailable while reading folder %s; "
-                "retrying (%s of %s).",
-                getattr(folder, "name", "unknown"),
-                retry,
-                RETRIES,
+            if items is None:
+                items = await asyncio.to_thread(_open_folder_items, folder, fields)
+            batch, error = await asyncio.to_thread(
+                _next_folder_items, items, batch_size
             )
-            time.sleep(
-                time_to_sleep_between_retries(
-                    RetryStrategy.EXPONENTIAL_BACKOFF, RETRY_INTERVAL, retry
-                )
+        except ErrorMailboxStoreUnavailable as store_error:
+            batch, error = [], store_error
+
+        finished = not batch and error is None
+        item = None
+        for item in batch:
+            yield item
+        # Drop the batch before reading the next one, or both stay alive.
+        batch = item = None
+
+        if finished:
+            return
+        if error is None:
+            continue
+        if not isinstance(error, ErrorMailboxStoreUnavailable):
+            raise error
+        if retry >= RETRIES:
+            raise error
+        logger.warning(
+            "Mailbox store unavailable while reading folder %s; "
+            "retrying (%s of %s).",
+            getattr(folder, "name", "unknown"),
+            retry,
+            RETRIES,
+        )
+        await asyncio.sleep(
+            time_to_sleep_between_retries(
+                RetryStrategy.EXPONENTIAL_BACKOFF, RETRY_INTERVAL, retry
             )
-            retry += 1
+        )
+        retry += 1
+        items = None
 
 
 def _is_mail_folder(folder):
@@ -994,12 +1047,6 @@ class OutlookClient:
 
         return await asyncio.to_thread(getattr, account, mail_type["folder"])
 
-    async def _fetch_folder_mails(self, folder_object):
-        # Materialize in the thread; lazy iteration would block the event loop.
-        return await asyncio.to_thread(
-            _materialize_folder_items, folder_object, MAIL_FIELDS
-        )
-
     async def get_mails(self, account):
         synced_folder_ids = set()
         for mail_type in MAIL_TYPES:
@@ -1024,7 +1071,7 @@ class OutlookClient:
             if sync_id is not None:
                 synced_folder_ids.add(sync_id)
 
-            for mail in await self._fetch_folder_mails(folder_object):
+            async for mail in _iter_folder_items(folder_object, MAIL_FIELDS):
                 yield mail, mail_type
 
         if not self.sync_all_mail_folders:
@@ -1050,20 +1097,24 @@ class OutlookClient:
                 f"Fetching additional mail folder {folder_name!r} for "
                 f"{account.primary_smtp_address}"
             )
-            # Guard the fetch, not the yields, which would also swallow errors
-            # raised by the consumer.
-            try:
-                mails = await self._fetch_folder_mails(folder_object)
-            except EXTRA_MAIL_FOLDER_ERRORS as error:
-                self._logger.warning(
-                    f"Could not fetch mail from folder {folder_name!r} for "
-                    f"{account.primary_smtp_address}, skipping: "
-                    f"{error.__class__.__name__}."
-                )
-                continue
-
-            for mail in mails:
-                yield mail, mail_type
+            async with aclosing(
+                _iter_folder_items(folder_object, MAIL_FIELDS)
+            ) as mails:
+                while True:
+                    # Guard the fetch, not the yield, which would also swallow
+                    # errors raised by the consumer.
+                    try:
+                        mail = await anext(mails)
+                    except StopAsyncIteration:
+                        break
+                    except EXTRA_MAIL_FOLDER_ERRORS as error:
+                        self._logger.warning(
+                            f"Could not fetch mail from folder {folder_name!r} for "
+                            f"{account.primary_smtp_address}, skipping the rest "
+                            f"of the folder: {error.__class__.__name__}."
+                        )
+                        break
+                    yield mail, mail_type
 
     async def get_calendars(self, account):
         # Resolve the folder off the event loop (blocking call); skip if absent.
@@ -1074,12 +1125,7 @@ class OutlookClient:
                 f"Could not resolve Calendar folder for {account.primary_smtp_address}, skipping."
             )
             return
-        # Materialize the queryset in the thread; lazy iteration would run the
-        # blocking EWS fetch back on the event loop.
-        calendars = await asyncio.to_thread(
-            _materialize_folder_items, folder, CALENDAR_FIELDS
-        )
-        for calendar in calendars:
+        async for calendar in _iter_folder_items(folder, CALENDAR_FIELDS):
             yield calendar
 
     async def get_child_calendars(self, account):
@@ -1103,12 +1149,7 @@ class OutlookClient:
                     f"({type(child_calendar).__name__}) for {account.primary_smtp_address}"
                 )
                 continue
-            # Materialize the queryset in the thread; lazy iteration would run the
-            # blocking EWS fetch back on the event loop.
-            calendars = await asyncio.to_thread(
-                _materialize_folder_items, child_calendar, CALENDAR_FIELDS
-            )
-            for calendar in calendars:
+            async for calendar in _iter_folder_items(child_calendar, CALENDAR_FIELDS):
                 yield calendar, child_calendar
 
     async def get_tasks(self, account):
@@ -1120,10 +1161,7 @@ class OutlookClient:
                 f"Could not resolve Tasks folder for {account.primary_smtp_address}, skipping."
             )
             return
-        # Materialize the queryset in the thread; lazy iteration would run the
-        # blocking EWS fetch back on the event loop.
-        tasks = await asyncio.to_thread(_materialize_folder_items, folder, TASK_FIELDS)
-        for task in tasks:
+        async for task in _iter_folder_items(folder, TASK_FIELDS):
             yield task
 
     async def get_contacts(self, account):
@@ -1136,12 +1174,7 @@ class OutlookClient:
                 f"Could not resolve Contacts folder for {account.primary_smtp_address}, skipping."
             )
             return
-        # Materialize the queryset in the thread; lazy iteration would run the
-        # blocking EWS fetch back on the event loop.
-        contacts = await asyncio.to_thread(
-            _materialize_folder_items, folder, CONTACT_FOLDER_FIELDS
-        )
-        for contact in contacts:
+        async for contact in _iter_folder_items(folder, CONTACT_FOLDER_FIELDS):
             yield contact
 
 
