@@ -61,12 +61,14 @@ MAIL_FIELDS = [
     "categories",
     "body",
     "text_body",
-    "mime_content",
     "message_id",
     "datetime_received",
     "has_attachments",
     "attachments",
 ]
+# The full raw message (attachments included) is only needed to index it as is.
+# The default trimmed .eml is built from the fields above.
+MAIL_FIELDS_WITH_MIME_CONTENT = [*MAIL_FIELDS, "mime_content"]
 CONTACT_FIELDS = [
     "email_addresses",
     "phone_numbers",

@@ -77,6 +77,7 @@ from connectors.sources.outlook.constants import (
     INBOX_MAIL_OBJECT,
     MAIL_ATTACHMENT,
     MAIL_FIELDS,
+    MAIL_FIELDS_WITH_MIME_CONTENT,
     MAIL_OBJECT,
     OUTLOOK_CLOUD,
     OUTLOOK_SERVER,
@@ -2283,6 +2284,33 @@ async def test_get_mails_skips_non_mail_archive_folder():
         ]
 
         assert folders == ["inbox", "sent", "junk"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "include_full_raw_message, expected_fields",
+    [(False, MAIL_FIELDS), (True, MAIL_FIELDS_WITH_MIME_CONTENT)],
+)
+async def test_get_mails_requests_mime_content_only_for_full_raw_message(
+    include_full_raw_message, expected_fields
+):
+    async with create_outlook_source() as source:
+        with (
+            patch.object(
+                source.client,
+                "configuration",
+                {"include_full_raw_message": include_full_raw_message},
+            ),
+            patch.object(
+                outlook_client, "_iter_folder_items", return_value=AsyncIterator([])
+            ) as iterate,
+        ):
+            _ = [item async for item in source.client.get_mails(MockAccount())]
+
+        assert iterate.call_count
+        for call in iterate.call_args_list:
+            assert call.args[1] == expected_fields
+        assert ("mime_content" in expected_fields) is include_full_raw_message
 
 
 @pytest.mark.asyncio
