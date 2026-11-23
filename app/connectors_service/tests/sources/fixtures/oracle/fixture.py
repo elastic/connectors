@@ -48,7 +48,7 @@ async def _connect(user, password):
     for attempt in range(1, RETRIES + 1):
         try:
             return oracledb.connect(user=user, password=password, dsn=DSN)
-        except oracledb.OperationalError as exc:
+        except oracledb.DatabaseError as exc:  # ORA-01017 until ORACLE_PWD is applied
             if attempt == RETRIES:
                 raise
             print(f"Waiting for Oracle ({attempt}/{RETRIES}): {exc}", flush=True)
