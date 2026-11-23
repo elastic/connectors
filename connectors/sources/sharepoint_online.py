@@ -10,6 +10,7 @@ from collections.abc import Iterable, Sized
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from functools import partial, wraps
+from urllib.parse import quote, unquote, urlparse
 
 import aiofiles
 import aiohttp
@@ -1100,7 +1101,7 @@ class SharepointOnlineClient:
         """
         self._validate_sharepoint_rest_url(site_web_url)
 
-        url = f"{site_web_url}/_api/lists/GetByTitle('{site_list_name}')/items({list_item_id})/FirstUniqueAncestorSecurableObject"
+        url = f"{site_web_url}/_api/lists/GetByTitle('{_escape_odata_string(site_list_name)}')/items({list_item_id})/FirstUniqueAncestorSecurableObject"
 
         try:
             response = await self._rest_api_client.fetch(url)
@@ -1128,7 +1129,7 @@ class SharepointOnlineClient:
 
         expand = "Member/users,RoleDefinitionBindings"
 
-        url = f"{site_web_url}/_api/lists/GetByTitle('{site_list_name}')/items({list_item_id})/FirstUniqueAncestorSecurableObject/roleassignments?$expand={expand}"
+        url = f"{site_web_url}/_api/lists/GetByTitle('{_escape_odata_string(site_list_name)}')/items({list_item_id})/FirstUniqueAncestorSecurableObject/roleassignments?$expand={expand}"
 
         try:
             async for page in self._rest_api_client.scroll(url):
@@ -1169,12 +1170,34 @@ class SharepointOnlineClient:
             f"{attachment_absolute_path}/$value", async_buffer
         )
 
+    @staticmethod
+    def _site_pages_list_path(site_web_url):
+        # The Site Pages library title is localized (e.g. "Pages du site"), but its URL is always /SitePages
+        # site_web_url may already be percent-encoded (Graph webUrl), so decode before encoding once
+        web_path = unquote(urlparse(site_web_url).path.rstrip("/")).replace("'", "''")
+        web_path = quote(web_path, safe="/'")
+        return f"{site_web_url.rstrip('/')}/_api/web/GetList('{web_path}/SitePages')"
+
+    async def site_pages_list_title(self, site_web_url):
+        self._validate_sharepoint_rest_url(site_web_url)
+
+        try:
+            response = await self._rest_api_client.fetch(
+                f"{self._site_pages_list_path(site_web_url)}?$select=Title"
+            )
+            return response.get("Title") or SITE_PAGES_LIST_NAME
+        except NotFound:
+            self._logger.warning(
+                f"Could not resolve Site Pages library title at '{site_web_url}'; assuming '{SITE_PAGES_LIST_NAME}'"
+            )
+            return SITE_PAGES_LIST_NAME
+
     async def site_pages(self, site_web_url):
         self._validate_sharepoint_rest_url(site_web_url)
 
         # select = "Id,Title,LayoutWebpartsContent,CanvasContent1,Description,Created,AuthorId,Modified,EditorId"
         select = "*,EncodedAbsUrl"  # ^ is what we want, but site pages don't have consistent schemas, and this causes errors. Better to fetch all and slice
-        url = f"{site_web_url}/_api/web/lists/GetByTitle('Site%20Pages')/items?$select={select}"
+        url = f"{self._site_pages_list_path(site_web_url)}/items?$select={select}"
 
         try:
             async for page in self._rest_api_client.scroll(url):
@@ -1199,12 +1222,13 @@ class SharepointOnlineClient:
         except NotFound:
             # I'm not sure if site can have no pages, but given how weird API is I put this here
             # Just to be on a safe side
+            self._logger.warning(f"Site Pages library not found at '{site_web_url}'")
             return
 
     async def site_page_has_unique_role_assignments(self, site_web_url, site_page_id):
         self._validate_sharepoint_rest_url(site_web_url)
 
-        url = f"{site_web_url}/_api/web/lists/GetByTitle('Site Pages')/items('{site_page_id}')/HasUniqueRoleAssignments"
+        url = f"{self._site_pages_list_path(site_web_url)}/items('{site_page_id}')/HasUniqueRoleAssignments"
 
         try:
             response = await self._rest_api_client.fetch(url)
@@ -1217,7 +1241,7 @@ class SharepointOnlineClient:
 
         expand = "Member/users,RoleDefinitionBindings"
 
-        url = f"{site_web_url}/_api/web/lists/GetByTitle('Site Pages')/items('{site_page_id}')/roleassignments?$expand={expand}"
+        url = f"{self._site_pages_list_path(site_web_url)}/items('{site_page_id}')/roleassignments?$expand={expand}"
 
         try:
             async for page in self._rest_api_client.scroll(url):
@@ -1312,6 +1336,10 @@ class DriveItemsPage(Iterable, Sized):
 
     def delta_link(self):
         return self._delta_link
+
+
+def _escape_odata_string(value):
+    return quote(str(value).replace("'", "''"), safe="' ")
 
 
 class SharepointOnlineAdvancedRulesValidator(AdvancedRulesValidator):
@@ -2863,6 +2891,7 @@ class SharepointOnlineDataSource(BaseDataSource):
     ):
         site_id = site["id"]
         url = site["webUrl"]
+        site_pages_list_title = None  # localized, resolved once per site when needed
         async for site_page in self.client.site_pages(url):
             if not check_timestamp or (
                 check_timestamp and site_page["Modified"] >= self.last_sync_time()
@@ -2929,12 +2958,16 @@ class SharepointOnlineDataSource(BaseDataSource):
                         self._dls_enabled()
                         and self.configuration["fetch_unique_page_permissions"]
                     ):
+                        if site_pages_list_title is None:
+                            site_pages_list_title = (
+                                await self.client.site_pages_list_title(url)
+                            )
                         # Page may inherit from a parent folder or list with unique permissions
                         inherited_access_control = (
                             await self._inherited_list_item_access_control(
                                 site_id,
                                 url,
-                                SITE_PAGES_LIST_NAME,
+                                site_pages_list_title,
                                 site_page["Id"],
                                 require_edit_access=not published,
                             )
