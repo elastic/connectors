@@ -19,7 +19,9 @@ fake_provider = WeightedFakeProvider(weights=[0.65, 0.3, 0.05, 0])
 
 # If the Oracle Service takes too much time to respond, modify the following retry constants accordingly.
 RETRY_INTERVAL = 4
-RETRIES = 90  # Oracle Free often needs several minutes before FREE registers on the listener
+RETRIES = (
+    90  # Oracle Free often needs several minutes before FREE registers on the listener
+)
 BATCH_SIZE = 100
 
 USER = "c##admin"
