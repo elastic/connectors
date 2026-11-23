@@ -60,6 +60,7 @@ from connectors.access_control import ACCESS_CONTROL
 from connectors.sources.outlook import OutlookDataSource
 from connectors.sources.outlook import client as outlook_client
 from connectors.sources.outlook.client import (
+    FOLDER_ITEMS_BATCH_SIZE,
     ExchangeUsers,
     Forbidden,
     InMemoryCAAdapter,
@@ -69,7 +70,7 @@ from connectors.sources.outlook.client import (
     UsersFetchFailed,
     _discover_additional_mail_folders,
     _is_mail_folder,
-    _materialize_folder_items,
+    _iter_folder_items,
 )
 from connectors.sources.outlook.constants import (
     ARCHIVE_MAIL_OBJECT,
@@ -1821,6 +1822,33 @@ async def test_get_mails_skips_additional_folder_that_cannot_be_fetched():
         assert {"constant": MAIL_OBJECT, "folder_name": "Restricted"} not in results
 
 
+@pytest.mark.asyncio
+async def test_get_mails_keeps_items_read_before_additional_folder_fails():
+    def failing_items():
+        for _ in range(FOLDER_ITEMS_BATCH_SIZE + 3):
+            yield build_mail_document()
+        access_denied_message = "access revoked mid-read"
+        raise ErrorAccessDenied(access_denied_message)
+
+    async with create_outlook_source(sync_all_mail_folders=True) as source:
+        account = MockAccount()
+        failing = typed_user_mail_folder(Folder, MAIL, folder_id="failing-id")
+        failing.name = "Projects"
+        failing.all.return_value = MagicMock()
+        failing.all.return_value.only.return_value = failing_items()
+        readable = typed_user_mail_folder(Folder, MAIL, folder_id="custom-id")
+        readable.name = "PRTG Done"
+        account.msg_folder_root.walk = MagicMock(return_value=[failing, readable])
+
+        results = [mail_type async for _, mail_type in source.client.get_mails(account)]
+
+        assert (
+            results.count({"constant": MAIL_OBJECT, "folder_name": "Projects"})
+            == FOLDER_ITEMS_BATCH_SIZE + 3
+        )
+        assert {"constant": MAIL_OBJECT, "folder_name": "PRTG Done"} in results
+
+
 def test_calendar_doc_formatter_handles_missing_organizer():
     calendar = build_calendar_document()
     calendar.organizer = None
@@ -2257,7 +2285,8 @@ async def test_get_mails_skips_non_mail_archive_folder():
         assert folders == ["inbox", "sent", "junk"]
 
 
-def test_materialize_folder_items_retries_on_mailbox_store_unavailable():
+@pytest.mark.asyncio
+async def test_iter_folder_items_retries_on_mailbox_store_unavailable():
     folder = MagicMock()
     folder.name = "Inbox"
     attempts = 0
@@ -2273,14 +2302,15 @@ def test_materialize_folder_items_retries_on_mailbox_store_unavailable():
 
     folder.all.return_value.only.side_effect = only_side_effect
 
-    with patch("connectors.sources.outlook.client.time.sleep"):
-        items = _materialize_folder_items(folder, MAIL_FIELDS)
+    with patch("connectors.sources.outlook.client.asyncio.sleep", AsyncMock()):
+        items = [item async for item in _iter_folder_items(folder, MAIL_FIELDS)]
 
     assert items == [mail]
     assert attempts == RETRIES
 
 
-def test_materialize_folder_items_raises_after_retries_exhausted():
+@pytest.mark.asyncio
+async def test_iter_folder_items_raises_after_retries_exhausted():
     folder = MagicMock()
     folder.name = "Inbox"
     store_unavailable_message = "mailbox store unavailable"
@@ -2288,11 +2318,101 @@ def test_materialize_folder_items_raises_after_retries_exhausted():
         store_unavailable_message
     )
 
-    with patch("connectors.sources.outlook.client.time.sleep"):
+    with patch("connectors.sources.outlook.client.asyncio.sleep", AsyncMock()):
         with pytest.raises(ErrorMailboxStoreUnavailable):
-            _materialize_folder_items(folder, MAIL_FIELDS)
+            _ = [item async for item in _iter_folder_items(folder, MAIL_FIELDS)]
 
     assert folder.all.return_value.only.call_count == RETRIES
+
+
+@pytest.mark.asyncio
+async def test_iter_folder_items_reads_one_batch_at_a_time():
+    # A full folder must not be held in memory: only one batch is pulled from
+    # the exchangelib iterator before items are handed to the consumer.
+    pulled = 0
+
+    def lazy_items():
+        nonlocal pulled
+        for index in range(10):
+            pulled += 1
+            yield index
+
+    folder = MagicMock()
+    folder.all.return_value.only.return_value = lazy_items()
+
+    items = _iter_folder_items(folder, MAIL_FIELDS, batch_size=3)
+    assert await anext(items) == 0
+    assert pulled == 3
+
+    rest = [item async for item in items]
+    assert rest == list(range(1, 10))
+    assert pulled == 10
+
+
+@pytest.mark.asyncio
+async def test_iter_folder_items_yields_partial_batch_before_raising():
+    # The error is raised between batch boundaries: items 4 and 5 sit in the
+    # second, incomplete batch and must still be yielded.
+    def failing_items():
+        yield from range(1, 6)
+        access_denied_message = "access revoked mid-read"
+        raise ErrorAccessDenied(access_denied_message)
+
+    folder = MagicMock()
+    folder.all.return_value.only.return_value = failing_items()
+
+    seen = []
+    with pytest.raises(ErrorAccessDenied):
+        async for item in _iter_folder_items(folder, MAIL_FIELDS, batch_size=3):
+            seen.append(item)
+
+    assert seen == [1, 2, 3, 4, 5]
+
+
+@pytest.mark.asyncio
+async def test_iter_folder_items_yields_partial_batch_before_restart():
+    def failing_items():
+        yield "first"
+        yield "second"
+        store_unavailable_message = "mailbox store unavailable"
+        raise ErrorMailboxStoreUnavailable(store_unavailable_message)
+
+    folder = MagicMock()
+    folder.name = "Inbox"
+    folder.all.return_value.only.side_effect = [
+        failing_items(),
+        iter(["first", "second", "third"]),
+    ]
+
+    with patch("connectors.sources.outlook.client.asyncio.sleep", AsyncMock()):
+        items = [
+            item async for item in _iter_folder_items(folder, MAIL_FIELDS, batch_size=3)
+        ]
+
+    assert items == ["first", "second", "first", "second", "third"]
+
+
+@pytest.mark.asyncio
+async def test_iter_folder_items_restarts_folder_after_mid_read_error():
+    def failing_items():
+        yield "first"
+        store_unavailable_message = "mailbox store unavailable"
+        raise ErrorMailboxStoreUnavailable(store_unavailable_message)
+
+    folder = MagicMock()
+    folder.name = "Inbox"
+    folder.all.return_value.only.side_effect = [
+        failing_items(),
+        iter(["first", "second"]),
+    ]
+
+    with patch("connectors.sources.outlook.client.asyncio.sleep", AsyncMock()):
+        items = [
+            item async for item in _iter_folder_items(folder, MAIL_FIELDS, batch_size=1)
+        ]
+
+    assert items == ["first", "first", "second"]
+    assert folder.all.return_value.only.call_count == 2
 
 
 @pytest.mark.asyncio
