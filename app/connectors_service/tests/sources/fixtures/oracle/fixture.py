@@ -6,6 +6,7 @@
 # ruff: noqa: T201
 """Oracle module responsible to generate records on the Oracle server."""
 
+import asyncio
 import os
 import random
 
@@ -18,7 +19,9 @@ fake_provider = WeightedFakeProvider(weights=[0.65, 0.3, 0.05, 0])
 
 # If the Oracle Service takes too much time to respond, modify the following retry constants accordingly.
 RETRY_INTERVAL = 4
-RETRIES = 1
+RETRIES = (
+    90  # Oracle Free often needs several minutes before FREE registers on the listener
+)
 BATCH_SIZE = 100
 
 USER = "c##admin"
@@ -39,6 +42,17 @@ match DATA_SIZE:
         RECORD_COUNT = 7000
 
 RECORDS_TO_DELETE = 10
+
+
+async def _connect(user, password):
+    for attempt in range(1, RETRIES + 1):
+        try:
+            return oracledb.connect(user=user, password=password, dsn=DSN)
+        except oracledb.OperationalError as exc:
+            if attempt == RETRIES:
+                raise
+            print(f"Waiting for Oracle ({attempt}/{RETRIES}): {exc}", flush=True)
+            await asyncio.sleep(RETRY_INTERVAL)
 
 
 def get_num_docs():
@@ -65,13 +79,13 @@ def inject_lines(table, cursor, lines):
 async def load():
     """Generate tables and loads table data in the oracle server."""
     """N tables of RECORD_COUNT rows each"""
-    connection = oracledb.connect(user="system", password=PASSWORD, dsn=DSN)
+    connection = await _connect("system", PASSWORD)
     cursor = connection.cursor()
     cursor.execute(f"CREATE USER {USER} IDENTIFIED by {PASSWORD} CONTAINER=ALL")
     cursor.execute(f"GRANT CONNECT, RESOURCE, DBA TO {USER}")
     connection.commit()
 
-    connection = oracledb.connect(user=USER, password=PASSWORD, dsn=DSN)
+    connection = await _connect(USER, PASSWORD)
     cursor = connection.cursor()
     for table in range(NUM_TABLES):
         print(f"Adding data for table #{table}...")
@@ -83,7 +97,7 @@ async def load():
 
 async def remove():
     """Removes 10 random items per table"""
-    connection = oracledb.connect(user=USER, password=PASSWORD, dsn=DSN)
+    connection = await _connect(USER, PASSWORD)
     cursor = connection.cursor()
 
     for table in range(NUM_TABLES):
