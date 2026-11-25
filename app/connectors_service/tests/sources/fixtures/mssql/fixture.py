@@ -151,6 +151,9 @@ async def load():
         server=HOST, port=PORT, user="sa", password=PASSWORD, autocommit=True
     )
     cursor = database_sa.cursor()
+    # TEMP: print server version for CI validation (remove before merge)
+    cursor.execute("SELECT @@VERSION")
+    print(f"MSSQL_SERVER_VERSION: {cursor.fetchone()[0]!r}")
     cursor.execute("CREATE LOGIN admin WITH PASSWORD = 'Password_123'")
     cursor.execute("ALTER SERVER ROLE [sysadmin] ADD MEMBER [admin]")
     cursor.close()
