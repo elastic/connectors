@@ -426,12 +426,17 @@ class NASDataSource(BaseDataSource):
         filename = file["title"]
         file_size = file["size"]
         file_extension = self.get_file_extension(filename)
-        if not (
-            self.configuration["skip_extension_filter"]
-            or self.is_valid_file_type(file_extension, filename)
-        ) or not self.is_file_size_within_limit(file_size, filename):
+        if not self.configuration[
+            "skip_extension_filter"
+        ] and not self.is_valid_file_type(file_extension, filename):
             self._logger.warning(
-                f"File size {file['size']} of {file['title']} bytes is larger than {self.framework_config.max_file_size} bytes. Discarding the file content"
+                f"File {filename} has unsupported extension '{file_extension}'. Discarding the file content"
+            )
+            return
+
+        if not self.is_file_size_within_limit(file_size, filename):
+            self._logger.warning(
+                f"File size {file_size} of {filename} bytes is larger than {self.framework_config.max_file_size} bytes. Discarding the file content"
             )
             return
 
