@@ -169,6 +169,15 @@ class NASDataSource(BaseDataSource):
                 "ui_restrictions": ["advanced"],
                 "value": False,
             },
+            "skip_extension_filter": {
+                "display": "toggle",
+                "label": "Attempt extraction for all file types",
+                "order": 10,
+                "tooltip": "Skips the file extension check, so every file within the size limit is downloaded and extraction is attempted. This can significantly slow down syncs.",
+                "type": "bool",
+                "ui_restrictions": ["advanced"],
+                "value": False,
+            },
         }
 
     def format_document(self, file):
@@ -417,9 +426,17 @@ class NASDataSource(BaseDataSource):
         filename = file["title"]
         file_size = file["size"]
         file_extension = self.get_file_extension(filename)
-        if not self.can_file_be_downloaded(file_extension, filename, file_size):
+        if not self.configuration[
+            "skip_extension_filter"
+        ] and not self.is_valid_file_type(file_extension, filename):
             self._logger.warning(
-                f"File size {file['size']} of {file['title']} bytes is larger than {self.framework_config.max_file_size} bytes. Discarding the file content"
+                f"File {filename} has unsupported extension '{file_extension}'. Discarding the file content"
+            )
+            return
+
+        if not self.is_file_size_within_limit(file_size, filename):
+            self._logger.warning(
+                f"File size {file_size} of {filename} bytes is larger than {self.framework_config.max_file_size} bytes. Discarding the file content"
             )
             return
 
