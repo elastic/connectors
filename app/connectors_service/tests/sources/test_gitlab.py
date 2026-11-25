@@ -256,6 +256,19 @@ class TestGitLabDataSource:
         assert client.graphql_url == "https://gitlab.example.com/api/graphql"
 
     @pytest.mark.asyncio
+    async def test_http_host_rejected_before_ping(self):
+        config = GitLabDataSource.get_default_configuration()
+        config["host"]["value"] = "http://gitlab.example.com"
+        config["token"]["value"] = "t"
+        source = GitLabDataSource(configuration=DataSourceConfiguration(config))
+        source.gitlab_client.ping = AsyncMock()
+
+        with pytest.raises(ConfigurableFieldValueError):
+            await source.validate_config()
+
+        source.gitlab_client.ping.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_ssl_context_used_when_ssl_enabled(self):
         with patch("connectors.sources.gitlab.client.ssl_context") as ssl_ctx:
             client = GitLabClient(
