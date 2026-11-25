@@ -371,6 +371,28 @@ async def test_get_content_with_upper_extension():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("title", ["README", "file1.unknownext"])
+async def test_get_content_with_skip_extension_filter(title):
+    async with create_source(NASDataSource, skip_extension_filter=True) as source:
+        mock_response = {
+            "id": "1",
+            "_timestamp": "2022-04-21T12:12:30",
+            "title": title,
+            "path": f"\\1.2.3.4/Users/folder1/{title}",
+            "size": 50,
+        }
+        expected_output = {"_id": "1", "_timestamp": "2022-04-21T12:12:30"}
+        source.download_and_extract_file = mock.MagicMock(
+            return_value=create_fake_coroutine(expected_output)
+        )
+
+        assert await source.get_content(mock_response, doit=True) == expected_output
+
+        mock_response["size"] = 20000000000
+        assert await source.get_content(mock_response, doit=True) is None
+
+
+@pytest.mark.asyncio
 async def test_get_content_when_doit_false():
     """Test get_content method when doit is false."""
     # Setup
