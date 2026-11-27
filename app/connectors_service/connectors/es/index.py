@@ -134,6 +134,10 @@ class ESApi(ESClient):
             )
         )
 
+    async def close(self):
+        await self._api_wrapper.close()
+        await super().close()
+
 
 class ESIndex(ESClient):
     """
@@ -156,6 +160,10 @@ class ESIndex(ESClient):
         )
         self.index_name = index_name
         self.elastic_config = elastic_config
+
+    async def close(self):
+        await self.api.close()
+        await super().close()
 
     def _create_object(self, doc):
         """
