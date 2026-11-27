@@ -206,6 +206,25 @@ def test_try_update_passes_output_headers_to_es_client():
     assert client.client._headers["x-elastic-app-auth"] == "token"
 
 
+def test_try_update_detects_changed_header_value():
+    config_wrapper = prepare_config_wrapper()
+
+    def update(token):
+        unit = prepare_agent_proto_unit_mock(
+            {
+                "hosts": ["https://localhost:9200"],
+                "api_key": "lemme_in",
+                "headers": {"X-Elastic-App-Auth": token},
+            },
+            None,
+        )
+        return config_wrapper.try_update(CONNECTOR_ID, SERVICE_TYPE, unit)
+
+    assert update("old") is True
+    assert update("old") is False
+    assert update("new") is True
+
+
 def test_try_update_without_headers_has_no_headers_key():
     config_wrapper = prepare_config_wrapper()
     unit_mock = prepare_agent_proto_unit_mock(
