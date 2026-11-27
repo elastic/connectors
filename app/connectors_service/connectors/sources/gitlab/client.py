@@ -48,7 +48,7 @@ from connectors.sources.gitlab.validation_utils import (
     safe_get_nested,
     validate_with_fallback,
 )
-from connectors.utils import CancellableSleeps, RetryStrategy, retryable
+from connectors.utils import CancellableSleeps, RetryStrategy, retryable, ssl_context
 
 
 class GitLabRateLimitException(Exception):
@@ -94,11 +94,20 @@ RETRY_INTERVAL = 2
 class GitLabClient:
     """Client for interacting with GitLab Cloud API using aiohttp."""
 
-    def __init__(self, token) -> None:
+    def __init__(
+        self, token, host=GITLAB_CLOUD_URL, ssl_enabled=False, ssl_ca=None
+    ) -> None:
         self._logger = logger
         self.token = token
-        self.api_url = f"{GITLAB_CLOUD_URL}/api/v4"
-        self.graphql_url = f"{GITLAB_CLOUD_URL}/api/graphql"
+        # The ftest override wins so existing ftests keep working
+        base_url = (
+            GITLAB_FTEST_HOST if RUNNING_FTEST and GITLAB_FTEST_HOST else host
+        ).rstrip("/")
+        self.api_url = f"{base_url}/api/v4"
+        self.graphql_url = f"{base_url}/api/graphql"
+        self.ssl_ctx = (
+            ssl_context(certificate=ssl_ca) if ssl_enabled and ssl_ca else None
+        )
         self._sleeps = CancellableSleeps()
         self._session = None
 
@@ -136,6 +145,8 @@ class GitLabClient:
                 ssl_context.check_hostname = False
                 ssl_context.verify_mode = ssl.CERT_NONE
                 connector_kwargs["connector"] = aiohttp.TCPConnector(ssl=ssl_context)
+            elif self.ssl_ctx:
+                connector_kwargs["connector"] = aiohttp.TCPConnector(ssl=self.ssl_ctx)
 
             self._session = aiohttp.ClientSession(
                 headers={"Authorization": f"Bearer {self.token}"},
