@@ -888,6 +888,34 @@ async def test_get_owned_files():
 
 
 @pytest.mark.asyncio
+async def test_paginated_api_call_follows_next_link_after_empty_page():
+    async with create_onedrive_source() as source:
+        first_page_url = "https://graph.microsoft.com/v1.0/users?$top=999"
+        next_page_url = "https://graph.microsoft.com/v1.0/users?$skiptoken=page-2"
+        pages = {
+            first_page_url: {"value": [], "@odata.nextLink": next_page_url},
+            next_page_url: {"value": [{"id": "user-1"}]},
+        }
+        requested_urls = []
+
+        async def get(url, header=None):
+            requested_urls.append(url)
+            yield JSONAsyncMock(pages[url])
+
+        source.client.get = get
+
+        responses = [
+            response
+            async for response in source.client.paginated_api_call(
+                "https://graph.microsoft.com/v1.0/users"
+            )
+        ]
+
+        assert requested_urls == [first_page_url, next_page_url]
+        assert responses == [[{"id": "user-1"}]]
+
+
+@pytest.mark.asyncio
 async def test_list_users():
     async with create_onedrive_source() as source:
         response = []

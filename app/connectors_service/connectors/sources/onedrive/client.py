@@ -253,10 +253,10 @@ class OneDriveClient:
                     response_json = await response.json()
                     result = response_json["value"]
 
-                    if len(result) == 0:
-                        return
-
-                    yield result
+                    # Graph can return an empty page that still has a nextLink,
+                    # so only the absence of a nextLink ends the listing.
+                    if result:
+                        yield result
 
                     url = response_json.get("@odata.nextLink")
                     if not url:
