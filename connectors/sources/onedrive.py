@@ -43,6 +43,8 @@ from connectors.utils import (
 RETRIES = 3
 RETRY_INTERVAL = 2
 DEFAULT_RETRY_SECONDS = 30
+# OneDrive and SharePoint throttle with 503 as well as 429, both with Retry-After
+THROTTLED_STATUSES = (429, 503)
 FETCH_SIZE = 999
 DEFAULT_PARALLEL_CONNECTION_COUNT = 15
 REQUEST_TIMEOUT = 300
@@ -262,6 +264,10 @@ class OneDriveClient:
         self._sleeps.cancel()
         await self.session.close()
         del self.session
+
+    async def sleep(self, seconds):
+        """Wait, unless the session is closed first."""
+        await self._sleeps.sleep(seconds)
 
     @retryable(
         retries=RETRIES,
@@ -714,8 +720,10 @@ class OneDriveDataSource(BaseDataSource):
             async for batch_response in self.client.post(batch_url, batch_request):
                 batch_response = await batch_response.json()
 
+            retry_after = 0
             for response in batch_response.get("responses", []):
-                if response.get("status", 200) == 200:
+                status = response.get("status", 200)
+                if status == 200:
                     yield response
 
                     if next_url := response.get("body", {}).get("@odata.nextLink"):
@@ -725,7 +733,7 @@ class OneDriveDataSource(BaseDataSource):
                                 request_id=response.get("id"), url=relative_url
                             )
                         )
-                elif response.get("status", 200) == 429:
+                elif status in THROTTLED_STATUSES:
                     request = (
                         self.lookup_request_by_id(requests, response.get("id")) or {}
                     )
@@ -737,6 +745,34 @@ class OneDriveDataSource(BaseDataSource):
                         )
                     else:
                         batched_apis.append(request)
+                        retry_after = max(
+                            retry_after, self._batch_retry_after(response)
+                        )
+                else:
+                    request = (
+                        self.lookup_request_by_id(requests, response.get("id")) or {}
+                    )
+                    self._logger.warning(
+                        f"Skipping batched request {request.get('url')}: Microsoft Graph returned status {status}. Response: {response.get('body')}"
+                    )
+
+            # Graph asks to wait for Retry-After before sending a throttled
+            # request again; resending it straight away is throttled again.
+            if retry_after:
+                self._logger.debug(
+                    f"Batched requests were throttled, retrying in {retry_after} seconds"
+                )
+                await self.client.sleep(retry_after)
+
+    def _batch_retry_after(self, response):
+        headers = {
+            name.lower(): value
+            for name, value in (response.get("headers") or {}).items()
+        }
+        try:
+            return int(headers["retry-after"])
+        except (KeyError, TypeError, ValueError):
+            return DEFAULT_RETRY_SECONDS
 
     def send_document_to_es(self, entity, download_url):
         entity = self.prepare_doc(entity)
