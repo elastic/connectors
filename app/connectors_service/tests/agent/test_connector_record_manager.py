@@ -145,7 +145,11 @@ async def test_ensure_connector_records_exist_recreates_client_when_es_config_ch
         await manager.ensure_connector_records_exist(mock_agent_config)
         assert index.call_count == 1
 
-        mock_agent_config["elasticsearch"]["headers"] = {"X-Elastic-App-Auth": "new"}
+        # Agent config updates replace the whole `elasticsearch` dict
+        mock_agent_config["elasticsearch"] = {
+            **mock_agent_config["elasticsearch"],
+            "headers": {"X-Elastic-App-Auth": "new"},
+        }
         await manager.ensure_connector_records_exist(mock_agent_config)
         assert index.call_count == 2
         index.return_value.close.assert_awaited_once()

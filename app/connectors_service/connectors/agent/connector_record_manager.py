@@ -4,8 +4,6 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 
-import copy
-
 from connectors.agent.logger import get_logger
 from connectors.protocol import ConnectorIndex
 from connectors.utils import generate_random_id
@@ -42,12 +40,14 @@ class ConnectorRecordManager:
 
         # Credentials and headers can change (e.g. a rotated token): drop the stale client
         if self._es_config is not None and self._es_config != es_config:
-            await self.connector_index.close()
-            self.connector_index = self._es_config = None
+            try:
+                await self.connector_index.close()
+            finally:
+                self.connector_index = self._es_config = None
 
         if not self.connector_index:
             self.connector_index = ConnectorIndex(es_config)
-            self._es_config = copy.deepcopy(es_config)
+            self._es_config = es_config
 
         for connector_config in agent_config.get("connectors"):
             connector_id, service_type = (

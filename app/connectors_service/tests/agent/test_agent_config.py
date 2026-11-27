@@ -226,6 +226,29 @@ def test_try_update_detects_changed_header_value():
     assert update("new") is True
 
 
+def test_try_update_drops_headers_removed_from_output():
+    config_wrapper = prepare_config_wrapper()
+    base = {"hosts": ["https://localhost:9200"], "api_key": "lemme_in"}
+
+    def update(config):
+        unit = prepare_agent_proto_unit_mock(config, None)
+        return config_wrapper.try_update(CONNECTOR_ID, SERVICE_TYPE, unit)
+
+    assert update({**base, "headers": {"X-Elastic-App-Auth": "token"}}) is True
+    assert update(base) is True
+    assert "headers" not in config_wrapper.get_specific_config()["elasticsearch"]
+
+
+def test_try_update_ignores_null_headers():
+    config_wrapper = prepare_config_wrapper()
+    unit = prepare_agent_proto_unit_mock(
+        {"hosts": ["https://localhost:9200"], "api_key": "k", "headers": None}, None
+    )
+
+    assert config_wrapper.try_update(CONNECTOR_ID, SERVICE_TYPE, unit) is True
+    assert "headers" not in config_wrapper.get_specific_config()["elasticsearch"]
+
+
 def test_try_update_without_headers_has_no_headers_key():
     config_wrapper = prepare_config_wrapper()
     unit_mock = prepare_agent_proto_unit_mock(
