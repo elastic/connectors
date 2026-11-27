@@ -61,6 +61,11 @@ login.
   ``channel_id``/``channel_title`` and/or ``chat_id``/``chat_title`` from
   discovery (no empty placeholders).
 
+Channel and chat message documents use ``<channel or chat id>-<message id>``
+as ``_id`` and keep the Graph message id in ``message_id`` (``reply_to_id``
+refers to it). Graph message ids are the creation time in epoch milliseconds
+and are only unique within one channel or chat.
+
 Team, Channel, and Chat documents include ``member_ids`` (Entra user ids).
 Channels with ``membershipType`` other than ``standard`` resolve members via
 the channel members API; standard channels inherit the parent team's membership.
