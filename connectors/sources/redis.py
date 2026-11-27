@@ -8,6 +8,7 @@ import os
 from enum import Enum
 from functools import cached_property
 from tempfile import NamedTemporaryFile
+from urllib.parse import quote
 
 import fastjsonschema
 import redis.asyncio as redis
@@ -76,6 +77,11 @@ class RedisClient:
                         exc_info=True,
                     )
 
+    def _credentials(self):
+        # Percent-encode the username and password so characters such as "/", "#",
+        # "?" or "%" are not parsed as part of the URL; redis-py unquotes them.
+        return f"{quote(self.username, safe='')}:{quote(self.password, safe='')}"
+
     @cached_property
     def _client(self):
         if self.ssl_enabled and self.mutual_tls_enabled:
@@ -83,18 +89,18 @@ class RedisClient:
             self.key_file = self.store_ssl_key(key=self.tls_keyfile, suffix=".key")
             query = f"ssl_certfile={self.cert_file}&ssl_keyfile={self.key_file}"
             self._redis_client = redis.from_url(
-                f"rediss://{self.username}:{self.password}@{self.host}:{self.port}?{query}",
+                f"rediss://{self._credentials()}@{self.host}:{self.port}?{query}",
                 decode_responses=True,
             )
         elif self.ssl_enabled:
             self._redis_client = redis.from_url(
-                f"rediss://{self.username}:{self.password}@{self.host}:{self.port}",
+                f"rediss://{self._credentials()}@{self.host}:{self.port}",
                 decode_responses=True,
             )
 
         else:
             self._redis_client = redis.from_url(
-                f"redis://{self.username}:{self.password}@{self.host}:{self.port}",
+                f"redis://{self._credentials()}@{self.host}:{self.port}",
                 decode_responses=True,
             )
         return self._redis_client
