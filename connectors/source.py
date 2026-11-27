@@ -26,6 +26,7 @@ from connectors.filtering.validation import (
     BasicRuleAgainstSchemaValidator,
     BasicRuleNoMatchAllRegexValidator,
     BasicRulesSetSemanticValidator,
+    BasicRuleValidRegexValidator,
     FilteringValidator,
 )
 from connectors.logger import logger
@@ -458,6 +459,7 @@ class BaseDataSource:
         return [
             BasicRuleAgainstSchemaValidator,
             BasicRuleNoMatchAllRegexValidator,
+            BasicRuleValidRegexValidator,
             BasicRulesSetSemanticValidator,
         ]
 
