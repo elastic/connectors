@@ -94,16 +94,22 @@ class BoxAPI:
         ]
         return files_entries
 
+    @staticmethod
+    def _next_marker(offset, limit, count):
+        return str(offset + limit) if offset + limit < count else None
+
     def get_folder_items(self, folder_id):
-        offset = int(request.args.get("offset"))
+        # The connector pages with markers (usemarker=true). The marker is the
+        # offset of the next page, and next_marker is omitted on the last page.
+        marker = request.args.get("marker")
+        offset = int(marker) if marker else 0
         limit = int(request.args.get("limit"))
         if folder_id == "0":
             entries = self.get_folders_entries(offset, limit)
             response = {
-                "total_count": 100,
                 "entries": entries,
-                "offset": offset,
                 "limit": limit,
+                "next_marker": self._next_marker(offset, limit, self.folder_count),
                 "order": [
                     {"by": "type", "direction": "ASC"},
                     {"by": "name", "direction": "ASC"},
@@ -117,10 +123,9 @@ class BoxAPI:
         else:
             entries = self.get_files_entries(offset, limit, folder_id)
             response = {
-                "total_count": self.file_count,
                 "entries": entries,
-                "offset": offset,
                 "limit": limit,
+                "next_marker": self._next_marker(offset, limit, self.file_count),
                 "order": [
                     {"by": "type", "direction": "ASC"},
                     {"by": "name", "direction": "ASC"},
