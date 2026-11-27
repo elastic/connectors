@@ -14,6 +14,7 @@ from connectors.filtering.validation import (
     BasicRuleAgainstSchemaValidator,
     BasicRuleNoMatchAllRegexValidator,
     BasicRulesSetSemanticValidator,
+    BasicRuleValidRegexValidator,
 )
 from connectors.protocol import Features
 from connectors.source import (
@@ -821,6 +822,7 @@ async def test_base_class():
     assert BaseDataSource.basic_rules_validators() == [
         BasicRuleAgainstSchemaValidator,
         BasicRuleNoMatchAllRegexValidator,
+        BasicRuleValidRegexValidator,
         BasicRulesSetSemanticValidator,
     ]
 
