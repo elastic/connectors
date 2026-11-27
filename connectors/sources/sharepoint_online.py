@@ -524,6 +524,13 @@ class MicrosoftAPISession:
         responses = body.get("responses", [])
         for response in responses:
             status = response.get("status", 200)
+            if status == 404:
+                # The resource of this one request is gone (e.g. a drive item
+                # deleted since it was listed). Raising would discard the
+                # responses of every other request in the batch, so leave it to
+                # the caller.
+                self._logger.debug(f"Batch request item not found: {response}")
+                continue
             if status != 200:
                 self._logger.warning(f"Batch request item failed with: {response}")
                 headers = response.get("headers", {})
@@ -2143,6 +2150,13 @@ class SharepointOnlineDataSource(BaseDataSource):
             drive_id, upsert_drive_items_ids
         ):
             drive_item_id = permissions_response.get("id")
+            if permissions_response.get("status") == 404:
+                # Deleted since the delta page was fetched
+                self._logger.debug(
+                    f"Skipping drive item {drive_item_id}: it no longer exists"
+                )
+                continue
+
             drive_item = upsert_ids_to_items.get(drive_item_id)
             permissions = nested_get_from_dict(
                 permissions_response, ["body", "value"], []
