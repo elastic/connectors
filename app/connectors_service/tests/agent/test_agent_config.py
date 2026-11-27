@@ -188,6 +188,77 @@ def test_ssl_config_from_agent_applies_to_es_client_without_defaults():
     assert node.config.verify_certs is False
 
 
+def test_try_update_passes_output_headers_to_es_client():
+    config_wrapper = prepare_config_wrapper()
+    unit_mock = prepare_agent_proto_unit_mock(
+        {
+            "hosts": ["https://localhost:9200"],
+            "api_key": "lemme_in",
+            "headers": {"X-Elastic-App-Auth": "token"},
+        },
+        None,
+    )
+
+    assert config_wrapper.try_update(CONNECTOR_ID, SERVICE_TYPE, unit_mock) is True
+    es_config = config_wrapper.get_specific_config()["elasticsearch"]
+    assert es_config["headers"] == {"X-Elastic-App-Auth": "token"}
+    client = ESClient(config_wrapper.get()["elasticsearch"])
+    assert client.client._headers["x-elastic-app-auth"] == "token"
+
+
+def test_try_update_detects_changed_header_value():
+    config_wrapper = prepare_config_wrapper()
+
+    def update(token):
+        unit = prepare_agent_proto_unit_mock(
+            {
+                "hosts": ["https://localhost:9200"],
+                "api_key": "lemme_in",
+                "headers": {"X-Elastic-App-Auth": token},
+            },
+            None,
+        )
+        return config_wrapper.try_update(CONNECTOR_ID, SERVICE_TYPE, unit)
+
+    assert update("old") is True
+    ESClient(config_wrapper.get()["elasticsearch"])  # must not alter stored config
+    assert update("old") is False
+    assert update("new") is True
+
+
+def test_try_update_drops_headers_removed_from_output():
+    config_wrapper = prepare_config_wrapper()
+    base = {"hosts": ["https://localhost:9200"], "api_key": "lemme_in"}
+
+    def update(config):
+        unit = prepare_agent_proto_unit_mock(config, None)
+        return config_wrapper.try_update(CONNECTOR_ID, SERVICE_TYPE, unit)
+
+    assert update({**base, "headers": {"X-Elastic-App-Auth": "token"}}) is True
+    assert update(base) is True
+    assert "headers" not in config_wrapper.get_specific_config()["elasticsearch"]
+
+
+def test_try_update_ignores_null_headers():
+    config_wrapper = prepare_config_wrapper()
+    unit = prepare_agent_proto_unit_mock(
+        {"hosts": ["https://localhost:9200"], "api_key": "k", "headers": None}, None
+    )
+
+    assert config_wrapper.try_update(CONNECTOR_ID, SERVICE_TYPE, unit) is True
+    assert "headers" not in config_wrapper.get_specific_config()["elasticsearch"]
+
+
+def test_try_update_without_headers_has_no_headers_key():
+    config_wrapper = prepare_config_wrapper()
+    unit_mock = prepare_agent_proto_unit_mock(
+        {"hosts": ["https://localhost:9200"], "api_key": "lemme_in"}, None
+    )
+
+    config_wrapper.try_update(CONNECTOR_ID, SERVICE_TYPE, unit_mock)
+    assert "headers" not in config_wrapper.get_specific_config()["elasticsearch"]
+
+
 def test_try_update_with_ssl_verification_mode_full_enables_verify_certs():
     hosts = ["https://localhost:9200"]
     api_key = "lemme_in"

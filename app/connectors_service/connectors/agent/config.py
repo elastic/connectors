@@ -97,6 +97,13 @@ class ConnectorsAgentConfigurationWrapper:
 
             es_creds.update(self._extract_ssl_config(source))
 
+            # Agentless sets X-Elastic-App-Auth here; ECH Traffic Filters reject requests without it.
+            headers = source.fields.get("headers")
+            if headers is not None and headers.HasField("struct_value"):
+                es_creds["headers"] = {
+                    key: str(value) for key, value in source["headers"].items()
+                }
+
             assumed_configuration["elasticsearch"] = es_creds
 
         if self.config_changed(assumed_configuration):

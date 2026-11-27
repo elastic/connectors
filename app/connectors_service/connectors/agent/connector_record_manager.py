@@ -19,6 +19,7 @@ class ConnectorRecordManager:
 
     def __init__(self):
         self.connector_index = None
+        self._es_config = None
 
     async def ensure_connector_records_exist(self, agent_config, connector_name=None):
         """
@@ -35,9 +36,18 @@ class ConnectorRecordManager:
             )
             return
 
-        # Initialize the ES client if it's not already initialized
+        es_config = agent_config.get("elasticsearch")
+
+        # Credentials and headers can change (e.g. a rotated token): drop the stale client
+        if self._es_config is not None and self._es_config != es_config:
+            try:
+                await self.connector_index.close()
+            finally:
+                self.connector_index = self._es_config = None
+
         if not self.connector_index:
-            self.connector_index = ConnectorIndex(agent_config.get("elasticsearch"))
+            self.connector_index = ConnectorIndex(es_config)
+            self._es_config = es_config
 
         for connector_config in agent_config.get("connectors"):
             connector_id, service_type = (

@@ -413,3 +413,17 @@ async def test_es_api_connector_sync_job_update_stats_metadata_as_none():
     es_api.client.connector.sync_job_update_stats.assert_called_once_with(
         connector_sync_job_id=sync_job_id, body=ingestion_stats, metadata={}
     )
+
+
+@pytest.mark.asyncio
+async def test_es_index_close_closes_nested_clients():
+    index = ESIndex(index_name, config)
+    index.client.close = AsyncMock()
+    index.api.client.close = AsyncMock()
+    index.api._api_wrapper.client.close = AsyncMock()
+
+    await index.close()
+
+    index.api._api_wrapper.client.close.assert_awaited_once()
+    index.api.client.close.assert_awaited_once()
+    index.client.close.assert_awaited_once()
