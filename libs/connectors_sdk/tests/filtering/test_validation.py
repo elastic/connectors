@@ -16,6 +16,7 @@ from connectors_sdk.filtering.validation import (
     BasicRulesSetSemanticValidator,
     BasicRulesSetValidator,
     BasicRuleValidator,
+    BasicRuleValidRegexValidator,
     Filter,
     FilteringValidationResult,
     FilteringValidationState,
@@ -895,6 +896,39 @@ def test_basic_rule_validate_no_match_all_regex(basic_rule, should_be_valid):
         assert BasicRuleNoMatchAllRegexValidator.validate(basic_rule).is_valid
     else:
         assert not BasicRuleNoMatchAllRegexValidator.validate(basic_rule).is_valid
+
+
+@pytest.mark.parametrize(
+    "basic_rule, should_be_valid",
+    [
+        (basic_rule_json(merge_with={"rule": "regex", "value": "abc"}), True),
+        (basic_rule_json(merge_with={"rule": "regex", "value": r".*\.pdf$"}), True),
+        # other rule types don't use the value as a regex
+        (basic_rule_json(merge_with={"rule": "contains", "value": "*.pdf"}), True),
+        (basic_rule_json(merge_with={"rule": "regex", "value": "*.pdf"}), False),
+        (basic_rule_json(merge_with={"rule": "regex", "value": "report[0-9"}), False),
+        (basic_rule_json(merge_with={"rule": "regex", "value": "(draft"}), False),
+        # re.compile raises OverflowError / RecursionError instead of re.error
+        (
+            basic_rule_json(
+                merge_with={"rule": "regex", "value": "a{" + "9" * 40 + "}"}
+            ),
+            False,
+        ),
+        (
+            basic_rule_json(
+                merge_with={"rule": "regex", "value": "(" * 5000 + ")" * 5000}
+            ),
+            False,
+        ),
+    ],
+)
+def test_basic_rule_validate_valid_regex(basic_rule, should_be_valid):
+    validation_result = BasicRuleValidRegexValidator.validate(basic_rule)
+
+    assert validation_result.is_valid == should_be_valid
+    if not should_be_valid:
+        assert "invalid regular expression" in validation_result.validation_message
 
 
 @pytest.mark.parametrize(
