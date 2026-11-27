@@ -4447,7 +4447,7 @@ Apache Software License
 
 
 graphql-core
-3.2.12
+3.2.14
 MIT License
 MIT License
 
