@@ -58,7 +58,7 @@ from connectors.sources.gitlab.models import (
     WorkItemWidgetNotes,
 )
 from connectors.sources.gitlab.queries import VALIDATE_PROJECTS_QUERY
-from connectors.utils import decode_base64_value
+from connectors.utils import HTTPS_URL_PATTERN, decode_base64_value
 
 SUPPORTED_EXTENSION = [".md", ".rst", ".txt"]
 # Largest page size the GitLab REST API accepts
@@ -83,6 +83,9 @@ class GitLabDataSource(BaseDataSource):
         super().__init__(configuration=configuration)
         self.gitlab_client = GitLabClient(
             token=self.configuration["token"],
+            host=self.configuration["host"],
+            ssl_enabled=self.configuration["ssl_enabled"],
+            ssl_ca=self.configuration["ssl_ca"],
         )
         self.configured_projects = self.configuration["projects"]
 
@@ -97,9 +100,29 @@ class GitLabDataSource(BaseDataSource):
             dict: Default configuration.
         """
         return {
+            "host": {
+                "label": "GitLab URL",
+                "order": 1,
+                "type": "str",
+                "value": "https://gitlab.com",
+                "validations": [{"type": "regex", "constraint": HTTPS_URL_PATTERN}],
+            },
+            "ssl_enabled": {
+                "display": "toggle",
+                "label": "Enable SSL",
+                "order": 2,
+                "type": "bool",
+                "value": False,
+            },
+            "ssl_ca": {
+                "depends_on": [{"field": "ssl_enabled", "value": True}],
+                "label": "SSL certificate",
+                "order": 3,
+                "type": "str",
+            },
             "token": {
                 "label": "Personal Access Token",
-                "order": 1,
+                "order": 4,
                 "sensitive": True,
                 "type": "str",
                 "tooltip": "GitLab Personal Access Token with api, read_api, and read_repository scopes.",
@@ -107,7 +130,7 @@ class GitLabDataSource(BaseDataSource):
             "projects": {
                 "display": "textarea",
                 "label": "List of projects",
-                "order": 2,
+                "order": 5,
                 "tooltip": "List of project paths (e.g., 'group/project'). Use '*' to sync all projects where the token's user is a member.",
                 "type": "list",
                 "value": [],
