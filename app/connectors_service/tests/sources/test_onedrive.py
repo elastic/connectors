@@ -26,6 +26,7 @@ from connectors.sources.onedrive.client import (
     NotFound,
     TokenRetrievalError,
 )
+from connectors.sources.onedrive.constants import DEFAULT_RETRY_SECONDS
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
 
@@ -1107,6 +1108,45 @@ async def test_json_batching_retries_throttled_request_after_retry_after(status)
         ["231"],
     ]
     sleep.assert_awaited_once_with(7)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "headers, expected_sleep",
+    [
+        ([{"Retry-After": "7"}, {"Retry-After": "12"}], 12),
+        ([{"Retry-After": "12"}, {"Retry-After": "7"}], 12),
+        ([{}, {"Retry-After": "7"}], DEFAULT_RETRY_SECONDS),
+        ([{"Retry-After": "soon"}, {"Retry-After": "7"}], DEFAULT_RETRY_SECONDS),
+    ],
+)
+async def test_json_batching_waits_for_longest_retry_after(headers, expected_sleep):
+    throttled = [
+        {"id": request_id, "status": 429, "headers": header}
+        for request_id, header in zip(["123", "231"], headers, strict=False)
+    ]
+    sent_batches = []
+    async with create_onedrive_source() as source:
+        source.client.post = _batch_post(
+            [
+                {"responses": throttled},
+                {"responses": [_file_page("123", "file-1"), _file_page("231", "f-2")]},
+            ],
+            sent_batches,
+        )
+        with patch.object(source.client._sleeps, "sleep", AsyncMock()) as sleep:
+            [
+                _
+                async for _ in source.json_batching(
+                    batched_apis=[
+                        source._prepare_batch("123", "users/123/drive/root/delta"),
+                        source._prepare_batch("231", "users/231/drive/root/delta"),
+                    ]
+                )
+            ]
+
+    assert len(sent_batches) == 2
+    sleep.assert_awaited_once_with(expected_sleep)
 
 
 @pytest.mark.asyncio
