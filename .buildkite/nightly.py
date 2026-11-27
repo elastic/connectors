@@ -4,7 +4,8 @@ import os
 _AGENTS = """\
 agents:
   provider: "gcp"
-  machineType: "n1-standard-8"
+  diskType: "hyperdisk-balanced"
+  machineType: "n4d-standard-8"
   useVault: true
   image: family/enterprise-search-ubuntu-2204-connectors-py
 """
