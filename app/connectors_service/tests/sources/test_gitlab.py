@@ -241,6 +241,49 @@ class TestGitLabDataSource:
         # Verify client was initialized with token
         assert source.gitlab_client.token == "test-token-123"
 
+    def test_config_defaults_for_existing_connector(self):
+        """Connectors saved before `host` existed fall back to gitlab.com."""
+        config = {"token": {"value": "t", "type": "str"}}
+        source = GitLabDataSource(configuration=DataSourceConfiguration(config))
+
+        assert source.gitlab_client.api_url == "https://gitlab.com/api/v4"
+        assert source.gitlab_client.ssl_ctx is None
+
+    def test_custom_host_with_trailing_slash(self):
+        client = GitLabClient(token="t", host="https://gitlab.example.com/")
+
+        assert client.api_url == "https://gitlab.example.com/api/v4"
+        assert client.graphql_url == "https://gitlab.example.com/api/graphql"
+
+    @pytest.mark.asyncio
+    async def test_http_host_rejected_before_ping(self):
+        config = GitLabDataSource.get_default_configuration()
+        config["host"]["value"] = "http://gitlab.example.com"
+        config["token"]["value"] = "t"
+        source = GitLabDataSource(configuration=DataSourceConfiguration(config))
+        source.gitlab_client.ping = AsyncMock()
+
+        with pytest.raises(ConfigurableFieldValueError):
+            await source.validate_config()
+
+        source.gitlab_client.ping.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_ssl_context_used_when_ssl_enabled(self):
+        with patch("connectors.sources.gitlab.client.ssl_context") as ssl_ctx:
+            client = GitLabClient(
+                token="t",
+                host="https://gitlab.example.com",
+                ssl_enabled=True,
+                ssl_ca="CA",
+            )
+            with patch("aiohttp.TCPConnector") as connector:
+                client._get_session()
+
+        ssl_ctx.assert_called_once_with(certificate="CA")
+        connector.assert_called_once_with(ssl=ssl_ctx.return_value)
+        await client.close()
+
     @pytest.mark.asyncio
     async def test_ping_success(self, mock_configuration):
         """Test successful ping."""
