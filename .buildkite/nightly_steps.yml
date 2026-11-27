@@ -3,7 +3,8 @@ definitions:
     - step: &test-agents
         agents:
           provider: "gcp"
-          machineType: "n1-standard-8"
+          diskType: "hyperdisk-balanced"
+          machineType: "n4d-standard-8"
           useVault: true
           image: family/enterprise-search-ubuntu-2204-connectors-py
   retries: &retries
@@ -129,6 +130,17 @@ steps:
       CONNECTOR: "mssql"
       DATA_SIZE: "small"
       SKIP_AARCH64: "true"
+  - label: "🔨 [Python {{ matrix }}] Microsoft SQL 2025"
+    <<: *retries
+    <<: *ftest_defaults
+    matrix:
+      - "3.11"
+    env:
+      PYTHON_VERSION: "{{ matrix }}"
+      CONNECTOR: "mssql"
+      DATA_SIZE: "small"
+      SKIP_AARCH64: "true"
+      MSSQL_IMAGE: "mcr.microsoft.com/mssql/server:2025-latest"
   - label: "🔨 [Python {{ matrix }}] Jira"
     <<: *retries
     <<: *ftest_defaults
