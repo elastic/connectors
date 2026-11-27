@@ -130,3 +130,22 @@ def test_agent_config_ready_with_invalid_config_missing_elasticsearch(
     invalid_config = {"connectors": [{"connector_id": "1", "service_type": "service1"}]}
     ready, _ = connector_record_manager._check_agent_config_ready(invalid_config)
     assert ready is False
+
+
+@pytest.mark.asyncio
+async def test_ensure_connector_records_exist_recreates_client_when_es_config_changes(
+    mock_agent_config,
+):
+    manager = ConnectorRecordManager()
+    with patch("connectors.agent.connector_record_manager.ConnectorIndex") as index:
+        index.return_value.connector_exists = AsyncMock(return_value=True)
+        index.return_value.close = AsyncMock()
+
+        await manager.ensure_connector_records_exist(mock_agent_config)
+        await manager.ensure_connector_records_exist(mock_agent_config)
+        assert index.call_count == 1
+
+        mock_agent_config["elasticsearch"]["headers"] = {"X-Elastic-App-Auth": "new"}
+        await manager.ensure_connector_records_exist(mock_agent_config)
+        assert index.call_count == 2
+        index.return_value.close.assert_awaited_once()

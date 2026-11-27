@@ -129,7 +129,7 @@ class ESClient:
             "backoff_multiplier", DEFAULT_ELASTICSEARCH_BACKOFF_MULTIPLIER
         )
 
-        options["headers"] = config.get("headers", {})
+        options["headers"] = dict(config.get("headers", {}))
         options["headers"]["user-agent"] = self.__class__.user_agent
         options["headers"]["X-elastic-product-origin"] = "connectors"
 

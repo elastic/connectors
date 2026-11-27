@@ -221,6 +221,7 @@ def test_try_update_detects_changed_header_value():
         return config_wrapper.try_update(CONNECTOR_ID, SERVICE_TYPE, unit)
 
     assert update("old") is True
+    ESClient(config_wrapper.get()["elasticsearch"])  # must not alter stored config
     assert update("old") is False
     assert update("new") is True
 
